@@ -17,16 +17,22 @@ defmodule TaskyWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :webhook do
+    plug :accepts, ["json"]
+  end
+
   scope "/", TaskyWeb do
     pipe_through :browser
 
     get "/", PageController, :home
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", TaskyWeb do
-  #   pipe_through :api
-  # end
+  # Webhook endpoints (no authentication required)
+  scope "/api", TaskyWeb do
+    pipe_through :webhook
+
+    post "/webhooks/tally", TallyWebhookController, :receive
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:tasky, :dev_routes) do

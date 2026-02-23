@@ -110,4 +110,14 @@ if config_env() == :prod do
   #     config :swoosh, :api_client, Swoosh.ApiClient.Req
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+
+  # ## Tally Webhook Configuration
+  #
+  # Configure the signing secret for Tally webhook verification.
+  # Generate a secure random string and set it in your Tally webhook settings
+  # and as an environment variable:
+  #
+  #     export TALLY_SIGNING_SECRET="your-secure-secret-here"
+  #
+  config :tasky, :tally_signing_secret, System.get_env("TALLY_SIGNING_SECRET")
 end

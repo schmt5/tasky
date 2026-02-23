@@ -14,6 +14,7 @@ defmodule Tasky.Tasks.TaskSubmission do
     field :feedback, :string
 
     field :graded_at, :utc_datetime
+    field :tally_response_id, :string
 
     belongs_to :task, Tasky.Tasks.Task
     belongs_to :student, Tasky.Accounts.User
