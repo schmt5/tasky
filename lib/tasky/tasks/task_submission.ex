@@ -5,10 +5,10 @@ defmodule Tasky.Tasks.TaskSubmission do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @valid_statuses ~w(not_started in_progress completed)
+  @valid_statuses ~w(draft open in_progress completed review_approved review_denied not_started)
 
   schema "task_submissions" do
-    field :status, :string, default: "not_started"
+    field :status, :string, default: "draft"
     field :completed_at, :utc_datetime
     field :points, :integer
     field :feedback, :string

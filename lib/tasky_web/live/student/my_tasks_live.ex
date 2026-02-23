@@ -6,7 +6,16 @@ defmodule TaskyWeb.Student.MyTasksLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".OpenLink">
+      export default {
+        mounted() {
+          this.handleEvent("open_link", ({url}) => {
+            window.open(url, '_blank');
+          });
+        }
+      }
+    </script>
+    <Layouts.app flash={@flash} current_scope={@current_scope} phx-hook=".OpenLink">
       <div class="max-w-7xl mx-auto">
         <.header>
           My Tasks
@@ -35,9 +44,13 @@ defmodule TaskyWeb.Student.MyTasksLive do
                   <div class="flex items-start justify-between">
                     <span class={[
                       "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium",
+                      submission.status == "draft" && "bg-gray-100 text-gray-800",
                       submission.status == "not_started" && "bg-gray-100 text-gray-800",
-                      submission.status == "in_progress" && "bg-yellow-100 text-yellow-800",
-                      submission.status == "completed" && "bg-green-100 text-green-800"
+                      submission.status == "open" && "bg-gray-200 text-gray-700",
+                      submission.status == "in_progress" && "bg-blue-100 text-blue-800",
+                      submission.status == "completed" && "bg-green-100 text-green-800",
+                      submission.status == "review_approved" && "bg-purple-100 text-purple-800",
+                      submission.status == "review_denied" && "bg-red-100 text-red-800"
                     ]}>
                       {format_status(submission.status)}
                     </span>
@@ -47,20 +60,26 @@ defmodule TaskyWeb.Student.MyTasksLive do
                 <div class="px-6 py-5">
                   <%!-- Task Name as Clickable Link --%>
                   <%= if submission.task.link do %>
-                    <a
-                      href={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="group block"
+                    <div
+                      phx-click="mark_in_progress"
+                      phx-value-submission-id={submission.id}
+                      phx-value-link={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
                     >
-                      <h3 class="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors duration-150 flex items-center gap-2">
-                        {submission.task.name}
-                        <.icon
-                          name="hero-arrow-top-right-on-square"
-                          class="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors duration-150"
-                        />
-                      </h3>
-                    </a>
+                      <a
+                        href={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="group block"
+                      >
+                        <h3 class="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors duration-150 flex items-center gap-2">
+                          {submission.task.name}
+                          <.icon
+                            name="hero-arrow-top-right-on-square"
+                            class="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors duration-150"
+                          />
+                        </h3>
+                      </a>
+                    </div>
                   <% else %>
                     <h3 class="text-lg font-semibold text-gray-900">
                       {submission.task.name}
@@ -109,21 +128,37 @@ defmodule TaskyWeb.Student.MyTasksLive do
                 <div class="px-6 py-3 bg-gray-50 border-t border-gray-100">
                   <div class="flex items-center justify-between text-xs text-gray-500">
                     <%= cond do %>
-                      <% submission.graded_at -> %>
-                        <span class="flex items-center gap-1 text-green-600 font-medium">
-                          <.icon name="hero-check-circle" class="w-4 h-4" /> Graded
+                      <% submission.status == "review_approved" -> %>
+                        <span class="flex items-center gap-1 text-purple-600 font-medium">
+                          <.icon name="hero-check-circle" class="w-4 h-4" /> Approved
+                        </span>
+                      <% submission.status == "review_denied" -> %>
+                        <span class="flex items-center gap-1 text-red-600 font-medium">
+                          <.icon name="hero-x-circle" class="w-4 h-4" /> Denied
                         </span>
                       <% submission.status == "completed" -> %>
-                        <span class="flex items-center gap-1 text-yellow-600 font-medium">
-                          <.icon name="hero-clock" class="w-4 h-4" /> Awaiting grade
+                        <span class="flex items-center gap-1 text-green-600 font-medium">
+                          <.icon name="hero-clock" class="w-4 h-4" /> Under review
                         </span>
                       <% submission.status == "in_progress" -> %>
                         <span class="flex items-center gap-1 text-blue-600 font-medium">
                           <.icon name="hero-arrow-path" class="w-4 h-4" /> In progress
                         </span>
-                      <% true -> %>
+                      <% submission.status == "open" -> %>
+                        <span class="flex items-center gap-1 text-gray-500 font-medium">
+                          <.icon name="hero-document-text" class="w-4 h-4" /> Open
+                        </span>
+                      <% submission.status == "not_started" -> %>
                         <span class="flex items-center gap-1 text-gray-500">
                           <.icon name="hero-document-text" class="w-4 h-4" /> Not started
+                        </span>
+                      <% submission.status == "draft" -> %>
+                        <span class="flex items-center gap-1 text-gray-500">
+                          <.icon name="hero-document-text" class="w-4 h-4" /> Draft
+                        </span>
+                      <% true -> %>
+                        <span class="flex items-center gap-1 text-gray-500">
+                          <.icon name="hero-document-text" class="w-4 h-4" /> Unknown
                         </span>
                     <% end %>
                   </div>
@@ -200,7 +235,7 @@ defmodule TaskyWeb.Student.MyTasksLive do
     stats = %{
       total: length(submissions),
       completed: Enum.count(submissions, &(&1.status == "completed")),
-      graded: Enum.count(submissions, &(&1.graded_at != nil))
+      graded: Enum.count(submissions, &(&1.status == "review_approved"))
     }
 
     {:ok,
@@ -214,6 +249,57 @@ defmodule TaskyWeb.Student.MyTasksLive do
     status
     |> String.replace("_", " ")
     |> String.capitalize()
+  end
+
+  @impl true
+  def handle_event(
+        "mark_in_progress",
+        %{"submission-id" => submission_id, "link" => link},
+        socket
+      ) do
+    IO.inspect(submission_id, label: "Received submission_id")
+    submission_id = String.to_integer(submission_id)
+    submission = Enum.find(socket.assigns.submissions, &(&1.id == submission_id))
+    IO.inspect(submission, label: "Found submission")
+
+    # Only mark as in_progress if it's currently open or draft
+    IO.inspect(submission && submission.status, label: "Current status")
+
+    socket =
+      if submission && submission.status in ["open", "draft", "not_started"] do
+        IO.puts("Attempting to update status to in_progress")
+
+        case Tasks.update_submission_status(
+               socket.assigns.current_scope,
+               submission_id,
+               "in_progress"
+             ) do
+          {:ok, _updated_submission} ->
+            IO.puts("Successfully updated to in_progress")
+            # Reload submissions to reflect the change
+            submissions = Tasks.list_my_submissions(socket.assigns.current_scope)
+
+            stats = %{
+              total: length(submissions),
+              completed: Enum.count(submissions, &(&1.status == "completed")),
+              graded: Enum.count(submissions, &(&1.status == "review_approved"))
+            }
+
+            socket
+            |> assign(:submissions, submissions)
+            |> assign(:stats, stats)
+
+          {:error, changeset} ->
+            IO.inspect(changeset, label: "Error updating submission")
+            socket
+        end
+      else
+        IO.puts("Submission not found or status not open/draft")
+        socket
+      end
+
+    # Open the link using JS command
+    {:noreply, push_event(socket, "open_link", %{url: link})}
   end
 
   defp format_date(datetime) do
