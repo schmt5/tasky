@@ -35,9 +35,16 @@ defmodule Tasky.AssignmentsTest do
 
     test "update_assignment/2 with valid data updates the assignment" do
       assignment = assignment_fixture()
-      update_attrs = %{name: "some updated name", status: "some updated status", link: "some updated link"}
 
-      assert {:ok, %Assignment{} = assignment} = Assignments.update_assignment(assignment, update_attrs)
+      update_attrs = %{
+        name: "some updated name",
+        status: "some updated status",
+        link: "some updated link"
+      }
+
+      assert {:ok, %Assignment{} = assignment} =
+               Assignments.update_assignment(assignment, update_attrs)
+
       assert assignment.name == "some updated name"
       assert assignment.status == "some updated status"
       assert assignment.link == "some updated link"
@@ -45,7 +52,10 @@ defmodule Tasky.AssignmentsTest do
 
     test "update_assignment/2 with invalid data returns error changeset" do
       assignment = assignment_fixture()
-      assert {:error, %Ecto.Changeset{}} = Assignments.update_assignment(assignment, @invalid_attrs)
+
+      assert {:error, %Ecto.Changeset{}} =
+               Assignments.update_assignment(assignment, @invalid_attrs)
+
       assert assignment == Assignments.get_assignment!(assignment.id)
     end
 

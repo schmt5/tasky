@@ -5,7 +5,11 @@ defmodule TaskyWeb.AssignmentLiveTest do
   import Tasky.AssignmentsFixtures
 
   @create_attrs %{name: "some name", status: "some status", link: "some link"}
-  @update_attrs %{name: "some updated name", status: "some updated status", link: "some updated link"}
+  @update_attrs %{
+    name: "some updated name",
+    status: "some updated status",
+    link: "some updated link"
+  }
   @invalid_attrs %{name: nil, status: nil, link: nil}
   defp create_assignment(_) do
     assignment = assignment_fixture()

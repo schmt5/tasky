@@ -45,6 +45,34 @@ defmodule TaskyWeb.Router do
     end
   end
 
+  ## Task routes (Teachers and Admins only)
+
+  scope "/", TaskyWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_admin_or_teacher]
+
+    live_session :tasks,
+      on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
+      live "/tasks", TaskLive.Index, :index
+      live "/tasks/new", TaskLive.Form, :new
+      live "/tasks/:id", TaskLive.Show, :show
+      live "/tasks/:id/edit", TaskLive.Form, :edit
+      live "/tasks/:id/submissions", Teacher.SubmissionsLive, :index
+      live "/tasks/:task_id/grade/:id", Teacher.GradeLive, :edit
+    end
+  end
+
+  ## Student routes
+
+  scope "/student", TaskyWeb.Student, as: :student do
+    pipe_through [:browser, :require_authenticated_user, :require_student]
+
+    live_session :student,
+      on_mount: [{TaskyWeb.UserAuth, :require_student}] do
+      live "/tasks/:id", TaskLive, :show
+      live "/my-tasks", MyTasksLive, :index
+    end
+  end
+
   ## Authentication routes
 
   scope "/", TaskyWeb do
@@ -55,8 +83,6 @@ defmodule TaskyWeb.Router do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
-
-    post "/users/update-password", UserSessionController, :update_password
   end
 
   scope "/", TaskyWeb do

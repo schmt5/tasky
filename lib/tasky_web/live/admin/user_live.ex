@@ -32,18 +32,21 @@ defmodule TaskyWeb.Admin.UserLive do
                     >
                       Email
                     </th>
+
                     <th
                       scope="col"
                       class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
                     >
                       Role
                     </th>
+
                     <th
                       scope="col"
                       class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
                     >
                       Confirmed
                     </th>
+
                     <th
                       scope="col"
                       class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
@@ -52,11 +55,13 @@ defmodule TaskyWeb.Admin.UserLive do
                     </th>
                   </tr>
                 </thead>
+
                 <tbody class="divide-y divide-gray-200 bg-white">
                   <tr :for={user <- users} class="hover:bg-gray-50">
                     <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {user.email}
                     </td>
+
                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <span class={[
                         "inline-flex rounded-full px-2 py-1 text-xs font-semibold leading-5",
@@ -67,6 +72,7 @@ defmodule TaskyWeb.Admin.UserLive do
                         {role_name(user.role)}
                       </span>
                     </td>
+
                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <%= if user.confirmed_at do %>
                         <span class="text-green-600">✓</span>
@@ -74,6 +80,7 @@ defmodule TaskyWeb.Admin.UserLive do
                         <span class="text-gray-400">—</span>
                       <% end %>
                     </td>
+
                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       <%= if user.id != @current_scope.user.id do %>
                         <.form

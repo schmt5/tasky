@@ -35,35 +35,72 @@ defmodule TaskyWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
+    <header class="navbar bg-base-200 shadow-sm px-4 sm:px-6 lg:px-8">
       <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
+        <a href="/" class="flex items-center gap-2">
           <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
+          <span class="text-lg font-bold">Tasky</span>
         </a>
       </div>
       <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
+        <ul class="flex items-center space-x-4">
+          <%= if @current_scope && @current_scope.user do %>
+            <%= cond do %>
+              <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
+                <li>
+                  <.link navigate={~p"/student/my-tasks"} class="btn btn-ghost">
+                    <.icon name="hero-document-text" class="w-5 h-5" /> My Tasks
+                  </.link>
+                </li>
+              <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
+                <li>
+                  <.link navigate={~p"/tasks"} class="btn btn-ghost">
+                    <.icon name="hero-document-text" class="w-5 h-5" /> Tasks
+                  </.link>
+                </li>
+              <% true -> %>
+            <% end %>
+            <li>
+              <div class="dropdown dropdown-end">
+                <label tabindex="0" class="btn btn-ghost">
+                  <.icon name="hero-user-circle" class="w-5 h-5" />
+                  {@current_scope.user.email}
+                </label>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 mt-2"
+                >
+                  <li>
+                    <.link navigate={~p"/users/settings"} class="flex items-center gap-2">
+                      <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
+                    </.link>
+                  </li>
+                  <li>
+                    <.link href={~p"/users/log-out"} method="delete" class="flex items-center gap-2">
+                      <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+                    </.link>
+                  </li>
+                </ul>
+              </div>
+            </li>
+          <% else %>
+            <li>
+              <.link navigate={~p"/users/log-in"} class="btn btn-ghost">
+                Log in
+              </.link>
+            </li>
+            <li>
+              <.link navigate={~p"/users/register"} class="btn btn-primary">
+                Register
+              </.link>
+            </li>
+          <% end %>
         </ul>
       </div>
     </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+    <main class="px-4 py-8 sm:px-6 lg:px-8">
+      <div class="mx-auto space-y-4">
         {render_slot(@inner_block)}
       </div>
     </main>
