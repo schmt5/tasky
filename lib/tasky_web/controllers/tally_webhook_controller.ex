@@ -43,9 +43,16 @@ defmodule TaskyWeb.TallyWebhookController do
   defp process_webhook(conn, params) do
     with {:ok, data} <- extract_webhook_data(params),
          {:ok, submission} <- find_submission(data),
-         {:ok, _updated_submission} <- mark_completed(submission, data) do
+         {:ok, updated_submission} <- mark_completed(submission, data) do
       Logger.info(
         "Successfully marked submission #{submission.id} as completed for student #{data.user_id}, task #{data.task_id}"
+      )
+
+      # Broadcast the update to the student's LiveView
+      Phoenix.PubSub.broadcast(
+        Tasky.PubSub,
+        "student:#{data.user_id}:submissions",
+        {:submission_updated, updated_submission}
       )
 
       json(conn, %{status: "ok"})

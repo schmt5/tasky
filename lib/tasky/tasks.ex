@@ -185,8 +185,9 @@ defmodule Tasky.Tasks do
   def list_my_submissions(%Scope{user: user} = _scope) when user.role == "student" do
     TaskSubmission
     |> where([s], s.student_id == ^user.id)
+    |> join(:inner, [s], t in assoc(s, :task))
     |> preload([:task])
-    |> order_by([s], desc: s.updated_at)
+    |> order_by([s, t], asc: t.position)
     |> Repo.all()
   end
 

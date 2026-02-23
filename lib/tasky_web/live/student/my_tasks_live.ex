@@ -34,7 +34,7 @@ defmodule TaskyWeb.Student.MyTasksLive do
             </div>
           <% else %>
             <%!-- Task Cards Grid --%>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="space-y-6">
               <div
                 :for={submission <- @submissions}
                 class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 overflow-hidden border border-gray-200"
@@ -230,6 +230,14 @@ defmodule TaskyWeb.Student.MyTasksLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    # Subscribe to real-time updates for this student's submissions
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(
+        Tasky.PubSub,
+        "student:#{socket.assigns.current_scope.user.id}:submissions"
+      )
+    end
+
     submissions = Tasks.list_my_submissions(socket.assigns.current_scope)
 
     stats = %{
@@ -304,5 +312,23 @@ defmodule TaskyWeb.Student.MyTasksLive do
 
   defp format_date(datetime) do
     Calendar.strftime(datetime, "%b %d, %Y")
+  end
+
+  @impl true
+  def handle_info({:submission_updated, _updated_submission}, socket) do
+    # Reload all submissions to get the latest state
+    submissions = Tasks.list_my_submissions(socket.assigns.current_scope)
+
+    stats = %{
+      total: length(submissions),
+      completed: Enum.count(submissions, &(&1.status == "completed")),
+      graded: Enum.count(submissions, &(&1.status == "review_approved"))
+    }
+
+    {:noreply,
+     socket
+     |> assign(:submissions, submissions)
+     |> assign(:stats, stats)
+     |> put_flash(:info, "Task status updated!")}
   end
 end
