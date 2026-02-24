@@ -89,11 +89,6 @@ defmodule TaskyWeb.Layouts do
                 Log in
               </.link>
             </li>
-            <li>
-              <.link navigate={~p"/users/register"} class="btn btn-primary">
-                Register
-              </.link>
-            </li>
           <% end %>
         </ul>
       </div>

@@ -11,19 +11,29 @@
 
     <div class="flex flex-col sm:flex-row gap-4 justify-center">
       <%= if @current_scope do %>
-        <.link
-          navigate={~p"/"}
-          class="btn btn-primary btn-lg"
-        >
-          Go to Dashboard
-        </.link>
-        <.link
-          href={~p"/users/log-out"}
-          method="delete"
-          class="btn btn-outline btn-lg"
-        >
-          Log Out
-        </.link>
+        <%= cond do %>
+          <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
+            <.link
+              navigate={~p"/student/my-tasks"}
+              class="btn btn-primary btn-lg"
+            >
+              View My Tasks
+            </.link>
+          <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
+            <.link
+              navigate={~p"/tasks"}
+              class="btn btn-primary btn-lg"
+            >
+              Manage Tasks
+            </.link>
+          <% true -> %>
+            <.link
+              navigate={~p"/users/settings"}
+              class="btn btn-primary btn-lg"
+            >
+              Go to Settings
+            </.link>
+        <% end %>
       <% else %>
         <.link
           navigate={~p"/users/log-in"}
