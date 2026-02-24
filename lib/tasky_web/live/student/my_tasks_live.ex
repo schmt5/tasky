@@ -33,189 +33,99 @@ defmodule TaskyWeb.Student.MyTasksLive do
               </p>
             </div>
           <% else %>
-            <%!-- Task Cards Grid --%>
-            <div class="space-y-6">
-              <div
-                :for={submission <- @submissions}
-                class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 overflow-hidden border border-gray-200"
-              >
-                <%!-- Card Header with Status Badge --%>
-                <div class="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                  <div class="flex items-start justify-between">
-                    <span class={[
-                      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium",
-                      submission.status == "draft" && "bg-gray-100 text-gray-800",
-                      submission.status == "not_started" && "bg-gray-100 text-gray-800",
-                      submission.status == "open" && "bg-gray-200 text-gray-700",
-                      submission.status == "in_progress" && "bg-blue-100 text-blue-800",
-                      submission.status == "completed" && "bg-green-100 text-green-800",
-                      submission.status == "review_approved" && "bg-purple-100 text-purple-800",
-                      submission.status == "review_denied" && "bg-red-100 text-red-800"
-                    ]}>
-                      {format_status(submission.status)}
-                    </span>
-                  </div>
+            <%!-- Progress Indicator --%>
+            <div class="mb-8 bg-white rounded-lg shadow-md p-6 border border-gray-200">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-gray-700">Progress Overview</h3>
+                <span class="text-2xl font-bold text-blue-600">
+                  {if @stats.total > 0,
+                    do: round(@stats.completed / @stats.total * 100),
+                    else: 0}%
+                </span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  class="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                  style={"width: #{if @stats.total > 0, do: (@stats.completed / @stats.total * 100), else: 0}%"}
+                >
                 </div>
-                <%!-- Card Body --%>
-                <div class="px-6 py-5">
-                  <%!-- Task Name as Clickable Link --%>
-                  <%= if submission.task.link do %>
-                    <div
-                      phx-click="mark_in_progress"
-                      phx-value-submission-id={submission.id}
-                      phx-value-link={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
-                    >
-                      <a
-                        href={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="group block"
-                      >
-                        <h3 class="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors duration-150 flex items-center gap-2">
-                          {submission.task.name}
-                          <.icon
-                            name="hero-arrow-top-right-on-square"
-                            class="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors duration-150"
-                          />
-                        </h3>
-                      </a>
-                    </div>
-                  <% else %>
-                    <h3 class="text-lg font-semibold text-gray-900">
-                      {submission.task.name}
-                    </h3>
-                  <% end %>
-                  <%!-- Task Metadata --%>
-                  <div class="mt-4 space-y-3">
-                    <%!-- Completion Date --%>
-                    <div class="flex items-center justify-between text-sm">
-                      <span class="text-gray-500 flex items-center gap-2">
-                        <.icon name="hero-calendar" class="w-4 h-4" /> Completed
-                      </span>
-                      <%= if submission.completed_at do %>
-                        <span class="font-medium text-gray-900">
-                          {format_date(submission.completed_at)}
-                        </span>
-                      <% else %>
-                        <span class="text-gray-400">Not yet</span>
-                      <% end %>
-                    </div>
-                    <%!-- Score --%>
-                    <div class="flex items-center justify-between text-sm">
-                      <span class="text-gray-500 flex items-center gap-2">
-                        <.icon name="hero-academic-cap" class="w-4 h-4" /> Score
-                      </span>
-                      <%= if submission.graded_at do %>
-                        <div class="flex items-center gap-1">
-                          <span class="text-lg font-bold text-green-600">
-                            {submission.points}
-                          </span>
-                          <span class="text-xs text-gray-400">/100</span>
-                        </div>
-                      <% else %>
-                        <%= if submission.status == "completed" do %>
-                          <span class="text-xs text-yellow-600 flex items-center gap-1 font-medium">
-                            <.icon name="hero-clock" class="w-4 h-4" /> Pending
-                          </span>
-                        <% else %>
-                          <span class="text-gray-400">Not graded</span>
-                        <% end %>
-                      <% end %>
-                    </div>
-                  </div>
-                </div>
-                <%!-- Card Footer with Progress Indicator --%>
-                <div class="px-6 py-3 bg-gray-50 border-t border-gray-100">
-                  <div class="flex items-center justify-between text-xs text-gray-500">
-                    <%= cond do %>
-                      <% submission.status == "review_approved" -> %>
-                        <span class="flex items-center gap-1 text-purple-600 font-medium">
-                          <.icon name="hero-check-circle" class="w-4 h-4" /> Approved
-                        </span>
-                      <% submission.status == "review_denied" -> %>
-                        <span class="flex items-center gap-1 text-red-600 font-medium">
-                          <.icon name="hero-x-circle" class="w-4 h-4" /> Denied
-                        </span>
-                      <% submission.status == "completed" -> %>
-                        <span class="flex items-center gap-1 text-green-600 font-medium">
-                          <.icon name="hero-clock" class="w-4 h-4" /> Under review
-                        </span>
-                      <% submission.status == "in_progress" -> %>
-                        <span class="flex items-center gap-1 text-blue-600 font-medium">
-                          <.icon name="hero-arrow-path" class="w-4 h-4" /> In progress
-                        </span>
-                      <% submission.status == "open" -> %>
-                        <span class="flex items-center gap-1 text-gray-500 font-medium">
-                          <.icon name="hero-document-text" class="w-4 h-4" /> Open
-                        </span>
-                      <% submission.status == "not_started" -> %>
-                        <span class="flex items-center gap-1 text-gray-500">
-                          <.icon name="hero-document-text" class="w-4 h-4" /> Not started
-                        </span>
-                      <% submission.status == "draft" -> %>
-                        <span class="flex items-center gap-1 text-gray-500">
-                          <.icon name="hero-document-text" class="w-4 h-4" /> Draft
-                        </span>
-                      <% true -> %>
-                        <span class="flex items-center gap-1 text-gray-500">
-                          <.icon name="hero-document-text" class="w-4 h-4" /> Unknown
-                        </span>
-                    <% end %>
-                  </div>
-                </div>
+              </div>
+              <div class="mt-3 flex items-center justify-end text-xs text-gray-500">
+                <span>
+                  {@stats.completed} completed
+                </span>
               </div>
             </div>
-            <%!-- Summary Stats --%>
-            <div class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
-              <div class="bg-white overflow-hidden shadow rounded-lg">
-                <div class="p-5">
-                  <div class="flex items-center">
+            <%!-- Task Cards Grid --%>
+            <div class="space-y-4">
+              <div
+                :for={submission <- @submissions}
+                class={[
+                  "rounded-xl shadow-sm transition-all duration-300 overflow-hidden border",
+                  submission.status == "completed" &&
+                    "bg-white/40 backdrop-blur-sm border-gray-300/50",
+                  submission.status != "completed" &&
+                    "bg-white border-gray-200 hover:shadow-md hover:border-gray-300"
+                ]}
+              >
+                <%!-- Card Body with Modern Layout --%>
+                <div class="p-6">
+                  <div class="flex items-center gap-4">
+                    <%!-- Content Section --%>
+                    <div class="flex-1 min-w-0">
+                      <%!-- Status Chip --%>
+                      <div class="mb-2">
+                        <span class={[
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase transition-all duration-200",
+                          submission.status == "draft" &&
+                            "bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200",
+                          submission.status == "not_started" &&
+                            "bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200",
+                          submission.status == "open" &&
+                            "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
+                          submission.status == "in_progress" &&
+                            "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
+                          submission.status == "completed" &&
+                            "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
+                          submission.status == "review_approved" &&
+                            "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20",
+                          submission.status == "review_denied" &&
+                            "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/20"
+                        ]}>
+                          {format_status(submission.status)}
+                        </span>
+                      </div>
+                      <%!-- Task Name as Link --%>
+                      <%= if submission.task.link do %>
+                        <div
+                          phx-click="mark_in_progress"
+                          phx-value-submission-id={submission.id}
+                          phx-value-link={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
+                        >
+                          <a
+                            href={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-xl font-semibold text-gray-800 hover:text-gray-900 transition-colors duration-150"
+                          >
+                            {submission.task.name}
+                          </a>
+                        </div>
+                      <% else %>
+                        <h3 class="text-xl font-semibold text-gray-900">
+                          {submission.task.name}
+                        </h3>
+                      <% end %>
+                    </div>
+                    <%!-- Completion Indicator --%>
                     <div class="flex-shrink-0">
-                      <.icon name="hero-document-text" class="h-6 w-6 text-gray-400" />
-                    </div>
-
-                    <div class="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Total Tasks</dt>
-
-                        <dd class="text-lg font-semibold text-gray-900">{@stats.total}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="bg-white overflow-hidden shadow rounded-lg">
-                <div class="p-5">
-                  <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                      <.icon name="hero-check-circle" class="h-6 w-6 text-green-400" />
-                    </div>
-
-                    <div class="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Completed</dt>
-
-                        <dd class="text-lg font-semibold text-gray-900">{@stats.completed}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="bg-white overflow-hidden shadow rounded-lg">
-                <div class="p-5">
-                  <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                      <.icon name="hero-academic-cap" class="h-6 w-6 text-blue-400" />
-                    </div>
-
-                    <div class="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt class="text-sm font-medium text-gray-500 truncate">Graded</dt>
-
-                        <dd class="text-lg font-semibold text-gray-900">{@stats.graded}</dd>
-                      </dl>
+                      <%= if submission.status == "completed" do %>
+                        <div class="text-2xl">
+                          ✅
+                        </div>
+                      <% else %>
+                        <div class="w-6 h-6 rounded border-2 border-gray-300 bg-white"></div>
+                      <% end %>
                     </div>
                   </div>
                 </div>
