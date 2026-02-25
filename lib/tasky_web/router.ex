@@ -58,6 +58,11 @@ defmodule TaskyWeb.Router do
 
     live_session :tasks,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
+      live "/courses", CourseLive.Index, :index
+      live "/courses/new", CourseLive.Form, :new
+      live "/courses/:id", CourseLive.Show, :show
+      live "/courses/:id/edit", CourseLive.Form, :edit
+
       live "/tasks", TaskLive.Index, :index
       live "/tasks/new", TaskLive.Form, :new
       live "/tasks/:id", TaskLive.Show, :show
@@ -74,6 +79,8 @@ defmodule TaskyWeb.Router do
 
     live_session :student,
       on_mount: [{TaskyWeb.UserAuth, :require_student}] do
+      live "/courses", CoursesLive, :index
+      live "/courses/:id", CourseLive, :show
       live "/tasks/:id", TaskLive, :show
       live "/my-tasks", MyTasksLive, :index
     end

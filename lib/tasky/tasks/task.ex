@@ -9,6 +9,7 @@ defmodule Tasky.Tasks.Task do
     field :status, :string
     field :user_id, :id
 
+    belongs_to :course, Tasky.Courses.Course
     has_many :submissions, Tasky.Tasks.TaskSubmission
 
     timestamps(type: :utc_datetime)
@@ -17,7 +18,7 @@ defmodule Tasky.Tasks.Task do
   @doc false
   def changeset(task, attrs, user_scope) do
     task
-    |> cast(attrs, [:name, :link, :position, :status])
+    |> cast(attrs, [:name, :link, :position, :status, :course_id])
     |> validate_required([:name, :link, :position, :status])
     |> put_change(:user_id, user_scope.user.id)
   end
