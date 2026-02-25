@@ -8,8 +8,8 @@ defmodule TaskyWeb.Student.CoursesLive do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.header>
-        My Courses
-        <:subtitle>View all courses you're enrolled in</:subtitle>
+        Meine Kurse
+        <:subtitle>Alle Kurse, in denen du eingeschrieben bist</:subtitle>
       </.header>
 
       <div
@@ -26,7 +26,7 @@ defmodule TaskyWeb.Student.CoursesLive do
           <.link navigate={~p"/student/courses/#{course.id}"} class="block p-6 hover:bg-gray-50">
             <h3 class="text-xl font-semibold text-gray-900 mb-2">{course.name}</h3>
             <p class="text-gray-600 text-sm mb-4 line-clamp-3">
-              {course.description || "No description provided"}
+              {course.description || "Keine Beschreibung verfügbar"}
             </p>
             <div class="flex items-center justify-between text-sm text-gray-500">
               <span class="flex items-center gap-1">
@@ -35,7 +35,7 @@ defmodule TaskyWeb.Student.CoursesLive do
               </span>
               <span class="flex items-center gap-1">
                 <.icon name="hero-clipboard-document-list" class="w-4 h-4" />
-                {length(course.tasks || [])} tasks
+                {length(course.tasks || [])} Aufgaben
               </span>
             </div>
           </.link>
@@ -44,7 +44,7 @@ defmodule TaskyWeb.Student.CoursesLive do
               navigate={~p"/student/courses/#{course.id}"}
               class="text-blue-600 hover:text-blue-700 text-sm font-medium"
             >
-              View Course →
+              Kurs ansehen →
             </.link>
           </div>
         </div>
@@ -52,8 +52,8 @@ defmodule TaskyWeb.Student.CoursesLive do
 
       <div :if={!@has_courses} class="text-center py-12">
         <.icon name="hero-academic-cap" class="w-16 h-16 text-gray-400 mx-auto mb-4" />
-        <h3 class="text-lg font-medium text-gray-900 mb-2">No courses yet</h3>
-        <p class="text-gray-600">You haven't been enrolled in any courses yet.</p>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Noch keine Kurse</h3>
+        <p class="text-gray-600">Du bist noch in keinen Kursen eingeschrieben.</p>
       </div>
     </Layouts.app>
     """
@@ -65,7 +65,7 @@ defmodule TaskyWeb.Student.CoursesLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "My Courses")
+     |> assign(:page_title, "Meine Kurse")
      |> assign(:has_courses, length(courses) > 0)
      |> stream(:courses, courses)}
   end
