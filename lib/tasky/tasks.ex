@@ -192,6 +192,40 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  Lists all submissions for a specific course for a student.
+  Students can only view their own submissions.
+  Automatically creates submissions for published tasks that don't have one yet.
+
+  ## Examples
+
+      iex> list_course_submissions(scope, course_id)
+      [%TaskSubmission{}, ...]
+
+  """
+  def list_course_submissions(%Scope{user: user} = scope, course_id)
+      when user.role == "student" do
+    # Get all published tasks for the course
+    tasks =
+      Task
+      |> where([t], t.course_id == ^course_id and t.status == "published")
+      |> order_by([t], asc: t.position)
+      |> Repo.all()
+
+    # For each task, get or create a submission
+    Enum.map(tasks, fn task ->
+      case get_or_create_submission(scope, task.id) do
+        {:ok, submission} ->
+          # Preload the task association
+          Repo.preload(submission, :task)
+
+        {:error, _} ->
+          nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  @doc """
   Lists all submissions for a specific task.
   Only teachers and admins can view all submissions.
 
