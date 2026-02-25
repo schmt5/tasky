@@ -125,37 +125,40 @@ defmodule TaskyWeb.Student.MyTasksLive do
                       </h3>
                     <% end %>
                   </div>
-                  <%!-- Completion Indicator --%>
+                  <%!-- Action Button or Completion Indicator --%>
                   <div class="flex-shrink-0">
-                    <%= if submission.status == "completed" do %>
-                      <div class="text-2xl">
-                        ✅
-                      </div>
-                    <% else %>
-                      <div class="w-6 h-6 rounded border-2 border-gray-300 bg-white"></div>
+                    <%= cond do %>
+                      <% submission.status == "completed" || submission.status == "review_approved" -> %>
+                        <div class="text-3xl">
+                          ✅
+                        </div>
+                      <% submission.status == "review_denied" -> %>
+                        <div class="text-3xl">
+                          ❌
+                        </div>
+                      <% submission.task.link -> %>
+                        <div
+                          phx-click="mark_in_progress"
+                          phx-value-submission-id={submission.id}
+                          phx-value-link={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
+                        >
+                          <a
+                            href={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors duration-150 shadow-sm"
+                          >
+                            {if submission.status in ["not_started", "open", "draft"],
+                              do: "Starten",
+                              else: "Öffnen"}
+                          </a>
+                        </div>
+                      <% true -> %>
+                        <div class="w-6 h-6 rounded border-2 border-gray-300 bg-white"></div>
                     <% end %>
                   </div>
                 </div>
               </div>
-              <%!-- Card Footer --%>
-              <%= if submission.task.link && submission.status != "completed" do %>
-                <div class="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end">
-                  <div
-                    phx-click="mark_in_progress"
-                    phx-value-submission-id={submission.id}
-                    phx-value-link={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
-                  >
-                    <a
-                      href={"#{submission.task.link}?user_id=#{@current_scope.user.id}&task_id=#{submission.task.id}&user_name=#{@current_scope.user.email}"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-150"
-                    >
-                      Starten
-                    </a>
-                  </div>
-                </div>
-              <% end %>
             </div>
           </div>
         <% end %>
