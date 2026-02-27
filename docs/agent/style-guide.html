@@ -1,0 +1,2170 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kitchen Sink — Tally-Inspired UI</title>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            /* ── Reset & Base ── */
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --sky-50: #f0f9ff;
+                --sky-100: #e0f2fe;
+                --sky-200: #bae6fd;
+                --sky-300: #7dd3fc;
+                --sky-400: #38bdf8;
+                --sky-500: #0ea5e9;
+                --sky-600: #0284c7;
+                --sky-700: #0369a1;
+
+                --stone-50: #fafaf9;
+                --stone-100: #f5f5f4;
+                --stone-200: #e7e5e4;
+                --stone-300: #d6d3d1;
+                --stone-400: #a8a29e;
+                --stone-500: #78716c;
+                --stone-600: #57534e;
+                --stone-700: #44403c;
+                --stone-800: #292524;
+                --stone-900: #1c1917;
+
+                --red-500: #ef4444;
+                --red-600: #dc2626;
+
+                --font-sans: "DM Sans", system-ui, sans-serif;
+                --font-serif: "Instrument Serif", Georgia, serif;
+
+                --radius-sm: 6px;
+                --radius-md: 10px;
+                --radius-lg: 14px;
+                --radius-xl: 18px;
+
+                --shadow-sm:
+                    0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
+                --shadow-sky: 0 2px 8px rgba(14, 165, 233, 0.25);
+            }
+
+            html {
+                scroll-behavior: smooth;
+            }
+
+            body {
+                font-family: var(--font-sans);
+                background: var(--stone-50);
+                color: var(--stone-800);
+                min-height: 100vh;
+                display: flex;
+            }
+
+            a {
+                text-decoration: none;
+                color: inherit;
+            }
+
+            /* ── Sidebar ── */
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 220px;
+                height: 100vh;
+                background: #fff;
+                border-right: 1px solid var(--stone-100);
+                padding: 32px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                z-index: 10;
+            }
+
+            .sidebar-logo {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 0 8px;
+                margin-bottom: 28px;
+            }
+
+            .logo-icon {
+                width: 28px;
+                height: 28px;
+                background: var(--sky-500);
+                border-radius: var(--radius-sm);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            .sidebar-logo span {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--stone-800);
+            }
+
+            .sidebar nav {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .nav-link {
+                display: block;
+                padding: 8px 12px;
+                border-radius: var(--radius-md);
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-500);
+                transition:
+                    background 0.15s,
+                    color 0.15s;
+            }
+
+            .nav-link:hover {
+                background: var(--sky-50);
+                color: var(--sky-600);
+            }
+
+            .sidebar-footer {
+                margin-top: auto;
+                padding: 0 8px;
+                font-size: 11px;
+                color: var(--stone-400);
+            }
+
+            /* ── Main ── */
+            .main {
+                margin-left: 220px;
+                flex: 1;
+                min-height: 100vh;
+            }
+
+            /* ── Page Header ── */
+            .page-header {
+                border-bottom: 1px solid var(--stone-100);
+                background: #fff;
+                padding: 48px 64px;
+                animation: fadeSlideIn 0.4s ease;
+            }
+
+            .page-header-eyebrow {
+                font-size: 10px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                font-weight: 600;
+                color: var(--sky-500);
+                margin-bottom: 12px;
+            }
+
+            .page-header h1 {
+                font-family: var(--font-serif);
+                font-size: 48px;
+                color: var(--stone-900);
+                line-height: 1.1;
+                margin-bottom: 12px;
+                font-weight: 400;
+            }
+
+            .page-header h1 em {
+                font-style: italic;
+            }
+
+            .page-header p {
+                font-size: 15px;
+                color: var(--stone-500);
+                max-width: 480px;
+                line-height: 1.7;
+            }
+
+            /* ── Content ── */
+            .content {
+                padding: 64px;
+                max-width: 960px;
+                display: flex;
+                flex-direction: column;
+                gap: 80px;
+            }
+
+            /* ── Section ── */
+            .section-eyebrow {
+                font-size: 10px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                font-weight: 600;
+                color: var(--stone-400);
+                margin-bottom: 20px;
+            }
+
+            .section-title {
+                font-family: var(--font-serif);
+                font-size: 28px;
+                font-weight: 400;
+                color: var(--stone-900);
+                margin-bottom: 8px;
+            }
+
+            .section-desc {
+                font-size: 14px;
+                color: var(--stone-500);
+                max-width: 460px;
+                line-height: 1.6;
+                margin-bottom: 40px;
+            }
+
+            .variant-label {
+                font-size: 10px;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                font-weight: 600;
+                color: var(--stone-400);
+                margin-bottom: 12px;
+            }
+
+            /* ── Preview Box ── */
+            .preview {
+                border: 1px solid var(--stone-200);
+                border-radius: var(--radius-xl);
+                background: #fff;
+                box-shadow: var(--shadow-sm);
+                overflow: hidden;
+                margin-bottom: 28px;
+            }
+
+            .preview-pad {
+                padding: 32px;
+            }
+
+            /* ── Code Block ── */
+            details summary {
+                cursor: pointer;
+                font-size: 12px;
+                color: var(--stone-400);
+                font-weight: 500;
+                user-select: none;
+                list-style: none;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 4px;
+            }
+            details summary::-webkit-details-marker {
+                display: none;
+            }
+            details summary:hover {
+                color: var(--stone-600);
+            }
+            details summary::before {
+                content: "›";
+                font-size: 16px;
+                transition: transform 0.2s;
+                display: inline-block;
+            }
+            details[open] summary::before {
+                transform: rotate(90deg);
+            }
+
+            pre {
+                background: var(--stone-900);
+                border-radius: var(--radius-lg);
+                padding: 20px 24px;
+                overflow-x: auto;
+                margin-top: 10px;
+            }
+            pre code {
+                font-family: "Fira Code", "Cascadia Code", monospace;
+                font-size: 12px;
+                color: #7dd3fc;
+                line-height: 1.7;
+            }
+
+            /* ═══ HEADER DEMOS ═══ */
+
+            .demo-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 16px 24px;
+                background: #fff;
+            }
+
+            .demo-header-logo {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .h-icon {
+                width: 28px;
+                height: 28px;
+                background: var(--sky-500);
+                border-radius: var(--radius-sm);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            .h-icon-gradient {
+                width: 32px;
+                height: 32px;
+                background: linear-gradient(
+                    135deg,
+                    var(--sky-400),
+                    var(--sky-600)
+                );
+                border-radius: var(--radius-md);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 2px 6px rgba(14, 165, 233, 0.3);
+                flex-shrink: 0;
+            }
+
+            .demo-header-logo .name {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--stone-800);
+            }
+
+            .demo-header-logo .name-white {
+                font-size: 14px;
+                font-weight: 600;
+                color: #fff;
+            }
+
+            .demo-header nav {
+                display: flex;
+                align-items: center;
+                gap: 24px;
+            }
+
+            .demo-header nav a {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-500);
+                transition: color 0.15s;
+            }
+            .demo-header nav a:hover {
+                color: var(--sky-600);
+            }
+
+            .demo-header .actions {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .h-login {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-500);
+                transition: color 0.15s;
+            }
+            .h-login:hover {
+                color: var(--sky-600);
+            }
+
+            /* Backdrop */
+            .demo-header-backdrop {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 14px 24px;
+                background: rgba(255, 255, 255, 0.85);
+                backdrop-filter: blur(8px);
+                border-bottom: 1px solid var(--stone-100);
+            }
+
+            .demo-header-backdrop .logo-wrap {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .demo-header-backdrop nav {
+                display: flex;
+                gap: 2px;
+            }
+            .demo-header-backdrop nav a {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-500);
+                padding: 6px 12px;
+                border-radius: var(--radius-md);
+                transition:
+                    background 0.15s,
+                    color 0.15s;
+            }
+            .demo-header-backdrop nav a:hover {
+                background: var(--sky-50);
+                color: var(--sky-600);
+            }
+
+            .demo-header-backdrop .actions {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .btn-text {
+                font-family: var(--font-sans);
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-500);
+                padding: 6px 12px;
+                border-radius: var(--radius-md);
+                border: none;
+                background: none;
+                cursor: pointer;
+                transition:
+                    background 0.15s,
+                    color 0.15s;
+            }
+            .btn-text:hover {
+                background: var(--stone-100);
+                color: var(--stone-800);
+            }
+
+            /* Dark */
+            .demo-header-dark {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 16px 24px;
+                background: var(--stone-900);
+            }
+            .demo-header-dark nav {
+                display: flex;
+                gap: 24px;
+            }
+            .demo-header-dark nav a {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-400);
+                transition: color 0.15s;
+            }
+            .demo-header-dark nav a:hover {
+                color: var(--sky-400);
+            }
+            .demo-header-dark .actions {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .h-login-dark {
+                font-size: 13px;
+                font-weight: 500;
+                color: var(--stone-400);
+                transition: color 0.15s;
+            }
+            .h-login-dark:hover {
+                color: var(--sky-400);
+            }
+
+            /* ═══ LIST ═══ */
+
+            .ks-list {
+                list-style: none;
+            }
+
+            .ks-item {
+                display: flex;
+                align-items: flex-start;
+                gap: 20px;
+                padding: 18px 24px;
+                border-bottom: 1px solid var(--stone-100);
+                transition: background 0.12s;
+            }
+            .ks-item:last-child {
+                border-bottom: none;
+            }
+            .ks-item:hover {
+                background: var(--stone-50);
+            }
+
+            .ks-item-main {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .ks-item-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .ks-item-title {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--stone-800);
+                line-height: 1.4;
+            }
+
+            .ks-item-desc {
+                font-size: 13px;
+                color: var(--stone-500);
+                line-height: 1.55;
+                max-width: 540px;
+            }
+
+            .ks-meta {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-top: 2px;
+            }
+            .ks-meta-item {
+                font-size: 12px;
+                color: var(--stone-400);
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .ks-meta-dot {
+                font-size: 12px;
+                color: var(--stone-300);
+            }
+
+            .ks-item-actions {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex-shrink: 0;
+                padding-top: 2px;
+            }
+
+            .ks-badge {
+                display: inline-flex;
+                align-items: center;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 2px 8px;
+                border-radius: 20px;
+                white-space: nowrap;
+            }
+            .ks-badge-green {
+                background: #dcfce7;
+                color: #166534;
+            }
+            .ks-badge-sky {
+                background: var(--sky-100);
+                color: var(--sky-700);
+            }
+            .ks-badge-amber {
+                background: #fef3c7;
+                color: #92400e;
+            }
+            .ks-badge-red {
+                background: #fee2e2;
+                color: #991b1b;
+            }
+            .ks-badge-stone {
+                background: var(--stone-100);
+                color: var(--stone-500);
+            }
+
+            .ks-item-compact {
+                padding: 12px 20px;
+                gap: 14px;
+            }
+            .ks-item-icon {
+                width: 32px;
+                height: 32px;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                margin-top: 1px;
+            }
+            .ks-icon-sky {
+                background: var(--sky-100);
+                color: var(--sky-600);
+            }
+            .ks-icon-stone {
+                background: var(--stone-100);
+                color: var(--stone-500);
+            }
+            .ks-icon-red {
+                background: #fee2e2;
+                color: #dc2626;
+            }
+            .ks-icon-btn {
+                padding: 6px;
+            }
+
+            .btn-danger-ghost {
+                color: #dc2626 !important;
+            }
+            .btn-danger-ghost:hover {
+                background: #fee2e2 !important;
+                color: #991b1b !important;
+            }
+
+            .ks-empty {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                padding: 56px 32px;
+            }
+            .ks-empty-icon {
+                width: 48px;
+                height: 48px;
+                border-radius: 14px;
+                background: var(--sky-50);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--sky-400);
+                margin-bottom: 16px;
+            }
+            .ks-empty-title {
+                font-size: 15px;
+                font-weight: 600;
+                color: var(--stone-700);
+                margin-bottom: 6px;
+            }
+            .ks-empty-desc {
+                font-size: 13px;
+                color: var(--stone-400);
+                max-width: 280px;
+                line-height: 1.55;
+            }
+
+            /* ═══ BUTTONS ═══ */
+
+            button {
+                font-family: var(--font-sans);
+                border: none;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                font-weight: 600;
+                transition:
+                    background 0.15s,
+                    color 0.15s,
+                    border-color 0.15s,
+                    transform 0.1s,
+                    box-shadow 0.15s;
+            }
+
+            button:active:not(:disabled) {
+                transform: scale(0.97);
+            }
+            button:disabled {
+                cursor: not-allowed;
+            }
+
+            .btn-primary {
+                background: var(--sky-500);
+                color: #fff;
+                border-radius: var(--radius-md);
+                box-shadow: var(--shadow-sky);
+            }
+            .btn-primary:hover:not(:disabled) {
+                background: var(--sky-600);
+            }
+
+            .btn-secondary {
+                background: #fff;
+                color: var(--sky-600);
+                border: 1.5px solid var(--sky-200);
+                border-radius: var(--radius-md);
+            }
+            .btn-secondary:hover:not(:disabled) {
+                background: var(--sky-50);
+            }
+
+            .btn-ghost {
+                background: transparent;
+                color: var(--stone-500);
+                border-radius: var(--radius-md);
+            }
+            .btn-ghost:hover:not(:disabled) {
+                background: var(--sky-50);
+                color: var(--sky-600);
+            }
+
+            .btn-danger {
+                background: var(--red-500);
+                color: #fff;
+                border-radius: var(--radius-md);
+            }
+            .btn-danger:hover:not(:disabled) {
+                background: var(--red-600);
+            }
+
+            .btn-muted {
+                background: var(--stone-100);
+                color: var(--stone-400);
+                border-radius: var(--radius-md);
+            }
+
+            .btn-sm {
+                font-size: 12px;
+                padding: 6px 14px;
+                border-radius: var(--radius-sm);
+            }
+            .btn-md {
+                font-size: 13px;
+                padding: 10px 20px;
+            }
+            .btn-lg {
+                font-size: 15px;
+                padding: 14px 28px;
+                border-radius: var(--radius-lg);
+            }
+            .btn-icon {
+                padding: 10px;
+            }
+
+            .btn-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .btn-col {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .spinner {
+                width: 14px;
+                height: 14px;
+                border: 2px solid rgba(255, 255, 255, 0.35);
+                border-top-color: #fff;
+                border-radius: 50%;
+                animation: spin 0.7s linear infinite;
+                flex-shrink: 0;
+            }
+
+            .spinner-sky {
+                border-color: var(--sky-200);
+                border-top-color: var(--sky-500);
+            }
+
+            .btn-full {
+                width: 100%;
+            }
+
+            /* ── Coming soon ── */
+            .coming-soon {
+                border: 1.5px dashed var(--stone-200);
+                border-radius: var(--radius-xl);
+                padding: 56px 32px;
+                text-align: center;
+            }
+
+            .coming-icon {
+                width: 40px;
+                height: 40px;
+                background: var(--sky-50);
+                border-radius: var(--radius-lg);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 16px;
+            }
+
+            .coming-soon p {
+                font-size: 14px;
+                font-weight: 500;
+                color: var(--stone-400);
+            }
+
+            .coming-soon small {
+                font-size: 12px;
+                color: var(--stone-300);
+                display: block;
+                margin-top: 4px;
+            }
+
+            /* ── Animation ── */
+            @keyframes fadeSlideIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            ::-webkit-scrollbar {
+                width: 5px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--sky-200);
+                border-radius: 4px;
+            }
+
+            /* ═══ HERO ═══ */
+
+            .hero-preview {
+                overflow: hidden;
+                border-radius: 0;
+                background: #fff;
+            }
+
+            /* Variant A – centered, clean */
+            .hero-a {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                padding: 72px 40px 64px;
+                background: #fff;
+            }
+            .hero-a .hero-eyebrow {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                background: var(--sky-50);
+                color: var(--sky-600);
+                font-size: 12px;
+                font-weight: 600;
+                padding: 4px 12px;
+                border-radius: 20px;
+                letter-spacing: 0.03em;
+                margin-bottom: 20px;
+            }
+            .hero-a h1 {
+                font-family: var(--font-serif);
+                font-size: clamp(28px, 4vw, 42px);
+                color: var(--stone-900);
+                line-height: 1.18;
+                max-width: 560px;
+                margin-bottom: 16px;
+            }
+            .hero-a h1 em {
+                font-style: italic;
+                color: var(--sky-500);
+            }
+            .hero-a .hero-sub {
+                font-size: 15px;
+                color: var(--stone-500);
+                line-height: 1.65;
+                max-width: 420px;
+                margin-bottom: 32px;
+            }
+            .hero-a .hero-actions {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .hero-a .hero-note {
+                margin-top: 16px;
+                font-size: 12px;
+                color: var(--stone-400);
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+            /* Variant B – split layout */
+            .hero-b {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                min-height: 320px;
+            }
+            @media (max-width: 640px) {
+                .hero-b {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .hero-b-left {
+                padding: 48px 40px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 16px;
+            }
+            .hero-b-left h2 {
+                font-family: var(--font-serif);
+                font-size: clamp(22px, 3vw, 32px);
+                color: var(--stone-900);
+                line-height: 1.22;
+            }
+            .hero-b-left h2 em {
+                font-style: italic;
+                color: var(--sky-500);
+            }
+            .hero-b-left p {
+                font-size: 14px;
+                color: var(--stone-500);
+                line-height: 1.65;
+                max-width: 340px;
+            }
+            .hero-b-left .hero-actions {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            .hero-b-right {
+                background: var(--sky-50);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 32px;
+                position: relative;
+                overflow: hidden;
+            }
+            .hero-b-right::before {
+                content: "";
+                position: absolute;
+                width: 300px;
+                height: 300px;
+                border-radius: 50%;
+                background: var(--sky-200);
+                opacity: 0.35;
+                top: -80px;
+                right: -80px;
+            }
+            .hero-b-right::after {
+                content: "";
+                position: absolute;
+                width: 180px;
+                height: 180px;
+                border-radius: 50%;
+                background: var(--sky-300);
+                opacity: 0.2;
+                bottom: -40px;
+                left: -40px;
+            }
+            .hero-b-card {
+                background: #fff;
+                border-radius: 14px;
+                padding: 20px 24px;
+                box-shadow:
+                    0 4px 24px rgba(14, 165, 233, 0.12),
+                    0 1px 4px rgba(0, 0, 0, 0.06);
+                width: 100%;
+                max-width: 240px;
+                position: relative;
+                z-index: 1;
+            }
+            .hero-b-card-label {
+                font-size: 11px;
+                color: var(--stone-400);
+                font-weight: 600;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                margin-bottom: 10px;
+            }
+            .hero-b-card-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 0;
+                border-bottom: 1px solid var(--stone-100);
+            }
+            .hero-b-card-row:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+            .hero-b-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .hero-b-card-text {
+                font-size: 12px;
+                color: var(--stone-600);
+                flex: 1;
+            }
+            .hero-b-card-val {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--stone-800);
+            }
+
+            .btn-outline-white:hover {
+                border-color: rgba(255, 255, 255, 0.4);
+                color: #fff;
+                background: rgba(255, 255, 255, 0.05);
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">
+                    <svg
+                        width="14"
+                        height="14"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="white"
+                        stroke-width="2.5"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M4 6h16M4 10h16M4 14h10"
+                        />
+                    </svg>
+                </div>
+                <span>Kitchen Sink</span>
+            </div>
+            <nav>
+                <a href="#header" class="nav-link">Header</a>
+                <a href="#buttons" class="nav-link">Button</a>
+                <a href="#list" class="nav-link">List</a>
+                <a href="#hero" class="nav-link">Hero</a>
+            </nav>
+            <div class="sidebar-footer">Tally-inspired · v0.1</div>
+        </aside>
+
+        <!-- Main -->
+        <main class="main">
+            <div class="page-header">
+                <div class="page-header-eyebrow">UI Documentation</div>
+                <h1>Kitchen <em>Sink</em></h1>
+                <p>
+                    Eine Übersicht aller UI-Komponenten — inspiriert vom klaren,
+                    dokumentartigen Design von Tally.so. Sky als Primärfarbe,
+                    reines CSS.
+                </p>
+            </div>
+
+            <div class="content">
+                <!-- ═══ HEADER ═══ -->
+                <section id="header">
+                    <div class="section-eyebrow">01 — Header</div>
+                    <h2 class="section-title">Header</h2>
+                    <p class="section-desc">
+                        Die primäre Navigation der Anwendung. Drei Varianten für
+                        unterschiedliche Kontexte.
+                    </p>
+
+                    <div class="variant-label">Default</div>
+                    <div class="preview">
+                        <header class="demo-header">
+                            <div class="demo-header-logo">
+                                <div class="h-icon">
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="white"
+                                        stroke-width="2.5"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M4 6h16M4 10h16M4 14h10"
+                                        />
+                                    </svg>
+                                </div>
+                                <span class="name">Tally</span>
+                            </div>
+                            <nav>
+                                <a href="#">Pricing</a>
+                                <a href="#">Templates</a>
+                                <a href="#">Blog</a>
+                            </nav>
+                            <div class="actions">
+                                <a href="#" class="h-login">Log in</a>
+                                <button class="btn-primary btn-md">
+                                    Sign up
+                                </button>
+                            </div>
+                        </header>
+                    </div>
+
+                    <div class="variant-label">With Border &amp; Backdrop</div>
+                    <div class="preview">
+                        <header class="demo-header-backdrop">
+                            <div class="logo-wrap">
+                                <div class="h-icon-gradient">
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="white"
+                                        stroke-width="2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                        />
+                                    </svg>
+                                </div>
+                                <span
+                                    style="
+                                        font-size: 14px;
+                                        font-weight: 600;
+                                        color: var(--stone-900);
+                                    "
+                                    >Forms</span
+                                >
+                            </div>
+                            <nav>
+                                <a href="#">Features</a>
+                                <a href="#">Docs</a>
+                                <a href="#">Pricing</a>
+                            </nav>
+                            <div class="actions">
+                                <button class="btn-text">Log in</button>
+                                <button class="btn-primary btn-md">
+                                    Start for free →
+                                </button>
+                            </div>
+                        </header>
+                    </div>
+
+                    <div class="variant-label">Dark</div>
+                    <div class="preview">
+                        <header class="demo-header-dark">
+                            <div class="demo-header-logo">
+                                <div class="h-icon">
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="white"
+                                        stroke-width="2.5"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M4 6h16M4 10h16M4 14h10"
+                                        />
+                                    </svg>
+                                </div>
+                                <span class="name-white">Tally</span>
+                            </div>
+                            <nav>
+                                <a href="#">Pricing</a>
+                                <a href="#">Templates</a>
+                                <a href="#">Blog</a>
+                            </nav>
+                            <div class="actions">
+                                <a href="#" class="h-login-dark">Log in</a>
+                                <button class="btn-primary btn-md">
+                                    Sign up
+                                </button>
+                            </div>
+                        </header>
+                    </div>
+
+                    <details>
+                        <summary>Code anzeigen</summary>
+                        <pre><code>&lt;header style="display:flex; align-items:center;
+        justify-content:space-between; padding:16px 24px;"&gt;
+  &lt;div class="logo"&gt;...&lt;/div&gt;
+  &lt;nav&gt;
+    &lt;a href="#"&gt;Pricing&lt;/a&gt;
+    &lt;a href="#"&gt;Templates&lt;/a&gt;
+  &lt;/nav&gt;
+  &lt;button class="btn-primary"&gt;Sign up&lt;/button&gt;
+&lt;/header&gt;</code></pre>
+                    </details>
+                </section>
+
+                <!-- ═══ BUTTONS ═══ -->
+                <section id="buttons">
+                    <div class="section-eyebrow">02 — Button</div>
+                    <h2 class="section-title">Button</h2>
+                    <p class="section-desc">
+                        Buttons in verschiedenen Varianten, Größen und
+                        Zuständen. Sky-500 als Primärfarbe.
+                    </p>
+
+                    <div class="variant-label">Varianten</div>
+                    <div class="preview preview-pad">
+                        <div class="btn-row">
+                            <button class="btn-primary btn-md">Primary</button>
+                            <button class="btn-secondary btn-md">
+                                Secondary
+                            </button>
+                            <button class="btn-ghost btn-md">Ghost</button>
+                            <button class="btn-danger btn-md">Danger</button>
+                            <button class="btn-muted btn-md" disabled>
+                                Disabled
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="variant-label">Größen</div>
+                    <div class="preview preview-pad">
+                        <div class="btn-row">
+                            <button class="btn-primary btn-sm">Small</button>
+                            <button class="btn-primary btn-md">Medium</button>
+                            <button class="btn-primary btn-lg">Large</button>
+                        </div>
+                    </div>
+
+                    <div class="variant-label">Mit Icons</div>
+                    <div class="preview preview-pad">
+                        <div class="btn-row">
+                            <button class="btn-primary btn-md">
+                                <svg
+                                    width="15"
+                                    height="15"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M12 4v16m8-8H4"
+                                    />
+                                </svg>
+                                Formular erstellen
+                            </button>
+                            <button class="btn-primary btn-md">
+                                Weiter
+                                <svg
+                                    width="15"
+                                    height="15"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M14 5l7 7m0 0l-7 7m7-7H3"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                class="btn-primary btn-icon"
+                                style="border-radius: 10px"
+                            >
+                                <svg
+                                    width="16"
+                                    height="16"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M12 4v16m8-8H4"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                class="btn-ghost btn-md"
+                                style="border: 1.5px solid var(--stone-200)"
+                            >
+                                <svg
+                                    width="15"
+                                    height="15"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                                    />
+                                </svg>
+                                Exportieren
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="variant-label">Loading States</div>
+                    <div class="preview preview-pad">
+                        <div class="btn-row">
+                            <button
+                                class="btn-primary btn-md"
+                                disabled
+                                style="opacity: 0.8; cursor: wait"
+                            >
+                                <span class="spinner"></span>
+                                Speichern…
+                            </button>
+                            <button
+                                class="btn-secondary btn-md"
+                                disabled
+                                style="cursor: wait"
+                            >
+                                <span class="spinner spinner-sky"></span>
+                                Laden…
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="variant-label">Full Width</div>
+                    <div class="preview preview-pad" style="max-width: 340px">
+                        <div class="btn-col">
+                            <button class="btn-primary btn-md btn-full">
+                                Mit Google fortfahren
+                            </button>
+                            <button class="btn-secondary btn-md btn-full">
+                                E-Mail verwenden
+                            </button>
+                        </div>
+                    </div>
+
+                    <details>
+                        <summary>Code anzeigen</summary>
+                        <pre><code>/* Primary */
+.btn-primary {
+  background: #0ea5e9;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+.btn-primary:hover { background: #0284c7; }
+.btn-primary:active { transform: scale(0.97); }
+
+/* Secondary */
+.btn-secondary {
+  background: #fff;
+  color: #0284c7;
+  border: 1.5px solid #bae6fd;
+  padding: 10px 20px;
+  border-radius: 10px;
+}
+.btn-secondary:hover { background: #f0f9ff; }
+
+/* Ghost */
+.btn-ghost {
+  background: transparent;
+  color: #78716c;
+  padding: 10px 20px;
+  border-radius: 10px;
+}
+.btn-ghost:hover { background: #f0f9ff; color: #0284c7; }</code></pre>
+                    </details>
+                </section>
+
+                <!-- ─── LIST COMPONENT ─── -->
+                <section id="list">
+                    <div class="section-tag">03 — List</div>
+                    <h2 class="section-title">List</h2>
+                    <p class="section-desc">
+                        Listen mit Titel, Beschreibung, Meta-Infos (Badges) und
+                        null bis mehreren Actions pro Eintrag.
+                    </p>
+
+                    <!-- Variant 1: Default with mixed actions -->
+                    <div class="variant-label">Default — gemischte Actions</div>
+                    <div class="preview" style="padding: 0; overflow: hidden">
+                        <ul class="ks-list">
+                            <!-- Item: Badge + 2 Actions -->
+                            <li class="ks-item">
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Kontaktformular Website</span
+                                        >
+                                        <span class="ks-badge ks-badge-green"
+                                            >Aktiv</span
+                                        >
+                                    </div>
+                                    <p class="ks-item-desc">
+                                        Sammelt Name, E-Mail und Nachricht.
+                                        Weiterleitung an
+                                        <a
+                                            href="/cdn-cgi/l/email-protection"
+                                            class="__cf_email__"
+                                            data-cfemail="51222421213e2325113738233c307f3534"
+                                            >[email&#160;protected]</a
+                                        >.
+                                    </p>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item">
+                                            <svg
+                                                width="13"
+                                                height="13"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                                />
+                                            </svg>
+                                            342 Einreichungen
+                                        </span>
+                                        <span class="ks-meta-dot">·</span>
+                                        <span class="ks-meta-item"
+                                            >Zuletzt: vor 2 Stunden</span
+                                        >
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <button class="btn-ghost btn-sm">
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828A2 2 0 0110 16H8v-2a2 2 0 01.586-1.414z"
+                                            />
+                                        </svg>
+                                        Bearbeiten
+                                    </button>
+                                    <button class="btn-primary btn-sm">
+                                        Antworten
+                                    </button>
+                                </div>
+                            </li>
+
+                            <!-- Item: Badge + 1 Action -->
+                            <li class="ks-item">
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Kundenzufriedenheits-Umfrage
+                                            Q4</span
+                                        >
+                                        <span class="ks-badge ks-badge-sky"
+                                            >Entwurf</span
+                                        >
+                                    </div>
+                                    <p class="ks-item-desc">
+                                        NPS-Befragung für Bestandskunden nach
+                                        Produktkauf. Conditional Logic aktiv.
+                                    </p>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item">
+                                            <svg
+                                                width="13"
+                                                height="13"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                                />
+                                            </svg>
+                                            8 Fragen
+                                        </span>
+                                        <span class="ks-meta-dot">·</span>
+                                        <span class="ks-meta-item"
+                                            >Erstellt am 12. Feb 2026</span
+                                        >
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <button class="btn-secondary btn-sm">
+                                        Veröffentlichen
+                                    </button>
+                                </div>
+                            </li>
+
+                            <!-- Item: Badge + no actions -->
+                            <li class="ks-item">
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Bewerbungsformular
+                                            Werkstudent</span
+                                        >
+                                        <span class="ks-badge ks-badge-stone"
+                                            >Archiviert</span
+                                        >
+                                    </div>
+                                    <p class="ks-item-desc">
+                                        Vollständige Bewerbungsmappe inkl.
+                                        Datei-Upload und Video-Einreichung.
+                                    </p>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item">
+                                            <svg
+                                                width="13"
+                                                height="13"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"
+                                                />
+                                            </svg>
+                                            24 Bewerbungen
+                                        </span>
+                                        <span class="ks-meta-dot">·</span>
+                                        <span class="ks-meta-item"
+                                            >Geschlossen Jan 2026</span
+                                        >
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <!-- keine actions -->
+                                </div>
+                            </li>
+
+                            <!-- Item: Multiple badges + 3 Actions -->
+                            <li class="ks-item">
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Event-Anmeldung: Design
+                                            Sprint</span
+                                        >
+                                        <span class="ks-badge ks-badge-green"
+                                            >Aktiv</span
+                                        >
+                                        <span class="ks-badge ks-badge-amber"
+                                            >Limit erreicht</span
+                                        >
+                                    </div>
+                                    <p class="ks-item-desc">
+                                        Anmeldeformular für den internen Design
+                                        Sprint. Maximale Teilnehmerzahl: 20
+                                        Personen.
+                                    </p>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item">
+                                            <svg
+                                                width="13"
+                                                height="13"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                                />
+                                            </svg>
+                                            20 / 20 Plätze
+                                        </span>
+                                        <span class="ks-meta-dot">·</span>
+                                        <span class="ks-meta-item">
+                                            <svg
+                                                width="13"
+                                                height="13"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                                />
+                                            </svg>
+                                            15. März 2026
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <button class="btn-ghost btn-sm">
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                            />
+                                        </svg>
+                                        Teilen
+                                    </button>
+                                    <button class="btn-ghost btn-sm">
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                                            />
+                                        </svg>
+                                        Export
+                                    </button>
+                                    <button
+                                        class="btn-ghost btn-sm btn-danger-ghost"
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                            />
+                                        </svg>
+                                        Löschen
+                                    </button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Variant 2: Compact -->
+                    <div class="variant-label">
+                        Compact — kein Beschreibungstext
+                    </div>
+                    <div class="preview" style="padding: 0; overflow: hidden">
+                        <ul class="ks-list ks-list-compact">
+                            <li class="ks-item ks-item-compact">
+                                <div class="ks-item-icon ks-icon-sky">
+                                    <svg
+                                        width="15"
+                                        height="15"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                        />
+                                    </svg>
+                                </div>
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Feedback-Formular</span
+                                        >
+                                        <span class="ks-badge ks-badge-green"
+                                            >Aktiv</span
+                                        >
+                                    </div>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item"
+                                            >128 Einreichungen · vor 10
+                                            Min.</span
+                                        >
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <button
+                                        class="btn-ghost btn-sm ks-icon-btn"
+                                        title="Bearbeiten"
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828A2 2 0 0110 16H8v-2a2 2 0 01.586-1.414z"
+                                            />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        class="btn-ghost btn-sm ks-icon-btn"
+                                        title="Teilen"
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </li>
+
+                            <li class="ks-item ks-item-compact">
+                                <div class="ks-item-icon ks-icon-stone">
+                                    <svg
+                                        width="15"
+                                        height="15"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                        />
+                                    </svg>
+                                </div>
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Onboarding-Checkliste</span
+                                        >
+                                        <span class="ks-badge ks-badge-sky"
+                                            >Entwurf</span
+                                        >
+                                    </div>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item"
+                                            >0 Einreichungen · Erstellt
+                                            gestern</span
+                                        >
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <button
+                                        class="btn-ghost btn-sm ks-icon-btn"
+                                        title="Bearbeiten"
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828A2 2 0 0110 16H8v-2a2 2 0 01.586-1.414z"
+                                            />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        class="btn-ghost btn-sm ks-icon-btn"
+                                        title="Teilen"
+                                    >
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </li>
+
+                            <li class="ks-item ks-item-compact">
+                                <div class="ks-item-icon ks-icon-red">
+                                    <svg
+                                        width="15"
+                                        height="15"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                        />
+                                    </svg>
+                                </div>
+                                <div class="ks-item-main">
+                                    <div class="ks-item-header">
+                                        <span class="ks-item-title"
+                                            >Datenschutz-Einwilligung 2024</span
+                                        >
+                                        <span class="ks-badge ks-badge-red"
+                                            >Abgelaufen</span
+                                        >
+                                    </div>
+                                    <div class="ks-meta">
+                                        <span class="ks-meta-item"
+                                            >Abgelaufen am 31. Dez 2024</span
+                                        >
+                                    </div>
+                                </div>
+                                <div class="ks-item-actions">
+                                    <!-- keine actions -->
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Variant 3: Empty state -->
+                    <div class="variant-label">Empty State</div>
+                    <div class="preview" style="padding: 0; overflow: hidden">
+                        <div class="ks-empty">
+                            <div class="ks-empty-icon">
+                                <svg
+                                    width="22"
+                                    height="22"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="1.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                    />
+                                </svg>
+                            </div>
+                            <p class="ks-empty-title">Noch keine Formulare</p>
+                            <p class="ks-empty-desc">
+                                Erstelle dein erstes Formular und teile es mit
+                                deinem Team.
+                            </p>
+                            <button
+                                class="btn-primary btn-md"
+                                style="margin-top: 16px"
+                            >
+                                <svg
+                                    width="15"
+                                    height="15"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M12 4v16m8-8H4"
+                                    />
+                                </svg>
+                                Formular erstellen
+                            </button>
+                        </div>
+                    </div>
+
+                    <details>
+                        <summary>Code anzeigen</summary>
+                        <pre><code>&lt;ul class="ks-list"&gt;
+  &lt;li class="ks-item"&gt;
+    &lt;div class="ks-item-main"&gt;
+      &lt;div class="ks-item-header"&gt;
+        &lt;span class="ks-item-title"&gt;Titel&lt;/span&gt;
+        &lt;span class="ks-badge ks-badge-green"&gt;Aktiv&lt;/span&gt;
+        &lt;span class="ks-badge ks-badge-amber"&gt;Warnung&lt;/span&gt;
+      &lt;/div&gt;
+      &lt;p class="ks-item-desc"&gt;Beschreibungstext…&lt;/p&gt;
+      &lt;div class="ks-meta"&gt;
+        &lt;span class="ks-meta-item"&gt;342 Einreichungen&lt;/span&gt;
+        &lt;span class="ks-meta-dot"&gt;·&lt;/span&gt;
+        &lt;span class="ks-meta-item"&gt;vor 2h&lt;/span&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="ks-item-actions"&gt;
+      &lt;button class="btn-ghost btn-sm"&gt;Bearbeiten&lt;/button&gt;
+      &lt;button class="btn-primary btn-sm"&gt;Antworten&lt;/button&gt;
+    &lt;/div&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;</code></pre>
+                    </details>
+                </section>
+
+                <!-- ─── HERO COMPONENT ─── -->
+                <section id="hero">
+                    <div class="section-eyebrow">04 — Hero</div>
+                    <h2 class="section-title">Hero</h2>
+                    <p class="section-desc">
+                        Die erste große Sektion einer Landing Page. Drei
+                        Varianten: zentriert, Split-Layout und dunkel mit
+                        Gradient.
+                    </p>
+
+                    <!-- Variant A: Centered -->
+                    <div class="variant-label">Zentriert — Classic</div>
+                    <div class="preview" style="padding: 0; overflow: hidden">
+                        <div class="hero-a">
+                            <div class="hero-eyebrow">
+                                <svg
+                                    width="12"
+                                    height="12"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M5 3l14 9-14 9V3z"
+                                    />
+                                </svg>
+                                Neu: Conditional Logic 2.0
+                            </div>
+                            <h1>
+                                Der einfachste Weg,<br /><em
+                                    >schöne Formulare</em
+                                >
+                                zu bauen
+                            </h1>
+                            <p class="hero-sub">
+                                Keine Programmierkenntnisse nötig. Einfach
+                                tippen wie in einem Dokument — und in Sekunden
+                                fertig.
+                            </p>
+                            <div class="hero-actions">
+                                <button class="btn-primary btn-lg">
+                                    Kostenlos starten
+                                    <svg
+                                        width="16"
+                                        height="16"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M14 5l7 7m0 0l-7 7m7-7H3"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    class="btn-ghost btn-lg"
+                                    style="border: 1.5px solid var(--stone-200)"
+                                >
+                                    Demo ansehen
+                                </button>
+                            </div>
+                            <div class="hero-note">
+                                <svg
+                                    width="13"
+                                    height="13"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                                    />
+                                </svg>
+                                Kein Kreditkarte · DSGVO-konform · Kostenlos für
+                                immer
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Variant B: Split -->
+                    <div class="variant-label">
+                        Split — Text links, Visual rechts
+                    </div>
+                    <div class="preview" style="padding: 0; overflow: hidden">
+                        <div class="hero-b">
+                            <div class="hero-b-left">
+                                <div
+                                    class="hero-eyebrow"
+                                    style="width: fit-content"
+                                >
+                                    <svg
+                                        width="12"
+                                        height="12"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                                        />
+                                    </svg>
+                                    500.000+ Teams vertrauen uns
+                                </div>
+                                <h2>
+                                    Formulare, die<br /><em
+                                        >wirklich konvertieren</em
+                                    >
+                                </h2>
+                                <p>
+                                    Intelligente Logik, schöne Designs und
+                                    nahtlose Integrationen — alles in einem
+                                    Formular-Builder.
+                                </p>
+                                <div class="hero-actions">
+                                    <button class="btn-primary btn-md">
+                                        Formular erstellen
+                                    </button>
+                                    <button class="btn-ghost btn-md">
+                                        Mehr erfahren
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="hero-b-right">
+                                <div class="hero-b-card">
+                                    <div class="hero-b-card-label">
+                                        Einreichungen heute
+                                    </div>
+                                    <div class="hero-b-card-row">
+                                        <div
+                                            class="hero-b-dot"
+                                            style="background: #22c55e"
+                                        ></div>
+                                        <span class="hero-b-card-text"
+                                            >Kontaktformular</span
+                                        >
+                                        <span class="hero-b-card-val">128</span>
+                                    </div>
+                                    <div class="hero-b-card-row">
+                                        <div
+                                            class="hero-b-dot"
+                                            style="background: var(--sky-400)"
+                                        ></div>
+                                        <span class="hero-b-card-text"
+                                            >Kundenfeedback</span
+                                        >
+                                        <span class="hero-b-card-val">74</span>
+                                    </div>
+                                    <div class="hero-b-card-row">
+                                        <div
+                                            class="hero-b-dot"
+                                            style="background: #f59e0b"
+                                        ></div>
+                                        <span class="hero-b-card-text"
+                                            >Event-Anmeldung</span
+                                        >
+                                        <span class="hero-b-card-val">31</span>
+                                    </div>
+                                    <div class="hero-b-card-row">
+                                        <div
+                                            class="hero-b-dot"
+                                            style="background: #a78bfa"
+                                        ></div>
+                                        <span class="hero-b-card-text"
+                                            >NPS-Umfrage</span
+                                        >
+                                        <span class="hero-b-card-val">19</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <details>
+                        <summary>Code anzeigen</summary>
+                        <pre><code>&lt;!-- Zentrierte Hero --&gt;
+&lt;section class="hero-a"&gt;
+  &lt;div class="hero-eyebrow"&gt;Neu: Feature XY&lt;/div&gt;
+  &lt;h1&gt;Dein Headline mit &lt;em&gt;Akzent&lt;/em&gt;&lt;/h1&gt;
+  &lt;p class="hero-sub"&gt;Kurze Beschreibung des Werteversprechens.&lt;/p&gt;
+  &lt;div class="hero-actions"&gt;
+    &lt;button class="btn-primary btn-lg"&gt;CTA Primary&lt;/button&gt;
+    &lt;button class="btn-ghost btn-lg"&gt;CTA Secondary&lt;/button&gt;
+  &lt;/div&gt;
+  &lt;div class="hero-note"&gt;Kein Kreditkarte erforderlich&lt;/div&gt;
+&lt;/section&gt;</code></pre>
+                    </details>
+                </section>
+
+                <!-- Coming soon -->
+                <div class="coming-soon">
+                    <div class="coming-icon">
+                        <svg
+                            width="20"
+                            height="20"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="var(--sky-400)"
+                            stroke-width="1.5"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M12 4v16m8-8H4"
+                            />
+                        </svg>
+                    </div>
+                    <p>Weitere Komponenten folgen</p>
+                </div>
+            </div>
+        </main>
+    </body>
+</html>

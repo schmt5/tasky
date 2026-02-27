@@ -7,53 +7,88 @@ defmodule TaskyWeb.Student.CoursesLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.header>
-        Meine Kurse
-        <:subtitle>Alle Kurse, in denen du eingeschrieben bist</:subtitle>
-      </.header>
-
-      <div
-        :if={@has_courses}
-        id="courses"
-        phx-update="stream"
-        class="grid gap-6 mt-8 md:grid-cols-2 lg:grid-cols-3"
-      >
-        <div
-          :for={{id, course} <- @streams.courses}
-          id={id}
-          class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 overflow-hidden"
-        >
-          <.link navigate={~p"/student/courses/#{course.id}"} class="block p-6 hover:bg-gray-50">
-            <h3 class="text-xl font-semibold text-gray-900 mb-2">{course.name}</h3>
-            <p class="text-gray-600 text-sm mb-4 line-clamp-3">
-              {course.description || "Keine Beschreibung verfügbar"}
-            </p>
-            <div class="flex items-center justify-between text-sm text-gray-500">
-              <span class="flex items-center gap-1">
-                <.icon name="hero-academic-cap" class="w-4 h-4" />
-                {course.teacher.email}
-              </span>
-              <span class="flex items-center gap-1">
-                <.icon name="hero-clipboard-document-list" class="w-4 h-4" />
-                {length(course.tasks || [])} Aufgaben
-              </span>
-            </div>
-          </.link>
-          <div class="bg-gray-50 px-6 py-3 border-t border-gray-200">
-            <.link
-              navigate={~p"/student/courses/#{course.id}"}
-              class="text-blue-600 hover:text-blue-700 text-sm font-medium"
-            >
-              Kurs ansehen →
-            </.link>
-          </div>
+      <div class="bg-white border-b border-stone-100 px-8 py-12">
+        <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500 mb-3">
+          Studenten Portal
         </div>
+        <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
+          Meine <em class="italic text-sky-500">Kurse</em>
+        </h1>
+        <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
+          Alle Kurse, in denen du eingeschrieben bist.
+        </p>
       </div>
 
-      <div :if={!@has_courses} class="text-center py-12">
-        <.icon name="hero-academic-cap" class="w-16 h-16 text-gray-400 mx-auto mb-4" />
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Noch keine Kurse</h3>
-        <p class="text-gray-600">Du bist noch in keinen Kursen eingeschrieben.</p>
+      <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+        <div class="flex items-center justify-between p-6 border-b border-stone-100">
+          <div>
+            <h2 class="text-lg font-semibold text-stone-800">Eingeschriebene Kurse</h2>
+            <p class="text-sm text-stone-500 mt-1">
+              {@course_count} Kurse insgesamt
+            </p>
+          </div>
+        </div>
+
+        <ul :if={@has_courses} id="courses" phx-update="stream" class="list-none p-0 m-0">
+          <li
+            :for={{id, course} <- @streams.courses}
+            id={id}
+            class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 hover:bg-stone-50"
+          >
+            <.link
+              navigate={~p"/student/courses/#{course.id}"}
+              class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600"
+            >
+              <.icon name="hero-academic-cap" class="w-5 h-5" />
+            </.link>
+
+            <.link
+              navigate={~p"/student/courses/#{course.id}"}
+              class="flex-1 min-w-0 flex flex-col gap-1.5"
+            >
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{course.name}</h3>
+                <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-sky-100 text-sky-700">
+                  Eingeschrieben
+                </span>
+              </div>
+
+              <p class="text-sm text-stone-500 leading-[1.6] max-w-[600px]">
+                {course.description || "Keine Beschreibung verfügbar"}
+              </p>
+
+              <div class="flex items-center gap-2 mt-1">
+                <span class="text-[13px] text-stone-400 flex items-center gap-1">
+                  <.icon name="hero-user" class="w-3.5 h-3.5" /> {course.teacher.email}
+                </span>
+                <span class="text-xs text-stone-300">·</span>
+                <span class="text-[13px] text-stone-400 flex items-center gap-1">
+                  <.icon name="hero-clipboard-document-list" class="w-3.5 h-3.5" />
+                  {length(course.tasks || [])} Aufgaben
+                </span>
+              </div>
+            </.link>
+
+            <div class="flex items-center gap-2 shrink-0 pt-0.5">
+              <.link
+                navigate={~p"/student/courses/#{course.id}"}
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+              >
+                Kurs ansehen <.icon name="hero-arrow-right" class="w-4 h-4" />
+              </.link>
+            </div>
+          </li>
+        </ul>
+
+        <div :if={!@has_courses} class="flex flex-col items-center text-center px-8 py-16 bg-white">
+          <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
+            <.icon name="hero-academic-cap" class="w-6 h-6" />
+          </div>
+          <h3 class="text-base font-semibold text-stone-700 mb-2">Noch keine Kurse</h3>
+          <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6]">
+            Du bist noch in keinen Kursen eingeschrieben. Kontaktiere deinen Lehrer, um einem Kurs beizutreten.
+          </p>
+        </div>
       </div>
     </Layouts.app>
     """
@@ -66,6 +101,7 @@ defmodule TaskyWeb.Student.CoursesLive do
     {:ok,
      socket
      |> assign(:page_title, "Meine Kurse")
+     |> assign(:course_count, length(courses))
      |> assign(:has_courses, length(courses) > 0)
      |> stream(:courses, courses)}
   end

@@ -8,117 +8,108 @@ defmodule TaskyWeb.Admin.UserLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <.header>
-          User Management
-          <:subtitle>Manage user roles and permissions</:subtitle>
-        </.header>
+      <div class="page-header">
+        <div class="page-header-eyebrow">Administration</div>
+        <h1>
+          User <em>Management</em>
+        </h1>
+        <p>Manage user roles and permissions across the platform.</p>
+      </div>
 
-        <div class="mt-8 space-y-8">
-          <div :for={{role_name, users} <- @users_by_role}>
-            <div class="mb-4">
-              <h3 class="text-lg font-semibold text-gray-900 capitalize">
-                {role_name(role_name)}s ({length(users)})
-              </h3>
-            </div>
-
-            <div class="overflow-hidden bg-white shadow sm:rounded-lg">
-              <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                  <tr>
-                    <th
-                      scope="col"
-                      class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
-                    >
-                      Email
-                    </th>
-
-                    <th
-                      scope="col"
-                      class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
-                    >
-                      Role
-                    </th>
-
-                    <th
-                      scope="col"
-                      class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
-                    >
-                      Confirmed
-                    </th>
-
-                    <th
-                      scope="col"
-                      class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody class="divide-y divide-gray-200 bg-white">
-                  <tr :for={user <- users} class="hover:bg-gray-50">
-                    <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {user.email}
-                    </td>
-
-                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      <span class={[
-                        "inline-flex rounded-full px-2 py-1 text-xs font-semibold leading-5",
-                        user.role == "admin" && "bg-purple-100 text-purple-800",
-                        user.role == "teacher" && "bg-blue-100 text-blue-800",
-                        user.role == "student" && "bg-green-100 text-green-800"
-                      ]}>
-                        {role_name(user.role)}
-                      </span>
-                    </td>
-
-                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      <%= if user.confirmed_at do %>
-                        <span class="text-green-600">✓</span>
-                      <% else %>
-                        <span class="text-gray-400">—</span>
-                      <% end %>
-                    </td>
-
-                    <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      <%= if user.id != @current_scope.user.id do %>
-                        <.form
-                          for={%{}}
-                          id={"role-form-#{user.id}"}
-                          phx-submit="change_role"
-                          phx-value-user-id={user.id}
-                          class="flex items-center gap-2"
-                        >
-                          <select
-                            name="role"
-                            class="rounded-md border-gray-300 text-sm focus:border-brand focus:ring-brand"
-                          >
-                            <option
-                              :for={{label, value} <- role_options()}
-                              value={value}
-                              selected={value == user.role}
-                            >
-                              {label}
-                            </option>
-                          </select>
-                          <.button type="submit">Update</.button>
-                        </.form>
-                      <% else %>
-                        <span class="text-xs text-gray-400">Current user</span>
-                      <% end %>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <%= if users == [] do %>
-                <div class="px-6 py-8 text-center text-sm text-gray-500">
-                  No {role_name(role_name)}s found
-                </div>
-              <% end %>
+      <div :for={{role_name, users} <- @users_by_role} class="mb-6 last:mb-0">
+        <div class="content-card">
+          <div class="flex items-center justify-between p-6 border-b border-stone-100">
+            <div>
+              <h2 class="text-lg font-semibold text-stone-800 capitalize">
+                {role_name(role_name)}s
+              </h2>
+              <p class="text-sm text-stone-500 mt-1">
+                {length(users)} {if length(users) == 1, do: "user", else: "users"}
+              </p>
             </div>
           </div>
+
+          <ul class="ks-list">
+            <li :for={user <- users} class="ks-item">
+              <div class={[
+                "ks-item-icon",
+                user.role == "admin" && "ks-icon-red",
+                user.role == "teacher" && "ks-icon-sky",
+                user.role == "student" && "ks-icon-green"
+              ]}>
+                <.icon name="hero-user-circle" class="w-5 h-5" />
+              </div>
+
+              <div class="ks-item-main">
+                <div class="ks-item-header">
+                  <h3 class="ks-item-title">{user.email}</h3>
+                  <span class={[
+                    "ks-badge",
+                    user.role == "admin" && "ks-badge-red",
+                    user.role == "teacher" && "ks-badge-sky",
+                    user.role == "student" && "ks-badge-green"
+                  ]}>
+                    {role_name(user.role)}
+                  </span>
+                  <%= if user.confirmed_at do %>
+                    <span class="ks-badge ks-badge-green">
+                      <.icon name="hero-check-circle" class="w-3 h-3" /> Confirmed
+                    </span>
+                  <% else %>
+                    <span class="ks-badge ks-badge-stone">Unconfirmed</span>
+                  <% end %>
+                </div>
+
+                <div class="ks-meta">
+                  <%= if user.id == @current_scope.user.id do %>
+                    <span class="ks-meta-item">
+                      <.icon name="hero-user" class="w-3.5 h-3.5" /> Current user
+                    </span>
+                  <% end %>
+                </div>
+              </div>
+
+              <div class="ks-item-actions">
+                <%= if user.id != @current_scope.user.id do %>
+                  <.form
+                    for={%{}}
+                    id={"role-form-#{user.id}"}
+                    phx-submit="change_role"
+                    phx-value-user-id={user.id}
+                    class="flex items-center gap-2"
+                  >
+                    <select
+                      name="role"
+                      class="text-sm px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                    >
+                      <option
+                        :for={{label, value} <- role_options()}
+                        value={value}
+                        selected={value == user.role}
+                      >
+                        {label}
+                      </option>
+                    </select>
+                    <button type="submit" class="btn-custom-primary btn-custom-sm">
+                      <.icon name="hero-arrow-path" class="w-4 h-4" /> Update
+                    </button>
+                  </.form>
+                <% end %>
+              </div>
+            </li>
+          </ul>
+
+          <%= if users == [] do %>
+            <div class="ks-empty">
+              <div class="ks-empty-icon">
+                <.icon name="hero-user-group" class="w-6 h-6" />
+              </div>
+              <h3 class="ks-empty-title">No {role_name(role_name)}s found</h3>
+              <p class="ks-empty-desc">
+                There are currently no users with the {role_name(role_name)} role.
+              </p>
+            </div>
+          <% end %>
         </div>
       </div>
     </Layouts.app>
