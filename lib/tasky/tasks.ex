@@ -47,6 +47,22 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  Returns the list of tasks for a specific course.
+
+  ## Examples
+
+      iex> list_tasks_by_course(course_id)
+      [%Task{}, ...]
+
+  """
+  def list_tasks_by_course(course_id) do
+    Task
+    |> where([t], t.course_id == ^course_id)
+    |> order_by([t], asc: t.position)
+    |> Repo.all()
+  end
+
+  @doc """
   Gets a single task.
 
   Raises `Ecto.NoResultsError` if the Task does not exist.

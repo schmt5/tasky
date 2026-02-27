@@ -16,6 +16,9 @@ defmodule TaskyWeb.CourseLive.Show do
           <.button navigate={~p"/courses"}>
             <.icon name="hero-arrow-left" /> Back to Courses
           </.button>
+          <.button navigate={~p"/courses/#{@course}/add"}>
+            <.icon name="hero-plus" /> Lerneinheiten hinzufügen
+          </.button>
           <.button variant="primary" navigate={~p"/courses/#{@course}/edit?return_to=show"}>
             <.icon name="hero-pencil" /> Edit Course
           </.button>
