@@ -45,7 +45,14 @@ defmodule TaskyWeb.CourseLive.Add do
                 >
                   <div class="flex-1">
                     <h3 class="font-medium text-gray-900">{form["name"]}</h3>
-                    <p class="text-sm text-gray-500 mt-1">Form ID: {form["id"]}</p>
+                    <div class="flex items-center gap-2 mt-1">
+                      <p class="text-sm text-gray-500">Form ID: {form["id"]}</p>
+                      <%= if Map.get(form, "status") == "DRAFT" do %>
+                        <span class="text-xs text-amber-600 italic">
+                          · Formular noch nicht publiziert
+                        </span>
+                      <% end %>
+                    </div>
                   </div>
                   <div>
                     <%= if form_already_added?(form["id"], @existing_form_ids) do %>
