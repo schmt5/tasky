@@ -14,13 +14,10 @@ defmodule TaskyWeb.CourseLive.Show do
         <:subtitle>{@course.description || "No description provided"}</:subtitle>
         <:actions>
           <.button navigate={~p"/courses"}>
-            <.icon name="hero-arrow-left" /> Back to Courses
-          </.button>
-          <.button navigate={~p"/courses/#{@course}/add"}>
-            <.icon name="hero-plus" /> Lerneinheiten hinzufügen
+            <.icon name="hero-arrow-left" /> Zurück zu Kursen
           </.button>
           <.button variant="primary" navigate={~p"/courses/#{@course}/edit?return_to=show"}>
-            <.icon name="hero-pencil" /> Edit Course
+            <.icon name="hero-pencil" /> Kurs bearbeiten
           </.button>
         </:actions>
       </.header>
@@ -29,39 +26,11 @@ defmodule TaskyWeb.CourseLive.Show do
         <!-- Tasks Section -->
         <div class="bg-white shadow rounded-lg p-6">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-gray-900">Tasks</h2>
-            <.button variant="primary" phx-click="new_task">
-              <.icon name="hero-plus" class="w-4 h-4" /> Add Task
+            <h2 class="text-xl font-semibold text-gray-900">Lerneinheiten</h2>
+            <.button variant="primary" navigate={~p"/courses/#{@course}/add"}>
+              <.icon name="hero-plus" /> Lerneinheiten hinzufügen
             </.button>
           </div>
-
-          <%= if @show_task_form do %>
-            <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <.form for={@task_form} id="task-form" phx-submit="save_task" phx-change="validate_task">
-                <input type="hidden" name="task[course_id]" value={@course.id} />
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <.input field={@task_form[:name]} type="text" label="Task Name" required />
-                  <.input field={@task_form[:link]} type="text" label="Link" required />
-                  <.input field={@task_form[:position]} type="number" label="Position" required />
-                  <.input
-                    field={@task_form[:status]}
-                    type="select"
-                    label="Status"
-                    options={[
-                      {"Draft", "draft"},
-                      {"Published", "published"},
-                      {"Archived", "archived"}
-                    ]}
-                    required
-                  />
-                </div>
-                <div class="flex gap-2 mt-4">
-                  <.button type="submit" variant="primary">Save Task</.button>
-                  <.button type="button" phx-click="cancel_task">Cancel</.button>
-                </div>
-              </.form>
-            </div>
-          <% end %>
 
           <div id="tasks" phx-update="stream" class="space-y-2">
             <div
@@ -91,14 +60,14 @@ defmodule TaskyWeb.CourseLive.Show do
                   navigate={~p"/tasks/#{task}/edit"}
                   class="text-blue-600 hover:text-blue-700 text-sm font-medium"
                 >
-                  Edit
+                  Bearbeiten
                 </.link>
                 <.link
                   phx-click={JS.push("delete_task", value: %{id: task.id}) |> hide("##{id}")}
-                  data-confirm="Are you sure?"
+                  data-confirm="Sind Sie sicher?"
                   class="text-red-600 hover:text-red-700 text-sm font-medium"
                 >
-                  Delete
+                  Löschen
                 </.link>
               </div>
             </div>
@@ -106,16 +75,16 @@ defmodule TaskyWeb.CourseLive.Show do
 
           <div :if={!@has_tasks} class="text-center py-8 text-gray-500">
             <.icon name="hero-clipboard-document-list" class="w-12 h-12 mx-auto mb-2 text-gray-400" />
-            <p>No tasks yet. Add your first task to get started.</p>
+            <p>Noch keine Lerneinheiten. Fügen Sie Ihre erste Lerneinheit hinzu.</p>
           </div>
         </div>
         
     <!-- Students Section -->
         <div class="bg-white shadow rounded-lg p-6">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-gray-900">Enrolled Students</h2>
+            <h2 class="text-xl font-semibold text-gray-900">Eingeschriebene Studenten</h2>
             <.button variant="primary" phx-click="show_enroll_modal">
-              <.icon name="hero-user-plus" class="w-4 h-4" /> Enroll Students
+              <.icon name="hero-user-plus" class="w-4 h-4" /> Studenten einschreiben
             </.button>
           </div>
 
@@ -133,10 +102,10 @@ defmodule TaskyWeb.CourseLive.Show do
                 phx-click={
                   JS.push("unenroll_student", value: %{student_id: student.id}) |> hide("##{id}")
                 }
-                data-confirm="Are you sure you want to unenroll this student?"
+                data-confirm="Sind Sie sicher, dass Sie diesen Studenten ausschreiben möchten?"
                 class="text-red-600 hover:text-red-700 text-sm font-medium"
               >
-                Unenroll
+                Ausschreiben
               </.link>
             </div>
           </div>
@@ -146,7 +115,7 @@ defmodule TaskyWeb.CourseLive.Show do
             class="text-center py-8 text-gray-500"
           >
             <.icon name="hero-users" class="w-12 h-12 mx-auto mb-2 text-gray-400" />
-            <p>No students enrolled yet.</p>
+            <p>Noch keine Studenten eingeschrieben.</p>
           </div>
         </div>
       </div>
@@ -159,7 +128,7 @@ defmodule TaskyWeb.CourseLive.Show do
             phx-click-away="hide_enroll_modal"
           >
             <div class="p-6">
-              <h3 class="text-lg font-semibold text-gray-900 mb-4">Enroll Students</h3>
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Studenten einschreiben</h3>
 
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <div
@@ -175,17 +144,17 @@ defmodule TaskyWeb.CourseLive.Show do
                     phx-value-student_id={student.id}
                     variant="primary"
                   >
-                    Enroll
+                    Einschreiben
                   </.button>
                 </div>
               </div>
 
               <div :if={Enum.empty?(@unenrolled_students)} class="text-center py-8 text-gray-500">
-                <p>All students are already enrolled in this course.</p>
+                <p>Alle Studenten sind bereits in diesem Kurs eingeschrieben.</p>
               </div>
 
               <div class="mt-6 flex justify-end">
-                <.button phx-click="hide_enroll_modal">Close</.button>
+                <.button phx-click="hide_enroll_modal">Schließen</.button>
               </div>
             </div>
           </div>
@@ -204,10 +173,8 @@ defmodule TaskyWeb.CourseLive.Show do
      socket
      |> assign(:page_title, course.name)
      |> assign(:course, course)
-     |> assign(:show_task_form, false)
      |> assign(:show_enroll_modal, false)
      |> assign(:unenrolled_students, [])
-     |> assign(:task_form, nil)
      |> assign(:has_tasks, length(course.tasks) > 0)
      |> assign(:has_students, length(enrolled_students) > 0)
      |> stream(:tasks, course.tasks)
@@ -215,62 +182,6 @@ defmodule TaskyWeb.CourseLive.Show do
   end
 
   @impl true
-  def handle_event("new_task", _params, socket) do
-    task_form =
-      Tasks.change_task(
-        socket.assigns.current_scope,
-        %Tasks.Task{
-          user_id: socket.assigns.current_scope.user.id,
-          course_id: socket.assigns.course.id,
-          position: length(socket.assigns.course.tasks) + 1,
-          status: "draft"
-        }
-      )
-      |> to_form()
-
-    {:noreply,
-     socket
-     |> assign(:show_task_form, true)
-     |> assign(:task_form, task_form)}
-  end
-
-  def handle_event("cancel_task", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_task_form, false)
-     |> assign(:task_form, nil)}
-  end
-
-  def handle_event("validate_task", %{"task" => task_params}, socket) do
-    changeset =
-      Tasks.change_task(
-        socket.assigns.current_scope,
-        %Tasks.Task{
-          user_id: socket.assigns.current_scope.user.id,
-          course_id: socket.assigns.course.id
-        },
-        task_params
-      )
-
-    {:noreply, assign(socket, task_form: to_form(changeset, action: :validate))}
-  end
-
-  def handle_event("save_task", %{"task" => task_params}, socket) do
-    case Tasks.create_task(socket.assigns.current_scope, task_params) do
-      {:ok, task} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Task created successfully")
-         |> assign(:show_task_form, false)
-         |> assign(:task_form, nil)
-         |> assign(:has_tasks, true)
-         |> stream_insert(:tasks, task)}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, task_form: to_form(changeset))}
-    end
-  end
-
   def handle_event("delete_task", %{"id" => id}, socket) do
     task = Tasks.get_task!(socket.assigns.current_scope, id)
     {:ok, _} = Tasks.delete_task(socket.assigns.current_scope, task)

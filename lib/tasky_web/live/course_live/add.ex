@@ -16,6 +16,9 @@ defmodule TaskyWeb.CourseLive.Add do
           <.button navigate={~p"/courses/#{@course}"}>
             <.icon name="hero-arrow-left" /> Zurück zum Kurs
           </.button>
+          <.button phx-click="refresh_forms" disabled={@loading}>
+            <.icon name="hero-arrow-path" /> Aktualisieren
+          </.button>
         </:actions>
       </.header>
 
@@ -113,6 +116,13 @@ defmodule TaskyWeb.CourseLive.Add do
          socket
          |> put_flash(:error, "Fehler beim Hinzufügen der Lerneinheit")}
     end
+  end
+
+  @impl true
+  def handle_event("refresh_forms", _params, socket) do
+    send(self(), :load_forms)
+
+    {:noreply, assign(socket, :loading, true)}
   end
 
   @impl true
