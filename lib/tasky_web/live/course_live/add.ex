@@ -124,11 +124,22 @@ defmodule TaskyWeb.CourseLive.Add do
          |> assign(:forms, forms)
          |> assign(:loading, false)}
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        require Logger
+        Logger.error("Failed to load Tally forms: #{inspect(reason)}")
+
+        error_message =
+          case reason do
+            :unauthorized -> "Ungültiger API Key"
+            :connection_error -> "Verbindung zur Tally API fehlgeschlagen"
+            :api_error -> "Tally API Fehler"
+            _ -> "Fehler beim Laden der Formulare: #{inspect(reason)}"
+          end
+
         {:noreply,
          socket
          |> assign(:loading, false)
-         |> put_flash(:error, "Fehler beim Laden der Formulare")}
+         |> put_flash(:error, error_message)}
     end
   end
 
