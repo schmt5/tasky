@@ -228,9 +228,16 @@ defmodule TaskyWeb.Student.CourseLive do
   end
 
   defp format_status(status) do
-    status
-    |> String.replace("_", " ")
-    |> String.capitalize()
+    case status do
+      "draft" -> "Entwurf"
+      "not_started" -> "Nicht begonnen"
+      "open" -> "Offen"
+      "in_progress" -> "In Bearbeitung"
+      "completed" -> "Erledigt"
+      "review_approved" -> "Genehmigt"
+      "review_denied" -> "Abgelehnt"
+      _ -> status |> String.replace("_", " ") |> String.capitalize()
+    end
   end
 
   @impl true

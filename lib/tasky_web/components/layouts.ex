@@ -67,26 +67,20 @@ defmodule TaskyWeb.Layouts do
                   navigate={~p"/student/courses"}
                   class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
                 >
-                  Courses
-                </.link>
-                <.link
-                  navigate={~p"/student/my-tasks"}
-                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
-                >
-                  My Tasks
+                  Kurse
                 </.link>
               <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
                 <.link
                   navigate={~p"/courses"}
                   class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
                 >
-                  Courses
+                  Kurse
                 </.link>
                 <.link
                   navigate={~p"/tasks"}
                   class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
                 >
-                  Tasks
+                  Aufgaben
                 </.link>
               <% true -> %>
             <% end %>
@@ -109,12 +103,12 @@ defmodule TaskyWeb.Layouts do
               >
                 <li>
                   <.link navigate={~p"/users/settings"} class="flex items-center gap-2">
-                    <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
+                    <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Einstellungen
                   </.link>
                 </li>
                 <li>
                   <.link href={~p"/users/log-out"} method="delete" class="flex items-center gap-2">
-                    <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+                    <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Abmelden
                   </.link>
                 </li>
               </ul>
@@ -124,13 +118,13 @@ defmodule TaskyWeb.Layouts do
               navigate={~p"/users/log-in"}
               class="text-sm font-medium text-stone-500 transition-colors duration-150 hover:text-sky-600"
             >
-              Log in
+              Anmelden
             </.link>
             <.link
               navigate={~p"/users/register"}
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
             >
-              Sign up
+              Registrieren
             </.link>
           <% end %>
         </div>
