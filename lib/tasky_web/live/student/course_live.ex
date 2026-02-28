@@ -18,54 +18,70 @@ defmodule TaskyWeb.Student.CourseLive do
     </script>
     <div id="course-tasks-container" phx-hook=".OpenLink">
       <Layouts.app flash={@flash} current_scope={@current_scope}>
-        <%!-- Header --%>
-        <div class="bg-white max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-          <.header>
-            {@course.name}
-            <:subtitle>
-              {@course.description || "Sieh dir alle Aufgaben für diesen Kurs an"}
-            </:subtitle>
-            <:actions>
+        <%!-- Page Header --%>
+        <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
+          <div class="max-w-6xl mx-auto">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
+                Studenten Portal
+              </div>
               <.link
                 navigate={~p"/student/courses"}
-                class="text-sm font-semibold text-gray-700 hover:text-gray-900"
+                class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
               >
-                <.icon name="hero-arrow-left" class="w-4 h-4 inline" /> Zurück
+                <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
               </.link>
-            </:actions>
-          </.header>
+            </div>
+
+            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
+              {@course.name}
+            </h1>
+
+            <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
+              {@course.description || "Sieh dir alle Aufgaben für diesen Kurs an"}
+            </p>
+          </div>
         </div>
 
         <%= if @submissions != [] do %>
-          <%!-- Progress Bar - Sticky --%>
-          <div class="sticky top-0 z-10 -mt-8">
-            <div class="max-w-5xl bg-white mx-auto px-4 sm:px-6 lg:px-8 py-6">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-gray-700">Fortschritt</h3>
-                <span class="text-2xl font-bold text-blue-600">
+          <%!-- Progress Card --%>
+          <div class="max-w-6xl mx-auto px-8 mb-8">
+            <div class="bg-gradient-to-br from-sky-50 to-white rounded-[14px] border border-sky-100 p-6 shadow-[0_1px_3px_rgba(14,165,233,0.08)]">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-[13px] font-semibold text-stone-700 tracking-[0.01em]">
+                  Kurs-Fortschritt
+                </h3>
+                <span class="text-[28px] font-bold bg-gradient-to-br from-sky-500 to-sky-600 bg-clip-text text-transparent">
                   {if @stats.total > 0,
                     do: round(@stats.completed / @stats.total * 100),
                     else: 0}%
                 </span>
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+
+              <div class="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden shadow-inner">
                 <div
-                  class="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                  class="bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 h-2.5 rounded-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(14,165,233,0.4)]"
                   style={"width: #{if @stats.total > 0, do: (@stats.completed / @stats.total * 100), else: 0}%"}
                 >
                 </div>
               </div>
-              <div class="mt-2 flex items-center justify-end text-xs text-gray-500">
-                <span>
-                  {@stats.completed} von {@stats.total} erledigt
+
+              <div class="mt-3 flex items-center justify-between text-[13px]">
+                <span class="text-stone-500">
+                  {@stats.completed} von {@stats.total} Aufgaben erledigt
                 </span>
+                <%= if @stats.graded > 0 do %>
+                  <span class="text-sky-600 font-medium flex items-center gap-1">
+                    <.icon name="hero-check-badge" class="w-4 h-4" /> {@stats.graded} bewertet
+                  </span>
+                <% end %>
               </div>
             </div>
           </div>
         <% end %>
 
         <%!-- Task List --%>
-        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="max-w-6xl mx-auto px-8 pb-8">
           <%= if @submissions == [] do %>
             <div class="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
               <.icon name="hero-document-text" class="mx-auto h-12 w-12 text-gray-400" />

@@ -7,19 +7,21 @@ defmodule TaskyWeb.Student.CoursesLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="bg-white border-b border-stone-100 px-8 py-12">
-        <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500 mb-3">
-          Studenten Portal
+      <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
+        <div class="max-w-6xl mx-auto">
+          <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500 mb-3">
+            Studenten Portal
+          </div>
+          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
+            Meine <em class="italic text-sky-500">Kurse</em>
+          </h1>
+          <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
+            Alle Kurse, in denen du eingeschrieben bist.
+          </p>
         </div>
-        <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-          Meine <em class="italic text-sky-500">Kurse</em>
-        </h1>
-        <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
-          Alle Kurse, in denen du eingeschrieben bist.
-        </p>
       </div>
 
-      <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+      <div class="max-w-6xl mx-auto bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
         <div class="flex items-center justify-between p-6 border-b border-stone-100">
           <div>
             <h2 class="text-lg font-semibold text-stone-800">Eingeschriebene Kurse</h2>
@@ -47,7 +49,9 @@ defmodule TaskyWeb.Student.CoursesLive do
               class="flex-1 min-w-0 flex flex-col gap-1.5"
             >
               <div class="flex items-center gap-2.5 flex-wrap">
-                <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{course.name}</h3>
+                <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">
+                  {course.name}
+                </h3>
                 <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-sky-100 text-sky-700">
                   Eingeschrieben
                 </span>

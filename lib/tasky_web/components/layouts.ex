@@ -35,110 +35,110 @@ defmodule TaskyWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="flex items-center justify-between px-6 py-4 bg-white border-b border-stone-100">
-      <div class="flex items-center gap-2.5">
-        <.link navigate={~p"/"} class="flex items-center gap-2.5">
-          <div class="w-9 h-9 flex items-center justify-center shrink-0 bg-gradient-to-br from-sky-400 to-sky-600 rounded-[10px] shadow-[0_2px_6px_rgba(14,165,233,0.3)]">
-            <svg
-              width="18"
-              height="18"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="white"
-              stroke-width="2.5"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </div>
-          <span class="text-base font-bold text-stone-800 tracking-tight">Tasky</span>
-        </.link>
-      </div>
+    <header class="px-6 py-4 bg-white border-b border-stone-100">
+      <div class="max-w-6xl mx-auto flex items-center justify-between">
+        <div class="items-center gap-2.5">
+          <.link navigate={~p"/"} class="flex items-center gap-2.5">
+            <div class="w-9 h-9 flex items-center justify-center shrink-0 bg-gradient-to-br from-sky-400 to-sky-600 rounded-[10px] shadow-[0_2px_6px_rgba(14,165,233,0.3)]">
+              <svg
+                width="18"
+                height="18"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="white"
+                stroke-width="2.5"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <span class="text-base font-bold text-stone-800 tracking-tight">Tasky</span>
+          </.link>
+        </div>
 
-      <nav class="flex items-center gap-2">
-        <%= if @current_scope && @current_scope.user do %>
-          <%= cond do %>
-            <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
-              <.link
-                navigate={~p"/student/courses"}
-                class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
-              >
-                Courses
-              </.link>
-              <.link
-                navigate={~p"/student/my-tasks"}
-                class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
-              >
-                My Tasks
-              </.link>
-            <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
-              <.link
-                navigate={~p"/courses"}
-                class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
-              >
-                Courses
-              </.link>
-              <.link
-                navigate={~p"/tasks"}
-                class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
-              >
-                Tasks
-              </.link>
-            <% true -> %>
+        <nav class="flex items-center gap-2">
+          <%= if @current_scope && @current_scope.user do %>
+            <%= cond do %>
+              <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
+                <.link
+                  navigate={~p"/student/courses"}
+                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                >
+                  Courses
+                </.link>
+                <.link
+                  navigate={~p"/student/my-tasks"}
+                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                >
+                  My Tasks
+                </.link>
+              <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
+                <.link
+                  navigate={~p"/courses"}
+                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                >
+                  Courses
+                </.link>
+                <.link
+                  navigate={~p"/tasks"}
+                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                >
+                  Tasks
+                </.link>
+              <% true -> %>
+            <% end %>
           <% end %>
-        <% end %>
-      </nav>
+        </nav>
 
-      <div class="flex items-center gap-3">
-        <%= if @current_scope && @current_scope.user do %>
-          <div class="dropdown dropdown-end">
-            <label
-              tabindex="0"
-              class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] cursor-pointer flex items-center gap-2 transition-all duration-150 hover:bg-stone-100 hover:text-stone-800"
+        <div class="flex items-center gap-3">
+          <%= if @current_scope && @current_scope.user do %>
+            <div class="dropdown dropdown-end">
+              <label
+                tabindex="0"
+                class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] cursor-pointer flex items-center gap-2 transition-all duration-150 hover:bg-stone-100 hover:text-stone-800"
+              >
+                <.icon name="hero-user-circle" class="w-5 h-5" />
+                {@current_scope.user.email}
+              </label>
+              <ul
+                tabindex="0"
+                class="dropdown-content z-[1] menu p-2 shadow-lg bg-white rounded-[10px] w-52 mt-2 border border-stone-100"
+              >
+                <li>
+                  <.link navigate={~p"/users/settings"} class="flex items-center gap-2">
+                    <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
+                  </.link>
+                </li>
+                <li>
+                  <.link href={~p"/users/log-out"} method="delete" class="flex items-center gap-2">
+                    <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
+                  </.link>
+                </li>
+              </ul>
+            </div>
+          <% else %>
+            <.link
+              navigate={~p"/users/log-in"}
+              class="text-sm font-medium text-stone-500 transition-colors duration-150 hover:text-sky-600"
             >
-              <.icon name="hero-user-circle" class="w-5 h-5" />
-              {@current_scope.user.email}
-            </label>
-            <ul
-              tabindex="0"
-              class="dropdown-content z-[1] menu p-2 shadow-lg bg-white rounded-[10px] w-52 mt-2 border border-stone-100"
+              Log in
+            </.link>
+            <.link
+              navigate={~p"/users/register"}
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
             >
-              <li>
-                <.link navigate={~p"/users/settings"} class="flex items-center gap-2">
-                  <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Settings
-                </.link>
-              </li>
-              <li>
-                <.link href={~p"/users/log-out"} method="delete" class="flex items-center gap-2">
-                  <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Log out
-                </.link>
-              </li>
-            </ul>
-          </div>
-        <% else %>
-          <.link
-            navigate={~p"/users/log-in"}
-            class="text-sm font-medium text-stone-500 transition-colors duration-150 hover:text-sky-600"
-          >
-            Log in
-          </.link>
-          <.link
-            navigate={~p"/users/register"}
-            class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-          >
-            Sign up
-          </.link>
-        <% end %>
+              Sign up
+            </.link>
+          <% end %>
+        </div>
       </div>
     </header>
 
     <main class="bg-stone-50 min-h-screen">
-      <div class="max-w-6xl mx-auto px-6 py-8">
-        {render_slot(@inner_block)}
-      </div>
+      {render_slot(@inner_block)}
     </main>
 
     <.flash_group flash={@flash} />

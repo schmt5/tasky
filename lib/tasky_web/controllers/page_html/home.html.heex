@@ -1,5 +1,5 @@
 <Layouts.flash_group flash={@flash} />
-<div class="flex flex-col items-center text-center px-10 py-20 bg-white">
+<div class="flex flex-col items-center text-center px-10 py-20 bg-white min-h-[100dvh]">
   <%= if @current_scope do %>
     <div class="inline-flex items-center gap-1.5 bg-sky-50 text-sky-600 text-xs font-semibold px-3.5 py-1.5 rounded-full tracking-wide mb-6">
       <svg
@@ -59,12 +59,6 @@
               />
             </svg>
             Alle Kurse ansehen
-          </.link>
-          <.link
-            navigate={~p"/student/my-tasks"}
-            class="inline-flex items-center gap-2 bg-white text-sky-600 text-[15px] font-semibold px-7 py-3.5 rounded-[14px] border-[1.5px] border-sky-200 transition-all duration-150 hover:bg-sky-50 active:scale-[0.98]"
-          >
-            Meine Aufgaben
           </.link>
         <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
           <.link
