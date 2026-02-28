@@ -8,25 +8,70 @@ defmodule TaskyWeb.CourseLive.Form do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <.header>
-        {@page_title}
-        <:subtitle>Use this form to manage course records in your database.</:subtitle>
-      </.header>
+      <%!-- Page Header --%>
+      <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
+        <div class="max-w-6xl mx-auto">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
+              Kursverwaltung
+            </div>
+            <.link
+              navigate={return_path(@return_to, @course)}
+              class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
+            >
+              <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
+            </.link>
+          </div>
 
-      <.form for={@form} id="course-form" phx-change="validate" phx-submit="save" class="max-w-2xl">
-        <.input field={@form[:name]} type="text" label="Course Name" required />
-        <.input
-          field={@form[:description]}
-          type="textarea"
-          label="Description"
-          placeholder="Enter a brief description of the course..."
-          rows="4"
-        />
-        <footer class="flex gap-2">
-          <.button phx-disable-with="Saving..." variant="primary">Save Course</.button>
-          <.button type="button" navigate={return_path(@return_to, @course)}>Cancel</.button>
-        </footer>
-      </.form>
+          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
+            {@page_title}
+          </h1>
+
+          <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
+            {if @live_action == :new,
+              do: "Erstelle einen neuen Kurs für deine Aufgaben und Studenten.",
+              else: "Bearbeite die Kursinformationen."}
+          </p>
+        </div>
+      </div>
+
+      <%!-- Form Card --%>
+      <div class="max-w-6xl mx-auto px-8 pb-8">
+        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+          <div class="p-6">
+            <.form
+              for={@form}
+              id="course-form"
+              phx-change="validate"
+              phx-submit="save"
+              class="space-y-6"
+            >
+              <.input field={@form[:name]} type="text" label="Kursname" required />
+              <.input
+                field={@form[:description]}
+                type="textarea"
+                label="Beschreibung"
+                placeholder="Gib eine kurze Beschreibung des Kurses ein..."
+                rows="4"
+              />
+              <div class="flex items-center gap-3 pt-4 border-t border-stone-100">
+                <.button
+                  phx-disable-with="Speichert..."
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                >
+                  {if @live_action == :new, do: "Kurs erstellen", else: "Änderungen speichern"}
+                </.button>
+                <.link
+                  navigate={return_path(@return_to, @course)}
+                  class="inline-flex items-center gap-2 text-stone-500 text-sm font-medium px-5 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-700"
+                >
+                  Abbrechen
+                </.link>
+              </div>
+            </.form>
+          </div>
+        </div>
+      </div>
     </Layouts.app>
     """
   end
@@ -46,7 +91,7 @@ defmodule TaskyWeb.CourseLive.Form do
     course = Courses.get_course!(socket.assigns.current_scope, id)
 
     socket
-    |> assign(:page_title, "Edit Course")
+    |> assign(:page_title, "Kurs bearbeiten")
     |> assign(:course, course)
     |> assign(:form, to_form(Courses.change_course(course)))
   end
@@ -55,7 +100,7 @@ defmodule TaskyWeb.CourseLive.Form do
     course = %Course{}
 
     socket
-    |> assign(:page_title, "New Course")
+    |> assign(:page_title, "Neuer Kurs")
     |> assign(:course, course)
     |> assign(:form, to_form(Courses.change_course(course)))
   end
@@ -75,7 +120,6 @@ defmodule TaskyWeb.CourseLive.Form do
       {:ok, course} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Course updated successfully")
          |> push_navigate(to: return_path(socket.assigns.return_to, course))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -88,7 +132,7 @@ defmodule TaskyWeb.CourseLive.Form do
       {:ok, course} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Course created successfully")
+         |> put_flash(:info, "Kurs erfolgreich erstellt")
          |> push_navigate(to: return_path(socket.assigns.return_to, course))}
 
       {:error, %Ecto.Changeset{} = changeset} ->
