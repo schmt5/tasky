@@ -275,12 +275,32 @@ defmodule Tasky.Tasks do
   """
   def update_submission_status(%Scope{user: user} = _scope, submission_id, status)
       when user.role == "student" do
-    submission = Repo.get!(TaskSubmission, submission_id)
+    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
     if submission.student_id == user.id do
-      submission
-      |> TaskSubmission.status_changeset(%{status: status})
-      |> Repo.update()
+      case submission
+           |> TaskSubmission.status_changeset(%{status: status})
+           |> Repo.update() do
+        {:ok, updated_submission} = result ->
+          # Broadcast to student's own subscription
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "student:#{user.id}:submissions",
+            {:submission_updated, updated_submission}
+          )
+
+          # Broadcast to course progress view for teachers
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "course:#{submission.task.course_id}:progress",
+            {:submission_updated, updated_submission}
+          )
+
+          result
+
+        error ->
+          error
+      end
     else
       {:error, :unauthorized}
     end
@@ -296,12 +316,32 @@ defmodule Tasky.Tasks do
 
   """
   def complete_task(%Scope{user: user} = _scope, submission_id) when user.role == "student" do
-    submission = Repo.get!(TaskSubmission, submission_id)
+    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
     if submission.student_id == user.id do
-      submission
-      |> TaskSubmission.complete_changeset()
-      |> Repo.update()
+      case submission
+           |> TaskSubmission.complete_changeset()
+           |> Repo.update() do
+        {:ok, updated_submission} = result ->
+          # Broadcast to student's own subscription
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "student:#{user.id}:submissions",
+            {:submission_updated, updated_submission}
+          )
+
+          # Broadcast to course progress view for teachers
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "course:#{submission.task.course_id}:progress",
+            {:submission_updated, updated_submission}
+          )
+
+          result
+
+        error ->
+          error
+      end
     else
       {:error, :unauthorized}
     end

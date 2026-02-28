@@ -164,6 +164,12 @@ defmodule TaskyWeb.CourseLive.Progress do
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     course = Courses.get_course!(socket.assigns.current_scope, id)
+
+    # Subscribe to real-time progress updates for this course
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Tasky.PubSub, "course:#{course.id}:progress")
+    end
+
     students = Courses.list_enrolled_students(course.id)
     tasks = Enum.sort_by(course.tasks, & &1.position)
 
@@ -179,6 +185,15 @@ defmodule TaskyWeb.CourseLive.Progress do
      |> assign(:tasks, tasks)
      |> assign(:progress_map, progress_map)
      |> assign(:has_data, has_data)}
+  end
+
+  @impl true
+  def handle_info({:submission_updated, _updated_submission}, socket) do
+    # Rebuild the progress map with fresh data
+    progress_map =
+      build_progress_map(socket.assigns.course.id, socket.assigns.students, socket.assigns.tasks)
+
+    {:noreply, assign(socket, :progress_map, progress_map)}
   end
 
   # Private Functions

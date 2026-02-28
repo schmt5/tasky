@@ -48,10 +48,20 @@ defmodule TaskyWeb.TallyWebhookController do
         "Successfully marked submission #{submission.id} as completed for student #{data.user_id}, task #{data.task_id}"
       )
 
+      # Preload task to get course_id
+      updated_submission = Repo.preload(updated_submission, :task)
+
       # Broadcast the update to the student's LiveView
       Phoenix.PubSub.broadcast(
         Tasky.PubSub,
         "student:#{data.user_id}:submissions",
+        {:submission_updated, updated_submission}
+      )
+
+      # Broadcast to course progress view for teachers
+      Phoenix.PubSub.broadcast(
+        Tasky.PubSub,
+        "course:#{updated_submission.task.course_id}:progress",
         {:submission_updated, updated_submission}
       )
 
