@@ -13,7 +13,9 @@ defmodule Tasky.AccountsFixtures do
 
   def valid_user_attributes(attrs \\ %{}) do
     Enum.into(attrs, %{
-      email: unique_user_email()
+      email: unique_user_email(),
+      firstname: "Test",
+      lastname: "User"
     })
   end
 

@@ -24,12 +24,26 @@ defmodule TaskyWeb.UserLive.Registration do
 
         <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
           <.input
+            field={@form[:firstname]}
+            type="text"
+            label="First Name"
+            required
+            phx-mounted={JS.focus()}
+          />
+
+          <.input
+            field={@form[:lastname]}
+            type="text"
+            label="Last Name"
+            required
+          />
+
+          <.input
             field={@form[:email]}
             type="email"
             label="Email"
             autocomplete="username"
             required
-            phx-mounted={JS.focus()}
           />
 
           <.button phx-disable-with="Creating account..." class="btn btn-primary w-full">

@@ -17,6 +17,7 @@ defmodule TaskyWeb.CourseLive.Progress do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-emerald-500">
               Kursfortschritt
             </div>
+
             <div class="flex items-center gap-2">
               <.link
                 navigate={~p"/courses/#{@course}"}
@@ -52,20 +53,24 @@ defmodule TaskyWeb.CourseLive.Progress do
                       >
                         Aufgabe
                       </th>
+
                       <th
                         :for={student <- @students}
                         scope="col"
                         class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[120px]"
                       >
                         <div class="flex flex-col items-center gap-1">
-                          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-stone-100 text-stone-600 mx-auto mb-2">
-                            <.icon name="hero-user-circle" class="w-5 h-5" />
+                          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 mx-auto mb-2 text-[11px] font-semibold">
+                            {get_initials(student)}
                           </div>
-                          <span class="line-clamp-2 text-[11px]">{student.email}</span>
+                          <span class="line-clamp-2 text-[11px]">
+                            {get_email_username(student.email)}
+                          </span>
                         </div>
                       </th>
                     </tr>
                   </thead>
+
                   <tbody class="bg-white divide-y divide-stone-100">
                     <tr
                       :for={task <- @tasks}
@@ -76,11 +81,10 @@ defmodule TaskyWeb.CourseLive.Progress do
                           <div class="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 bg-sky-100 text-sky-600">
                             <.icon name="hero-clipboard-document-list" class="w-5 h-5" />
                           </div>
-                          <span class="text-[14px] font-medium text-stone-800">
-                            {task.name}
-                          </span>
+                          <span class="text-[14px] font-medium text-stone-800">{task.name}</span>
                         </div>
                       </td>
+
                       <td :for={student <- @students} class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= case get_submission_status(@progress_map, student.id, task.id) do %>
@@ -113,7 +117,6 @@ defmodule TaskyWeb.CourseLive.Progress do
                 </table>
               </div>
             </div>
-
             <%!-- Legend --%>
             <div class="border-t border-stone-200 bg-stone-50 px-6 py-4">
               <div class="flex items-center justify-center gap-8">
@@ -123,12 +126,14 @@ defmodule TaskyWeb.CourseLive.Progress do
                   </div>
                   <span class="text-[13px] text-stone-600">Abgeschlossen</span>
                 </div>
+
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-[6px] bg-sky-500 flex items-center justify-center">
                     <.icon name="hero-ellipsis-horizontal" class="w-4 h-4 text-white" />
                   </div>
                   <span class="text-[13px] text-stone-600">In Bearbeitung</span>
                 </div>
+
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-[6px] bg-stone-200 flex items-center justify-center">
                     <.icon name="hero-minus" class="w-4 h-4 text-stone-400" />
@@ -142,7 +147,9 @@ defmodule TaskyWeb.CourseLive.Progress do
               <div class="w-14 h-14 rounded-[14px] bg-emerald-50 flex items-center justify-center text-emerald-400 mb-5">
                 <.icon name="hero-chart-bar" class="w-6 h-6" />
               </div>
+
               <h3 class="text-base font-semibold text-stone-700 mb-2">Keine Daten verfügbar</h3>
+
               <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6]">
                 Fügen Sie Lerneinheiten hinzu und schreiben Sie Studenten ein, um den Fortschritt zu verfolgen.
               </p>
@@ -204,4 +211,28 @@ defmodule TaskyWeb.CourseLive.Progress do
       _ -> :not_started
     end
   end
+
+  defp get_initials(student) do
+    first_initial =
+      case student.firstname do
+        nil -> "?"
+        "" -> "?"
+        name -> name |> String.first() |> String.upcase()
+      end
+
+    last_initial =
+      case student.lastname do
+        nil -> "?"
+        "" -> "?"
+        name -> name |> String.first() |> String.upcase()
+      end
+
+    "#{first_initial}#{last_initial}"
+  end
+
+  defp get_email_username(email) when is_binary(email) do
+    email |> String.split("@") |> List.first()
+  end
+
+  defp get_email_username(_), do: ""
 end

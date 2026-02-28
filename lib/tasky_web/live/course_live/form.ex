@@ -15,6 +15,7 @@ defmodule TaskyWeb.CourseLive.Form do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
               Kursverwaltung
             </div>
+            
             <.link
               navigate={return_path(@return_to, @course)}
               class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
@@ -22,11 +23,11 @@ defmodule TaskyWeb.CourseLive.Form do
               <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
             </.link>
           </div>
-
+          
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             {@page_title}
           </h1>
-
+          
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
               do: "Erstelle einen neuen Kurs für deine Aufgaben und Studenten.",
@@ -34,8 +35,7 @@ defmodule TaskyWeb.CourseLive.Form do
           </p>
         </div>
       </div>
-
-      <%!-- Form Card --%>
+       <%!-- Form Card --%>
       <div class="max-w-6xl mx-auto px-8 pb-8">
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6">

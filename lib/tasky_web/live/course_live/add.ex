@@ -16,6 +16,7 @@ defmodule TaskyWeb.CourseLive.Add do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
               Kursverwaltung
             </div>
+            
             <div class="flex items-center gap-2">
               <.link
                 navigate={~p"/courses/#{@course}"}
@@ -34,11 +35,11 @@ defmodule TaskyWeb.CourseLive.Add do
               </button>
             </div>
           </div>
-
+          
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             Lerneinheiten hinzufügen
           </h1>
-
+          
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             Fügen Sie neue Lerneinheiten zu
             <span class="font-medium text-stone-700">"{@course.name}"</span>
@@ -46,8 +47,7 @@ defmodule TaskyWeb.CourseLive.Add do
           </p>
         </div>
       </div>
-
-      <%!-- Forms List --%>
+       <%!-- Forms List --%>
       <div class="max-w-6xl mx-auto px-8 pb-8">
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @loading do %>
@@ -55,6 +55,7 @@ defmodule TaskyWeb.CourseLive.Add do
               <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-500 mb-4">
                 <.icon name="hero-arrow-path" class="w-6 h-6 animate-spin" />
               </div>
+              
               <p class="text-stone-600 font-medium">Lade Tally Formulare...</p>
             </div>
           <% else %>
@@ -63,10 +64,13 @@ defmodule TaskyWeb.CourseLive.Add do
                 <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
                   <.icon name="hero-document-text" class="w-6 h-6" />
                 </div>
+                
                 <h3 class="text-base font-semibold text-stone-700 mb-2">Keine Formulare gefunden</h3>
+                
                 <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
                   Es wurden keine Tally Formulare gefunden. Erstellen Sie zuerst Formulare in Tally.
                 </p>
+                
                 <button
                   type="button"
                   phx-click="refresh_forms"
@@ -78,11 +82,10 @@ defmodule TaskyWeb.CourseLive.Add do
             <% else %>
               <div class="p-6 border-b border-stone-100">
                 <h2 class="text-lg font-semibold text-stone-800">Verfügbare Tally Formulare</h2>
-                <p class="text-sm text-stone-500 mt-1">
-                  {length(@forms)} Formulare gefunden
-                </p>
+                
+                <p class="text-sm text-stone-500 mt-1">{length(@forms)} Formulare gefunden</p>
               </div>
-
+              
               <ul class="list-none p-0 m-0">
                 <li
                   :for={form <- @forms}
@@ -91,24 +94,23 @@ defmodule TaskyWeb.CourseLive.Add do
                   <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600">
                     <.icon name="hero-document-text" class="w-5 h-5" />
                   </div>
-
+                  
                   <div class="flex-1 min-w-0 flex flex-col gap-1.5">
                     <div class="flex items-center gap-2.5 flex-wrap">
                       <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">
                         {form["name"]}
                       </h3>
+                      
                       <%= if Map.get(form, "status") == "DRAFT" do %>
                         <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-amber-100 text-amber-700">
                           Entwurf
                         </span>
                       <% end %>
                     </div>
-
-                    <p class="text-[13px] text-stone-400">
-                      Form ID: {form["id"]}
-                    </p>
+                    
+                    <p class="text-[13px] text-stone-400">Form ID: {form["id"]}</p>
                   </div>
-
+                  
                   <div class="flex items-center gap-2 shrink-0 pt-0.5">
                     <%= if form_already_added?(form["id"], @existing_form_ids) do %>
                       <span class="text-[13px] text-stone-500 italic px-3.5 py-1.5">

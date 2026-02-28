@@ -4,6 +4,8 @@ defmodule Tasky.Accounts.User do
 
   schema "users" do
     field :email, :string
+    field :firstname, :string
+    field :lastname, :string
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
     field :role, :string, default: "student"
@@ -53,9 +55,23 @@ defmodule Tasky.Accounts.User do
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :role])
+    |> cast(attrs, [:email, :firstname, :lastname, :role])
+    |> validate_required([:firstname, :lastname])
+    |> validate_length(:firstname, min: 1, max: 100)
+    |> validate_length(:lastname, min: 1, max: 100)
     |> validate_email(opts)
     |> validate_role()
+  end
+
+  @doc """
+  A user changeset for updating profile information (firstname and lastname).
+  """
+  def profile_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:firstname, :lastname])
+    |> validate_required([:firstname, :lastname])
+    |> validate_length(:firstname, min: 1, max: 100)
+    |> validate_length(:lastname, min: 1, max: 100)
   end
 
   defp validate_role(changeset) do

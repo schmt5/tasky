@@ -171,9 +171,11 @@ defmodule TaskyWeb.UI do
       <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500 mb-3">
         {@eyebrow}
       </div>
+      
       <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
         {render_slot(@title)}
       </h1>
+      
       <p :if={@description != []} class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
         {render_slot(@description)}
       </p>
@@ -210,8 +212,10 @@ defmodule TaskyWeb.UI do
     <div class="flex items-center justify-between p-6 border-b border-stone-100">
       <div>
         <h2 class="text-lg font-semibold text-stone-800">{@title}</h2>
+        
         <p :if={@subtitle} class="text-sm text-stone-500 mt-1">{@subtitle}</p>
       </div>
+      
       <div :if={@action != []}>{render_slot(@action)}</div>
     </div>
     """
@@ -231,8 +235,11 @@ defmodule TaskyWeb.UI do
       <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
         <.icon name={@icon_name} class="w-6 h-6" />
       </div>
+      
       <h3 class="text-base font-semibold text-stone-700 mb-2">{@title}</h3>
+      
       <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6]">{@description}</p>
+      
       <div :if={@action != []} class="mt-6">{render_slot(@action)}</div>
     </div>
     """
