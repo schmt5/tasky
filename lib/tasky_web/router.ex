@@ -63,6 +63,7 @@ defmodule TaskyWeb.Router do
       live "/courses/:id", CourseLive.Show, :show
       live "/courses/:id/edit", CourseLive.Form, :edit
       live "/courses/:id/add", CourseLive.Add, :add
+      live "/courses/:id/progress", CourseLive.Progress, :progress
     end
   end
 

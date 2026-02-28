@@ -24,6 +24,12 @@ defmodule TaskyWeb.CourseLive.Show do
                 <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
               </.link>
               <.link
+                navigate={~p"/courses/#{@course}/progress"}
+                class="inline-flex items-center gap-2 bg-emerald-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98]"
+              >
+                <.icon name="hero-chart-bar" class="w-4 h-4" /> Fortschritt
+              </.link>
+              <.link
                 navigate={~p"/courses/#{@course}/edit?return_to=show"}
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
