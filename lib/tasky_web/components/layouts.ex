@@ -106,6 +106,13 @@ defmodule TaskyWeb.Layouts do
                     <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Einstellungen
                   </.link>
                 </li>
+                <%= if @current_scope.user.role in ["teacher", "admin"] do %>
+                  <li>
+                    <.link navigate={~p"/settings/tally"} class="flex items-center gap-2">
+                      <.icon name="hero-key" class="w-4 h-4" /> Tally API Key
+                    </.link>
+                  </li>
+                <% end %>
                 <li>
                   <.link href={~p"/users/log-out"} method="delete" class="flex items-center gap-2">
                     <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> Abmelden

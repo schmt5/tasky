@@ -66,6 +66,11 @@ defmodule TaskyWeb.Router do
       live "/courses/:id/progress", CourseLive.Progress, :progress
       live "/progress/:task_id", TaskLive.Progress, :task_progress
     end
+
+    live_session :teacher_settings,
+      on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
+      live "/settings/tally", UserLive.TallySettings, :edit
+    end
   end
 
   ## Student routes

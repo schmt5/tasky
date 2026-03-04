@@ -131,6 +131,45 @@ defmodule TaskyWeb.UserLive.Settings do
             </.form>
           </div>
         </div>
+
+        <%!-- Tally API Settings Section (Teachers only) --%>
+        <%= if @current_scope.user.role == "teacher" do %>
+          <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <div class="flex items-center justify-between p-6 border-b border-stone-100">
+              <div>
+                <h2 class="text-lg font-semibold text-stone-800">Tally.so Integration</h2>
+                <p class="text-sm text-stone-500 mt-1">
+                  Verwalten Sie Ihre Tally.so API-Einstellungen
+                </p>
+              </div>
+            </div>
+
+            <div class="p-6">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <%= if @current_scope.user.tally_api_key do %>
+                    <div class="flex items-center gap-2 text-green-600">
+                      <.icon name="hero-check-circle" class="w-5 h-5" />
+                      <span class="text-sm font-medium">API Key konfiguriert</span>
+                    </div>
+                  <% else %>
+                    <div class="flex items-center gap-2 text-amber-600">
+                      <.icon name="hero-exclamation-circle" class="w-5 h-5" />
+                      <span class="text-sm font-medium">Kein API Key hinterlegt</span>
+                    </div>
+                  <% end %>
+                </div>
+
+                <.link
+                  navigate={~p"/settings/tally"}
+                  class="inline-flex items-center gap-2 text-sm font-semibold text-sky-600 hover:text-sky-700 transition-colors"
+                >
+                  API Key verwalten <.icon name="hero-arrow-right" class="w-4 h-4" />
+                </.link>
+              </div>
+            </div>
+          </div>
+        <% end %>
       </div>
     </Layouts.app>
     """

@@ -498,7 +498,11 @@ defmodule TaskyWeb.TaskLive.Progress do
 
             form_id ->
               # Fetch from Tally API
-              case TallyApi.fetch_submission(form_id, tally_response_id) do
+              case TallyApi.fetch_submission(
+                     socket.assigns.current_scope,
+                     form_id,
+                     tally_response_id
+                   ) do
                 {:ok, data} ->
                   metadata = TallyApi.extract_metadata(data)
                   files = TallyApi.extract_file_uploads(data)

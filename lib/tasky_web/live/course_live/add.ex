@@ -16,7 +16,7 @@ defmodule TaskyWeb.CourseLive.Add do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
               Kursverwaltung
             </div>
-            
+
             <div class="flex items-center gap-2">
               <.link
                 navigate={~p"/courses/#{@course}"}
@@ -35,11 +35,11 @@ defmodule TaskyWeb.CourseLive.Add do
               </button>
             </div>
           </div>
-          
+
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             Lerneinheiten hinzufügen
           </h1>
-          
+
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             Fügen Sie neue Lerneinheiten zu
             <span class="font-medium text-stone-700">"{@course.name}"</span>
@@ -47,92 +47,146 @@ defmodule TaskyWeb.CourseLive.Add do
           </p>
         </div>
       </div>
-       <%!-- Forms List --%>
+      <%!-- Forms List --%>
       <div class="max-w-6xl mx-auto px-8 pb-8">
-        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-          <%= if @loading do %>
-            <div class="flex flex-col items-center justify-center py-16">
-              <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-500 mb-4">
-                <.icon name="hero-arrow-path" class="w-6 h-6 animate-spin" />
-              </div>
-              
-              <p class="text-stone-600 font-medium">Lade Tally Formulare...</p>
-            </div>
-          <% else %>
-            <%= if @forms == [] do %>
-              <div class="flex flex-col items-center text-center px-8 py-16 bg-white">
-                <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
-                  <.icon name="hero-document-text" class="w-6 h-6" />
-                </div>
-                
-                <h3 class="text-base font-semibold text-stone-700 mb-2">Keine Formulare gefunden</h3>
-                
-                <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
-                  Es wurden keine Tally Formulare gefunden. Erstellen Sie zuerst Formulare in Tally.
-                </p>
-                
-                <button
-                  type="button"
-                  phx-click="refresh_forms"
-                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+        <%= if is_nil(@current_scope.user.tally_api_key) do %>
+          <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-[16px] border border-amber-200 p-8 shadow-[0_2px_12px_rgba(251,191,36,0.15)]">
+            <div class="flex flex-col items-center text-center">
+              <div class="w-14 h-14 bg-amber-100 rounded-[12px] flex items-center justify-center mb-4">
+                <svg
+                  width="28"
+                  height="28"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  class="text-amber-600"
                 >
-                  <.icon name="hero-arrow-path" class="w-4 h-4" /> Erneut laden
-                </button>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                  />
+                </svg>
+              </div>
+              <div class="w-full max-w-[480px]">
+                <h3 class="text-lg font-semibold text-amber-900 mb-2">
+                  Tally API Key erforderlich
+                </h3>
+                <p class="text-base text-amber-800 leading-relaxed mb-6">
+                  Tasky funktioniert zusammen mit Tally. Damit diese beide kommunizieren können, musst du einen API Key hinterlegen.
+                </p>
+                <.link
+                  navigate={~p"/settings/tally"}
+                  class="inline-flex items-center gap-2 bg-amber-600 text-white text-[15px] font-semibold px-6 py-3 rounded-[10px] shadow-[0_2px_8px_rgba(217,119,6,0.25)] transition-all duration-150 hover:bg-amber-700 active:scale-[0.98]"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                    />
+                  </svg>
+                  API Key jetzt einrichten
+                </.link>
+              </div>
+            </div>
+          </div>
+        <% else %>
+          <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <%= if @loading do %>
+              <div class="flex flex-col items-center justify-center py-16">
+                <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-500 mb-4">
+                  <.icon name="hero-arrow-path" class="w-6 h-6 animate-spin" />
+                </div>
+
+                <p class="text-stone-600 font-medium">Lade Tally Formulare...</p>
               </div>
             <% else %>
-              <div class="p-6 border-b border-stone-100">
-                <h2 class="text-lg font-semibold text-stone-800">Verfügbare Tally Formulare</h2>
-                
-                <p class="text-sm text-stone-500 mt-1">{length(@forms)} Formulare gefunden</p>
-              </div>
-              
-              <ul class="list-none p-0 m-0">
-                <li
-                  :for={form <- @forms}
-                  class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 hover:bg-stone-50"
-                >
-                  <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600">
-                    <.icon name="hero-document-text" class="w-5 h-5" />
+              <%= if @forms == [] do %>
+                <div class="flex flex-col items-center text-center px-8 py-16 bg-white">
+                  <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
+                    <.icon name="hero-document-text" class="w-6 h-6" />
                   </div>
-                  
-                  <div class="flex-1 min-w-0 flex flex-col gap-1.5">
-                    <div class="flex items-center gap-2.5 flex-wrap">
-                      <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">
-                        {form["name"]}
-                      </h3>
-                      
-                      <%= if Map.get(form, "status") == "DRAFT" do %>
-                        <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-amber-100 text-amber-700">
-                          Entwurf
+
+                  <h3 class="text-base font-semibold text-stone-700 mb-2">
+                    Keine Formulare gefunden
+                  </h3>
+
+                  <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
+                    Es wurden keine Tally Formulare gefunden. Erstellen Sie zuerst Formulare in Tally.
+                  </p>
+
+                  <button
+                    type="button"
+                    phx-click="refresh_forms"
+                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                  >
+                    <.icon name="hero-arrow-path" class="w-4 h-4" /> Erneut laden
+                  </button>
+                </div>
+              <% else %>
+                <div class="p-6 border-b border-stone-100">
+                  <h2 class="text-lg font-semibold text-stone-800">Verfügbare Tally Formulare</h2>
+
+                  <p class="text-sm text-stone-500 mt-1">{length(@forms)} Formulare gefunden</p>
+                </div>
+
+                <ul class="list-none p-0 m-0">
+                  <li
+                    :for={form <- @forms}
+                    class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 hover:bg-stone-50"
+                  >
+                    <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600">
+                      <.icon name="hero-document-text" class="w-5 h-5" />
+                    </div>
+
+                    <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                      <div class="flex items-center gap-2.5 flex-wrap">
+                        <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">
+                          {form["name"]}
+                        </h3>
+
+                        <%= if Map.get(form, "status") == "DRAFT" do %>
+                          <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-amber-100 text-amber-700">
+                            Entwurf
+                          </span>
+                        <% end %>
+                      </div>
+
+                      <p class="text-[13px] text-stone-400">Form ID: {form["id"]}</p>
+                    </div>
+
+                    <div class="flex items-center gap-2 shrink-0 pt-0.5">
+                      <%= if form_already_added?(form["id"], @existing_form_ids) do %>
+                        <span class="text-[13px] text-stone-500 italic px-3.5 py-1.5">
+                          bereits hinzugefügt
                         </span>
+                      <% else %>
+                        <button
+                          type="button"
+                          phx-click="add_form"
+                          phx-value-form_id={form["id"]}
+                          phx-value-form_name={form["name"]}
+                          class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                        >
+                          <.icon name="hero-plus" class="w-4 h-4" /> Hinzufügen
+                        </button>
                       <% end %>
                     </div>
-                    
-                    <p class="text-[13px] text-stone-400">Form ID: {form["id"]}</p>
-                  </div>
-                  
-                  <div class="flex items-center gap-2 shrink-0 pt-0.5">
-                    <%= if form_already_added?(form["id"], @existing_form_ids) do %>
-                      <span class="text-[13px] text-stone-500 italic px-3.5 py-1.5">
-                        bereits hinzugefügt
-                      </span>
-                    <% else %>
-                      <button
-                        type="button"
-                        phx-click="add_form"
-                        phx-value-form_id={form["id"]}
-                        phx-value-form_name={form["name"]}
-                        class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-                      >
-                        <.icon name="hero-plus" class="w-4 h-4" /> Hinzufügen
-                      </button>
-                    <% end %>
-                  </div>
-                </li>
-              </ul>
+                  </li>
+                </ul>
+              <% end %>
             <% end %>
-          <% end %>
-        </div>
+          </div>
+        <% end %>
       </div>
     </Layouts.app>
     """
@@ -194,7 +248,7 @@ defmodule TaskyWeb.CourseLive.Add do
 
   @impl true
   def handle_info(:load_forms, socket) do
-    case Client.list_forms() do
+    case Client.list_forms(socket.assigns.current_scope) do
       {:ok, forms} ->
         {:noreply,
          socket

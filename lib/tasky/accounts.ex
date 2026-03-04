@@ -125,6 +125,37 @@ defmodule Tasky.Accounts do
   end
 
   @doc """
+  Returns an `%Ecto.Changeset{}` for changing the user Tally API key.
+
+  ## Examples
+
+      iex> change_user_tally_api_key(user)
+      %Ecto.Changeset{data: %User{}}
+
+  """
+  def change_user_tally_api_key(user, attrs \\ %{}) do
+    User.tally_api_key_changeset(user, attrs)
+  end
+
+  @doc """
+  Updates the user Tally API key.
+
+  ## Examples
+
+      iex> update_user_tally_api_key(user, %{tally_api_key: "tly-..."})
+      {:ok, %User{}}
+
+      iex> update_user_tally_api_key(user, %{tally_api_key: ""})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_user_tally_api_key(user, attrs) do
+    user
+    |> change_user_tally_api_key(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
   Updates the user email using the given token.
 
   If the token matches, the user email is updated and the token is deleted.

@@ -14,7 +14,7 @@ defmodule Tasky.External.TallyApi do
 
   ## Examples
 
-      iex> TallyApi.fetch_submission("ODzq8K", "WOvKy4v")
+      iex> TallyApi.fetch_submission(current_scope, "ODzq8K", "WOvKy4v")
       {:ok, %{
         "submission" => %{
           "id" => "WOvKy4v",
@@ -24,13 +24,13 @@ defmodule Tasky.External.TallyApi do
         "questions" => [...]
       }}
 
-      iex> TallyApi.fetch_submission("invalid", "invalid")
+      iex> TallyApi.fetch_submission(current_scope, "invalid", "invalid")
       {:error, :not_found}
   """
-  def fetch_submission(form_id, submission_id) do
+  def fetch_submission(current_scope, form_id, submission_id) do
     url = "#{@base_url}/forms/#{form_id}/submissions/#{submission_id}"
 
-    case make_request(url) do
+    case make_request(current_scope, url) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
 
@@ -55,16 +55,16 @@ defmodule Tasky.External.TallyApi do
 
   ## Examples
 
-      iex> TallyApi.fetch_submissions("ODzq8K")
+      iex> TallyApi.fetch_submissions(current_scope, "ODzq8K")
       {:ok, %{
         "submissions" => [...],
         "questions" => [...]
       }}
   """
-  def fetch_submissions(form_id) do
+  def fetch_submissions(current_scope, form_id) do
     url = "#{@base_url}/forms/#{form_id}/submissions"
 
-    case make_request(url) do
+    case make_request(current_scope, url) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
 
@@ -173,8 +173,8 @@ defmodule Tasky.External.TallyApi do
 
   defp get_question_title(_), do: "Question"
 
-  defp make_request(url) do
-    api_key = get_api_key()
+  defp make_request(current_scope, url) do
+    api_key = get_api_key(current_scope)
 
     if is_nil(api_key) || api_key == "" do
       Logger.error("Tally API key not configured")
@@ -189,7 +189,10 @@ defmodule Tasky.External.TallyApi do
     end
   end
 
-  defp get_api_key do
-    # Application.get_env(:tasky, :tally_api_key)
+  defp get_api_key(current_scope) do
+    case current_scope do
+      %{user: %{tally_api_key: api_key}} when is_binary(api_key) -> api_key
+      _ -> nil
+    end
   end
 end

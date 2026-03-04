@@ -9,6 +9,7 @@ defmodule Tasky.Accounts.User do
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
     field :role, :string, default: "student"
+    field :tally_api_key, :string
 
     has_many :task_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :student_id
     has_many :graded_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :graded_by_id
@@ -72,6 +73,37 @@ defmodule Tasky.Accounts.User do
     |> validate_required([:firstname, :lastname])
     |> validate_length(:firstname, min: 1, max: 100)
     |> validate_length(:lastname, min: 1, max: 100)
+  end
+
+  @doc """
+  A user changeset for updating the Tally API key.
+  """
+  def tally_api_key_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:tally_api_key])
+    |> validate_tally_api_key()
+  end
+
+  defp validate_tally_api_key(changeset) do
+    case get_change(changeset, :tally_api_key) do
+      nil ->
+        # No change, valid
+        changeset
+
+      "" ->
+        # Empty string not allowed
+        add_error(changeset, :tally_api_key, "darf nicht leer sein")
+
+      value when is_binary(value) ->
+        # Trim and validate length
+        changeset
+        |> put_change(:tally_api_key, String.trim(value))
+        |> validate_length(:tally_api_key,
+          min: 1,
+          max: 255,
+          message: "muss zwischen 1 und 255 Zeichen lang sein"
+        )
+    end
   end
 
   defp validate_role(changeset) do
