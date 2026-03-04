@@ -180,7 +180,7 @@ defmodule TaskyWeb.UserLive.TallySettings do
         {:noreply,
          socket
          |> put_flash(:info, info)
-         |> push_navigate(to: ~p"/")}
+         |> push_navigate(to: ~p"/courses")}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :tally_form, to_form(changeset, action: :insert))}
