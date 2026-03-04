@@ -5,6 +5,7 @@ defmodule Tasky.Courses do
 
   import Ecto.Query, warn: false
   alias Tasky.Repo
+  alias Tasky.Tasks.Task
 
   alias Tasky.Courses.Course
   alias Tasky.Courses.CourseEnrollment
@@ -54,7 +55,8 @@ defmodule Tasky.Courses do
   Raises `Ecto.NoResultsError` if the Course does not exist.
   """
   def get_course!(scope, id) do
-    course = Repo.get!(Course, id) |> Repo.preload([:teacher, :tasks])
+    tasks_query = from t in Task, order_by: [asc: t.position]
+    course = Repo.get!(Course, id) |> Repo.preload([:teacher, tasks: tasks_query])
 
     case scope.user.role do
       "admin" ->

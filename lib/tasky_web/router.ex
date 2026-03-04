@@ -65,6 +65,7 @@ defmodule TaskyWeb.Router do
       live "/courses/:id/add", CourseLive.Add, :add
       live "/courses/:id/progress", CourseLive.Progress, :progress
       live "/courses/:id/students", CourseLive.Students, :students
+      live "/courses/:id/reorder", CourseLive.Reorder, :reorder
       live "/progress/:task_id", TaskLive.Progress, :task_progress
     end
 

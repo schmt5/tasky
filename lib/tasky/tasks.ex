@@ -163,6 +163,29 @@ defmodule Tasky.Tasks do
     Task.changeset(task, attrs, scope)
   end
 
+  @doc """
+  Reorders tasks by updating their positions.
+
+  ## Examples
+
+      iex> reorder_tasks(scope, [%{id: 1, position: 0}, %{id: 2, position: 1}])
+      {:ok, :reordered}
+
+  """
+  def reorder_tasks(%Scope{} = scope, task_positions) when is_list(task_positions) do
+    Repo.transaction(fn ->
+      Enum.each(task_positions, fn %{id: id, position: position} ->
+        task = get_task!(scope, id)
+
+        task
+        |> Ecto.Changeset.change(%{position: position})
+        |> Repo.update!()
+      end)
+
+      :reordered
+    end)
+  end
+
   ## Task Submissions
 
   @doc """
