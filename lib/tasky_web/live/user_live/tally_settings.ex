@@ -14,12 +14,6 @@ defmodule TaskyWeb.UserLive.TallySettings do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
               Integration
             </div>
-            <.link
-              navigate={~p"/users/settings"}
-              class="text-sm text-stone-500 hover:text-stone-700 transition-colors"
-            >
-              ← Zurück zu Einstellungen
-            </.link>
           </div>
 
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
