@@ -16,7 +16,7 @@ defmodule TaskyWeb.CourseLive.Show do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
               Kursverwaltung
             </div>
-            
+
             <div class="flex items-center gap-2">
               <.link
                 navigate={~p"/courses"}
@@ -38,27 +38,27 @@ defmodule TaskyWeb.CourseLive.Show do
               </.link>
             </div>
           </div>
-          
+
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             {@course.name}
           </h1>
-          
+
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {@course.description || "Keine Beschreibung verfügbar"}
           </p>
         </div>
       </div>
-      
+
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
         <%!-- Tasks Section --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="flex items-center justify-between p-6 border-b border-stone-100">
             <div>
               <h2 class="text-lg font-semibold text-stone-800">Lerneinheiten</h2>
-              
+
               <p class="text-sm text-stone-500 mt-1">{length(@course.tasks)} Aufgaben insgesamt</p>
             </div>
-            
+
             <.link
               navigate={~p"/courses/#{@course}/add"}
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
@@ -66,7 +66,7 @@ defmodule TaskyWeb.CourseLive.Show do
               <.icon name="hero-plus" class="w-4 h-4" /> Lerneinheit hinzufügen
             </.link>
           </div>
-          
+
           <ul :if={@has_tasks} id="tasks" phx-update="stream" class="list-none p-0 m-0">
             <li
               :for={{id, task} <- @streams.tasks}
@@ -76,11 +76,11 @@ defmodule TaskyWeb.CourseLive.Show do
               <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600">
                 <.icon name="hero-clipboard-document-list" class="w-5 h-5" />
               </div>
-              
+
               <div class="flex-1 min-w-0 flex flex-col gap-1.5">
                 <div class="flex items-center gap-2.5 flex-wrap">
                   <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{task.name}</h3>
-                  
+
                   <span class={[
                     "inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em]",
                     task.status == "draft" && "bg-stone-100 text-stone-700",
@@ -90,7 +90,7 @@ defmodule TaskyWeb.CourseLive.Show do
                     {String.capitalize(task.status)}
                   </span>
                 </div>
-                
+
                 <div class="flex items-center gap-2">
                   <%= if task.link do %>
                     <a
@@ -99,12 +99,13 @@ defmodule TaskyWeb.CourseLive.Show do
                       class="text-[13px] text-sky-500 hover:text-sky-600 flex items-center gap-1 transition-colors"
                     >
                       <.icon name="hero-link" class="w-3.5 h-3.5" /> Link öffnen
-                    </a> <span class="text-xs text-stone-300">·</span>
+                    </a>
+                     <span class="text-xs text-stone-300">·</span>
                   <% end %>
-                   <span class="text-[13px] text-stone-400">Position: {task.position}</span>
+                  <span class="text-[13px] text-stone-400">Position: {task.position}</span>
                 </div>
               </div>
-              
+
               <div class="flex items-center gap-2 shrink-0 pt-0.5">
                 <button
                   type="button"
@@ -117,18 +118,18 @@ defmodule TaskyWeb.CourseLive.Show do
               </div>
             </li>
           </ul>
-          
+
           <div :if={!@has_tasks} class="flex flex-col items-center text-center px-8 py-16 bg-white">
             <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
               <.icon name="hero-clipboard-document-list" class="w-6 h-6" />
             </div>
-            
+
             <h3 class="text-base font-semibold text-stone-700 mb-2">Noch keine Lerneinheiten</h3>
-            
+
             <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
               Fügen Sie Ihre erste Lerneinheit hinzu, um zu beginnen.
             </p>
-            
+
             <.link
               navigate={~p"/courses/#{@course}/add"}
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
@@ -137,17 +138,17 @@ defmodule TaskyWeb.CourseLive.Show do
             </.link>
           </div>
         </div>
-         <%!-- Students Section --%>
+        <%!-- Students Section --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="flex items-center justify-between p-6 border-b border-stone-100">
             <div>
               <h2 class="text-lg font-semibold text-stone-800">Eingeschriebene Studenten</h2>
-              
+
               <p class="text-sm text-stone-500 mt-1">
                 {if @has_students, do: "#{@student_count} Studenten", else: "Keine Studenten"}
               </p>
             </div>
-            
+
             <button
               type="button"
               phx-click="show_enroll_modal"
@@ -156,7 +157,7 @@ defmodule TaskyWeb.CourseLive.Show do
               <.icon name="hero-user-plus" class="w-4 h-4" /> Studenten einschreiben
             </button>
           </div>
-          
+
           <ul :if={@has_students} id="enrolled-students" phx-update="stream" class="list-none p-0 m-0">
             <li
               :for={{id, student} <- @streams.enrolled_students}
@@ -167,9 +168,9 @@ defmodule TaskyWeb.CourseLive.Show do
                 <div class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-stone-100 text-stone-600">
                   <.icon name="hero-user-circle" class="w-5 h-5" />
                 </div>
-                 <span class="text-[15px] font-medium text-stone-800">{student.email}</span>
+                <span class="text-[15px] font-medium text-stone-800">{student.email}</span>
               </div>
-              
+
               <button
                 type="button"
                 phx-click={
@@ -182,18 +183,18 @@ defmodule TaskyWeb.CourseLive.Show do
               </button>
             </li>
           </ul>
-          
+
           <div :if={!@has_students} class="flex flex-col items-center text-center px-8 py-16 bg-white">
             <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
               <.icon name="hero-users" class="w-6 h-6" />
             </div>
-            
+
             <h3 class="text-base font-semibold text-stone-700 mb-2">Noch keine Studenten</h3>
-            
+
             <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
               Schreiben Sie Studenten ein, um zu beginnen.
             </p>
-            
+
             <button
               type="button"
               phx-click="show_enroll_modal"
@@ -204,17 +205,23 @@ defmodule TaskyWeb.CourseLive.Show do
           </div>
         </div>
       </div>
-       <%!-- Enrollment Modal --%>
+      <%!-- Enrollment Modal --%>
       <%= if @show_enroll_modal do %>
-        <div class="fixed inset-0 bg-stone-900/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div
-            class="bg-white rounded-[14px] shadow-2xl max-w-md w-full mx-4 border border-stone-200"
-            phx-click-away="hide_enroll_modal"
-          >
+        <dialog
+          id="enroll-modal"
+          class="modal modal-open"
+          phx-window-keydown="hide_enroll_modal"
+          phx-key="escape"
+        >
+          <%!-- Modal backdrop --%>
+          <div class="modal-backdrop bg-stone-900/50" phx-click="hide_enroll_modal"></div>
+
+          <%!-- Modal box --%>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
             <div class="p-6 border-b border-stone-100">
               <h3 class="text-lg font-semibold text-stone-800">Studenten einschreiben</h3>
             </div>
-            
+
             <div class="p-6">
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <div
@@ -225,9 +232,9 @@ defmodule TaskyWeb.CourseLive.Show do
                     <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-stone-200 text-stone-600">
                       <.icon name="hero-user-circle" class="w-5 h-5" />
                     </div>
-                     <span class="text-[15px] text-stone-800">{student.email}</span>
+                    <span class="text-[15px] text-stone-800">{student.email}</span>
                   </div>
-                  
+
                   <button
                     type="button"
                     phx-click="enroll_student"
@@ -238,7 +245,7 @@ defmodule TaskyWeb.CourseLive.Show do
                   </button>
                 </div>
               </div>
-              
+
               <div
                 :if={Enum.empty?(@unenrolled_students)}
                 class="text-center py-12 text-stone-500"
@@ -246,11 +253,11 @@ defmodule TaskyWeb.CourseLive.Show do
                 <div class="w-12 h-12 rounded-[10px] bg-stone-100 flex items-center justify-center text-stone-400 mx-auto mb-3">
                   <.icon name="hero-check-circle" class="w-6 h-6" />
                 </div>
-                
+
                 <p class="text-sm">Alle Studenten sind bereits in diesem Kurs eingeschrieben.</p>
               </div>
             </div>
-            
+
             <div class="p-6 border-t border-stone-100 flex justify-end">
               <button
                 type="button"
@@ -261,7 +268,7 @@ defmodule TaskyWeb.CourseLive.Show do
               </button>
             </div>
           </div>
-        </div>
+        </dialog>
       <% end %>
     </Layouts.app>
     """
