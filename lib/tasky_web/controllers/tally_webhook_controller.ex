@@ -24,7 +24,7 @@ defmodule TaskyWeb.TallyWebhookController do
   }
   """
   def receive(conn, params) do
-    Logger.info("Received Tally webhook: #{inspect(params)}")
+    Logger.info("Received Tally webhook")
 
     # Verify signature if configured
     case verify_signature(conn, params) do
@@ -41,34 +41,46 @@ defmodule TaskyWeb.TallyWebhookController do
   end
 
   defp process_webhook(conn, params) do
-    with {:ok, data} <- extract_webhook_data(params),
-         {:ok, submission} <- find_submission(data),
-         {:ok, updated_submission} <- mark_completed(submission, data) do
-      Logger.info(
-        "Successfully marked submission #{submission.id} as completed for student #{data.user_id}, task #{data.task_id}"
-      )
+    result =
+      with {:ok, data} <- extract_webhook_data(params),
+           {:ok, submission} <- find_submission(data),
+           {:ok, updated_submission} <- mark_completed(submission, data) do
+        Logger.info(
+          "Successfully marked submission #{submission.id} as completed for student #{data.user_id}, task #{data.task_id}"
+        )
 
-      # Preload task to get course_id
-      updated_submission = Repo.preload(updated_submission, :task)
+        # Preload task to get course_id for broadcasts
+        updated_submission = Repo.preload(updated_submission, :task)
 
-      # Broadcast the update to the student's LiveView
-      Phoenix.PubSub.broadcast(
-        Tasky.PubSub,
-        "student:#{data.user_id}:submissions",
-        {:submission_updated, updated_submission}
-      )
+        {:ok, updated_submission, data}
+      else
+        error -> error
+      end
 
-      # Broadcast to course progress view for teachers
-      Phoenix.PubSub.broadcast(
-        Tasky.PubSub,
-        "course:#{updated_submission.task.course_id}:progress",
-        {:submission_updated, updated_submission}
-      )
+    case result do
+      {:ok, updated_submission, data} ->
+        # Send response first
+        response = json(conn, %{status: "ok"})
 
-      json(conn, %{status: "ok"})
-    else
+        # Then broadcast updates asynchronously (don't block response)
+        Task.start(fn ->
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "student:#{data.user_id}:submissions",
+            {:submission_updated, updated_submission}
+          )
+
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "course:#{updated_submission.task.course_id}:progress",
+            {:submission_updated, updated_submission}
+          )
+        end)
+
+        response
+
       {:error, :missing_fields} ->
-        Logger.error("Missing required fields in webhook payload")
+        Logger.error("Missing required fields (user_id, task_id) in webhook payload")
 
         conn
         |> put_status(:bad_request)
@@ -87,6 +99,13 @@ defmodule TaskyWeb.TallyWebhookController do
         conn
         |> put_status(:unprocessable_entity)
         |> json(%{error: "Failed to update submission"})
+
+      error ->
+        Logger.error("Unexpected error in webhook processing: #{inspect(error)}")
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: "Internal server error"})
     end
   end
 
@@ -135,7 +154,9 @@ defmodule TaskyWeb.TallyWebhookController do
     end
   end
 
-  defp extract_webhook_data(_params), do: {:error, :missing_fields}
+  defp extract_webhook_data(_params) do
+    {:error, :missing_fields}
+  end
 
   defp find_field_value(fields, label) when is_list(fields) do
     Enum.find_value(fields, fn field ->
@@ -153,18 +174,32 @@ defmodule TaskyWeb.TallyWebhookController do
 
   defp find_submission(%{user_id: user_id, task_id: task_id}) do
     case Repo.get_by(Tasks.TaskSubmission, student_id: user_id, task_id: task_id) do
-      nil -> {:error, :submission_not_found}
-      submission -> {:ok, submission}
+      nil ->
+        {:error, :submission_not_found}
+
+      submission ->
+        {:ok, submission}
     end
   end
 
   defp mark_completed(submission, %{response_id: response_id}) do
-    submission
-    |> Ecto.Changeset.change(%{
-      status: "completed",
-      completed_at: DateTime.utc_now(:second),
-      tally_response_id: response_id
-    })
-    |> Repo.update()
+    result =
+      submission
+      |> Ecto.Changeset.change(%{
+        status: "completed",
+        completed_at: DateTime.utc_now(:second),
+        tally_response_id: response_id
+      })
+      |> Repo.update()
+
+    case result do
+      {:ok, updated} ->
+        Logger.info("Successfully completed submission #{submission.id}")
+        {:ok, updated}
+
+      {:error, changeset} ->
+        Logger.error("Failed to update submission: #{inspect(changeset.errors)}")
+        {:error, changeset}
+    end
   end
 end

@@ -77,12 +77,21 @@ defmodule TaskyWeb.CourseLive.Progress do
                       class="hover:bg-stone-50 transition-colors duration-150"
                     >
                       <td class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-4 whitespace-nowrap border-r border-stone-200">
-                        <div class="flex items-center gap-3">
-                          <div class="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 bg-sky-100 text-sky-600">
+                        <.link
+                          navigate={~p"/progress/#{task.id}"}
+                          class="flex items-center gap-3 hover:bg-sky-50 hover:text-sky-700 transition-all duration-200 rounded-lg px-2 py-1 -mx-2 -my-1 group/link"
+                        >
+                          <div class="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 bg-sky-100 text-sky-600 group-hover/link:bg-sky-200 transition-colors">
                             <.icon name="hero-clipboard-document-list" class="w-5 h-5" />
                           </div>
-                          <span class="text-[14px] font-medium text-stone-800">{task.name}</span>
-                        </div>
+                          <span class="text-[14px] font-medium text-stone-800 group-hover/link:text-sky-700 transition-all">
+                            {task.name}
+                          </span>
+                          <.icon
+                            name="hero-arrow-right"
+                            class="w-4 h-4 text-stone-400 group-hover/link:text-sky-600 opacity-0 group-hover/link:opacity-100 transition-all"
+                          />
+                        </.link>
                       </td>
 
                       <td :for={student <- @students} class="px-4 py-4">

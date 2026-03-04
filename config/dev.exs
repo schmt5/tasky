@@ -92,3 +92,8 @@ config :swoosh, :api_client, false
 # Set to nil or empty string to skip signature verification in development
 # In production, set this to your actual Tally signing secret
 config :tasky, :tally_signing_secret, nil
+
+# Tally API configuration
+# Set your Tally API key to fetch submission data
+# Get your API key from: https://tally.so/account/api
+config :tasky, :tally_api_key, System.get_env("TALLY_API_KEY")

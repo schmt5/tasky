@@ -120,4 +120,13 @@ if config_env() == :prod do
   #     export TALLY_SIGNING_SECRET="your-secure-secret-here"
   #
   config :tasky, :tally_signing_secret, System.get_env("TALLY_SIGNING_SECRET")
+
+  # ## Tally API Configuration
+  #
+  # Configure the API key for fetching submission data from Tally.
+  # Get your API key from: https://tally.so/account/api
+  #
+  #     export TALLY_API_KEY="your-api-key-here"
+  #
+  config :tasky, :tally_api_key, System.get_env("TALLY_API_KEY")
 end
