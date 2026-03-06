@@ -224,6 +224,19 @@ defmodule TaskyWeb.CourseLive.Add do
 
     case Tasks.create_task(socket.assigns.current_scope, task_attrs) do
       {:ok, _task} ->
+        # Create webhook for the form
+        webhook_url = "https://roxann-fluttery-jacqueline.ngrok-free.dev/api/webhooks/tally"
+
+        case Client.create_webhook(socket.assigns.current_scope, form_id, webhook_url) do
+          {:ok, _webhook} ->
+            require Logger
+            Logger.info("Webhook created successfully for form #{form_id}")
+
+          {:error, reason} ->
+            require Logger
+            Logger.warning("Failed to create webhook for form #{form_id}: #{inspect(reason)}")
+        end
+
         # Update existing form IDs
         existing_form_ids = [form_id | socket.assigns.existing_form_ids]
 
