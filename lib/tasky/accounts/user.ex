@@ -11,6 +11,9 @@ defmodule Tasky.Accounts.User do
     field :role, :string, default: "student"
     field :tally_api_key, :string
 
+    # Virtual fields for UI representation
+    field :is_teacher, :boolean, virtual: true, default: false
+
     has_many :task_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :student_id
     has_many :graded_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :graded_by_id
     has_many :taught_courses, Tasky.Courses.Course, foreign_key: :teacher_id
@@ -56,12 +59,28 @@ defmodule Tasky.Accounts.User do
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :firstname, :lastname, :role])
+    |> cast(attrs, [:email, :firstname, :lastname, :is_teacher])
+    |> transform_is_teacher_to_role()
     |> validate_required([:firstname, :lastname])
     |> validate_length(:firstname, min: 1, max: 100)
     |> validate_length(:lastname, min: 1, max: 100)
     |> validate_email(opts)
     |> validate_role()
+  end
+
+  # Transform virtual field is_teacher to role field
+  defp transform_is_teacher_to_role(changeset) do
+    case get_change(changeset, :is_teacher) do
+      true ->
+        put_change(changeset, :role, "teacher")
+
+      false ->
+        put_change(changeset, :role, "student")
+
+      nil ->
+        # If is_teacher is not provided, default to student
+        put_change(changeset, :role, "student")
+    end
   end
 
   @doc """

@@ -8,48 +8,146 @@ defmodule TaskyWeb.UserLive.Registration do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-sm">
-        <div class="text-center">
-          <.header>
-            Register for an account
-            <:subtitle>
-              Already registered?
-              <.link navigate={~p"/users/log-in"} class="font-semibold text-brand hover:underline">
-                Log in
+      <div class="min-h-screen bg-gradient-to-br from-sky-50 via-white to-stone-50 flex items-center justify-center px-4 py-12">
+        <div class="w-full max-w-[440px]">
+          <%!-- Header --%>
+          <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-[16px] bg-gradient-to-br from-sky-400 to-sky-600 shadow-[0_4px_16px_rgba(14,165,233,0.25)] mb-6">
+              <svg
+                width="32"
+                height="32"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+                class="text-white"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
+              </svg>
+            </div>
+
+            <h1 class="font-serif text-[38px] text-stone-900 leading-[1.1] mb-3 font-normal">
+              Konto erstellen
+            </h1>
+
+            <p class="text-[15px] text-stone-500 leading-[1.6]">
+              Bereits registriert?
+              <.link
+                navigate={~p"/users/log-in"}
+                class="font-semibold text-sky-600 hover:text-sky-700 transition-colors duration-150"
+              >
+                Jetzt anmelden
               </.link>
-              to your account now.
-            </:subtitle>
-          </.header>
+              und loslegen.
+            </p>
+          </div>
+          <%!-- Form Card --%>
+          <div class="bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-hidden">
+            <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
+              <div class="p-8 space-y-5">
+                <.input
+                  field={@form[:firstname]}
+                  type="text"
+                  label="Vorname"
+                  required
+                  phx-mounted={JS.focus()}
+                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                  placeholder="Max"
+                />
+
+                <.input
+                  field={@form[:lastname]}
+                  type="text"
+                  label="Nachname"
+                  required
+                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                  placeholder="Mustermann"
+                />
+
+                <.input
+                  field={@form[:email]}
+                  type="email"
+                  label="E-Mail"
+                  autocomplete="username"
+                  required
+                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                  placeholder="max@beispiel.de"
+                />
+
+                <div class="pt-2 border-t border-stone-100 mt-6 pt-6">
+                  <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
+                    <div class="flex items-start gap-3">
+                      <div class="mt-0.5">
+                        <.input
+                          field={@form[:is_teacher]}
+                          type="checkbox"
+                          label=""
+                          class="w-5 h-5 text-sky-500 bg-white border-stone-300 rounded-[6px] focus:ring-4 focus:ring-sky-100 focus:ring-offset-0 transition-all duration-150 cursor-pointer"
+                        />
+                      </div>
+                      <div class="flex-1 -mt-1">
+                        <label for={@form[:is_teacher].id} class="cursor-pointer">
+                          <span class="block text-[14px] font-semibold text-stone-800 hover:text-stone-900 transition-colors">
+                            Ich bin eine Lehrperson
+                          </span>
+                          <span class="block text-[13px] text-stone-600 mt-0.5 leading-[1.5]">
+                            Lehrpersonen können Kurse erstellen und Lerneinheiten verwalten.
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="px-8 pb-8">
+                <button
+                  type="submit"
+                  phx-disable-with="Konto wird erstellt..."
+                  class="w-full inline-flex items-center justify-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-6 py-3.5 rounded-[10px] shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  Konto erstellen
+                </button>
+              </div>
+            </.form>
+          </div>
+          <%!-- Footer Note --%>
+          <div class="mt-6 flex items-center justify-center gap-2 text-[13px] text-stone-400">
+            <svg
+              width="14"
+              height="14"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+              />
+            </svg>
+            <span>Kostenlos · DSGVO-konform · Keine Kreditkarte nötig</span>
+          </div>
         </div>
-
-        <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
-          <.input
-            field={@form[:firstname]}
-            type="text"
-            label="First Name"
-            required
-            phx-mounted={JS.focus()}
-          />
-
-          <.input
-            field={@form[:lastname]}
-            type="text"
-            label="Last Name"
-            required
-          />
-
-          <.input
-            field={@form[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            required
-          />
-
-          <.button phx-disable-with="Creating account..." class="btn btn-primary w-full">
-            Create an account
-          </.button>
-        </.form>
       </div>
     </Layouts.app>
     """
@@ -62,7 +160,7 @@ defmodule TaskyWeb.UserLive.Registration do
   end
 
   def mount(_params, _session, socket) do
-    changeset = Accounts.change_user_email(%User{}, %{}, validate_unique: false)
+    changeset = Accounts.change_user_registration(%User{}, %{}, validate_unique: false)
 
     {:ok, assign_form(socket, changeset), temporary_assigns: [form: nil]}
   end
@@ -81,7 +179,7 @@ defmodule TaskyWeb.UserLive.Registration do
          socket
          |> put_flash(
            :info,
-           "An email was sent to #{user.email}, please access it to confirm your account."
+           "Eine E-Mail wurde an #{user.email} gesendet. Bitte öffnen Sie diese, um Ihr Konto zu bestätigen."
          )
          |> push_navigate(to: ~p"/users/log-in")}
 
@@ -91,7 +189,7 @@ defmodule TaskyWeb.UserLive.Registration do
   end
 
   def handle_event("validate", %{"user" => user_params}, socket) do
-    changeset = Accounts.change_user_email(%User{}, user_params, validate_unique: false)
+    changeset = Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
     {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
 
