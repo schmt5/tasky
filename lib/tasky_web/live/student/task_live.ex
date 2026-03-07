@@ -99,19 +99,45 @@ defmodule TaskyWeb.Student.TaskLive do
               </div>
             <% else %>
               <%!-- Task Completed - Success Message --%>
-              <div class="bg-gradient-to-br from-emerald-50 to-white rounded-[14px] border border-emerald-200 p-12 shadow-sm text-center">
-                <div class="text-7xl mb-6 animate-bounce">
-                  {@success_emoji}
+              <div class="border border-stone-200 rounded-[18px] bg-white shadow-sm overflow-hidden">
+                <div class="flex flex-col items-center text-center px-10 py-16 bg-white">
+                  <div class="text-[56px] leading-none mb-1.5 animate-bounce">
+                    {@success_emoji}
+                  </div>
+
+                  <div class="w-6 h-[1.5px] bg-stone-200 rounded-sm my-5"></div>
+
+                  <h3 class="font-serif text-[34px] font-normal text-stone-900 leading-tight mb-2.5 animate-[fadeUp_0.4s_0.15s_ease_both]">
+                    Aufgabe <em class="italic text-emerald-500">erledigt.</em>
+                  </h3>
+
+                  <p class="text-[14px] text-stone-400 leading-relaxed max-w-[300px] mb-8 animate-[fadeUp_0.4s_0.2s_ease_both]">
+                    Sehr gute Arbeit — du hast diese Aufgabe erfolgreich abgeschlossen.
+                  </p>
+
+                  <div class="animate-[fadeUp_0.4s_0.25s_ease_both]">
+                    <.link
+                      navigate={~p"/student/courses/#{@task.course_id}"}
+                      class="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
+                    >
+                      Weiter
+                      <svg
+                        width="14"
+                        height="14"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14 5l7 7m0 0l-7 7m7-7H3"
+                        />
+                      </svg>
+                    </.link>
+                  </div>
                 </div>
-
-                <h3 class="text-3xl font-semibold text-emerald-900 mb-6">Aufgabe erledigt</h3>
-
-                <.link
-                  navigate={~p"/student/courses/#{@task.course_id}"}
-                  class="inline-flex items-center gap-2 px-6 py-3 text-[15px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors duration-150 shadow-sm"
-                >
-                  Weiter
-                </.link>
               </div>
             <% end %>
           <% else %>
