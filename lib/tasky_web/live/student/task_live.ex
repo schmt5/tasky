@@ -6,205 +6,262 @@ defmodule TaskyWeb.Student.TaskLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="max-w-4xl mx-auto">
-        <.header>
-          {@task.name}
-          <:subtitle>
-            <div class="flex items-center gap-4 mt-2">
-              <span class={[
-                "inline-flex items-center px-3 py-1 rounded-full text-sm font-medium",
-                @submission.status == "not_started" && "bg-gray-100 text-gray-800",
-                @submission.status == "in_progress" && "bg-yellow-100 text-yellow-800",
-                @submission.status == "completed" && "bg-green-100 text-green-800"
-              ]}>
-                {format_status(@submission.status)}
-              </span>
-              <%= if @submission.completed_at do %>
-                <span class="text-sm text-gray-500">
-                  Completed {format_date(@submission.completed_at)}
-                </span>
-              <% end %>
-            </div>
-          </:subtitle>
+    <script src="https://tally.so/widgets/embed.js">
+    </script>
 
-          <:actions>
-            <.button navigate={~p"/student/my-tasks"}>
-              <.icon name="hero-arrow-left" /> Back to My Tasks
-            </.button>
-          </:actions>
-        </.header>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".TallyEmbed">
+      export default {
+        mounted() {
+          if (window.Tally) {
+            window.Tally.loadEmbeds();
+          }
+        },
+        updated() {
+          if (window.Tally) {
+            window.Tally.loadEmbeds();
+          }
+        }
+      }
+    </script>
 
-        <div class="mt-8 space-y-8">
-          <%!-- Task Details --%>
-          <div class="bg-white shadow rounded-lg p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Task Details</h2>
+    <div id="task-container" phx-hook=".TallyEmbed">
+      <Layouts.app flash={@flash} current_scope={@current_scope}>
+        <%!-- Compact Page Header --%>
+        <div class="bg-white border-b border-stone-200 h-[54px] flex items-center px-8">
+          <div class="max-w-6xl mx-auto w-full flex items-center justify-between">
+            <h1 class="text-[16px] font-semibold text-stone-900 truncate">
+              {@task.name}
+            </h1>
 
-            <.list>
-              <:item title="Status">
-                <span class={[
-                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                  @task.status == "draft" && "bg-gray-100 text-gray-800",
-                  @task.status == "published" && "bg-blue-100 text-blue-800",
-                  @task.status == "archived" && "bg-red-100 text-red-800"
-                ]}>
-                  {String.capitalize(@task.status)}
-                </span>
-              </:item>
-
-              <:item :if={@task.link} title="Link">
-                <a
-                  href={@task.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-blue-600 hover:text-blue-700 underline flex items-center gap-1"
-                >
-                  {@task.link} <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
-                </a>
-              </:item>
-
-              <:item :if={@task.position} title="Position">{@task.position}</:item>
-            </.list>
+            <.link
+              navigate={~p"/student/courses/#{@task.course_id}"}
+              class="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors duration-150 flex-shrink-0"
+            >
+              <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
+            </.link>
           </div>
-          <%!-- Action Buttons --%>
-          <%= if @submission.status == "not_started" do %>
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 class="text-lg font-semibold text-blue-900 mb-2">Ready to Start?</h3>
+        </div>
 
-              <p class="text-blue-700 mb-4">
-                Click the button below to mark this task as in progress.
-              </p>
-
-              <.button
-                variant="primary"
-                phx-click="start_task"
-                phx-value-id={@submission.id}
-                class="w-full sm:w-auto"
-              >
-                <.icon name="hero-play" class="w-5 h-5" /> Start Task
-              </.button>
+        <%!-- Main Content --%>
+        <div class="max-w-4xl mx-auto px-8 py-8">
+          <%= if @preview_mode && @submission.status == "completed" do %>
+            <%!-- Preview Mode Banner --%>
+            <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div class="flex items-center gap-3">
+                <.icon name="hero-eye" class="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <div class="flex-1">
+                  <p class="text-[14px] font-medium text-blue-900">
+                    Vorschaumodus
+                  </p>
+                  <p class="text-[13px] text-blue-700">
+                    Du siehst deine bereits abgeschlossene Aufgabe zur Ansicht.
+                  </p>
+                </div>
+              </div>
             </div>
           <% end %>
 
-          <%= if @submission.status == "in_progress" do %>
-            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-              <h3 class="text-lg font-semibold text-yellow-900 mb-2">Task In Progress</h3>
+          <%= if @submission.status == "completed" && !@preview_mode do %>
+            <%= if @submission.graded_at do %>
+              <%!-- Graded Feedback Card --%>
+              <div class="bg-gradient-to-br from-emerald-50 to-white rounded-[14px] border border-emerald-200 p-8 shadow-sm">
+                <div class="flex items-start gap-4">
+                  <div class="flex-shrink-0">
+                    <div class="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
+                      <.icon name="hero-check-badge" class="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
 
-              <p class="text-yellow-700 mb-4">
-                Once you've completed this task, click the button below to submit it for grading.
-              </p>
+                  <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-emerald-900 mb-1">Aufgabe bewertet!</h3>
 
-              <.button
-                variant="primary"
-                phx-click="complete_task"
-                phx-value-id={@submission.id}
-                class="w-full sm:w-auto bg-green-600 hover:bg-green-700"
-              >
-                <.icon name="hero-check-circle" class="w-5 h-5" /> Mark as Complete
-              </.button>
-            </div>
-          <% end %>
-
-          <%= if @submission.status == "completed" do %>
-            <div class="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h3 class="text-lg font-semibold text-green-900 mb-2">Task Completed!</h3>
-
-              <%= if @submission.graded_at do %>
-                <div class="space-y-4">
-                  <p class="text-green-700">Your task has been graded by your teacher.</p>
-
-                  <div class="bg-white rounded-lg p-4 border border-green-200">
-                    <div class="flex items-center justify-between mb-3">
-                      <span class="text-sm font-medium text-gray-700">Score</span>
-                      <span class="text-2xl font-bold text-green-600">
-                        {@submission.points}<span class="text-sm text-gray-500">/100</span>
-                      </span>
+                    <div class="flex items-baseline gap-2 mb-3">
+                      <span class="text-3xl font-bold text-emerald-600">{@submission.points}</span>
+                      <span class="text-sm text-stone-500">von 100 Punkten</span>
                     </div>
 
                     <%= if @submission.feedback && @submission.feedback != "" do %>
-                      <div class="border-t border-gray-200 pt-3">
-                        <span class="text-sm font-medium text-gray-700">Teacher Feedback</span>
-                        <p class="mt-1 text-gray-600 whitespace-pre-wrap">{@submission.feedback}</p>
+                      <div class="mt-4 bg-white rounded-lg p-4 border border-emerald-100">
+                        <p class="text-[13px] font-semibold text-stone-700 mb-2">
+                          Feedback vom Lehrer:
+                        </p>
+                        <p class="text-[14px] text-stone-600 whitespace-pre-wrap leading-relaxed">
+                          {@submission.feedback}
+                        </p>
                       </div>
                     <% end %>
 
-                    <%= if @submission.graded_at do %>
-                      <div class="mt-3 text-xs text-gray-500">
-                        Graded {format_date(@submission.graded_at)}
-                      </div>
-                    <% end %>
+                    <div class="mt-3 text-[12px] text-stone-500">
+                      Bewertet am {format_date(@submission.graded_at)}
+                    </div>
                   </div>
                 </div>
-              <% else %>
-                <p class="text-green-700">
-                  Your task has been submitted and is waiting for your teacher to grade it.
-                </p>
-
-                <div class="mt-4 flex items-center gap-2 text-sm text-green-600">
-                  <.icon name="hero-clock" class="w-5 h-5 animate-pulse" />
-                  <span>Waiting for grade...</span>
+              </div>
+            <% else %>
+              <%!-- Task Completed - Success Message --%>
+              <div class="bg-gradient-to-br from-emerald-50 to-white rounded-[14px] border border-emerald-200 p-12 shadow-sm text-center">
+                <div class="text-7xl mb-6 animate-bounce">
+                  {@success_emoji}
                 </div>
-              <% end %>
-            </div>
+
+                <h3 class="text-3xl font-semibold text-emerald-900 mb-6">Aufgabe erledigt</h3>
+
+                <.link
+                  navigate={~p"/student/courses/#{@task.course_id}"}
+                  class="inline-flex items-center gap-2 px-6 py-3 text-[15px] font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors duration-150 shadow-sm"
+                >
+                  Weiter
+                </.link>
+              </div>
+            <% end %>
+          <% else %>
+            <%!-- Show form only if task is not completed --%>
+            <%= if @task.link do %>
+              <%!-- Tally Form Embed (no card wrapper) --%>
+              <iframe
+                data-tally-src={"#{build_tally_url(@task.link, @task.id, @current_scope.user)}"}
+                loading="lazy"
+                width="100%"
+                height="800"
+                frameborder="0"
+                marginheight="0"
+                marginwidth="0"
+                title={@task.name}
+                class="w-full min-h-[800px]"
+              >
+              </iframe>
+            <% else %>
+              <%!-- No Link Available --%>
+              <div class="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                <.icon name="hero-document-text" class="mx-auto h-12 w-12 text-gray-400" />
+                <h3 class="mt-2 text-sm font-semibold text-gray-900">Kein Formular verfügbar</h3>
+
+                <p class="mt-1 text-sm text-gray-500">
+                  Für diese Aufgabe ist kein Formular-Link hinterlegt.
+                </p>
+              </div>
+            <% end %>
           <% end %>
         </div>
-      </div>
-    </Layouts.app>
+      </Layouts.app>
+    </div>
     """
   end
 
   @impl true
-  def mount(%{"id" => id}, _session, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
+  def mount(%{"id" => id} = params, _session, socket) do
+    # Subscribe to real-time updates for this student's submissions
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(
+        Tasky.PubSub,
+        "student:#{socket.assigns.current_scope.user.id}:submissions"
+      )
+    end
 
+    # Convert string ID to integer
+    task_id = String.to_integer(id)
+
+    # Get or create submission for this task
     {:ok, submission} =
       Tasks.get_or_create_submission(
         socket.assigns.current_scope,
-        id
+        task_id
       )
+
+    # Preload the task through the submission
+    submission = Tasky.Repo.preload(submission, :task)
+    task = submission.task
+
+    # Auto-start the task if it's not started yet
+    submission =
+      if submission.status in ["not_started", "open", "draft"] do
+        case Tasks.update_submission_status(
+               socket.assigns.current_scope,
+               submission.id,
+               "in_progress"
+             ) do
+          {:ok, updated_submission} ->
+            Tasky.Repo.preload(updated_submission, :task, force: true)
+
+          {:error, _} ->
+            submission
+        end
+      else
+        submission
+      end
+
+    # Check if preview mode is enabled
+    preview_mode = Map.get(params, "preview") == "true"
 
     {:ok,
      socket
      |> assign(:page_title, task.name)
      |> assign(:task, task)
-     |> assign(:submission, submission)}
+     |> assign(:submission, submission)
+     |> assign(:preview_mode, preview_mode)
+     |> assign(:success_emoji, random_success_emoji())}
   end
 
   @impl true
-  def handle_event("start_task", %{"id" => id}, socket) do
-    {:ok, submission} =
-      Tasks.update_submission_status(
-        socket.assigns.current_scope,
-        id,
-        "in_progress"
-      )
+  def handle_info({:submission_updated, updated_submission}, socket) do
+    # Only update if this is the current task's submission
+    if updated_submission.id == socket.assigns.submission.id do
+      # Preload task for the updated submission
+      updated_submission = Tasky.Repo.preload(updated_submission, :task, force: true)
 
-    {:noreply,
-     socket
-     |> put_flash(:info, "Task started! Good luck!")
-     |> assign(:submission, submission)}
-  end
-
-  def handle_event("complete_task", %{"id" => id}, socket) do
-    {:ok, submission} =
-      Tasks.complete_task(
-        socket.assigns.current_scope,
-        id
-      )
-
-    {:noreply,
-     socket
-     |> put_flash(:info, "Task completed! Your teacher will grade it soon.")
-     |> assign(:submission, submission)}
-  end
-
-  defp format_status(status) do
-    status
-    |> String.replace("_", " ")
-    |> String.capitalize()
+      {:noreply, assign(socket, :submission, updated_submission)}
+    else
+      {:noreply, socket}
+    end
   end
 
   defp format_date(datetime) do
-    Calendar.strftime(datetime, "%B %d, %Y at %I:%M %p")
+    Calendar.strftime(datetime, "%d.%m.%Y um %H:%M")
+  end
+
+  # Pick a random success emoji to celebrate task completion
+  defp random_success_emoji do
+    success_emojis = ["🎉", "🚀", "⭐", "🎊", "✨", "🏆", "🎯", "💫", "🌟", "👏"]
+    Enum.random(success_emojis)
+  end
+
+  # Extract Tally embed URL from a regular Tally link
+  # Converts https://tally.so/r/Pd6yr1 to https://tally.so/embed/Pd6yr1
+  defp extract_tally_embed_url(link) do
+    cond do
+      String.contains?(link, "/embed/") ->
+        link
+
+      String.contains?(link, "/r/") ->
+        String.replace(link, "/r/", "/embed/")
+
+      true ->
+        # If it's already a full URL, return as is
+        link
+    end
+  end
+
+  # Build complete Tally URL with hidden fields
+  # According to Tally docs, query parameters are automatically forwarded to hidden fields
+  defp build_tally_url(link, task_id, user) do
+    base_url = extract_tally_embed_url(link)
+
+    # Check if URL already has query parameters
+    separator = if String.contains?(base_url, "?"), do: "&", else: "?"
+
+    # Build all parameters in one string
+    params =
+      [
+        "alignLeft=1",
+        "hideTitle=1",
+        "transparentBackground=1",
+        "dynamicHeight=1",
+        "task_id=#{task_id}",
+        "user_id=#{user.id}",
+        "user_name=#{URI.encode_www_form(user.email)}"
+      ]
+      |> Enum.join("&")
+
+    "#{base_url}#{separator}#{params}"
   end
 end
