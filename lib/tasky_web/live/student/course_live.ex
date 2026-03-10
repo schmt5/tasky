@@ -84,77 +84,127 @@ defmodule TaskyWeb.Student.CourseLive do
               </p>
             </div>
           <% else %>
-            <%!-- Task Cards Grid --%>
-            <div class="space-y-4">
+            <%!-- Timeline Label --%>
+            <div class="text-[10px] tracking-[0.12em] uppercase font-semibold text-stone-400 mb-1">
+              Aufgaben
+            </div>
+            <%!-- Timeline Container --%>
+            <div class="relative flex flex-col">
+              <%!-- Vertical Spine Line --%>
+              <div class="absolute left-[19px] top-[32px] bottom-[32px] w-[2px] bg-gradient-to-b from-stone-200 via-stone-200 to-stone-100 rounded-[1px] z-0">
+              </div>
+              <%!-- Timeline Items --%>
               <div
-                :for={submission <- @submissions}
-                class={[
-                  "rounded-xl shadow-sm transition-all duration-300 overflow-hidden border",
-                  submission.status == "completed" &&
-                    "bg-white/40 backdrop-blur-sm border-gray-300/50",
-                  submission.status != "completed" &&
-                    "bg-white border-gray-200 hover:shadow-md hover:border-gray-300"
-                ]}
+                :for={{submission, index} <- Enum.with_index(@submissions, 1)}
+                class="flex items-start gap-4 relative z-[1]"
               >
-                <%!-- Card Body with Modern Layout --%>
-                <div class="p-6">
-                  <div class="flex items-center gap-4">
-                    <%!-- Content Section --%>
-                    <div class="flex-1 min-w-0">
-                      <%!-- Status Chip --%>
-                      <div class="mb-2">
-                        <span class={[
-                          "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase transition-all duration-200",
-                          submission.status == "draft" &&
-                            "bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200",
-                          submission.status == "not_started" &&
-                            "bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200",
-                          submission.status == "open" &&
-                            "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-                          submission.status == "in_progress" &&
-                            "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
-                          submission.status == "completed" &&
-                            "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
-                          submission.status == "review_approved" &&
-                            "bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20",
-                          submission.status == "review_denied" &&
-                            "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/20"
-                        ]}>
-                          {format_status(submission.status)}
-                        </span>
-                      </div>
-                      <%!-- Task Name as Link --%>
-                      <.link
-                        navigate={
-                          if submission.status == "completed",
-                            do: ~p"/student/tasks/#{submission.task.id}?preview=true",
-                            else: ~p"/student/tasks/#{submission.task.id}"
-                        }
-                        class="text-xl font-semibold text-gray-800 hover:text-gray-900 transition-colors duration-150"
-                      >
+                <%!-- Timeline Node --%>
+                <div class={[
+                  "flex-shrink-0 w-[40px] h-[40px] rounded-full flex items-center justify-center text-[12px] font-bold border-2 border-white shadow-sm mt-[14px] relative transition-all duration-200",
+                  submission.status in ["completed", "review_approved"] &&
+                    "bg-green-100 text-green-700 shadow-[0_0_0_2px_#dcfce7]",
+                  submission.task.id == @active_task_id &&
+                    (index == 1 || index == length(@submissions)) &&
+                    "bg-white text-stone-700 shadow-[0_0_0_3px_#e0f2fe,0_2px_8px_rgba(14,165,233,0.25)]",
+                  submission.task.id == @active_task_id &&
+                    index != 1 && index != length(@submissions) &&
+                    "bg-sky-500 text-white shadow-[0_0_0_3px_#e0f2fe,0_2px_8px_rgba(14,165,233,0.25)]",
+                  submission.task.id != @active_task_id &&
+                    submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                    (index == 1 || index == length(@submissions)) &&
+                    "bg-white text-stone-700 shadow-[0_0_0_2px_#e7e5e4]",
+                  submission.task.id != @active_task_id &&
+                    submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                    index != 1 && index != length(@submissions) &&
+                    "bg-stone-200 text-stone-500 shadow-[0_0_0_2px_#e7e5e4]",
+                  submission.status == "review_denied" &&
+                    "bg-rose-100 text-rose-700 shadow-[0_0_0_2px_#ffe4e6]"
+                ]}>
+                  <%= if submission.status in ["completed", "review_approved"] do %>
+                    <.icon name="hero-check" class="w-4 h-4" />
+                  <% else %>
+                    <%= cond do %>
+                      <% index == 1 -> %>
+                        <span class="text-[16px]">📍</span>
+                      <% index == length(@submissions) -> %>
+                        <span class="text-[16px]">🏁</span>
+                      <% true -> %>
+                        {String.pad_leading("#{index}", 2, "0")}
+                    <% end %>
+                  <% end %>
+                </div>
+                <%!-- Timeline Card --%>
+                <.link
+                  navigate={
+                    if submission.status == "completed",
+                      do: ~p"/student/tasks/#{submission.task.id}?preview=true",
+                      else: ~p"/student/tasks/#{submission.task.id}"
+                  }
+                  class={[
+                    "flex-1 rounded-xl shadow-sm transition-all duration-300 overflow-hidden border mb-3 flex items-center gap-4 p-6 no-underline",
+                    submission.status in ["completed", "review_approved"] &&
+                      "bg-white/40 backdrop-blur-sm border-stone-100 hover:border-stone-200",
+                    submission.task.id == @active_task_id &&
+                      "bg-white border-sky-200 shadow-[0_0_0_3px_#f0f9ff] hover:border-sky-300 hover:shadow-[0_4px_16px_rgba(14,165,233,0.12),0_0_0_3px_#f0f9ff]",
+                    submission.task.id != @active_task_id &&
+                      submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                      "bg-white border-stone-200 hover:shadow-md hover:border-stone-300 hover:-translate-y-[1px]",
+                    submission.status == "review_denied" &&
+                      "bg-white border-rose-200 hover:border-rose-300"
+                  ]}
+                >
+                  <%!-- Card Body --%>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class={[
+                        "text-[14px] font-semibold leading-[1.4] whitespace-nowrap overflow-hidden text-ellipsis",
+                        submission.status in ["completed", "review_approved"] &&
+                          "text-stone-400 line-through decoration-stone-300",
+                        submission.status not in ["completed", "review_approved"] && "text-stone-800"
+                      ]}>
                         {submission.task.name}
-                      </.link>
+                      </span>
                     </div>
-                    <%!-- Action Button or Completion Indicator --%>
-                    <div class="flex-shrink-0">
-                      <%= cond do %>
-                        <% submission.status == "completed" || submission.status == "review_approved" -> %>
-                          <div class="text-3xl">✅</div>
-                        <% submission.status == "review_denied" -> %>
-                          <div class="text-3xl">❌</div>
-                        <% true -> %>
-                          <.link
-                            navigate={~p"/student/tasks/#{submission.task.id}"}
-                            class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors duration-150 shadow-sm"
-                          >
-                            {if submission.status in ["not_started", "open", "draft"],
-                              do: "Starten",
-                              else: "Öffnen"}
-                          </.link>
-                      <% end %>
+
+                    <div>
+                      <span class={[
+                        "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap",
+                        submission.status == "draft" && "bg-gray-100 text-gray-700",
+                        submission.status == "not_started" && "bg-stone-100 text-stone-500",
+                        submission.status == "open" && "bg-stone-100 text-stone-500",
+                        submission.status == "in_progress" && "bg-sky-100 text-sky-700",
+                        submission.status == "completed" && "bg-green-100 text-green-800",
+                        submission.status == "review_approved" && "bg-sky-100 text-sky-700",
+                        submission.status == "review_denied" && "bg-rose-100 text-rose-700"
+                      ]}>
+                        {format_status(submission.status)}
+                      </span>
                     </div>
                   </div>
-                </div>
+                  <%!-- Action Icon/Indicator --%>
+                  <div class="flex-shrink-0">
+                    <%= cond do %>
+                      <% submission.status in ["completed", "review_approved"] -> %>
+                        <div class="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center">
+                          <.icon name="hero-check" class="w-3.5 h-3.5" />
+                        </div>
+                      <% submission.status == "review_denied" -> %>
+                        <div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center">
+                          <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+                        </div>
+                      <% submission.task.id == @active_task_id -> %>
+                        <button class="px-4 py-2 text-[13px] font-semibold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all duration-150 shadow-[0_2px_8px_rgba(14,165,233,0.25)]">
+                          {if submission.status in ["not_started", "open", "draft"],
+                            do: "Starten",
+                            else: "Öffnen"}
+                        </button>
+                      <% true -> %>
+                        <button class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg border-[1.5px] border-stone-200 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-all duration-150">
+                          Öffnen
+                        </button>
+                    <% end %>
+                  </div>
+                </.link>
               </div>
             </div>
           <% end %>
@@ -182,18 +232,37 @@ defmodule TaskyWeb.Student.CourseLive do
     submissions = Tasks.list_course_submissions(socket.assigns.current_scope, course_id)
 
     stats = calculate_stats(submissions)
+    active_task_id = find_active_task_id(submissions)
 
     {:ok,
      socket
      |> assign(:page_title, course.name)
      |> assign(:course, course)
      |> assign(:submissions, submissions)
-     |> assign(:stats, stats)}
+     |> assign(:stats, stats)
+     |> assign(:active_task_id, active_task_id)}
+  end
+
+  @impl true
+  def handle_info({:submission_updated, _updated_submission}, socket) do
+    # Reload all submissions to get the latest state
+    submissions =
+      Tasks.list_course_submissions(socket.assigns.current_scope, socket.assigns.course.id)
+
+    stats = calculate_stats(submissions)
+    active_task_id = find_active_task_id(submissions)
+
+    {:noreply,
+     socket
+     |> assign(:submissions, submissions)
+     |> assign(:stats, stats)
+     |> assign(:active_task_id, active_task_id)
+     |> put_flash(:info, "Aufgabenstatus aktualisiert!")}
   end
 
   defp format_status(status) do
     case status do
-      "draft" -> "Entwurf"
+      "draft" -> "TODO"
       "not_started" -> "Nicht begonnen"
       "open" -> "Offen"
       "in_progress" -> "In Bearbeitung"
@@ -204,26 +273,34 @@ defmodule TaskyWeb.Student.CourseLive do
     end
   end
 
-  @impl true
-  def handle_info({:submission_updated, _updated_submission}, socket) do
-    # Reload all submissions to get the latest state
-    submissions =
-      Tasks.list_course_submissions(socket.assigns.current_scope, socket.assigns.course.id)
-
-    stats = calculate_stats(submissions)
-
-    {:noreply,
-     socket
-     |> assign(:submissions, submissions)
-     |> assign(:stats, stats)
-     |> put_flash(:info, "Aufgabenstatus aktualisiert!")}
-  end
-
   defp calculate_stats(submissions) do
     %{
       total: length(submissions),
       completed: Enum.count(submissions, &(&1.status == "completed")),
       graded: Enum.count(submissions, &(&1.status == "review_approved"))
     }
+  end
+
+  defp find_active_task_id(submissions) do
+    # Find the in_progress task
+    in_progress = Enum.find(submissions, &(&1.status == "in_progress"))
+
+    if in_progress do
+      in_progress.task.id
+    else
+      # Find the first non-completed task
+      next_task =
+        Enum.find(submissions, &(&1.status not in ["completed", "review_approved"]))
+
+      if next_task do
+        next_task.task.id
+      else
+        # If all completed, return the first task id (fallback)
+        case List.first(submissions) do
+          nil -> nil
+          submission -> submission.task.id
+        end
+      end
+    end
   end
 end
