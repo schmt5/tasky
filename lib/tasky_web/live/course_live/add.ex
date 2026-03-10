@@ -27,7 +27,7 @@ defmodule TaskyWeb.CourseLive.Add do
               <button
                 type="button"
                 phx-click="refresh_forms"
-                disabled={@loading}
+                disabled={@loading || @adding}
                 class="inline-flex items-center gap-2 bg-stone-100 text-stone-700 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-stone-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <.icon name="hero-arrow-path" class={["w-4 h-4", @loading && "animate-spin"]} />
@@ -134,16 +134,67 @@ defmodule TaskyWeb.CourseLive.Add do
                 </div>
               <% else %>
                 <div class="p-6 border-b border-stone-100">
-                  <h2 class="text-lg font-semibold text-stone-800">Verfügbare Tally Formulare</h2>
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h2 class="text-lg font-semibold text-stone-800">
+                        Verfügbare Tally Formulare
+                      </h2>
 
-                  <p class="text-sm text-stone-500 mt-1">{length(@forms)} Formulare gefunden</p>
+                      <p class="text-sm text-stone-500 mt-1">
+                        {length(@forms)} Formulare gefunden
+                        <%= if MapSet.size(@selected_form_ids) > 0 do %>
+                          <span class="inline-flex items-center ml-2 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-sky-100 text-sky-700">
+                            {MapSet.size(@selected_form_ids)} ausgewählt
+                          </span>
+                        <% end %>
+                      </p>
+                    </div>
+
+                    <%= if MapSet.size(@selected_form_ids) > 0 do %>
+                      <button
+                        type="button"
+                        phx-click="add_selected_forms"
+                        disabled={@adding}
+                        class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-4 py-2 rounded-[8px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <%= if @adding do %>
+                          <.icon name="hero-arrow-path" class="w-4 h-4 animate-spin" />
+                          Wird hinzugefügt...
+                        <% else %>
+                          <.icon name="hero-plus" class="w-4 h-4" />
+                          Ausgewählte hinzufügen ({MapSet.size(@selected_form_ids)})
+                        <% end %>
+                      </button>
+                    <% end %>
+                  </div>
                 </div>
 
                 <ul class="list-none p-0 m-0">
                   <li
                     :for={form <- @forms}
-                    class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 hover:bg-stone-50"
+                    class={[
+                      "flex items-start gap-5 px-6 py-5 border-b border-stone-100 transition-colors duration-150 last:border-b-0",
+                      form_already_added?(form["id"], @existing_form_ids) &&
+                        "bg-stone-50 opacity-60",
+                      !form_already_added?(form["id"], @existing_form_ids) &&
+                        "bg-white hover:bg-stone-50"
+                    ]}
                   >
+                    <%= if form_already_added?(form["id"], @existing_form_ids) do %>
+                      <div class="w-5 h-5 mt-2 shrink-0"></div>
+                    <% else %>
+                      <label class="flex items-center justify-center w-5 h-5 mt-2 shrink-0 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          phx-click="toggle_form_selection"
+                          phx-value-form_id={form["id"]}
+                          checked={MapSet.member?(@selected_form_ids, form["id"])}
+                          disabled={@adding}
+                          class="w-5 h-5 rounded-[4px] border-2 border-stone-300 text-sky-500 focus:ring-2 focus:ring-sky-500 focus:ring-offset-0 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </label>
+                    <% end %>
+
                     <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600">
                       <.icon name="hero-document-text" class="w-5 h-5" />
                     </div>
@@ -169,16 +220,6 @@ defmodule TaskyWeb.CourseLive.Add do
                         <span class="text-[13px] text-stone-500 italic px-3.5 py-1.5">
                           bereits hinzugefügt
                         </span>
-                      <% else %>
-                        <button
-                          type="button"
-                          phx-click="add_form"
-                          phx-value-form_id={form["id"]}
-                          phx-value-form_name={form["name"]}
-                          class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-                        >
-                          <.icon name="hero-plus" class="w-4 h-4" /> Hinzufügen
-                        </button>
                       <% end %>
                     </div>
                   </li>
@@ -205,50 +246,44 @@ defmodule TaskyWeb.CourseLive.Add do
      |> assign(:course, course)
      |> assign(:forms, [])
      |> assign(:loading, true)
+     |> assign(:adding, false)
+     |> assign(:selected_form_ids, MapSet.new())
      |> assign(:existing_form_ids, existing_form_ids)}
   end
 
   @impl true
-  def handle_event("add_form", %{"form_id" => form_id, "form_name" => form_name}, socket) do
-    course = socket.assigns.course
-    next_position = length(course.tasks) + 1
+  def handle_event("toggle_form_selection", %{"form_id" => form_id}, socket) do
+    selected_form_ids = socket.assigns.selected_form_ids
 
-    task_attrs = %{
-      name: form_name,
-      link: Client.form_url(form_id),
-      position: next_position,
-      status: "published",
-      course_id: course.id,
-      tally_form_id: form_id
-    }
+    new_selected =
+      if MapSet.member?(selected_form_ids, form_id) do
+        MapSet.delete(selected_form_ids, form_id)
+      else
+        MapSet.put(selected_form_ids, form_id)
+      end
 
-    case Tasks.create_task(socket.assigns.current_scope, task_attrs) do
-      {:ok, _task} ->
-        # Create webhook for the form
-        webhook_url = "https://roxann-fluttery-jacqueline.ngrok-free.dev/api/webhooks/tally"
+    {:noreply, assign(socket, :selected_form_ids, new_selected)}
+  end
 
-        case Client.create_webhook(socket.assigns.current_scope, form_id, webhook_url) do
-          {:ok, _webhook} ->
-            require Logger
-            Logger.info("Webhook created successfully for form #{form_id}")
+  @impl true
+  def handle_event("add_selected_forms", _params, socket) do
+    selected_form_ids = socket.assigns.selected_form_ids
 
-          {:error, reason} ->
-            require Logger
-            Logger.warning("Failed to create webhook for form #{form_id}: #{inspect(reason)}")
-        end
+    if MapSet.size(selected_form_ids) == 0 do
+      {:noreply, socket}
+    else
+      # Start adding process
+      socket = assign(socket, :adding, true)
 
-        # Update existing form IDs
-        existing_form_ids = [form_id | socket.assigns.existing_form_ids]
+      # Get selected forms with their data
+      selected_forms =
+        socket.assigns.forms
+        |> Enum.filter(fn form -> MapSet.member?(selected_form_ids, form["id"]) end)
 
-        {:noreply,
-         socket
-         |> assign(:existing_form_ids, existing_form_ids)
-         |> put_flash(:info, "Lerneinheit erfolgreich hinzugefügt")}
+      # Send message to process forms asynchronously
+      send(self(), {:process_selected_forms, selected_forms})
 
-      {:error, _changeset} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Fehler beim Hinzufügen der Lerneinheit")}
+      {:noreply, socket}
     end
   end
 
@@ -263,9 +298,12 @@ defmodule TaskyWeb.CourseLive.Add do
   def handle_info(:load_forms, socket) do
     case Client.list_forms(socket.assigns.current_scope) do
       {:ok, forms} ->
+        # Sort forms alphabetically by name (A to Z, case insensitive)
+        sorted_forms = Enum.sort_by(forms, fn form -> String.downcase(form["name"]) end)
+
         {:noreply,
          socket
-         |> assign(:forms, forms)
+         |> assign(:forms, sorted_forms)
          |> assign(:loading, false)}
 
       {:error, reason} ->
@@ -285,6 +323,92 @@ defmodule TaskyWeb.CourseLive.Add do
          |> assign(:loading, false)
          |> put_flash(:error, error_message)}
     end
+  end
+
+  @impl true
+  def handle_info({:process_selected_forms, selected_forms}, socket) do
+    course = socket.assigns.course
+    current_position = length(course.tasks)
+
+    results =
+      selected_forms
+      |> Enum.with_index(1)
+      |> Enum.map(fn {form, index} ->
+        task_attrs = %{
+          name: form["name"],
+          link: Client.form_url(form["id"]),
+          position: current_position + index,
+          status: "published",
+          course_id: course.id,
+          tally_form_id: form["id"]
+        }
+
+        case Tasks.create_task(socket.assigns.current_scope, task_attrs) do
+          {:ok, _task} ->
+            # Create webhook for the form
+            webhook_url = "https://roxann-fluttery-jacqueline.ngrok-free.dev/api/webhooks/tally"
+
+            case Client.create_webhook(socket.assigns.current_scope, form["id"], webhook_url) do
+              {:ok, _webhook} ->
+                require Logger
+                Logger.info("Webhook created successfully for form #{form["id"]}")
+
+              {:error, reason} ->
+                require Logger
+
+                Logger.warning(
+                  "Failed to create webhook for form #{form["id"]}: #{inspect(reason)}"
+                )
+            end
+
+            {:ok, form["id"]}
+
+          {:error, changeset} ->
+            {:error, form["id"], changeset}
+        end
+      end)
+
+    # Count successes and failures
+    successes = Enum.count(results, fn result -> match?({:ok, _}, result) end)
+    failures = Enum.count(results, fn result -> match?({:error, _, _}, result) end)
+
+    # Update existing form IDs with successful additions
+    new_form_ids =
+      results
+      |> Enum.filter(fn result -> match?({:ok, _}, result) end)
+      |> Enum.map(fn {:ok, form_id} -> form_id end)
+
+    existing_form_ids = new_form_ids ++ socket.assigns.existing_form_ids
+
+    # Prepare flash message
+    socket =
+      cond do
+        failures == 0 ->
+          message =
+            if successes == 1 do
+              "1 Lerneinheit erfolgreich hinzugefügt"
+            else
+              "#{successes} Lerneinheiten erfolgreich hinzugefügt"
+            end
+
+          put_flash(socket, :info, message)
+
+        successes == 0 ->
+          put_flash(socket, :error, "Fehler beim Hinzufügen der Lerneinheiten")
+
+        true ->
+          put_flash(
+            socket,
+            :info,
+            "#{successes} von #{successes + failures} Lerneinheiten erfolgreich hinzugefügt"
+          )
+      end
+
+    {:noreply,
+     socket
+     |> assign(:adding, false)
+     |> assign(:selected_form_ids, MapSet.new())
+     |> assign(:existing_form_ids, existing_form_ids)}
   end
 
   defp get_existing_form_ids(course_id) do
