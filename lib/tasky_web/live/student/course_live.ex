@@ -38,13 +38,13 @@ defmodule TaskyWeb.Student.CourseLive do
         <%= if @submissions != [] do %>
           <%!-- Progress Card --%>
           <div class="max-w-6xl mx-auto px-8 mb-8">
-            <div class="bg-gradient-to-br from-sky-50 to-white rounded-[14px] border border-sky-100 p-6 shadow-[0_1px_3px_rgba(14,165,233,0.08)]">
+            <div class="bg-gradient-to-br from-emerald-50 to-white rounded-[14px] border border-emerald-200 p-6 shadow-sm">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-[13px] font-semibold text-stone-700 tracking-[0.01em]">
                   Kurs-Fortschritt
                 </h3>
 
-                <span class="text-[28px] font-bold bg-gradient-to-br from-sky-500 to-sky-600 bg-clip-text text-transparent">
+                <span class="text-[28px] font-bold text-emerald-600">
                   {if @stats.total > 0,
                     do: round(@stats.completed / @stats.total * 100),
                     else: 0}%
@@ -53,7 +53,7 @@ defmodule TaskyWeb.Student.CourseLive do
 
               <div class="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden shadow-inner">
                 <div
-                  class="bg-gradient-to-r from-sky-400 via-sky-500 to-sky-600 h-2.5 rounded-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(14,165,233,0.4)]"
+                  class="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 h-2.5 rounded-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]"
                   style={"width: #{if @stats.total > 0, do: (@stats.completed / @stats.total * 100), else: 0}%"}
                 >
                 </div>
@@ -64,7 +64,7 @@ defmodule TaskyWeb.Student.CourseLive do
                   {@stats.completed} von {@stats.total} Aufgaben erledigt
                 </span>
                 <%= if @stats.graded > 0 do %>
-                  <span class="text-sky-600 font-medium flex items-center gap-1">
+                  <span class="text-emerald-600 font-medium flex items-center gap-1">
                     <.icon name="hero-check-badge" class="w-4 h-4" /> {@stats.graded} bewertet
                   </span>
                 <% end %>
