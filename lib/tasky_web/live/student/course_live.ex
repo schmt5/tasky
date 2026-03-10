@@ -38,36 +38,81 @@ defmodule TaskyWeb.Student.CourseLive do
         <%= if @submissions != [] do %>
           <%!-- Progress Card --%>
           <div class="max-w-6xl mx-auto px-8 mb-8">
-            <div class="bg-gradient-to-br from-emerald-50 to-white rounded-[14px] border border-emerald-200 p-6 shadow-sm">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="text-[13px] font-semibold text-stone-700 tracking-[0.01em]">
-                  Kurs-Fortschritt
-                </h3>
-
-                <span class="text-[28px] font-bold text-emerald-600">
-                  {if @stats.total > 0,
-                    do: round(@stats.completed / @stats.total * 100),
-                    else: 0}%
-                </span>
+            <div class="bg-gradient-to-br from-emerald-50 to-white rounded-[18px] border border-emerald-200 p-8 shadow-sm overflow-hidden relative">
+              <%!-- Decorative background pattern --%>
+              <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-100/30 rounded-full blur-3xl -z-0">
+              </div>
+              <div class="absolute bottom-0 left-0 w-24 h-24 bg-emerald-100/20 rounded-full blur-2xl -z-0">
               </div>
 
-              <div class="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden shadow-inner">
-                <div
-                  class="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 h-2.5 rounded-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]"
-                  style={"width: #{if @stats.total > 0, do: (@stats.completed / @stats.total * 100), else: 0}%"}
-                >
+              <div class="relative z-10">
+                <div class="flex items-center gap-4 mb-6">
+                  <%!-- Icon --%>
+                  <div class="flex-shrink-0">
+                    <div class="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
+                      <.icon name="hero-chart-bar" class="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
+
+                  <%!-- Header and percentage --%>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-[18px] font-semibold text-stone-700">
+                      Dein Kurs-Fortschritt
+                    </h3>
+                  </div>
+
+                  <%!-- Large percentage display --%>
+                  <div class="flex-shrink-0 text-right">
+                    <div class="text-[36px] font-bold text-emerald-600 leading-none">
+                      {if @stats.total > 0,
+                        do: round(@stats.completed / @stats.total * 100),
+                        else: 0}%
+                    </div>
+                    <div class="text-[11px] text-stone-400 font-medium mt-1">
+                      Abgeschlossen
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div class="mt-3 flex items-center justify-between text-[13px]">
-                <span class="text-stone-500">
-                  {@stats.completed} von {@stats.total} Aufgaben erledigt
-                </span>
-                <%= if @stats.graded > 0 do %>
-                  <span class="text-emerald-600 font-medium flex items-center gap-1">
-                    <.icon name="hero-check-badge" class="w-4 h-4" /> {@stats.graded} bewertet
-                  </span>
-                <% end %>
+                <%!-- Progress bar --%>
+                <div class="mb-4">
+                  <div class="w-full bg-stone-100 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div
+                      class="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 h-3 rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_rgba(16,185,129,0.5)] relative"
+                      style={"width: #{if @stats.total > 0, do: (@stats.completed / @stats.total * 100), else: 0}%"}
+                    >
+                      <%!-- Shimmer effect --%>
+                      <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_2s_infinite]">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <%!-- Stats row --%>
+                <div class="flex items-center gap-6 text-[13px]">
+                  <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span class="text-stone-600 font-medium">
+                      {@stats.completed} / {@stats.total} Aufgaben
+                    </span>
+                  </div>
+
+                  <%= if @stats.graded > 0 do %>
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
+                      <.icon name="hero-check-badge" class="w-4 h-4 text-emerald-600" />
+                      <span class="text-emerald-700 font-semibold">
+                        {@stats.graded} bewertet
+                      </span>
+                    </div>
+                  <% end %>
+
+                  <%= if @stats.completed == @stats.total && @stats.total > 0 do %>
+                    <div class="ml-auto flex items-center gap-2 text-emerald-600 font-semibold animate-[fadeIn_0.5s_ease]">
+                      <span class="text-[18px]">🎉</span>
+                      <span>Alle erledigt!</span>
+                    </div>
+                  <% end %>
+                </div>
               </div>
             </div>
           </div>
@@ -91,7 +136,7 @@ defmodule TaskyWeb.Student.CourseLive do
             <%!-- Timeline Container --%>
             <div class="relative flex flex-col">
               <%!-- Vertical Spine Line --%>
-              <div class="absolute left-[19px] top-[32px] bottom-[32px] w-[2px] bg-gradient-to-b from-stone-200 via-stone-200 to-stone-100 rounded-[1px] z-0">
+              <div class="absolute left-[23px] top-[32px] bottom-[32px] w-[2px] bg-gradient-to-b from-stone-200 via-stone-200 to-stone-100 rounded-[1px] z-0">
               </div>
               <%!-- Timeline Items --%>
               <div
@@ -100,9 +145,9 @@ defmodule TaskyWeb.Student.CourseLive do
               >
                 <%!-- Timeline Node --%>
                 <div class={[
-                  "flex-shrink-0 w-[40px] h-[40px] rounded-full flex items-center justify-center text-[12px] font-bold border-2 border-white shadow-sm mt-[14px] relative transition-all duration-200",
+                  "flex-shrink-0 w-[48px] h-[48px] rounded-full flex items-center justify-center text-[14px] font-bold border-2 border-white shadow-sm mt-[14px] relative transition-all duration-200",
                   submission.status in ["completed", "review_approved"] &&
-                    "bg-green-100 text-green-700 shadow-[0_0_0_2px_#dcfce7]",
+                    "bg-white shadow-[0_0_0_2px_#dcfce7]",
                   submission.task.id == @active_task_id &&
                     (index == 1 || index == length(@submissions)) &&
                     "bg-white text-stone-700 shadow-[0_0_0_3px_#e0f2fe,0_2px_8px_rgba(14,165,233,0.25)]",
@@ -121,13 +166,13 @@ defmodule TaskyWeb.Student.CourseLive do
                     "bg-rose-100 text-rose-700 shadow-[0_0_0_2px_#ffe4e6]"
                 ]}>
                   <%= if submission.status in ["completed", "review_approved"] do %>
-                    <.icon name="hero-check" class="w-4 h-4" />
+                    <span class="text-[24px]">✅</span>
                   <% else %>
                     <%= cond do %>
                       <% index == 1 -> %>
-                        <span class="text-[16px]">📍</span>
+                        <span class="text-[20px]">📍</span>
                       <% index == length(@submissions) -> %>
-                        <span class="text-[16px]">🏁</span>
+                        <span class="text-[20px]">🏁</span>
                       <% true -> %>
                         {String.pad_leading("#{index}", 2, "0")}
                     <% end %>
@@ -185,9 +230,8 @@ defmodule TaskyWeb.Student.CourseLive do
                   <div class="flex-shrink-0">
                     <%= cond do %>
                       <% submission.status in ["completed", "review_approved"] -> %>
-                        <div class="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center">
-                          <.icon name="hero-check" class="w-3.5 h-3.5" />
-                        </div>
+                        <%!-- No icon for completed tasks --%>
+                        <div></div>
                       <% submission.status == "review_denied" -> %>
                         <div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center">
                           <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
