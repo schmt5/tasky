@@ -230,20 +230,21 @@ defmodule TaskyWeb.Student.CourseLive do
                   <div class="flex-shrink-0">
                     <%= cond do %>
                       <% submission.status in ["completed", "review_approved"] -> %>
-                        <%!-- No icon for completed tasks --%>
-                        <div></div>
+                        <button class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg hover:bg-stone-50 hover:text-stone-700 transition-all duration-150 cursor-pointer">
+                          Ansehen
+                        </button>
                       <% submission.status == "review_denied" -> %>
                         <div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center">
                           <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
                         </div>
                       <% submission.task.id == @active_task_id -> %>
-                        <button class="px-4 py-2 text-[13px] font-semibold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all duration-150 shadow-[0_2px_8px_rgba(14,165,233,0.25)]">
+                        <button class="px-4 py-2 text-[13px] font-semibold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all duration-150 shadow-[0_2px_8px_rgba(14,165,233,0.25)] cursor-pointer">
                           {if submission.status in ["not_started", "open", "draft"],
                             do: "Starten",
                             else: "Öffnen"}
                         </button>
                       <% true -> %>
-                        <button class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg border-[1.5px] border-stone-200 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-all duration-150">
+                        <button class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg border-[1.5px] border-stone-200 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-all duration-150 cursor-pointer">
                           Öffnen
                         </button>
                     <% end %>
