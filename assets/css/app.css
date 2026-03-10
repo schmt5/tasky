@@ -183,3 +183,41 @@
         opacity: 1;
     }
 }
+
+/* Page Header Styles */
+.page-header {
+    border-bottom: 1px solid #e7e5e4;
+    background: #fff;
+    padding: 32px 64px;
+    animation: fadeIn 0.4s ease;
+}
+
+.page-header-eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #0ea5e9;
+    margin-bottom: 8px;
+}
+
+.page-header h1 {
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 36px;
+    color: #1c1917;
+    line-height: 1.1;
+    margin-bottom: 8px;
+    font-weight: 400;
+}
+
+.page-header h1 em {
+    font-style: italic;
+    color: #0ea5e9;
+}
+
+.page-header p {
+    font-size: 14px;
+    color: #78716c;
+    max-width: 480px;
+    line-height: 1.6;
+}

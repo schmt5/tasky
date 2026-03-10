@@ -10,10 +10,10 @@ defmodule TaskyWeb.Student.CourseLive do
     <div id="course-tasks-container">
       <Layouts.app flash={@flash} current_scope={@current_scope}>
         <%!-- Page Header --%>
-        <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
+        <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-4 mb-8">
           <div class="max-w-6xl mx-auto">
-            <div class="flex items-center justify-between mb-3">
-              <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-[10px] tracking-[0.12em] uppercase font-semibold text-sky-500">
                 Studenten Portal
               </div>
 
@@ -25,11 +25,11 @@ defmodule TaskyWeb.Student.CourseLive do
               </.link>
             </div>
 
-            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
+            <h1 class="font-serif text-[36px] text-stone-900 leading-[1.1] mb-2 font-normal">
               {@course.name}
             </h1>
 
-            <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
+            <p class="text-[14px] text-stone-500 max-w-[560px] leading-[1.6]">
               {@course.description || "Sieh dir alle Aufgaben für diesen Kurs an"}
             </p>
           </div>
