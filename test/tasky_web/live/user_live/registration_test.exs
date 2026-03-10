@@ -4,6 +4,8 @@ defmodule TaskyWeb.UserLive.RegistrationTest do
   import Phoenix.LiveViewTest
   import Tasky.AccountsFixtures
 
+  alias Tasky.Classes
+
   describe "Registration page" do
     test "renders registration page", %{conn: conn} do
       {:ok, _lv, html} = live(conn, ~p"/users/register")
@@ -77,6 +79,70 @@ defmodule TaskyWeb.UserLive.RegistrationTest do
         |> follow_redirect(conn, ~p"/users/log-in")
 
       assert login_html =~ "Log in"
+    end
+  end
+
+  describe "registration with class parameter" do
+    test "displays class name when valid slug is provided", %{conn: conn} do
+      {:ok, class} = Classes.create_class(%{name: "Test Class 5a"})
+
+      {:ok, _lv, html} = live(conn, ~p"/users/register?class=#{class.slug}")
+
+      assert html =~ "Test Class 5a"
+      assert html =~ "Klasse"
+    end
+
+    test "shows error when invalid class slug is provided", %{conn: conn} do
+      {:ok, _lv, html} = live(conn, ~p"/users/register?class=invalid-slug")
+
+      assert html =~ "Die angegebene Klasse wurde nicht gefunden"
+    end
+
+    test "registers user with class when slug is provided", %{conn: conn} do
+      {:ok, class} = Classes.create_class(%{name: "Test Class 5a"})
+      {:ok, lv, _html} = live(conn, ~p"/users/register?class=#{class.slug}")
+
+      email = unique_user_email()
+
+      form =
+        form(lv, "#registration_form",
+          user: %{
+            "email" => email,
+            "firstname" => "Test",
+            "lastname" => "Student"
+          }
+        )
+
+      {:ok, _lv, _html} =
+        render_submit(form)
+        |> follow_redirect(conn, ~p"/users/log-in")
+
+      # Verify user was created with class_id
+      user = Tasky.Accounts.get_user_by_email(email)
+      assert user.class_id == class.id
+    end
+
+    test "registers user without class when no slug is provided", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/register")
+
+      email = unique_user_email()
+
+      form =
+        form(lv, "#registration_form",
+          user: %{
+            "email" => email,
+            "firstname" => "Test",
+            "lastname" => "Student"
+          }
+        )
+
+      {:ok, _lv, _html} =
+        render_submit(form)
+        |> follow_redirect(conn, ~p"/users/log-in")
+
+      # Verify user was created without class_id
+      user = Tasky.Accounts.get_user_by_email(email)
+      assert is_nil(user.class_id)
     end
   end
 end

@@ -3,6 +3,7 @@ defmodule TaskyWeb.UserLive.Registration do
 
   alias Tasky.Accounts
   alias Tasky.Accounts.User
+  alias Tasky.Classes
 
   @impl true
   def render(assigns) do
@@ -77,6 +78,17 @@ defmodule TaskyWeb.UserLive.Registration do
                   class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
                   placeholder="max@beispiel.de"
                 />
+
+                <%= if @class_name do %>
+                  <.input
+                    field={@form[:class_name]}
+                    type="text"
+                    label="Klasse"
+                    value={@class_name}
+                    readonly
+                    class="w-full px-4 py-3 text-[15px] text-stone-900 bg-stone-50 border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 cursor-not-allowed"
+                  />
+                <% end %>
 
                 <div class="pt-2 border-t border-stone-100 mt-6 pt-6">
                   <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
@@ -159,14 +171,27 @@ defmodule TaskyWeb.UserLive.Registration do
     {:ok, redirect(socket, to: TaskyWeb.UserAuth.signed_in_path(socket))}
   end
 
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     changeset = Accounts.change_user_registration(%User{}, %{}, validate_unique: false)
 
-    {:ok, assign_form(socket, changeset), temporary_assigns: [form: nil]}
+    socket =
+      socket
+      |> assign_form(changeset)
+      |> handle_class_param(params)
+
+    {:ok, socket, temporary_assigns: [form: nil]}
   end
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
+    # Include class_id if it was set via query parameter
+    user_params =
+      if socket.assigns[:class_id] do
+        Map.put(user_params, "class_id", socket.assigns.class_id)
+      else
+        user_params
+      end
+
     case Accounts.register_user(user_params) do
       {:ok, user} ->
         {:ok, _} =
@@ -189,6 +214,14 @@ defmodule TaskyWeb.UserLive.Registration do
   end
 
   def handle_event("validate", %{"user" => user_params}, socket) do
+    # Include class_id if it was set via query parameter
+    user_params =
+      if socket.assigns[:class_id] do
+        Map.put(user_params, "class_id", socket.assigns.class_id)
+      else
+        user_params
+      end
+
     changeset = Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
     {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
@@ -196,5 +229,29 @@ defmodule TaskyWeb.UserLive.Registration do
   defp assign_form(socket, %Ecto.Changeset{} = changeset) do
     form = to_form(changeset, as: "user")
     assign(socket, form: form)
+  end
+
+  defp handle_class_param(socket, %{"class" => slug}) when is_binary(slug) do
+    case Classes.get_class_by_slug(slug) do
+      nil ->
+        socket
+        |> put_flash(:error, "Die angegebene Klasse wurde nicht gefunden.")
+        |> assign(class_name: nil, class_id: nil)
+
+      class ->
+        # Update the changeset to include class_id
+        changeset =
+          Accounts.change_user_registration(%User{}, %{"class_id" => class.id},
+            validate_unique: false
+          )
+
+        socket
+        |> assign_form(changeset)
+        |> assign(class_name: class.name, class_id: class.id)
+    end
+  end
+
+  defp handle_class_param(socket, _params) do
+    assign(socket, class_name: nil, class_id: nil)
   end
 end

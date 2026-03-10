@@ -14,6 +14,8 @@ defmodule Tasky.Accounts.User do
     # Virtual fields for UI representation
     field :is_teacher, :boolean, virtual: true, default: false
 
+    belongs_to :class, Tasky.Classes.Class
+
     has_many :task_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :student_id
     has_many :graded_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :graded_by_id
     has_many :taught_courses, Tasky.Courses.Course, foreign_key: :teacher_id
@@ -59,13 +61,14 @@ defmodule Tasky.Accounts.User do
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :firstname, :lastname, :is_teacher])
+    |> cast(attrs, [:email, :firstname, :lastname, :is_teacher, :class_id])
     |> transform_is_teacher_to_role()
     |> validate_required([:firstname, :lastname])
     |> validate_length(:firstname, min: 1, max: 100)
     |> validate_length(:lastname, min: 1, max: 100)
     |> validate_email(opts)
     |> validate_role()
+    |> foreign_key_constraint(:class_id)
   end
 
   # Transform virtual field is_teacher to role field

@@ -14,6 +14,8 @@ import Ecto.Query
 alias Tasky.Repo
 alias Tasky.Accounts
 alias Tasky.Accounts.User
+alias Tasky.Classes
+alias Tasky.Classes.Class
 alias Tasky.Courses
 alias Tasky.Courses.Course
 alias Tasky.Tasks.Task
@@ -22,51 +24,77 @@ alias Tasky.Tasks.Task
 Repo.delete_all(Task)
 Repo.delete_all(Course)
 Repo.delete_all(User)
+Repo.delete_all(Class)
 
-IO.puts("Creating users...")
+IO.puts("Creating classes...")
+
+# Create classes
+{:ok, class_5a} = Classes.create_class(%{name: "Klasse 5a"})
+IO.puts("Created class: #{class_5a.name} (slug: #{class_5a.slug})")
+
+{:ok, class_6b} = Classes.create_class(%{name: "Mathematik 2024"})
+IO.puts("Created class: #{class_6b.name} (slug: #{class_6b.slug})")
+
+{:ok, class_7c} = Classes.create_class(%{name: "Informatik Oberstufe"})
+IO.puts("Created class: #{class_7c.name} (slug: #{class_7c.slug})")
+
+IO.puts("\nCreating users...")
 
 # Create a teacher
 {:ok, teacher} =
   Accounts.register_user(%{
     email: "teacher@example.com",
+    firstname: "Max",
+    lastname: "Mustermann",
     role: "teacher"
   })
 
 teacher = Repo.get!(User, teacher.id)
 IO.puts("Created teacher: #{teacher.email}")
 
-# Create students
+# Create students with classes
 {:ok, student1} =
   Accounts.register_user(%{
     email: "student1@example.com",
-    role: "student"
+    firstname: "Anna",
+    lastname: "Schmidt",
+    role: "student",
+    class_id: class_5a.id
   })
 
 student1 = Repo.get!(User, student1.id)
-IO.puts("Created student: #{student1.email}")
+IO.puts("Created student: #{student1.email} (Klasse 5a)")
 
 {:ok, student2} =
   Accounts.register_user(%{
     email: "student2@example.com",
-    role: "student"
+    firstname: "Tim",
+    lastname: "Müller",
+    role: "student",
+    class_id: class_5a.id
   })
 
 student2 = Repo.get!(User, student2.id)
-IO.puts("Created student: #{student2.email}")
+IO.puts("Created student: #{student2.email} (Klasse 5a)")
 
 {:ok, student3} =
   Accounts.register_user(%{
     email: "student3@example.com",
-    role: "student"
+    firstname: "Lisa",
+    lastname: "Weber",
+    role: "student",
+    class_id: class_6b.id
   })
 
 student3 = Repo.get!(User, student3.id)
-IO.puts("Created student: #{student3.email}")
+IO.puts("Created student: #{student3.email} (Mathematik 2024)")
 
 # Create an admin
 {:ok, admin} =
   Accounts.register_user(%{
     email: "admin@example.com",
+    firstname: "Admin",
+    lastname: "User",
     role: "admin"
   })
 
@@ -209,9 +237,13 @@ IO.puts("Student2 enrolled in: #{course1.name}, #{course3.name}")
 IO.puts("Student3 enrolled in: #{course2.name}, #{course3.name}")
 
 IO.puts("\n✓ Seed data created successfully!")
+IO.puts("\nClasses created:")
+IO.puts("  - #{class_5a.name} (Registration: /users/register?class=#{class_5a.slug})")
+IO.puts("  - #{class_6b.name} (Registration: /users/register?class=#{class_6b.slug})")
+IO.puts("  - #{class_7c.name} (Registration: /users/register?class=#{class_7c.slug})")
 IO.puts("\nYou can log in with:")
 IO.puts("  Teacher: teacher@example.com")
-IO.puts("  Student1: student1@example.com")
-IO.puts("  Student2: student2@example.com")
-IO.puts("  Student3: student3@example.com")
+IO.puts("  Student1: student1@example.com (Klasse 5a)")
+IO.puts("  Student2: student2@example.com (Klasse 5a)")
+IO.puts("  Student3: student3@example.com (Mathematik 2024)")
 IO.puts("  Admin: admin@example.com")

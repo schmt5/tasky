@@ -43,6 +43,45 @@ topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" });
 window.addEventListener("phx:page-loading-start", (_info) => topbar.show(300));
 window.addEventListener("phx:page-loading-stop", (_info) => topbar.hide());
 
+// Handle copy-to-clipboard events
+window.addEventListener("phx:copy-to-clipboard", (e) => {
+  const text = e.detail.text;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        // Success - could add visual feedback here
+        console.log("Copied to clipboard:", text);
+      })
+      .catch((err) => {
+        console.error("Failed to copy:", err);
+        // Fallback for older browsers
+        fallbackCopyTextToClipboard(text);
+      });
+  } else {
+    // Fallback for older browsers
+    fallbackCopyTextToClipboard(text);
+  }
+});
+
+// Fallback copy function for older browsers
+function fallbackCopyTextToClipboard(text) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.left = "-999999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand("copy");
+    console.log("Fallback: Copied to clipboard");
+  } catch (err) {
+    console.error("Fallback: Failed to copy", err);
+  }
+  document.body.removeChild(textArea);
+}
+
 // connect if there are any LiveViews on the page
 liveSocket.connect();
 

@@ -76,6 +76,12 @@ defmodule TaskyWeb.Layouts do
                 >
                   Kurse
                 </.link>
+                <.link
+                  navigate={~p"/classes"}
+                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                >
+                  Klassen
+                </.link>
               <% true -> %>
             <% end %>
           <% end %>
