@@ -24,60 +24,94 @@
     <% end %>
   </p>
 
-  <div class="flex items-center gap-3 flex-wrap justify-center">
-    <%= if @current_scope do %>
-      <%= cond do %>
-        <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
+  <%= if @current_scope do %>
+    <%= cond do %>
+      <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
+        <div class="w-full max-w-[640px] mt-4">
           <.link
             navigate={~p"/student/courses"}
-            class="inline-flex items-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-7 py-3.5 rounded-[14px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+            class="group w-full bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:border-sky-200 block"
           >
-            <svg
-              width="16"
-              height="16"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+            <div class="p-6 flex items-start gap-4">
+              <div class="w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 bg-sky-50 text-sky-500 group-hover:bg-sky-100 transition-colors duration-150">
+                <.icon name="hero-academic-cap" class="w-6 h-6" />
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-semibold text-stone-800 mb-1.5 group-hover:text-sky-600 transition-colors duration-150">
+                  Alle Kurse ansehen
+                </h3>
+                <p class="text-sm text-stone-500 leading-relaxed">
+                  Greife auf deine eingeschriebenen Kurse zu und verwalte deine Lerneinheiten
+                </p>
+              </div>
+              <.icon
+                name="hero-arrow-right"
+                class="w-5 h-5 text-stone-300 group-hover:text-sky-500 group-hover:translate-x-1 transition-all duration-150"
               />
-            </svg>
-            Alle Kurse ansehen
+            </div>
           </.link>
-        <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
+        </div>
+      <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
+        <div class="w-full max-w-[800px] grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+          <%!-- Courses Card --%>
           <.link
             navigate={~p"/courses"}
-            class="inline-flex items-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-7 py-3.5 rounded-[14px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+            class="group bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:border-sky-200"
           >
-            <svg
-              width="16"
-              height="16"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+            <div class="p-6 flex items-start gap-4">
+              <div class="w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 bg-sky-50 text-sky-500 group-hover:bg-sky-100 transition-colors duration-150">
+                <.icon name="hero-academic-cap" class="w-6 h-6" />
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-semibold text-stone-800 mb-1.5 group-hover:text-sky-600 transition-colors duration-150">
+                  Kurse verwalten
+                </h3>
+                <p class="text-sm text-stone-500 leading-relaxed">
+                  Erstelle und verwalte deine Kurse und Lerneinheiten
+                </p>
+              </div>
+              <.icon
+                name="hero-arrow-right"
+                class="w-5 h-5 text-stone-300 group-hover:text-sky-500 group-hover:translate-x-1 transition-all duration-150"
               />
-            </svg>
-            Kurse verwalten
+            </div>
           </.link>
-        <% true -> %>
+          <%!-- Classes Card --%>
+          <.link
+            navigate={~p"/classes"}
+            class="group bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:border-purple-200"
+          >
+            <div class="p-6 flex items-start gap-4">
+              <div class="w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 bg-purple-50 text-purple-500 group-hover:bg-purple-100 transition-colors duration-150">
+                <.icon name="hero-users" class="w-6 h-6" />
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-semibold text-stone-800 mb-1.5 group-hover:text-purple-600 transition-colors duration-150">
+                  Klassen verwalten
+                </h3>
+                <p class="text-sm text-stone-500 leading-relaxed">
+                  Organisiere deine Studierenden in Klassen und Gruppen
+                </p>
+              </div>
+              <.icon
+                name="hero-arrow-right"
+                class="w-5 h-5 text-stone-300 group-hover:text-purple-500 group-hover:translate-x-1 transition-all duration-150"
+              />
+            </div>
+          </.link>
+        </div>
+      <% true -> %>
+        <div class="flex items-center gap-3 flex-wrap justify-center">
           <.link
             navigate={~p"/users/settings"}
             class="inline-flex items-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-7 py-3.5 rounded-[14px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
           >
             Go to Settings
           </.link>
-      <% end %>
-    <% else %>
+        </div>
+    <% end %>
+  <% else %>
+    <div class="flex items-center gap-3 flex-wrap justify-center">
       <.link
         navigate={~p"/users/register"}
         class="inline-flex items-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-7 py-3.5 rounded-[14px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
@@ -104,8 +138,8 @@
       >
         Log In
       </.link>
-    <% end %>
-  </div>
+    </div>
+  <% end %>
 
   <%= unless @current_scope do %>
     <p class="mt-5 text-[13px] text-stone-400 flex items-center gap-1.5">
