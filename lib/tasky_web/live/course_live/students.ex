@@ -3,6 +3,7 @@ defmodule TaskyWeb.CourseLive.Students do
 
   alias Tasky.Courses
   alias Tasky.Accounts
+  alias Tasky.Classes
 
   @impl true
   def render(assigns) do
@@ -123,6 +124,43 @@ defmodule TaskyWeb.CourseLive.Students do
             </div>
 
             <div class="p-6">
+              <%!-- Class Filter --%>
+              <.form for={%{}} phx-change="filter_by_class" class="mb-4">
+                <.input
+                  type="select"
+                  name="class_id"
+                  label="Nach Klasse filtern"
+                  value={@selected_class_id}
+                  prompt="Alle Klassen"
+                  options={Enum.map(@classes, fn class -> {class.name, class.id} end)}
+                />
+              </.form>
+
+              <%!-- Batch Enroll Button --%>
+              <%= if @selected_class_id && !Enum.empty?(@unenrolled_students) do %>
+                <div class="mb-4 p-4 bg-sky-50 rounded-[10px] border border-sky-100">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex-1">
+                      <p class="text-sm font-medium text-sky-900 mb-1">
+                        Alle Studenten einschreiben
+                      </p>
+                      <p class="text-xs text-sky-700">
+                        {length(@unenrolled_students)} Studenten aus dieser Klasse gleichzeitig einschreiben
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      phx-click="enroll_all_from_class"
+                      class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-[8px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] whitespace-nowrap"
+                    >
+                      <.icon name="hero-user-group" class="w-4 h-4" /> Alle einschreiben
+                    </button>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+
+            <div class="px-6 pb-6">
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <div
                   :for={student <- @unenrolled_students}
@@ -185,6 +223,8 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:course, course)
      |> assign(:show_enroll_modal, false)
      |> assign(:unenrolled_students, [])
+     |> assign(:classes, [])
+     |> assign(:selected_class_id, nil)
      |> assign(:has_students, length(enrolled_students) > 0)
      |> assign(:student_count, length(enrolled_students))
      |> stream(:enrolled_students, enrolled_students)}
@@ -193,18 +233,77 @@ defmodule TaskyWeb.CourseLive.Students do
   @impl true
   def handle_event("show_enroll_modal", _params, socket) do
     unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id)
+    classes = Classes.list_classes()
 
     {:noreply,
      socket
      |> assign(:show_enroll_modal, true)
-     |> assign(:unenrolled_students, unenrolled_students)}
+     |> assign(:unenrolled_students, unenrolled_students)
+     |> assign(:classes, classes)
+     |> assign(:selected_class_id, nil)}
   end
 
   def handle_event("hide_enroll_modal", _params, socket) do
     {:noreply,
      socket
      |> assign(:show_enroll_modal, false)
-     |> assign(:unenrolled_students, [])}
+     |> assign(:unenrolled_students, [])
+     |> assign(:classes, [])
+     |> assign(:selected_class_id, nil)}
+  end
+
+  def handle_event("filter_by_class", %{"class_id" => ""}, socket) do
+    unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id)
+
+    {:noreply,
+     socket
+     |> assign(:unenrolled_students, unenrolled_students)
+     |> assign(:selected_class_id, nil)}
+  end
+
+  def handle_event("filter_by_class", %{"class_id" => class_id}, socket) do
+    class_id = String.to_integer(class_id)
+    unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id, class_id)
+
+    {:noreply,
+     socket
+     |> assign(:unenrolled_students, unenrolled_students)
+     |> assign(:selected_class_id, class_id)}
+  end
+
+  def handle_event("enroll_all_from_class", _params, socket) do
+    case socket.assigns.unenrolled_students do
+      [] ->
+        {:noreply, put_flash(socket, :info, "Keine Studenten zum Einschreiben verfügbar")}
+
+      students ->
+        results =
+          Enum.map(students, fn student ->
+            Courses.enroll_student(socket.assigns.course.id, student.id)
+          end)
+
+        success_count = Enum.count(results, fn {status, _} -> status == :ok end)
+        enrolled_students = Courses.list_enrolled_students(socket.assigns.course.id)
+        new_count = length(enrolled_students)
+
+        # Clear the filter and refresh the list
+        unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id)
+
+        socket =
+          socket
+          |> assign(:has_students, new_count > 0)
+          |> assign(:student_count, new_count)
+          |> assign(:unenrolled_students, unenrolled_students)
+          |> assign(:selected_class_id, nil)
+          |> stream(:enrolled_students, enrolled_students, reset: true)
+
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           "#{success_count} Studenten wurden erfolgreich eingeschrieben"
+         )}
+    end
   end
 
   def handle_event("enroll_student", %{"student_id" => student_id}, socket) do

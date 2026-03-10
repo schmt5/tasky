@@ -183,6 +183,24 @@ defmodule Tasky.Courses do
   end
 
   @doc """
+  Returns the list of students not enrolled in a course, filtered by class.
+  """
+  def list_unenrolled_students(course_id, class_id) when is_integer(class_id) do
+    Repo.all(
+      from u in Tasky.Accounts.User,
+        where:
+          u.role == "student" and
+            u.class_id == ^class_id and
+            u.id not in subquery(
+              from e in CourseEnrollment,
+                where: e.course_id == ^course_id,
+                select: e.student_id
+            ),
+        order_by: u.email
+    )
+  end
+
+  @doc """
   Checks if a student is enrolled in a course.
   """
   def enrolled?(course_id, student_id) do
