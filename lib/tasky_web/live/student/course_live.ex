@@ -45,7 +45,7 @@ defmodule TaskyWeb.Student.CourseLive do
               <div class="absolute bottom-0 left-0 w-24 h-24 bg-emerald-100/20 rounded-full blur-2xl -z-0">
               </div>
 
-              <div class="relative z-10">
+              <div class="relative">
                 <div class="flex items-center gap-4 mb-6">
                   <%!-- Icon --%>
                   <div class="flex-shrink-0">

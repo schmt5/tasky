@@ -60,7 +60,7 @@ defmodule TaskyWeb.Student.TaskLive do
 
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <%!-- Compact Page Header --%>
-      <div class="bg-white border-b border-stone-200 h-[54px] flex items-center px-8">
+      <div class="sticky top-0 z-20 bg-white border-b border-stone-200 h-[54px] flex items-center px-8">
         <div class="max-w-6xl mx-auto w-full flex items-center justify-between">
           <h1 class="text-[16px] font-semibold text-stone-900 truncate">
             {@task.name}
