@@ -111,6 +111,12 @@ defmodule TaskyWeb.CourseLive.Show do
                 <.icon name="hero-arrows-up-down" class="w-4 h-4" /> Sortieren
               </.link>
               <.link
+                navigate={~p"/courses/#{@course}/export"}
+                class="inline-flex items-center gap-2 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-amber-300 hover:text-amber-700"
+              >
+                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
+              </.link>
+              <.link
                 navigate={~p"/courses/#{@course}/add"}
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >

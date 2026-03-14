@@ -64,7 +64,7 @@ defmodule TaskyWeb.Student.CoursesLive do
                 <span class="text-[13px] text-stone-400 flex items-center gap-1">
                   <.icon name="hero-user" class="w-3.5 h-3.5" /> {course.teacher.email}
                 </span>
-                 <span class="text-xs text-stone-300">·</span>
+                <span class="text-xs text-stone-300">·</span>
                 <span class="text-[13px] text-stone-400 flex items-center gap-1">
                   <.icon name="hero-clipboard-document-list" class="w-3.5 h-3.5" /> {length(
                     course.tasks || []

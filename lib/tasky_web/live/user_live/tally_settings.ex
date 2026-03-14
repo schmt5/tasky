@@ -15,29 +15,30 @@ defmodule TaskyWeb.UserLive.TallySettings do
               Integration
             </div>
           </div>
-
+          
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             Tally.so API Einstellungen
           </h1>
-
+          
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             Verwalten Sie Ihre Tally.so API-Integration für Formulare und Aufgaben
           </p>
         </div>
       </div>
-
+      
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
         <%!-- API Key Section --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="flex items-center justify-between p-6 border-b border-stone-100">
             <div>
               <h2 class="text-lg font-semibold text-stone-800">Tally API Key</h2>
+              
               <p class="text-sm text-stone-500 mt-1">
                 Geben Sie Ihren persönlichen Tally.so API-Schlüssel ein
               </p>
             </div>
           </div>
-
+          
           <div class="p-6">
             <.form
               for={@tally_form}
@@ -59,7 +60,7 @@ defmodule TaskyWeb.UserLive.TallySettings do
                   Ihren API-Schlüssel finden Sie in Ihrem Tally.so Dashboard unter Einstellungen → API
                 </p>
               </div>
-
+              
               <div class="bg-blue-50 border border-blue-200 rounded-[10px] p-4">
                 <div class="flex items-start gap-3">
                   <.icon
@@ -68,6 +69,7 @@ defmodule TaskyWeb.UserLive.TallySettings do
                   />
                   <div class="text-sm text-blue-800 leading-[1.6] space-y-2">
                     <p class="font-semibold">Was ist ein Tally API Key?</p>
+                    
                     <p>
                       Mit Ihrem persönlichen API-Schlüssel kann Tasky auf Ihre Tally.so Formulare zugreifen
                       und Einreichungen automatisch verarbeiten. Der Schlüssel wird sicher in Ihrem Konto gespeichert.
@@ -75,7 +77,7 @@ defmodule TaskyWeb.UserLive.TallySettings do
                   </div>
                 </div>
               </div>
-
+              
               <div class="flex items-center justify-between pt-2">
                 <button
                   :if={@tally_form.data.tally_api_key}
@@ -86,6 +88,7 @@ defmodule TaskyWeb.UserLive.TallySettings do
                   API Key entfernen
                 </button>
                 <div class="flex-1"></div>
+                
                 <.button
                   variant="primary"
                   phx-disable-with="Saving..."
@@ -97,8 +100,7 @@ defmodule TaskyWeb.UserLive.TallySettings do
             </.form>
           </div>
         </div>
-
-        <%!-- Status Section --%>
+         <%!-- Status Section --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6">
             <div class="flex items-center gap-3">
@@ -116,19 +118,22 @@ defmodule TaskyWeb.UserLive.TallySettings do
             </div>
           </div>
         </div>
-
-        <%!-- Help Section --%>
+         <%!-- Help Section --%>
         <div class="bg-stone-50 rounded-[14px] border border-stone-200 p-6">
           <h3 class="text-sm font-semibold text-stone-800 mb-3">Hilfe & Dokumentation</h3>
+          
           <div class="space-y-2 text-sm text-stone-600">
-            <p>
-              <strong>So erhalten Sie Ihren API Key:</strong>
-            </p>
+            <p><strong>So erhalten Sie Ihren API Key:</strong></p>
+            
             <ol class="list-decimal list-inside space-y-1 ml-2">
               <li>Melden Sie sich bei Tally.so an</li>
+              
               <li>Öffnen Sie die Einstellungen</li>
+              
               <li>Navigieren Sie zum Bereich "API"</li>
+              
               <li>Erstellen Sie einen neuen API-Schlüssel oder kopieren Sie einen bestehenden</li>
+              
               <li>Fügen Sie den Schlüssel hier ein</li>
             </ol>
           </div>
