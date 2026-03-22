@@ -124,6 +124,11 @@ defmodule TaskyWeb.Student.MyTasksLive do
                     ]}>
                       {format_status(submission.status)}
                     </span>
+                    <%= if submission.graded_at do %>
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 whitespace-nowrap">
+                        💬 Feedback erhalten
+                      </span>
+                    <% end %>
                   </div>
 
                   <div class="ks-meta">
@@ -131,6 +136,12 @@ defmodule TaskyWeb.Student.MyTasksLive do
                       <.icon name="hero-clock" class="w-3.5 h-3.5" />
                       {format_status(submission.status)}
                     </span>
+                    <%= if submission.graded_at do %>
+                      <span class="ks-meta-item text-amber-600 font-medium">
+                        <.icon name="hero-chat-bubble-left-ellipsis" class="w-3.5 h-3.5" />
+                        Feedback vom Lehrer verfügbar
+                      </span>
+                    <% end %>
                   </div>
                 </div>
 

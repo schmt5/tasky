@@ -250,17 +250,24 @@ defmodule Tasky.Tasks do
       |> order_by([t], asc: t.position)
       |> Repo.all()
 
-    # For each task, get or create a submission
-    Enum.map(tasks, fn task ->
-      case get_or_create_submission(scope, task.id) do
-        {:ok, submission} ->
-          # Preload the task association
-          Repo.preload(submission, :task)
-
-        {:error, _} ->
-          nil
-      end
+    # Ensure a submission row exists for every task
+    Enum.each(tasks, fn task ->
+      get_or_create_submission(scope, task.id)
     end)
+
+    task_ids = Enum.map(tasks, & &1.id)
+
+    # Fetch all submissions in one query so feedback/graded_at are always fresh
+    submissions_by_task =
+      TaskSubmission
+      |> where([s], s.student_id == ^user.id and s.task_id in ^task_ids)
+      |> preload(:task)
+      |> Repo.all()
+      |> Map.new(&{&1.task_id, &1})
+
+    # Return in task position order
+    tasks
+    |> Enum.map(&Map.get(submissions_by_task, &1.id))
     |> Enum.reject(&is_nil/1)
   end
 
@@ -382,11 +389,29 @@ defmodule Tasky.Tasks do
   """
   def grade_submission(%Scope{user: user} = scope, submission_id, attrs) do
     if Scope.admin_or_teacher?(scope) do
-      submission = Repo.get!(TaskSubmission, submission_id)
+      submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
-      submission
-      |> TaskSubmission.grade_changeset(attrs, user.id)
-      |> Repo.update()
+      case submission
+           |> TaskSubmission.grade_changeset(attrs, user.id)
+           |> Repo.update() do
+        {:ok, updated_submission} = result ->
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "student:#{submission.student_id}:submissions",
+            {:submission_updated, updated_submission}
+          )
+
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "course:#{submission.task.course_id}:progress",
+            {:submission_updated, updated_submission}
+          )
+
+          result
+
+        error ->
+          error
+      end
     else
       {:error, :unauthorized}
     end

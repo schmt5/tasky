@@ -5,6 +5,27 @@ This is a web application written using the Phoenix web framework.
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
+### Form & input rules
+
+- **Always** use `to_form/2` to create a form assign in the LiveView before passing it to the template. **Never** pass a raw map or changeset directly to `<.form>`
+- **Always** use `<.form for={@form} id="my-form" phx-submit="save">` in templates — always give the form a unique DOM `id`
+- **Always** use `<.input field={@form[:field]} type="...">` from `core_components.ex` for every input, select, and textarea — **never** write raw `<input>`, `<select>`, or `<textarea>` tags inside a form
+- A raw `<textarea>` or `<input>` outside a `<.form>` wrapper will **not** send `phx-change` or `phx-submit` events correctly — this is a common source of silent bugs
+- When a form lives inside a modal that is keyed per-record (e.g. per student), give the `<.form>` an `id` that includes the record id (e.g. `id={"feedback-form-#{@selected_student_id}"}`) so LiveView fully re-renders it when the record changes
+- Read submitted values from the event params pattern-matched in `handle_event`, e.g.:
+
+      def handle_event("save", %{"my_form" => %{"field" => value}}, socket) do
+
+  where `"my_form"` is the `:as` key passed to `to_form/2`
+
+### Modal rules
+
+- **Always** use the `<dialog class="modal modal-open">` + `<div class="modal-backdrop ...">` + `<div class="modal-box ...">` pattern for custom modals — this is the established pattern in this project (see `progress.ex` and `students.ex`)
+- **Never** build modals with raw `fixed inset-0` divs — use the `dialog` pattern above
+- **Always** guard the modal with `<%= if @show_modal do %>` and reset all modal assigns on close
+- **Always** handle `phx-window-keydown="close_modal" phx-key="escape"` and a `phx-click="close_modal"` on the backdrop for accessibility
+- The `<.modal>` component in `core_components.ex` uses a JS show/hide approach and is a **different** pattern — do not mix it with the `dialog` approach
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content

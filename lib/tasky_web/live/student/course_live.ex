@@ -1,8 +1,8 @@
 defmodule TaskyWeb.Student.CourseLive do
   use TaskyWeb, :live_view
 
-  alias Tasky.Courses
   alias Tasky.Tasks
+  alias Tasky.Courses
 
   @impl true
   def render(assigns) do
@@ -179,25 +179,18 @@ defmodule TaskyWeb.Student.CourseLive do
                   <% end %>
                 </div>
                 <%!-- Timeline Card --%>
-                <.link
-                  navigate={
-                    if submission.status == "completed",
-                      do: ~p"/student/tasks/#{submission.task.id}?preview=true",
-                      else: ~p"/student/tasks/#{submission.task.id}"
-                  }
-                  class={[
-                    "flex-1 rounded-xl shadow-sm transition-all duration-300 overflow-hidden border mb-3 flex items-center gap-4 p-6 no-underline",
-                    submission.status in ["completed", "review_approved"] &&
-                      "bg-white/40 backdrop-blur-sm border-stone-100 hover:border-stone-200",
-                    submission.task.id == @active_task_id &&
-                      "bg-white border-sky-200 shadow-[0_0_0_3px_#f0f9ff] hover:border-sky-300 hover:shadow-[0_4px_16px_rgba(14,165,233,0.12),0_0_0_3px_#f0f9ff]",
-                    submission.task.id != @active_task_id &&
-                      submission.status in ["not_started", "open", "draft", "in_progress"] &&
-                      "bg-white border-stone-200 hover:shadow-md hover:border-stone-300 hover:-translate-y-[1px]",
-                    submission.status == "review_denied" &&
-                      "bg-white border-rose-200 hover:border-rose-300"
-                  ]}
-                >
+                <div class={[
+                  "flex-1 rounded-xl shadow-sm transition-all duration-300 overflow-hidden border mb-3 flex items-center gap-4 p-6",
+                  submission.status in ["completed", "review_approved"] &&
+                    "bg-white/40 backdrop-blur-sm border-stone-100",
+                  submission.task.id == @active_task_id &&
+                    "bg-white border-sky-200 shadow-[0_0_0_3px_#f0f9ff]",
+                  submission.task.id != @active_task_id &&
+                    submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                    "bg-white border-stone-200",
+                  submission.status == "review_denied" &&
+                    "bg-white border-rose-200"
+                ]}>
                   <%!-- Card Body --%>
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-1">
@@ -209,6 +202,16 @@ defmodule TaskyWeb.Student.CourseLive do
                       ]}>
                         {submission.task.name}
                       </span>
+                      <%= if submission.graded_at do %>
+                        <button
+                          type="button"
+                          phx-click="show_feedback"
+                          phx-value-submission-id={submission.id}
+                          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 whitespace-nowrap flex-shrink-0 hover:bg-amber-200 transition-colors"
+                        >
+                          💬 Feedback
+                        </button>
+                      <% end %>
                     </div>
 
                     <div>
@@ -230,30 +233,99 @@ defmodule TaskyWeb.Student.CourseLive do
                   <div class="flex-shrink-0">
                     <%= cond do %>
                       <% submission.status in ["completed", "review_approved"] -> %>
-                        <button class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg hover:bg-stone-50 hover:text-stone-700 transition-all duration-150 cursor-pointer">
+                        <.link
+                          navigate={~p"/student/tasks/#{submission.task.id}?preview=true"}
+                          class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg hover:bg-stone-50 hover:text-stone-700 transition-all duration-150"
+                        >
                           Ansehen
-                        </button>
+                        </.link>
                       <% submission.status == "review_denied" -> %>
                         <div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center">
                           <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
                         </div>
                       <% submission.task.id == @active_task_id -> %>
-                        <button class="px-4 py-2 text-[13px] font-semibold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all duration-150 shadow-[0_2px_8px_rgba(14,165,233,0.25)] cursor-pointer">
+                        <.link
+                          navigate={~p"/student/tasks/#{submission.task.id}"}
+                          class="px-4 py-2 text-[13px] font-semibold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all duration-150 shadow-[0_2px_8px_rgba(14,165,233,0.25)]"
+                        >
                           {if submission.status in ["not_started", "open", "draft"],
                             do: "Starten",
                             else: "Öffnen"}
-                        </button>
+                        </.link>
                       <% true -> %>
-                        <button class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg border-[1.5px] border-stone-200 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-all duration-150 cursor-pointer">
+                        <.link
+                          navigate={~p"/student/tasks/#{submission.task.id}"}
+                          class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg border-[1.5px] border-stone-200 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-all duration-150"
+                        >
                           Öffnen
-                        </button>
+                        </.link>
                     <% end %>
                   </div>
-                </.link>
+                </div>
               </div>
             </div>
           <% end %>
         </div>
+
+        <%!-- Feedback Modal --%>
+        <%= if @show_feedback_modal do %>
+          <dialog
+            id="feedback-modal"
+            class="modal modal-open"
+            phx-window-keydown="close_feedback_modal"
+            phx-key="escape"
+          >
+            <%!-- Modal backdrop --%>
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_feedback_modal"></div>
+            <%!-- Modal box --%>
+            <div class="modal-box max-w-lg p-0 bg-white rounded-[16px] shadow-2xl border border-stone-200">
+              <%!-- Header --%>
+              <div class="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-base">
+                    💬
+                  </div>
+                  <div>
+                    <h3 class="text-[15px] font-semibold text-stone-900">Feedback vom Lehrer</h3>
+                    <%= if @feedback_task_name do %>
+                      <p class="text-[12px] text-stone-400">{@feedback_task_name}</p>
+                    <% end %>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  phx-click="close_feedback_modal"
+                  class="text-stone-400 hover:text-stone-600 transition-colors"
+                >
+                  <.icon name="hero-x-mark" class="w-5 h-5" />
+                </button>
+              </div>
+              <%!-- Body --%>
+              <div class="px-6 py-5">
+                <div class="bg-amber-50 border border-amber-100 rounded-[10px] px-4 py-4">
+                  <p class="text-[14px] text-stone-700 whitespace-pre-line leading-relaxed">
+                    {String.trim(@feedback_text || "")}
+                  </p>
+                </div>
+                <%= if @feedback_graded_at do %>
+                  <p class="text-[11px] text-stone-400 mt-3 text-right">
+                    Erhalten am {Calendar.strftime(@feedback_graded_at, "%d.%m.%Y um %H:%M Uhr")}
+                  </p>
+                <% end %>
+              </div>
+              <%!-- Footer --%>
+              <div class="px-6 py-4 border-t border-stone-100 flex justify-end">
+                <button
+                  type="button"
+                  phx-click="close_feedback_modal"
+                  class="px-4 py-2 bg-stone-900 text-white text-[13px] font-medium rounded-[8px] hover:bg-stone-800 transition-colors"
+                >
+                  Schließen
+                </button>
+              </div>
+            </div>
+          </dialog>
+        <% end %>
       </Layouts.app>
     </div>
     """
@@ -285,7 +357,11 @@ defmodule TaskyWeb.Student.CourseLive do
      |> assign(:course, course)
      |> assign(:submissions, submissions)
      |> assign(:stats, stats)
-     |> assign(:active_task_id, active_task_id)}
+     |> assign(:active_task_id, active_task_id)
+     |> assign(:show_feedback_modal, false)
+     |> assign(:feedback_text, nil)
+     |> assign(:feedback_task_name, nil)
+     |> assign(:feedback_graded_at, nil)}
   end
 
   @impl true
@@ -303,6 +379,30 @@ defmodule TaskyWeb.Student.CourseLive do
      |> assign(:stats, stats)
      |> assign(:active_task_id, active_task_id)
      |> put_flash(:info, "Aufgabenstatus aktualisiert!")}
+  end
+
+  @impl true
+  def handle_event("show_feedback", %{"submission-id" => submission_id}, socket) do
+    submission_id = String.to_integer(submission_id)
+
+    submission = Enum.find(socket.assigns.submissions, &(&1.id == submission_id))
+
+    {:noreply,
+     socket
+     |> assign(:show_feedback_modal, true)
+     |> assign(:feedback_text, submission.feedback || "")
+     |> assign(:feedback_task_name, submission.task.name)
+     |> assign(:feedback_graded_at, submission.graded_at)}
+  end
+
+  @impl true
+  def handle_event("close_feedback_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_feedback_modal, false)
+     |> assign(:feedback_text, nil)
+     |> assign(:feedback_task_name, nil)
+     |> assign(:feedback_graded_at, nil)}
   end
 
   defp format_status(status) do

@@ -400,17 +400,45 @@ defmodule TaskyWeb.TaskLive.Progress do
                   <% end %>
                 <% end %>
               </div>
-              <%!-- Modal Footer --%>
-              <div class="bg-white px-8 py-4 border-t border-stone-200">
-                <div class="flex justify-end">
-                  <button
-                    type="button"
-                    phx-click="close_modal"
-                    class="px-5 py-2 bg-stone-900 text-white text-[14px] font-medium rounded-[8px] hover:bg-stone-800 transition-colors"
-                  >
-                    Schließen
-                  </button>
+              <%!-- Modal Footer: Feedback --%>
+              <div class="bg-stone-50 px-8 py-5 border-t border-stone-200">
+                <div class="flex items-center gap-2 mb-3">
+                  <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4 text-stone-500" />
+                  <span class="text-[13px] font-semibold text-stone-700">Feedback an Schüler</span>
+                  <%= if @feedback_saved do %>
+                    <span class="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-600 ml-1">
+                      <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> Gespeichert
+                    </span>
+                  <% end %>
                 </div>
+                <.form
+                  for={@feedback_form}
+                  id={"feedback-form-#{@selected_student_id}"}
+                  phx-submit="save_feedback"
+                >
+                  <.input
+                    type="textarea"
+                    field={@feedback_form[:feedback]}
+                    placeholder="Schreibe hier dein Feedback für den Schüler..."
+                    rows="3"
+                    class="w-full text-[13px] text-stone-800 bg-white border border-stone-200 rounded-[8px] px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent placeholder:text-stone-300 transition"
+                  />
+                  <div class="flex items-center justify-end gap-3 mt-3">
+                    <button
+                      type="button"
+                      phx-click="close_modal"
+                      class="px-4 py-2 text-[13px] font-medium text-stone-600 hover:text-stone-900 transition-colors"
+                    >
+                      Schließen
+                    </button>
+                    <button
+                      type="submit"
+                      class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white text-[13px] font-semibold rounded-[8px] hover:bg-emerald-600 transition-colors shadow-sm"
+                    >
+                      <.icon name="hero-paper-airplane" class="w-3.5 h-3.5" /> Feedback speichern
+                    </button>
+                  </div>
+                </.form>
               </div>
             </div>
           </dialog>
@@ -451,7 +479,10 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:selected_student_id, nil)
      |> assign(:selected_student_name, nil)
      |> assign(:selected_student_email, nil)
-     |> assign(:students_with_submissions, [])}
+     |> assign(:students_with_submissions, [])
+     |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
+     |> assign(:feedback_saved, false)
+     |> assign(:selected_submission_record, nil)}
   end
 
   @impl true
@@ -495,12 +526,25 @@ defmodule TaskyWeb.TaskLive.Progress do
                   files = TallyApi.extract_file_uploads(data)
                   all_responses = TallyApi.extract_all_responses(data)
 
+                  # Load existing feedback from DB record
+                  submission_record =
+                    Repo.get_by(Tasks.TaskSubmission,
+                      student_id: student_id,
+                      task_id: task.id
+                    )
+
+                  existing_feedback =
+                    (submission_record && submission_record.feedback) || ""
+
                   assign(socket,
                     loading_submission: false,
                     submission_data: metadata,
                     file_uploads: files,
                     all_responses: all_responses,
-                    submission_error: nil
+                    submission_error: nil,
+                    selected_submission_record: submission_record,
+                    feedback_form: to_form(%{"feedback" => existing_feedback}, as: :submission),
+                    feedback_saved: false
                   )
 
                 {:error, :not_found} ->
@@ -531,9 +575,21 @@ defmodule TaskyWeb.TaskLive.Progress do
           end
 
         _ ->
+          # Still load any existing feedback even without a Tally submission
+          submission_record =
+            Repo.get_by(Tasks.TaskSubmission,
+              student_id: student_id,
+              task_id: task.id
+            )
+
+          existing_feedback = (submission_record && submission_record.feedback) || ""
+
           assign(socket,
             loading_submission: false,
-            submission_error: "Keine Tally-Einreichung für diesen Studenten gefunden"
+            submission_error: "Keine Tally-Einreichung für diesen Studenten gefunden",
+            selected_submission_record: submission_record,
+            feedback_form: to_form(%{"feedback" => existing_feedback}, as: :submission),
+            feedback_saved: false
           )
       end
 
@@ -570,6 +626,49 @@ defmodule TaskyWeb.TaskLive.Progress do
   end
 
   @impl true
+  def handle_event("save_feedback", %{"submission" => %{"feedback" => feedback_text}}, socket) do
+    submission_record = socket.assigns.selected_submission_record
+
+    case submission_record do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Keine Einreichung gefunden")}
+
+      record ->
+        attrs = %{feedback: feedback_text}
+
+        case Tasks.grade_submission(socket.assigns.current_scope, record.id, attrs) do
+          {:ok, updated} ->
+            # Broadcast to student so they see feedback live
+            task = socket.assigns.task
+
+            Phoenix.PubSub.broadcast(
+              Tasky.PubSub,
+              "student:#{record.student_id}:submissions",
+              {:submission_updated, updated}
+            )
+
+            Phoenix.PubSub.broadcast(
+              Tasky.PubSub,
+              "course:#{task.course_id}:progress",
+              {:submission_updated, updated}
+            )
+
+            {:noreply,
+             socket
+             |> assign(:selected_submission_record, updated)
+             |> assign(
+               :feedback_form,
+               to_form(%{"feedback" => updated.feedback || ""}, as: :submission)
+             )
+             |> assign(:feedback_saved, true)}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Feedback konnte nicht gespeichert werden")}
+        end
+    end
+  end
+
+  @impl true
   def handle_event("navigate_submission", %{"direction" => direction}, socket) do
     students = socket.assigns.students_with_submissions
     current_id = socket.assigns.selected_student_id
@@ -596,6 +695,9 @@ defmodule TaskyWeb.TaskLive.Progress do
         |> assign(:submission_error, nil)
         |> assign(:file_uploads, [])
         |> assign(:all_responses, [])
+        |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
+        |> assign(:feedback_saved, false)
+        |> assign(:selected_submission_record, nil)
 
       send(self(), {:fetch_submission, next_student.id})
 
@@ -617,7 +719,10 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:loading_submission, false)
      |> assign(:selected_student_id, nil)
      |> assign(:selected_student_email, nil)
-     |> assign(:students_with_submissions, [])}
+     |> assign(:students_with_submissions, [])
+     |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
+     |> assign(:feedback_saved, false)
+     |> assign(:selected_submission_record, nil)}
   end
 
   @impl true
