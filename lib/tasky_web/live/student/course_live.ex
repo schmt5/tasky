@@ -286,7 +286,9 @@ defmodule TaskyWeb.Student.CourseLive do
                     💬
                   </div>
                   <div>
-                    <h3 class="text-[15px] font-semibold text-stone-900">Feedback vom Lehrer</h3>
+                    <h3 class="text-[15px] font-semibold text-stone-900">
+                      Feedback von der Lehrperson
+                    </h3>
                     <%= if @feedback_task_name do %>
                       <p class="text-[12px] text-stone-400">{@feedback_task_name}</p>
                     <% end %>
