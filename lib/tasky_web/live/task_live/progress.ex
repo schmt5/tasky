@@ -19,7 +19,7 @@ defmodule TaskyWeb.TaskLive.Progress do
             <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-emerald-500">
               Aufgabenfortschritt
             </div>
-            
+
             <div class="flex items-center gap-2">
               <.link
                 navigate={~p"/courses/#{@task.course_id}/progress"}
@@ -29,17 +29,17 @@ defmodule TaskyWeb.TaskLive.Progress do
               </.link>
             </div>
           </div>
-          
+
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             {@task.name}
           </h1>
-          
+
           <p class="text-[15px] text-stone-500 leading-[1.7]">
             Übersicht über den Fortschritt aller Studenten für diese Aufgabe
           </p>
         </div>
       </div>
-      
+
       <div class="max-w-7xl mx-auto px-8 pb-8">
         <%!-- Progress Grid --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
@@ -55,7 +55,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                       >
                         -
                       </th>
-                      
+
                       <th
                         :for={student <- @students}
                         scope="col"
@@ -65,7 +65,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 mx-auto mb-2 text-[11px] font-semibold">
                             {get_initials(student)}
                           </div>
-                          
+
                           <span class="line-clamp-2 text-[11px] text-stone-600">
                             {get_email_username(student.email)}
                           </span>
@@ -73,7 +73,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                       </th>
                     </tr>
                   </thead>
-                  
+
                   <tbody class="bg-white divide-y divide-stone-100">
                     <tr class="hover:bg-stone-50 transition-colors duration-150">
                       <td class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-4 whitespace-nowrap border-r border-stone-200">
@@ -81,7 +81,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                           <span class="text-[14px] font-medium text-stone-800">Fortschritt</span>
                         </div>
                       </td>
-                      
+
                       <td :for={student <- @students} class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= case get_submission_status(@progress_map, student.id) do %>
@@ -110,14 +110,14 @@ defmodule TaskyWeb.TaskLive.Progress do
                         </div>
                       </td>
                     </tr>
-                     <%!-- Submission Actions Row --%>
+                    <%!-- Submission Actions Row --%>
                     <tr class="hover:bg-stone-50 transition-colors duration-150">
                       <td class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-4 whitespace-nowrap border-r border-stone-200">
                         <div class="flex items-center gap-3">
                           <span class="text-[14px] font-medium text-stone-800">Antworten</span>
                         </div>
                       </td>
-                      
+
                       <td :for={student <- @students} class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= if has_submission?(@progress_map, student.id) do %>
@@ -139,28 +139,28 @@ defmodule TaskyWeb.TaskLive.Progress do
                 </table>
               </div>
             </div>
-             <%!-- Legend --%>
+            <%!-- Legend --%>
             <div class="border-t border-stone-200 bg-stone-50 px-6 py-4">
               <div class="flex items-center justify-center gap-8">
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-[6px] bg-emerald-500 flex items-center justify-center">
                     <.icon name="hero-check" class="w-4 h-4 text-white" />
                   </div>
-                   <span class="text-[13px] text-stone-600">Abgeschlossen</span>
+                  <span class="text-[13px] text-stone-600">Abgeschlossen</span>
                 </div>
-                
+
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-[6px] bg-sky-500 flex items-center justify-center">
                     <.icon name="hero-ellipsis-horizontal" class="w-4 h-4 text-white" />
                   </div>
-                   <span class="text-[13px] text-stone-600">In Bearbeitung</span>
+                  <span class="text-[13px] text-stone-600">In Bearbeitung</span>
                 </div>
-                
+
                 <div class="flex items-center gap-2">
                   <div class="w-6 h-6 rounded-[6px] bg-stone-200 flex items-center justify-center">
                     <.icon name="hero-minus" class="w-4 h-4 text-stone-400" />
                   </div>
-                   <span class="text-[13px] text-stone-600">Nicht begonnen</span>
+                  <span class="text-[13px] text-stone-600">Nicht begonnen</span>
                 </div>
               </div>
             </div>
@@ -169,16 +169,16 @@ defmodule TaskyWeb.TaskLive.Progress do
               <div class="w-14 h-14 rounded-[14px] bg-emerald-50 flex items-center justify-center text-emerald-400 mb-5">
                 <.icon name="hero-chart-bar" class="w-6 h-6" />
               </div>
-              
+
               <h3 class="text-base font-semibold text-stone-700 mb-2">Keine Daten verfügbar</h3>
-              
+
               <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6]">
                 Schreiben Sie Studenten in den Kurs ein, um den Fortschritt zu verfolgen.
               </p>
             </div>
           <% end %>
         </div>
-         <%!-- Submission Modal --%>
+        <%!-- Submission Modal --%>
         <%= if @show_modal do %>
           <dialog
             id="submission-modal"
@@ -188,53 +188,86 @@ defmodule TaskyWeb.TaskLive.Progress do
           >
             <%!-- Modal backdrop --%>
             <div class="modal-backdrop bg-stone-900/50" phx-click="close_modal"></div>
-             <%!-- Modal box --%>
-            <div class="modal-box w-11/12 max-w-4xl p-0 bg-white rounded-[16px] shadow-2xl">
+            <%!-- Modal box --%>
+            <div class="modal-box w-[96vw] max-w-[96vw] h-[94vh] max-h-[94vh] p-0 bg-white rounded-[16px] shadow-2xl flex flex-col">
               <%!-- Modal Header --%>
-              <div class="bg-white border-b border-stone-200 px-8 py-6">
-                <div class="flex items-center justify-between">
-                  <div class="flex-1">
-                    <div class="flex items-center gap-3 mb-2">
-                      <div class="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                        <.icon name="hero-document-check" class="w-5 h-5 text-emerald-600" />
-                      </div>
-                      
-                      <div>
-                        <h3 class="text-[20px] font-semibold text-stone-900">
-                          {@selected_student_name}
-                        </h3>
-                        
-                        <%= if @selected_student_email do %>
-                          <p class="text-[13px] text-stone-500">{@selected_student_email}</p>
-                        <% end %>
-                      </div>
-                    </div>
-                    
+              <div class="bg-white border-b border-stone-200 px-6 py-4">
+                <div class="flex items-center gap-3">
+                  <%!-- Avatar --%>
+                  <div class="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                    <.icon name="hero-document-check" class="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <%!-- Student info --%>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-[18px] font-semibold text-stone-900 truncate leading-tight">
+                      {@selected_student_name}
+                    </h3>
+                    <%= if @selected_student_email do %>
+                      <p class="text-[12px] text-stone-500 truncate">{@selected_student_email}</p>
+                    <% end %>
                     <%= if @submission_data do %>
-                      <p class="text-[13px] text-stone-600">
-                        <span class="font-medium">Eingereicht am:</span> {format_datetime(
-                          @submission_data.submitted_at
-                        )}
+                      <p class="text-[11px] text-stone-400 mt-0.5">
+                        Eingereicht am: {format_datetime(@submission_data.submitted_at)}
                       </p>
                     <% end %>
                   </div>
-                  
+                  <%!-- Compact nav group --%>
+                  <%= if length(@students_with_submissions) > 1 do %>
+                    <% current_nav_index =
+                      Enum.find_index(@students_with_submissions, &(&1.id == @selected_student_id)) %>
+                    <div class="flex items-center gap-1 bg-stone-100 rounded-[8px] px-1 py-1 shrink-0">
+                      <button
+                        type="button"
+                        phx-click="navigate_submission"
+                        phx-value-direction="prev"
+                        disabled={current_nav_index == 0}
+                        class={[
+                          "inline-flex items-center justify-center w-7 h-7 rounded-[6px] transition-colors duration-150",
+                          if(current_nav_index == 0,
+                            do: "text-stone-300 cursor-not-allowed",
+                            else: "text-stone-600 hover:bg-white hover:shadow-sm hover:text-stone-900"
+                          )
+                        ]}
+                      >
+                        <.icon name="hero-chevron-left" class="w-4 h-4" />
+                      </button>
+                      <span class="text-[12px] font-semibold text-stone-500 tabular-nums px-1 select-none">
+                        {current_nav_index + 1}/{length(@students_with_submissions)}
+                      </span>
+                      <button
+                        type="button"
+                        phx-click="navigate_submission"
+                        phx-value-direction="next"
+                        disabled={current_nav_index == length(@students_with_submissions) - 1}
+                        class={[
+                          "inline-flex items-center justify-center w-7 h-7 rounded-[6px] transition-colors duration-150",
+                          if(current_nav_index == length(@students_with_submissions) - 1,
+                            do: "text-stone-300 cursor-not-allowed",
+                            else: "text-stone-600 hover:bg-white hover:shadow-sm hover:text-stone-900"
+                          )
+                        ]}
+                      >
+                        <.icon name="hero-chevron-right" class="w-4 h-4" />
+                      </button>
+                    </div>
+                  <% end %>
+                  <%!-- Close button --%>
                   <button
                     type="button"
                     phx-click="close_modal"
-                    class="text-stone-400 hover:text-stone-600 transition-colors"
+                    class="shrink-0 text-stone-400 hover:text-stone-600 transition-colors"
                   >
-                    <.icon name="hero-x-mark" class="w-6 h-6" />
+                    <.icon name="hero-x-mark" class="w-5 h-5" />
                   </button>
                 </div>
               </div>
-               <%!-- Modal Body --%>
-              <div class="px-8 py-6 max-h-[calc(100vh-300px)] overflow-y-auto">
+              <%!-- Modal Body --%>
+              <div class="px-8 py-6 flex-1 overflow-y-auto">
                 <%= if @loading_submission do %>
                   <div class="flex flex-col items-center justify-center py-12">
                     <div class="w-12 h-12 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mb-4">
                     </div>
-                    
+
                     <p class="text-[14px] text-stone-500">Lade Einreichung...</p>
                   </div>
                 <% else %>
@@ -243,9 +276,9 @@ defmodule TaskyWeb.TaskLive.Progress do
                       <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
                         <.icon name="hero-exclamation-triangle" class="w-6 h-6 text-red-600" />
                       </div>
-                      
+
                       <h4 class="text-[16px] font-semibold text-red-900 mb-2">Fehler beim Laden</h4>
-                      
+
                       <p class="text-[14px] text-red-700">{@submission_error}</p>
                     </div>
                   <% else %>
@@ -257,7 +290,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                             <div class="text-[13px] font-semibold text-stone-700 uppercase tracking-wide">
                               {response.question_title}
                             </div>
-                             <%!-- Answer based on type --%>
+                            <%!-- Answer based on type --%>
                             <%= cond do %>
                               <%!-- File Upload --%>
                               <% response.question_type == "FILE_UPLOAD" and is_list(response.answer) -> %>
@@ -278,18 +311,18 @@ defmodule TaskyWeb.TaskLive.Progress do
                                             />
                                           <% end %>
                                         </div>
-                                        
+
                                         <div class="flex-1 min-w-0">
                                           <p class="text-[14px] font-medium text-stone-900 truncate">
                                             {file["name"]}
                                           </p>
-                                          
+
                                           <p class="text-[12px] text-stone-500">
                                             {format_file_size(file["size"])}
                                           </p>
                                         </div>
                                       </div>
-                                      
+
                                       <a
                                         href={file["url"]}
                                         target="_blank"
@@ -299,7 +332,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                                         Download
                                       </a>
                                     </div>
-                                     <%!-- Image Preview --%>
+                                    <%!-- Image Preview --%>
                                     <%= if String.starts_with?(file["mimeType"] || "", "image/") do %>
                                       <div class="mt-3 rounded-[8px] overflow-hidden border border-stone-200 bg-stone-50">
                                         <img
@@ -311,7 +344,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                                     <% end %>
                                   </div>
                                 </div>
-                                 <%!-- Multiple Choice / Select --%>
+                                <%!-- Multiple Choice / Select --%>
                               <% response.question_type in ["MULTIPLE_CHOICE", "CHECKBOXES"] and is_list(response.answer) -> %>
                                 <div class="bg-emerald-50 border border-emerald-200 rounded-[10px] px-4 py-3">
                                   <div class="flex flex-wrap gap-2">
@@ -323,14 +356,14 @@ defmodule TaskyWeb.TaskLive.Progress do
                                     </span>
                                   </div>
                                 </div>
-                                 <%!-- Text / Input answers --%>
+                                <%!-- Text / Input answers --%>
                               <% is_binary(response.answer) -> %>
                                 <div class="bg-stone-50 border border-stone-200 rounded-[10px] px-4 py-3">
                                   <p class="text-[14px] text-stone-800 whitespace-pre-wrap">
                                     {response.answer}
                                   </p>
                                 </div>
-                                 <%!-- List of strings --%>
+                                <%!-- List of strings --%>
                               <% is_list(response.answer) -> %>
                                 <div class="bg-stone-50 border border-stone-200 rounded-[10px] px-4 py-3">
                                   <ul class="list-disc list-inside space-y-1">
@@ -342,7 +375,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                                     </li>
                                   </ul>
                                 </div>
-                                 <%!-- Fallback for other types --%>
+                                <%!-- Fallback for other types --%>
                               <% true -> %>
                                 <div class="bg-stone-50 border border-stone-200 rounded-[10px] px-4 py-3">
                                   <p class="text-[14px] text-stone-800 font-mono">
@@ -357,7 +390,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                           <div class="w-12 h-12 rounded-full bg-stone-200 flex items-center justify-center mx-auto mb-3">
                             <.icon name="hero-document" class="w-6 h-6 text-stone-400" />
                           </div>
-                          
+
                           <p class="text-[14px] text-stone-600">
                             Keine Antworten in dieser Einreichung
                           </p>
@@ -367,7 +400,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                   <% end %>
                 <% end %>
               </div>
-               <%!-- Modal Footer --%>
+              <%!-- Modal Footer --%>
               <div class="bg-white px-8 py-4 border-t border-stone-200">
                 <div class="flex justify-end">
                   <button
@@ -415,8 +448,10 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:submission_error, nil)
      |> assign(:file_uploads, [])
      |> assign(:all_responses, [])
+     |> assign(:selected_student_id, nil)
      |> assign(:selected_student_name, nil)
-     |> assign(:selected_student_email, nil)}
+     |> assign(:selected_student_email, nil)
+     |> assign(:students_with_submissions, [])}
   end
 
   @impl true
@@ -511,19 +546,58 @@ defmodule TaskyWeb.TaskLive.Progress do
     student = Enum.find(socket.assigns.students, &(&1.id == student_id))
 
     if student do
-      student_name = get_student_full_name(student)
-      student_email = student.email
+      students_with_submissions =
+        Enum.filter(socket.assigns.students, fn s ->
+          has_submission?(socket.assigns.progress_map, s.id)
+        end)
 
       socket =
         socket
         |> assign(:show_modal, true)
         |> assign(:loading_submission, true)
-        |> assign(:selected_student_name, student_name)
-        |> assign(:selected_student_email, student_email)
+        |> assign(:selected_student_id, student_id)
+        |> assign(:selected_student_name, get_student_full_name(student))
+        |> assign(:selected_student_email, student.email)
+        |> assign(:students_with_submissions, students_with_submissions)
         |> assign(:submission_error, nil)
 
-      # Fetch submission in background
       send(self(), {:fetch_submission, student_id})
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("navigate_submission", %{"direction" => direction}, socket) do
+    students = socket.assigns.students_with_submissions
+    current_id = socket.assigns.selected_student_id
+
+    current_index = Enum.find_index(students, &(&1.id == current_id))
+
+    next_index =
+      case direction do
+        "prev" -> current_index - 1
+        "next" -> current_index + 1
+        _ -> current_index
+      end
+
+    next_student = Enum.at(students, next_index)
+
+    if next_student do
+      socket =
+        socket
+        |> assign(:loading_submission, true)
+        |> assign(:selected_student_id, next_student.id)
+        |> assign(:selected_student_name, get_student_full_name(next_student))
+        |> assign(:selected_student_email, next_student.email)
+        |> assign(:submission_data, nil)
+        |> assign(:submission_error, nil)
+        |> assign(:file_uploads, [])
+        |> assign(:all_responses, [])
+
+      send(self(), {:fetch_submission, next_student.id})
 
       {:noreply, socket}
     else
@@ -541,7 +615,9 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:file_uploads, [])
      |> assign(:all_responses, [])
      |> assign(:loading_submission, false)
-     |> assign(:selected_student_email, nil)}
+     |> assign(:selected_student_id, nil)
+     |> assign(:selected_student_email, nil)
+     |> assign(:students_with_submissions, [])}
   end
 
   @impl true
