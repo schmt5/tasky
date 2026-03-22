@@ -79,6 +79,18 @@ defmodule TaskyWeb.Layouts do
                 >
                   Kurse
                 </.link>
+                <.link
+                  navigate={~p"/student/my-tasks"}
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/student/my-tasks"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
+                >
+                  Meine Aufgaben
+                </.link>
               <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
                 <.link
                   navigate={~p"/courses"}

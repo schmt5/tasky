@@ -173,17 +173,28 @@ defmodule Tasky.Tasks do
 
   """
   def reorder_tasks(%Scope{} = scope, task_positions) when is_list(task_positions) do
-    Repo.transaction(fn ->
-      Enum.each(task_positions, fn %{id: id, position: position} ->
-        task = get_task!(scope, id)
+    ids = Enum.map(task_positions, & &1.id)
 
-        task
-        |> Ecto.Changeset.change(%{position: position})
-        |> Repo.update!()
+    # Fetch all tasks in one query and verify every one belongs to this scope's user
+    owned_tasks =
+      Repo.all(from t in Task, where: t.id in ^ids and t.user_id == ^scope.user.id)
+
+    if length(owned_tasks) != length(ids) do
+      {:error, :unauthorized}
+    else
+      position_map =
+        Map.new(task_positions, fn %{id: id, position: position} -> {id, position} end)
+
+      Repo.transaction(fn ->
+        Enum.each(owned_tasks, fn task ->
+          task
+          |> Ecto.Changeset.change(%{position: Map.fetch!(position_map, task.id)})
+          |> Repo.update!()
+        end)
+
+        :reordered
       end)
-
-      :reordered
-    end)
+    end
   end
 
   ## Task Submissions

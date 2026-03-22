@@ -6,7 +6,7 @@ defmodule TaskyWeb.CourseLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/courses"}>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500 mb-3">

@@ -16,7 +16,7 @@ defmodule TaskyWeb.Student.MyTasksLive do
       }
     </script>
     <div id="my-tasks-container" phx-hook=".OpenLink">
-      <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/student/my-tasks"}>
         <div class="page-header">
           <div class="page-header-eyebrow">Studenten Portal</div>
           <h1>
@@ -223,25 +223,18 @@ defmodule TaskyWeb.Student.MyTasksLive do
         %{"submission-id" => submission_id, "link" => link},
         socket
       ) do
-    IO.inspect(submission_id, label: "Received submission_id")
     submission_id = String.to_integer(submission_id)
     submission = Enum.find(socket.assigns.submissions, &(&1.id == submission_id))
-    IO.inspect(submission, label: "Found submission")
 
     # Only mark as in_progress if it's currently open or draft
-    IO.inspect(submission && submission.status, label: "Current status")
-
     socket =
       if submission && submission.status in ["open", "draft", "not_started"] do
-        IO.puts("Attempting to update status to in_progress")
-
         case Tasks.update_submission_status(
                socket.assigns.current_scope,
                submission_id,
                "in_progress"
              ) do
           {:ok, _updated_submission} ->
-            IO.puts("Successfully updated to in_progress")
             # Reload submissions to reflect the change
             submissions = Tasks.list_my_submissions(socket.assigns.current_scope)
 
@@ -255,12 +248,10 @@ defmodule TaskyWeb.Student.MyTasksLive do
             |> assign(:submissions, submissions)
             |> assign(:stats, stats)
 
-          {:error, changeset} ->
-            IO.inspect(changeset, label: "Error updating submission")
+          {:error, _changeset} ->
             socket
         end
       else
-        IO.puts("Submission not found or status not open/draft")
         socket
       end
 
