@@ -58,7 +58,11 @@ defmodule TaskyWeb.Student.TaskLive do
       }
     </script>
 
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      current_path={~p"/student/tasks/#{@task}"}
+    >
       <%!-- Compact Page Header --%>
       <div class="sticky top-0 z-20 bg-white border-b border-stone-200 h-[54px] flex items-center px-8">
         <div class="max-w-6xl mx-auto w-full flex items-center justify-between">
@@ -66,12 +70,7 @@ defmodule TaskyWeb.Student.TaskLive do
             {@task.name}
           </h1>
 
-          <.link
-            navigate={~p"/student/courses/#{@task.course_id}"}
-            class="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors duration-150 flex-shrink-0"
-          >
-            <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
-          </.link>
+          <.back_link navigate={~p"/student/courses/#{@task.course_id}"} label="Zurück zum Kurs" />
         </div>
       </div>
 

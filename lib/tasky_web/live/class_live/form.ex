@@ -7,27 +7,29 @@ defmodule TaskyWeb.ClassLive.Form do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/classes"}>
       <%!-- Page Header --%>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
-              Klassenverwaltung
-            </div>
-            
-            <.link
-              navigate={~p"/classes"}
-              class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
-            >
-              <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
-            </.link>
+            <%= if @live_action == :new do %>
+              <.breadcrumbs crumbs={[
+                %{label: "Klassen", navigate: ~p"/classes"},
+                %{label: "Neue Klasse"}
+              ]} />
+            <% else %>
+              <.breadcrumbs crumbs={[
+                %{label: "Klassen", navigate: ~p"/classes"},
+                %{label: @class.name},
+                %{label: "Bearbeiten"}
+              ]} />
+            <% end %>
           </div>
-          
+
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             {@page_title}
           </h1>
-          
+
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
               do: "Erstelle eine neue Klasse für deine Schüler.",
@@ -35,7 +37,7 @@ defmodule TaskyWeb.ClassLive.Form do
           </p>
         </div>
       </div>
-       <%!-- Form Card --%>
+      <%!-- Form Card --%>
       <div class="max-w-6xl mx-auto px-8 pb-8">
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6">
@@ -58,7 +60,7 @@ defmodule TaskyWeb.ClassLive.Form do
                   <div class="mt-0.5">
                     <.icon name="hero-information-circle" class="w-5 h-5 text-sky-600" />
                   </div>
-                  
+
                   <div class="flex-1">
                     <p class="text-[13px] text-stone-700 leading-[1.5]">
                       Nach dem Erstellen erhältst du einen Link, den du an deine Schüler weitergeben kannst. Schüler, die sich über diesen Link registrieren, werden automatisch dieser Klasse zugeordnet.
@@ -66,7 +68,7 @@ defmodule TaskyWeb.ClassLive.Form do
                   </div>
                 </div>
               </div>
-              
+
               <div class="flex items-center gap-3 pt-4 border-t border-stone-100">
                 <.button
                   phx-disable-with="Speichert..."

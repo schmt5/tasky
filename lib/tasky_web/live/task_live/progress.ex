@@ -11,23 +11,21 @@ defmodule TaskyWeb.TaskLive.Progress do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      current_path={~p"/progress/#{@task.id}"}
+    >
       <%!-- Page Header --%>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-7xl mx-auto">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-emerald-500">
-              Aufgabenfortschritt
-            </div>
-
-            <div class="flex items-center gap-2">
-              <.link
-                navigate={~p"/courses/#{@task.course_id}/progress"}
-                class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
-              >
-                <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück zum Kursfortschritt
-              </.link>
-            </div>
+            <.breadcrumbs crumbs={[
+              %{label: "Kurse", navigate: ~p"/courses"},
+              %{label: @task.course.name, navigate: ~p"/courses/#{@task.course_id}"},
+              %{label: "Fortschritt", navigate: ~p"/courses/#{@task.course_id}/progress"},
+              %{label: @task.name}
+            ]} />
           </div>
 
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">

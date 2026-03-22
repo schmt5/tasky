@@ -31,6 +31,10 @@ defmodule TaskyWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
 
+  attr :current_path, :string,
+    default: nil,
+    doc: "the current request path, used to highlight the active nav link"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -65,20 +69,38 @@ defmodule TaskyWeb.Layouts do
               <% Tasky.Accounts.Scope.student?(@current_scope) -> %>
                 <.link
                   navigate={~p"/student/courses"}
-                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/student/courses"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
                 >
                   Kurse
                 </.link>
               <% Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) -> %>
                 <.link
                   navigate={~p"/courses"}
-                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/courses"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
                 >
                   Kurse
                 </.link>
                 <.link
                   navigate={~p"/classes"}
-                  class="text-sm font-medium text-stone-500 px-3.5 py-2 rounded-[10px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/classes"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
                 >
                   Klassen
                 </.link>

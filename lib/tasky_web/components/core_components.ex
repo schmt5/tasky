@@ -567,6 +567,64 @@ defmodule TaskyWeb.CoreComponents do
   end
 
   @doc """
+  Renders a back navigation link with a left arrow icon.
+
+  ## Examples
+
+      <.back_link navigate={~p"/courses"} />
+      <.back_link navigate={~p"/courses/1"} label="Zurück zum Kurs" />
+  """
+  attr :navigate, :string, required: true
+  attr :label, :string, default: "Zurück"
+
+  def back_link(assigns) do
+    ~H"""
+    <.link
+      navigate={@navigate}
+      class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
+    >
+      <.icon name="hero-arrow-left" class="w-4 h-4" />{@label}
+    </.link>
+    """
+  end
+
+  @doc """
+  Renders a breadcrumb trail.
+
+  Each crumb is a map with `:label` (string) and optionally `:navigate` (path).
+  The last crumb is rendered as plain text (current page).
+
+  ## Examples
+
+      <.breadcrumbs crumbs={[
+        %{label: "Kurse", navigate: ~p"/courses"},
+        %{label: @course.name, navigate: ~p"/courses/\#{@course}"},
+        %{label: "Fortschritt"}
+      ]} />
+  """
+  attr :crumbs, :list, required: true
+
+  def breadcrumbs(assigns) do
+    ~H"""
+    <nav class="flex items-center gap-1.5 text-[13px] font-semibold flex-wrap">
+      <%= for {crumb, index} <- Enum.with_index(@crumbs) do %>
+        <%= if index < length(@crumbs) - 1 do %>
+          <.link
+            navigate={crumb.navigate}
+            class="text-stone-400 hover:text-stone-700 transition-colors duration-150 whitespace-nowrap"
+          >
+            {crumb.label}
+          </.link>
+          <span class="text-stone-300 select-none">/</span>
+        <% else %>
+          <span class="text-stone-800 whitespace-nowrap">{crumb.label}</span>
+        <% end %>
+      <% end %>
+    </nav>
+    """
+  end
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

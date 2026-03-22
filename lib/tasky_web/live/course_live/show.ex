@@ -7,29 +7,22 @@ defmodule TaskyWeb.CourseLive.Show do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/courses/#{@course}"}>
       <%!-- Page Header --%>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500">
-              Kursverwaltung
-            </div>
+            <.breadcrumbs crumbs={[
+              %{label: "Kurse", navigate: ~p"/courses"},
+              %{label: @course.name}
+            ]} />
 
-            <div class="flex items-center gap-2">
-              <.link
-                navigate={~p"/courses"}
-                class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
-              >
-                <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
-              </.link>
-              <.link
-                navigate={~p"/courses/#{@course}/edit?return_to=show"}
-                class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-              >
-                <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
-              </.link>
-            </div>
+            <.link
+              navigate={~p"/courses/#{@course}/edit?return_to=show"}
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+            >
+              <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
+            </.link>
           </div>
 
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">

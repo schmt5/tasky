@@ -9,23 +9,20 @@ defmodule TaskyWeb.CourseLive.Progress do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      current_path={~p"/courses/#{@course}/progress"}
+    >
       <%!-- Page Header --%>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-7xl mx-auto">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-emerald-500">
-              Kursfortschritt
-            </div>
-
-            <div class="flex items-center gap-2">
-              <.link
-                navigate={~p"/courses/#{@course}"}
-                class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
-              >
-                <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück zum Kurs
-              </.link>
-            </div>
+            <.breadcrumbs crumbs={[
+              %{label: "Kurse", navigate: ~p"/courses"},
+              %{label: @course.name, navigate: ~p"/courses/#{@course}"},
+              %{label: "Fortschritt"}
+            ]} />
           </div>
 
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">

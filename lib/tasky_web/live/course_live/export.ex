@@ -111,7 +111,7 @@ defmodule TaskyWeb.CourseLive.Export do
                       <h4 class="block-h3" id={"block-#{block.id}"}>{block.text}</h4>
                     <% block.type == :text -> %>
                       <div class="block-text">
-                        <%= Phoenix.HTML.raw(block.html) %>
+                        {Phoenix.HTML.raw(block.html)}
                       </div>
                     <% block.type == :image -> %>
                       <figure class="block-image">

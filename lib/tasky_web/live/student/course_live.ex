@@ -8,21 +8,19 @@ defmodule TaskyWeb.Student.CourseLive do
   def render(assigns) do
     ~H"""
     <div id="course-tasks-container">
-      <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <Layouts.app
+        flash={@flash}
+        current_scope={@current_scope}
+        current_path={~p"/student/courses/#{@course}"}
+      >
         <%!-- Page Header --%>
         <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-4 mb-8">
           <div class="max-w-6xl mx-auto">
             <div class="flex items-center justify-between mb-2">
-              <div class="text-[10px] tracking-[0.12em] uppercase font-semibold text-sky-500">
-                Studenten Portal
-              </div>
-
-              <.link
-                navigate={~p"/student/courses"}
-                class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-stone-600 hover:text-stone-900 transition-colors duration-150"
-              >
-                <.icon name="hero-arrow-left" class="w-4 h-4" /> Zurück
-              </.link>
+              <.breadcrumbs crumbs={[
+                %{label: "Meine Kurse", navigate: ~p"/student/courses"},
+                %{label: @course.name}
+              ]} />
             </div>
 
             <h1 class="font-serif text-[36px] text-stone-900 leading-[1.1] mb-2 font-normal">
