@@ -307,11 +307,6 @@ defmodule TaskyWeb.Student.CourseLive do
                     {String.trim(@feedback_text || "")}
                   </p>
                 </div>
-                <%= if @feedback_graded_at do %>
-                  <p class="text-[11px] text-stone-400 mt-3 text-right">
-                    Erhalten am {Calendar.strftime(@feedback_graded_at, "%d.%m.%Y um %H:%M Uhr")}
-                  </p>
-                <% end %>
               </div>
               <%!-- Footer --%>
               <div class="px-6 py-4 border-t border-stone-100 flex justify-end">
@@ -360,8 +355,7 @@ defmodule TaskyWeb.Student.CourseLive do
      |> assign(:active_task_id, active_task_id)
      |> assign(:show_feedback_modal, false)
      |> assign(:feedback_text, nil)
-     |> assign(:feedback_task_name, nil)
-     |> assign(:feedback_graded_at, nil)}
+     |> assign(:feedback_task_name, nil)}
   end
 
   @impl true
@@ -391,8 +385,7 @@ defmodule TaskyWeb.Student.CourseLive do
      socket
      |> assign(:show_feedback_modal, true)
      |> assign(:feedback_text, submission.feedback || "")
-     |> assign(:feedback_task_name, submission.task.name)
-     |> assign(:feedback_graded_at, submission.graded_at)}
+     |> assign(:feedback_task_name, submission.task.name)}
   end
 
   @impl true
@@ -401,8 +394,7 @@ defmodule TaskyWeb.Student.CourseLive do
      socket
      |> assign(:show_feedback_modal, false)
      |> assign(:feedback_text, nil)
-     |> assign(:feedback_task_name, nil)
-     |> assign(:feedback_graded_at, nil)}
+     |> assign(:feedback_task_name, nil)}
   end
 
   defp format_status(status) do
