@@ -63,9 +63,17 @@ defmodule Tasky.Accounts.User do
     user
     |> cast(attrs, [:email, :firstname, :lastname, :is_teacher, :class_id])
     |> transform_is_teacher_to_role()
-    |> validate_required([:firstname, :lastname])
-    |> validate_length(:firstname, min: 1, max: 100)
-    |> validate_length(:lastname, min: 1, max: 100)
+    |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
+    |> validate_length(:firstname,
+      min: 1,
+      max: 100,
+      message: "muss zwischen 1 und 100 Zeichen lang sein"
+    )
+    |> validate_length(:lastname,
+      min: 1,
+      max: 100,
+      message: "muss zwischen 1 und 100 Zeichen lang sein"
+    )
     |> validate_email(opts)
     |> validate_role()
     |> foreign_key_constraint(:class_id)
@@ -92,9 +100,17 @@ defmodule Tasky.Accounts.User do
   def profile_changeset(user, attrs) do
     user
     |> cast(attrs, [:firstname, :lastname])
-    |> validate_required([:firstname, :lastname])
-    |> validate_length(:firstname, min: 1, max: 100)
-    |> validate_length(:lastname, min: 1, max: 100)
+    |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
+    |> validate_length(:firstname,
+      min: 1,
+      max: 100,
+      message: "muss zwischen 1 und 100 Zeichen lang sein"
+    )
+    |> validate_length(:lastname,
+      min: 1,
+      max: 100,
+      message: "muss zwischen 1 und 100 Zeichen lang sein"
+    )
   end
 
   @doc """
@@ -131,18 +147,18 @@ defmodule Tasky.Accounts.User do
   defp validate_role(changeset) do
     changeset
     |> validate_inclusion(:role, @valid_roles,
-      message: "must be one of: #{Enum.join(@valid_roles, ", ")}"
+      message: "muss einer der folgenden Werte sein: #{Enum.join(@valid_roles, ", ")}"
     )
   end
 
   defp validate_email(changeset, opts) do
     changeset =
       changeset
-      |> validate_required([:email])
+      |> validate_required([:email], message: "darf nicht leer sein")
       |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/,
-        message: "must have the @ sign and no spaces"
+        message: "muss ein @-Zeichen enthalten und darf keine Leerzeichen haben"
       )
-      |> validate_length(:email, max: 160)
+      |> validate_length(:email, max: 160, message: "darf maximal 160 Zeichen lang sein")
 
     if Keyword.get(opts, :validate_unique, true) do
       changeset
@@ -156,7 +172,7 @@ defmodule Tasky.Accounts.User do
 
   defp validate_email_changed(changeset) do
     if get_field(changeset, :email) && get_change(changeset, :email) == nil do
-      add_error(changeset, :email, "did not change")
+      add_error(changeset, :email, "hat sich nicht geändert")
     else
       changeset
     end

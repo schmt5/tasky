@@ -22,7 +22,7 @@ end
 
 config :tasky, TaskyWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
-if config_env() == :prod do
+if config_env() in [:prod, :demo] do
   database_path =
     System.get_env("DATABASE_PATH") ||
       raise """

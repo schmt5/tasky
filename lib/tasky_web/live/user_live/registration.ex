@@ -200,13 +200,7 @@ defmodule TaskyWeb.UserLive.Registration do
             &url(~p"/users/log-in/#{&1}")
           )
 
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "Eine E-Mail wurde an #{user.email} gesendet. Bitte öffnen Sie diese, um Ihr Konto zu bestätigen."
-         )
-         |> push_navigate(to: ~p"/users/log-in")}
+        {:noreply, push_navigate(socket, to: ~p"/users/register/success?email=#{user.email}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}

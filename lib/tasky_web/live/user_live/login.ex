@@ -53,44 +53,44 @@ defmodule TaskyWeb.UserLive.Login do
             </p>
           </div>
 
-          <%!-- Dev Mailbox Info --%>
-          <div
-            :if={local_mail_adapter?()}
-            class="mb-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-[12px] border border-amber-200 p-4 shadow-[0_2px_8px_rgba(251,191,36,0.1)]"
-          >
-            <div class="flex items-start gap-3">
-              <div class="w-8 h-8 bg-amber-100 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">
-                <svg
-                  width="18"
-                  height="18"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  class="text-amber-600"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <div class="flex-1">
-                <p class="text-[13px] font-semibold text-amber-900 mb-1">
-                  Lokaler Mail-Adapter aktiv
-                </p>
-                <p class="text-[13px] text-amber-800 leading-[1.5]">
-                  E-Mails werden lokal gespeichert. Besuchen Sie <.link
-                    href="/dev/mailbox"
-                    class="font-semibold text-amber-900 underline hover:text-amber-950"
+          <%!-- Demo Mailbox Info — appears with animation after submit --%>
+          <%= if local_mail_adapter?() && @submitted do %>
+            <div class="mb-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[12px] border border-emerald-200 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.1)] animate-[fadeSlideIn_0.35s_ease-out]">
+              <div class="flex items-start gap-3">
+                <div class="w-8 h-8 bg-emerald-100 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">
+                  <svg
+                    width="18"
+                    height="18"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    class="text-emerald-600"
                   >
-                    die Mailbox-Seite
-                  </.link>, um gesendete E-Mails anzuzeigen.
-                </p>
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <div class="flex-1">
+                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">
+                    Demo Instanz
+                  </p>
+                  <p class="text-[13px] text-emerald-800 leading-[1.5]">
+                    Das E-Mail für das Login findest du unter <.link
+                      href="/dev/mailbox"
+                      class="font-semibold text-emerald-900 underline hover:text-emerald-950"
+                    >
+                      Mail aufrufen
+                    </.link>.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          <% end %>
+
           <%!-- Form Card --%>
           <div class="bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-hidden">
             <.form
@@ -117,42 +117,60 @@ defmodule TaskyWeb.UserLive.Login do
               <div class="px-8 pb-8">
                 <button
                   type="submit"
+                  disabled={@submitted}
                   class="w-full inline-flex items-center justify-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-6 py-3.5 rounded-[10px] shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <svg
-                    width="18"
-                    height="18"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                  Mit E-Mail anmelden
-                  <svg
-                    width="16"
-                    height="16"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    class="ml-1"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M14 5l7 7m0 0l-7 7m7-7H3"
-                    />
-                  </svg>
+                  <%= if @submitted do %>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      class="animate-spin"
+                    >
+                      <circle cx="12" cy="12" r="10" class="opacity-25" />
+                      <path d="M12 2a10 10 0 0110 10" stroke-linecap="round" />
+                    </svg>
+                    E-Mail wird gesendet…
+                  <% else %>
+                    <svg
+                      width="18"
+                      height="18"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      />
+                    </svg>
+                    Mit E-Mail anmelden
+                    <svg
+                      width="16"
+                      height="16"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      class="ml-1"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M14 5l7 7m0 0l-7 7m7-7H3"
+                      />
+                    </svg>
+                  <% end %>
                 </button>
               </div>
             </.form>
           </div>
+
           <%!-- Footer Note --%>
           <div class="mt-6 flex items-center justify-center gap-2 text-[13px] text-stone-400">
             <svg
@@ -185,7 +203,7 @@ defmodule TaskyWeb.UserLive.Login do
 
     form = to_form(%{"email" => email}, as: "user")
 
-    {:ok, assign(socket, form: form)}
+    {:ok, assign(socket, form: form, submitted: false)}
   end
 
   @impl true
@@ -197,13 +215,7 @@ defmodule TaskyWeb.UserLive.Login do
       )
     end
 
-    info =
-      "Falls Ihre E-Mail in unserem System ist, erhalten Sie in Kürze Anweisungen zum Anmelden."
-
-    {:noreply,
-     socket
-     |> put_flash(:info, info)
-     |> push_navigate(to: ~p"/users/log-in")}
+    {:noreply, assign(socket, submitted: true)}
   end
 
   defp local_mail_adapter? do
