@@ -155,8 +155,8 @@ defmodule Tasky.Accounts.User do
     changeset =
       changeset
       |> validate_required([:email], message: "darf nicht leer sein")
-      |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/,
-        message: "muss ein @-Zeichen enthalten und darf keine Leerzeichen haben"
+      |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+\.[^@,;\s]{2,}$/,
+        message: "muss eine gültige E-Mail-Adresse sein (z.B. max@beispiel.de)"
       )
       |> validate_length(:email, max: 160, message: "darf maximal 160 Zeichen lang sein")
 
