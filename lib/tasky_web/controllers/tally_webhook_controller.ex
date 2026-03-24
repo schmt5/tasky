@@ -23,7 +23,7 @@ defmodule TaskyWeb.TallyWebhookController do
     }
   }
   """
-  def receive(conn, params) do
+  def receive(conn, %{"eventType" => "FORM_RESPONSE"} = params) do
     Logger.info("Received Tally webhook")
 
     # Verify signature if configured
@@ -40,9 +40,20 @@ defmodule TaskyWeb.TallyWebhookController do
     end
   end
 
+  def receive(conn, %{"eventType" => event_type}) do
+    Logger.info("Ignoring Tally webhook event type: #{event_type}")
+    json(conn, %{status: "ignored"})
+  end
+
+  def receive(conn, _params) do
+    Logger.warning("Received Tally webhook with missing eventType")
+    json(conn, %{status: "ignored"})
+  end
+
   defp process_webhook(conn, params) do
     result =
       with {:ok, data} <- extract_webhook_data(params),
+           :not_duplicate <- check_duplicate(data),
            {:ok, submission} <- find_submission(data),
            {:ok, updated_submission} <- mark_completed(submission, data) do
         Logger.info(
@@ -86,6 +97,10 @@ defmodule TaskyWeb.TallyWebhookController do
         |> put_status(:bad_request)
         |> json(%{error: "Missing required fields (user_id, task_id)"})
 
+      {:error, :duplicate_response} ->
+        Logger.info("Duplicate Tally webhook response_id — ignoring")
+        json(conn, %{status: "ok"})
+
       {:error, :submission_not_found} ->
         Logger.error("Submission not found in webhook processing")
 
@@ -109,26 +124,22 @@ defmodule TaskyWeb.TallyWebhookController do
     end
   end
 
-  defp verify_signature(conn, params) do
-    # Get the signing secret from config
+  defp verify_signature(conn, _params) do
     signing_secret = Application.get_env(:tasky, :tally_signing_secret)
 
-    # If no signing secret is configured, skip verification (dev mode)
     if is_nil(signing_secret) || signing_secret == "" do
       Logger.warning("Tally signing secret not configured - skipping signature verification")
       :ok
     else
-      # Get the signature from headers
       signature = get_req_header(conn, "tally-signature") |> List.first()
 
       if is_nil(signature) do
         {:error, "Missing Tally-Signature header"}
       else
-        # Calculate the expected signature
-        payload = Jason.encode!(params)
-        calculated = :crypto.mac(:hmac, :sha256, signing_secret, payload) |> Base.encode64()
+        raw_body = conn.private[:raw_body] || ""
+        calculated = :crypto.mac(:hmac, :sha256, signing_secret, raw_body) |> Base.encode64()
 
-        if signature == calculated do
+        if Plug.Crypto.secure_compare(calculated, signature) do
           :ok
         else
           {:error, "Signature mismatch"}
@@ -137,20 +148,23 @@ defmodule TaskyWeb.TallyWebhookController do
     end
   end
 
+  defp check_duplicate(%{response_id: response_id}) do
+    case Repo.get_by(Tasks.TaskSubmission, tally_response_id: response_id) do
+      nil -> :not_duplicate
+      _existing -> {:error, :duplicate_response}
+    end
+  end
+
   defp extract_webhook_data(%{"data" => %{"fields" => fields, "responseId" => response_id}}) do
     # Extract user_id and task_id from hidden fields
     user_id = find_field_value(fields, "user_id")
     task_id = find_field_value(fields, "task_id")
 
-    if user_id && task_id do
-      {:ok,
-       %{
-         user_id: parse_int(user_id),
-         task_id: parse_int(task_id),
-         response_id: response_id
-       }}
+    with {:ok, uid} <- parse_int(user_id || ""),
+         {:ok, tid} <- parse_int(task_id || "") do
+      {:ok, %{user_id: uid, task_id: tid, response_id: response_id}}
     else
-      {:error, :missing_fields}
+      _ -> {:error, :missing_fields}
     end
   end
 
@@ -169,8 +183,14 @@ defmodule TaskyWeb.TallyWebhookController do
 
   defp find_field_value(_fields, _label), do: nil
 
-  defp parse_int(value) when is_integer(value), do: value
-  defp parse_int(value) when is_binary(value), do: String.to_integer(value)
+  defp parse_int(value) when is_integer(value), do: {:ok, value}
+
+  defp parse_int(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> {:ok, int}
+      _ -> {:error, :invalid_integer}
+    end
+  end
 
   defp find_submission(%{user_id: user_id, task_id: task_id}) do
     case Repo.get_by(Tasks.TaskSubmission, student_id: user_id, task_id: task_id) do
