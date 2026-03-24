@@ -138,6 +138,25 @@ defmodule Tasky.Classes do
   end
 
   @doc """
+  Returns a map of %{class_id => student_count} for all classes in a single query.
+
+  ## Examples
+
+      iex> count_students_per_class()
+      %{1 => 5, 2 => 3}
+
+  """
+  def count_students_per_class do
+    Repo.all(
+      from u in Tasky.Accounts.User,
+        where: not is_nil(u.class_id),
+        group_by: u.class_id,
+        select: {u.class_id, count(u.id)}
+    )
+    |> Map.new()
+  end
+
+  @doc """
   Returns the list of students in a class.
 
   ## Examples

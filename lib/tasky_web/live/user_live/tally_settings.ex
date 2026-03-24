@@ -173,13 +173,14 @@ defmodule TaskyWeb.UserLive.TallySettings do
     user = socket.assigns.current_scope.user
 
     case Accounts.update_user_tally_api_key(user, user_params) do
-      {:ok, _updated_user} ->
+      {:ok, updated_user} ->
         info = "Tally API Key erfolgreich gespeichert."
+        tally_changeset = Accounts.change_user_tally_api_key(updated_user, %{})
 
         {:noreply,
          socket
          |> put_flash(:info, info)
-         |> push_navigate(to: ~p"/courses")}
+         |> assign(:tally_form, to_form(tally_changeset))}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :tally_form, to_form(changeset, action: :insert))}

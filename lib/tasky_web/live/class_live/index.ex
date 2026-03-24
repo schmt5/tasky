@@ -129,14 +129,14 @@ defmodule TaskyWeb.ClassLive.Index do
   @impl true
   def mount(_params, _session, socket) do
     classes = Classes.list_classes()
-    student_counts = build_student_counts(classes)
+    class_count = length(classes)
 
     {:ok,
      socket
      |> assign(:page_title, "Klassen")
-     |> assign(:class_count, length(classes))
-     |> assign(:has_classes, length(classes) > 0)
-     |> assign(:student_counts, student_counts)
+     |> assign(:class_count, class_count)
+     |> assign(:has_classes, class_count > 0)
+     |> assign(:student_counts, Classes.count_students_per_class())
      |> stream(:classes, classes)}
   end
 
@@ -154,27 +154,19 @@ defmodule TaskyWeb.ClassLive.Index do
     case Classes.delete_class(class) do
       {:ok, _class} ->
         classes = Classes.list_classes()
-        student_counts = build_student_counts(classes)
+        class_count = length(classes)
 
         {:noreply,
          socket
-         |> assign(:class_count, length(classes))
-         |> assign(:has_classes, length(classes) > 0)
-         |> assign(:student_counts, student_counts)
+         |> assign(:class_count, class_count)
+         |> assign(:has_classes, class_count > 0)
+         |> assign(:student_counts, Classes.count_students_per_class())
          |> stream(:classes, classes, reset: true)
          |> put_flash(:info, "Klasse wurde erfolgreich gelöscht.")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Klasse konnte nicht gelöscht werden.")}
     end
-  end
-
-  defp build_student_counts(classes) do
-    classes
-    |> Enum.map(fn class ->
-      {class.id, Classes.count_students_in_class(class)}
-    end)
-    |> Enum.into(%{})
   end
 
   defp registration_url(slug) do

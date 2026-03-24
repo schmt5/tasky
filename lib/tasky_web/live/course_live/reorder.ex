@@ -152,10 +152,7 @@ defmodule TaskyWeb.CourseLive.Reorder do
 
     case Tasks.reorder_tasks(socket.assigns.current_scope, task_positions) do
       {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Reihenfolge erfolgreich aktualisiert")
-         |> assign(:tasks, Tasks.list_tasks_by_course(socket.assigns.course.id))}
+        {:noreply, assign(socket, :tasks, Tasks.list_tasks_by_course(socket.assigns.course.id))}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Fehler beim Aktualisieren der Reihenfolge")}
