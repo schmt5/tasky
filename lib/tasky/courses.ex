@@ -209,4 +209,23 @@ defmodule Tasky.Courses do
         where: e.course_id == ^course_id and e.student_id == ^student_id
     )
   end
+
+  @doc """
+  Returns a progress map for all students and tasks in a course.
+
+  The result is a map of `{student_id, task_id} => status` for efficient
+  lookup in the progress grid, avoiding raw Repo access in LiveViews.
+  """
+  def get_progress_map_for_course(course_id, student_ids, task_ids) do
+    Repo.all(
+      from s in Tasky.Tasks.TaskSubmission,
+        join: t in assoc(s, :task),
+        where:
+          s.student_id in ^student_ids and s.task_id in ^task_ids and t.course_id == ^course_id,
+        select: %{student_id: s.student_id, task_id: s.task_id, status: s.status}
+    )
+    |> Enum.reduce(%{}, fn submission, acc ->
+      Map.put(acc, {submission.student_id, submission.task_id}, submission.status)
+    end)
+  end
 end

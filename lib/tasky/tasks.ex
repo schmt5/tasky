@@ -582,4 +582,66 @@ defmodule Tasky.Tasks do
       {:error, :unauthorized}
     end
   end
+
+  @doc """
+  Returns a map of %{student_id => %{status, tally_response_id}} for all
+  given students on a single task. Used by the task progress LiveView.
+  """
+  def get_progress_map_for_task(task_id, student_ids) do
+    submissions =
+      Repo.all(
+        from s in TaskSubmission,
+          where: s.student_id in ^student_ids and s.task_id == ^task_id,
+          select: %{
+            student_id: s.student_id,
+            status: s.status,
+            tally_response_id: s.tally_response_id
+          }
+      )
+
+    Enum.reduce(submissions, %{}, fn submission, acc ->
+      Map.put(acc, submission.student_id, %{
+        status: submission.status,
+        tally_response_id: submission.tally_response_id
+      })
+    end)
+  end
+
+  @doc """
+  Returns a map of %{{student_id, task_id} => status} for all combinations
+  of the given students and tasks within a course. Used by the course
+  progress LiveView.
+  """
+  def get_progress_map_for_course(course_id, student_ids, task_ids) do
+    submissions =
+      Repo.all(
+        from s in TaskSubmission,
+          join: t in assoc(s, :task),
+          where:
+            s.student_id in ^student_ids and s.task_id in ^task_ids and
+              t.course_id == ^course_id,
+          select: %{student_id: s.student_id, task_id: s.task_id, status: s.status}
+      )
+
+    Enum.reduce(submissions, %{}, fn submission, acc ->
+      Map.put(acc, {submission.student_id, submission.task_id}, submission.status)
+    end)
+  end
+
+  @doc """
+  Gets a task preloaded with its associated course. Used by progress views
+  that need the course_id without raw Repo access in LiveViews.
+  """
+  def get_task_with_course!(%Scope{} = scope, task_id) do
+    task = get_task!(scope, task_id)
+    Repo.preload(task, :course)
+  end
+
+  @doc """
+  Returns the submission record for a given student and task, or nil if none exists.
+  Avoids raw Repo.get_by calls in LiveViews.
+  """
+  def get_submission_for_student(task_id, student_id) do
+    Repo.get_by(TaskSubmission, task_id: task_id, student_id: student_id)
+  end
 end

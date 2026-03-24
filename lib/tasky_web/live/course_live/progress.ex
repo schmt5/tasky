@@ -2,9 +2,6 @@ defmodule TaskyWeb.CourseLive.Progress do
   use TaskyWeb, :live_view
 
   alias Tasky.Courses
-  alias Tasky.Repo
-
-  import Ecto.Query
 
   @impl true
   def render(assigns) do
@@ -207,20 +204,7 @@ defmodule TaskyWeb.CourseLive.Progress do
   defp build_progress_map(course_id, students, tasks) do
     student_ids = Enum.map(students, & &1.id)
     task_ids = Enum.map(tasks, & &1.id)
-
-    submissions =
-      Repo.all(
-        from s in Tasky.Tasks.TaskSubmission,
-          join: t in assoc(s, :task),
-          where:
-            s.student_id in ^student_ids and s.task_id in ^task_ids and t.course_id == ^course_id,
-          select: %{student_id: s.student_id, task_id: s.task_id, status: s.status}
-      )
-
-    Enum.reduce(submissions, %{}, fn submission, acc ->
-      key = {submission.student_id, submission.task_id}
-      Map.put(acc, key, submission.status)
-    end)
+    Courses.get_progress_map_for_course(course_id, student_ids, task_ids)
   end
 
   defp get_submission_status(progress_map, student_id, task_id) do

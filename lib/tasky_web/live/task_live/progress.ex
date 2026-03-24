@@ -3,10 +3,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
   alias Tasky.Tasks
   alias Tasky.Courses
-  alias Tasky.Repo
   alias Tasky.Tally.Client, as: TallyApi
-
-  import Ecto.Query
 
   @impl true
   def render(assigns) do
@@ -448,7 +445,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
   @impl true
   def mount(%{"task_id" => task_id}, _session, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, task_id) |> Repo.preload(:course)
+    task = Tasks.get_task_with_course!(socket.assigns.current_scope, task_id)
 
     # Subscribe to real-time progress updates for this task's course
     if connected?(socket) do
@@ -498,8 +495,7 @@ defmodule TaskyWeb.TaskLive.Progress do
     task = socket.assigns.task
 
     # Find the submission record to get tally_response_id
-    submission =
-      Repo.get_by(Tasks.TaskSubmission, student_id: student_id, task_id: task.id)
+    submission = Tasks.get_submission_for_student(task.id, student_id)
 
     socket =
       case submission do
@@ -526,10 +522,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
                   # Load existing feedback from DB record
                   submission_record =
-                    Repo.get_by(Tasks.TaskSubmission,
-                      student_id: student_id,
-                      task_id: task.id
-                    )
+                    Tasks.get_submission_for_student(task.id, student_id)
 
                   existing_feedback =
                     (submission_record && submission_record.feedback) || ""
@@ -575,10 +568,7 @@ defmodule TaskyWeb.TaskLive.Progress do
         _ ->
           # Still load any existing feedback even without a Tally submission
           submission_record =
-            Repo.get_by(Tasks.TaskSubmission,
-              student_id: student_id,
-              task_id: task.id
-            )
+            Tasks.get_submission_for_student(task.id, student_id)
 
           existing_feedback = (submission_record && submission_record.feedback) || ""
 
@@ -732,24 +722,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
   defp build_progress_map(task_id, students) do
     student_ids = Enum.map(students, & &1.id)
-
-    submissions =
-      Repo.all(
-        from s in Tasky.Tasks.TaskSubmission,
-          where: s.student_id in ^student_ids and s.task_id == ^task_id,
-          select: %{
-            student_id: s.student_id,
-            status: s.status,
-            tally_response_id: s.tally_response_id
-          }
-      )
-
-    Enum.reduce(submissions, %{}, fn submission, acc ->
-      Map.put(acc, submission.student_id, %{
-        status: submission.status,
-        tally_response_id: submission.tally_response_id
-      })
-    end)
+    Tasks.get_progress_map_for_task(task_id, student_ids)
   end
 
   defp get_submission_status(progress_map, student_id) do
