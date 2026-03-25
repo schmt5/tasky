@@ -29,6 +29,8 @@ defmodule Tasky.AccountsFixtures do
   end
 
   def user_fixture(attrs \\ %{}) do
+    {role, attrs} = Map.pop(attrs, :role)
+
     user = unconfirmed_user_fixture(attrs)
 
     token =
@@ -38,6 +40,16 @@ defmodule Tasky.AccountsFixtures do
 
     {:ok, {user, _expired_tokens}} =
       Accounts.login_user_by_magic_link(token)
+
+    # Apply role after registration since registration_changeset derives role
+    # from :is_teacher and does not cast :role directly.
+    user =
+      if role do
+        {:ok, updated} = Accounts.update_user_role(user, %{role: role})
+        updated
+      else
+        user
+      end
 
     user
   end

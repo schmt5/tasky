@@ -34,19 +34,20 @@ defmodule Tasky.AccountsTest do
     test "requires email to be set" do
       {:error, changeset} = Accounts.register_user(%{})
 
-      assert %{email: ["can't be blank"]} = errors_on(changeset)
+      assert %{email: ["darf nicht leer sein"]} = errors_on(changeset)
     end
 
     test "validates email when given" do
       {:error, changeset} = Accounts.register_user(%{email: "not valid"})
 
-      assert %{email: ["must have the @ sign and no spaces"]} = errors_on(changeset)
+      assert %{email: ["muss eine gültige E-Mail-Adresse sein (z.B. max@beispiel.de)"]} =
+               errors_on(changeset)
     end
 
     test "validates maximum values for email for security" do
       too_long = String.duplicate("db", 100)
       {:error, changeset} = Accounts.register_user(%{email: too_long})
-      assert "should be at most 160 character(s)" in errors_on(changeset).email
+      assert "darf maximal 160 Zeichen lang sein" in errors_on(changeset).email
     end
 
     test "validates email uniqueness" do

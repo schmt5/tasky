@@ -8,9 +8,9 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
 
   setup do
     # Create a teacher and a student
-    teacher = user_fixture(%{email: "teacher@example.com", role: "teacher"})
-    student = user_fixture(%{email: "student@example.com", role: "student"})
-    teacher_scope = %Tasky.Accounts.Scope{user: teacher}
+    teacher = user_fixture(%{email: unique_user_email(), role: "teacher"})
+    student = user_fixture(%{email: unique_user_email(), role: "student"})
+    teacher_scope = Tasky.Accounts.Scope.for_user(teacher)
 
     # Create a task
     {:ok, task} =
@@ -22,7 +22,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
       })
 
     # Create a submission for the student
-    {:ok, submission} =
+    {:ok, _} =
       Tasks.assign_task_to_students(teacher_scope, task.id, [student.id])
 
     submission = Repo.get_by!(Tasks.TaskSubmission, student_id: student.id, task_id: task.id)
@@ -85,6 +85,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
       submission: submission
     } do
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "tally-response-456",
           "fields" => [
@@ -112,6 +113,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
 
     test "returns 400 when user_id is missing", %{conn: conn, task: task} do
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "test-response",
           "fields" => [
@@ -132,6 +134,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
 
     test "returns 400 when task_id is missing", %{conn: conn, student: student} do
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "test-response",
           "fields" => [
@@ -164,6 +167,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
 
     test "returns 404 when submission does not exist", %{conn: conn, student: student} do
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "test-response",
           "fields" => [
@@ -200,6 +204,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
       |> Repo.update!()
 
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "new-response-123",
           "fields" => [
@@ -239,6 +244,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
       |> Repo.update!()
 
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "response-abc",
           "fields" => [
@@ -272,6 +278,7 @@ defmodule TaskyWeb.TallyWebhookControllerTest do
       task: task
     } do
       payload = %{
+        "eventType" => "FORM_RESPONSE",
         "data" => %{
           "responseId" => "response-xyz",
           "fields" => [
