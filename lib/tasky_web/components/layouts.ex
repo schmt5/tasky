@@ -59,7 +59,7 @@ defmodule TaskyWeb.Layouts do
                 />
               </svg>
             </div>
-            <span class="text-base font-bold text-stone-800 tracking-tight">Tasky</span>
+            <span class="text-base font-bold text-stone-800 tracking-tight">LearningLine</span>
           </.link>
         </div>
 

@@ -9,7 +9,7 @@ defmodule Tasky.Accounts.UserNotifier do
     email =
       new()
       |> to(recipient)
-      |> from({"Tasky", "contact@example.com"})
+      |> from({"LearningLine", "contact@example.com"})
       |> subject(subject)
       |> text_body(body)
 
