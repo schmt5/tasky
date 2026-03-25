@@ -231,34 +231,42 @@ defmodule TaskyWeb.Student.TaskLive do
     submission = Tasky.Repo.preload(submission, :task)
     task = submission.task
 
-    # Auto-start the task if it's not started yet
-    submission =
-      if submission.status in ["not_started", "open", "draft"] do
-        case Tasks.update_submission_status(
-               socket.assigns.current_scope,
-               submission.id,
-               "in_progress"
-             ) do
-          {:ok, updated_submission} ->
-            Tasky.Repo.preload(updated_submission, :task, force: true)
+    # Redirect back to the course if the task is marked as locked
+    if task.locked do
+      {:ok,
+       socket
+       |> put_flash(:info, "Diese Aufgabe ist noch nicht verfügbar.")
+       |> push_navigate(to: ~p"/student/courses/#{task.course_id}")}
+    else
+      # Auto-start the task if it's not started yet
+      submission =
+        if submission.status in ["not_started", "open", "draft"] do
+          case Tasks.update_submission_status(
+                 socket.assigns.current_scope,
+                 submission.id,
+                 "in_progress"
+               ) do
+            {:ok, updated_submission} ->
+              Tasky.Repo.preload(updated_submission, :task, force: true)
 
-          {:error, _} ->
-            submission
+            {:error, _} ->
+              submission
+          end
+        else
+          submission
         end
-      else
-        submission
-      end
 
-    # Check if preview mode is enabled
-    preview_mode = Map.get(params, "preview") == "true"
+      # Check if preview mode is enabled
+      preview_mode = Map.get(params, "preview") == "true"
 
-    {:ok,
-     socket
-     |> assign(:page_title, task.name)
-     |> assign(:task, task)
-     |> assign(:submission, submission)
-     |> assign(:preview_mode, preview_mode)
-     |> assign(:success_emoji, random_success_emoji())}
+      {:ok,
+       socket
+       |> assign(:page_title, task.name)
+       |> assign(:task, task)
+       |> assign(:submission, submission)
+       |> assign(:preview_mode, preview_mode)
+       |> assign(:success_emoji, random_success_emoji())}
+    end
   end
 
   @impl true

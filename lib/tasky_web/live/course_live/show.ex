@@ -132,15 +132,24 @@ defmodule TaskyWeb.CourseLive.Show do
                 <div class="flex items-center gap-2.5 flex-wrap">
                   <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{task.name}</h3>
 
-                  <span class={[
-                    "inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em]",
-                    task.status == "draft" && "bg-stone-100 text-stone-700",
-                    task.status == "published" && "bg-sky-100 text-sky-700",
-                    task.status == "archived" && "bg-red-100 text-red-700"
-                  ]}>
-                    {String.capitalize(task.status)}
-                  </span>
+                  <%= if task.status == "draft" do %>
+                    <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-amber-100 text-amber-700">
+                      Tally Form nicht veröffentlicht
+                    </span>
+                  <% end %>
+
+                  <%= if task.locked do %>
+                    <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-red-100 text-red-700">
+                      <.icon name="hero-lock-closed" class="w-3 h-3" /> Gesperrt
+                    </span>
+                  <% end %>
                 </div>
+
+                <%= if task.locked do %>
+                  <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
+                    Schüler sehen diese Aufgabe, können sie aber nicht starten.
+                  </p>
+                <% end %>
 
                 <div class="flex items-center gap-2">
                   <%= if task.link do %>
@@ -158,6 +167,21 @@ defmodule TaskyWeb.CourseLive.Show do
               </div>
 
               <div class="flex items-center gap-2 shrink-0 pt-0.5">
+                <button
+                  type="button"
+                  phx-click="toggle_locked"
+                  phx-value-id={task.id}
+                  title={if task.locked, do: "Aufgabe freigeben", else: "Aufgabe sperren"}
+                  class="inline-flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+                >
+                  <%= if task.locked do %>
+                    <.icon name="hero-lock-open" class="w-4 h-4" />
+                    <span class="hidden sm:inline">Freigeben</span>
+                  <% else %>
+                    <.icon name="hero-lock-closed" class="w-4 h-4" />
+                    <span class="hidden sm:inline">Sperren</span>
+                  <% end %>
+                </button>
                 <button
                   type="button"
                   phx-click={JS.push("delete_task", value: %{id: task.id}) |> hide("##{id}")}
@@ -217,5 +241,13 @@ defmodule TaskyWeb.CourseLive.Show do
      socket
      |> assign(:has_tasks, length(course.tasks) > 0)
      |> stream_delete(:tasks, task)}
+  end
+
+  @impl true
+  def handle_event("toggle_locked", %{"id" => id}, socket) do
+    task = Tasks.get_task!(socket.assigns.current_scope, id)
+    {:ok, updated_task} = Tasks.toggle_locked(socket.assigns.current_scope, task)
+
+    {:noreply, stream_insert(socket, :tasks, updated_task)}
   end
 end

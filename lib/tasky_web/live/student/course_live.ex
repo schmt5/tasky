@@ -230,6 +230,10 @@ defmodule TaskyWeb.Student.CourseLive do
                   <%!-- Action Icon/Indicator --%>
                   <div class="flex-shrink-0">
                     <%= cond do %>
+                      <% submission.task.locked -> %>
+                        <span class="inline-flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold text-stone-400 bg-stone-50 rounded-lg border border-stone-200 cursor-default select-none">
+                          <.icon name="hero-clock" class="w-3.5 h-3.5" /> Bald verfügbar
+                        </span>
                       <% submission.status in ["completed", "review_approved"] -> %>
                         <.link
                           navigate={~p"/student/tasks/#{submission.task.id}?preview=true"}

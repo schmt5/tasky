@@ -147,6 +147,10 @@ defmodule TaskyWeb.Student.MyTasksLive do
 
                 <div class="ks-item-actions">
                   <%= cond do %>
+                    <% submission.task.locked -> %>
+                      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-semibold text-stone-400 bg-stone-50 rounded-lg border border-stone-200 cursor-default select-none">
+                        <.icon name="hero-clock" class="w-3.5 h-3.5" /> Bald verfügbar
+                      </span>
                     <% submission.status in ["completed", "review_approved"] -> %>
                       <div class="flex items-center gap-2 text-green-600 font-medium text-sm">
                         <.icon name="hero-check-circle" class="w-5 h-5" /> Erledigt

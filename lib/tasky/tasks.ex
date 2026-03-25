@@ -127,6 +127,28 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  Toggles the locked status of a task.
+  Only the owner (teacher) can toggle locked status.
+
+  ## Examples
+
+      iex> toggle_locked(scope, task)
+      {:ok, %Task{}}
+
+  """
+  def toggle_locked(%Scope{} = scope, %Task{} = task) do
+    true = task.user_id == scope.user.id
+
+    with {:ok, task = %Task{}} <-
+           task
+           |> Ecto.Changeset.change(%{locked: !task.locked})
+           |> Repo.update() do
+      broadcast_task(scope, {:updated, task})
+      {:ok, task}
+    end
+  end
+
+  @doc """
   Deletes a task.
 
   ## Examples
@@ -254,21 +276,23 @@ defmodule Tasky.Tasks do
   """
   def list_course_submissions(%Scope{user: user} = scope, course_id)
       when user.role == "student" do
-    # Get all published tasks for the course
+    # Get all published tasks for the course, including draft ones so students see "Bald verfügbar"
     tasks =
       Task
       |> where([t], t.course_id == ^course_id and t.status == "published")
       |> order_by([t], asc: t.position)
       |> Repo.all()
 
-    # Ensure a submission row exists for every task
+    # Ensure a submission row exists for every non-locked task
     Enum.each(tasks, fn task ->
-      get_or_create_submission(scope, task.id)
+      unless task.locked do
+        get_or_create_submission(scope, task.id)
+      end
     end)
 
     task_ids = Enum.map(tasks, & &1.id)
 
-    # Fetch all submissions in one query so feedback/graded_at are always fresh
+    # Fetch existing submissions for non-draft tasks
     submissions_by_task =
       TaskSubmission
       |> where([s], s.student_id == ^user.id and s.task_id in ^task_ids)
@@ -276,9 +300,26 @@ defmodule Tasky.Tasks do
       |> Repo.all()
       |> Map.new(&{&1.task_id, &1})
 
-    # Return in task position order
+    # Return in task position order; locked tasks without a submission get a virtual placeholder
     tasks
-    |> Enum.map(&Map.get(submissions_by_task, &1.id))
+    |> Enum.map(fn task ->
+      case Map.get(submissions_by_task, task.id) do
+        nil when task.locked ->
+          # Return a virtual submission struct so the UI can render "Bald verfügbar"
+          %TaskSubmission{
+            task_id: task.id,
+            task: task,
+            status: "not_started",
+            student_id: user.id
+          }
+
+        nil ->
+          nil
+
+        submission ->
+          submission
+      end
+    end)
     |> Enum.reject(&is_nil/1)
   end
 

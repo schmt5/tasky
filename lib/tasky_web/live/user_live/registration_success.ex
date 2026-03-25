@@ -26,17 +26,16 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
                 />
               </svg>
             </div>
-
+            
             <h1 class="font-serif text-[38px] text-stone-900 leading-[1.1] mb-3 font-normal">
               Registrierung erfolgreich
             </h1>
-
+            
             <p class="text-[15px] text-stone-500 leading-[1.6]">
               Dein Konto wurde erstellt. Fast geschafft!
             </p>
           </div>
-
-          <%!-- Demo / Dev: show green mailbox info box --%>
+           <%!-- Demo / Dev: show green mailbox info box --%>
           <%= if local_mail_adapter?() do %>
             <div class="mb-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[12px] border border-emerald-200 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.1)] animate-[fadeSlideIn_0.35s_ease-out]">
               <div class="flex items-start gap-3">
@@ -57,10 +56,10 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
                     />
                   </svg>
                 </div>
+                
                 <div class="flex-1">
-                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">
-                    Demo Instanz
-                  </p>
+                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">Demo Instanz</p>
+                  
                   <p class="text-[13px] text-emerald-800 leading-[1.5]">
                     Das E-Mail für das Login findest du unter <.link
                       href="/dev/mailbox"
@@ -93,16 +92,18 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
                     />
                   </svg>
                 </div>
+                
                 <div class="flex-1">
                   <p class="text-[14px] font-semibold text-stone-800 mb-1">
                     Bestätige deine E-Mail-Adresse
                   </p>
+                  
                   <p class="text-[13px] text-stone-500 leading-[1.6]">
                     Wir haben einen Anmeldelink an
                   </p>
-                  <p class="text-[14px] font-semibold text-sky-600 mt-1 mb-2 break-all">
-                    {@email}
-                  </p>
+                  
+                  <p class="text-[14px] font-semibold text-sky-600 mt-1 mb-2 break-all">{@email}</p>
+                  
                   <p class="text-[13px] text-stone-500 leading-[1.6]">
                     gesendet. Bitte öffne dein Postfach und klicke auf den Link, um dich anzumelden.
                   </p>
@@ -110,8 +111,7 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
               </div>
             </div>
           <% end %>
-
-          <%!-- Back to login link --%>
+           <%!-- Back to login link --%>
           <div class="text-center">
             <.link
               navigate={~p"/users/log-in"}

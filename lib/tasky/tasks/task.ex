@@ -8,6 +8,7 @@ defmodule Tasky.Tasks.Task do
     field :position, :integer
     field :status, :string
     field :tally_form_id, :string
+    field :locked, :boolean, default: false
     field :user_id, :id
 
     belongs_to :course, Tasky.Courses.Course
@@ -19,7 +20,7 @@ defmodule Tasky.Tasks.Task do
   @doc false
   def changeset(task, attrs, user_scope) do
     task
-    |> cast(attrs, [:name, :link, :position, :status, :course_id, :tally_form_id])
+    |> cast(attrs, [:name, :link, :position, :status, :course_id, :tally_form_id, :locked])
     |> validate_required([:name, :link, :position, :status])
     |> put_change(:user_id, user_scope.user.id)
   end
