@@ -7,7 +7,7 @@
       <%= if @current_scope && Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) do %>
         Willkommen, <span class="text-sky-500">{@current_scope.user.firstname}</span>
       <% else %>
-        Welcome to <em class="italic text-sky-500">Tasky</em>
+        Willkommen bei <em class="italic text-sky-500">Tasky</em>
       <% end %>
     <% end %>
   </h1>
@@ -19,7 +19,7 @@
       <%= if @current_scope && Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) do %>
         Dein Werkzeug für effiziente Kursverwaltung. Erstelle Kurse, verwalte Aufgaben und behalte den Überblick über deine Studierenden.
       <% else %>
-        A simple task management system for teachers and students. Organize courses, manage assignments, and track progress.
+        Ein einfaches Aufgabenverwaltungssystem für Lehrkräfte und Studierende. Organisiere Kurse, verwalte Aufgaben und behalte den Fortschritt im Blick.
       <% end %>
     <% end %>
   </p>
@@ -106,7 +106,7 @@
             navigate={~p"/users/settings"}
             class="inline-flex items-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-7 py-3.5 rounded-[14px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
           >
-            Go to Settings
+            Zu den Einstellungen
           </.link>
         </div>
     <% end %>
@@ -130,13 +130,13 @@
             d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
           />
         </svg>
-        Sign Up Free
+        Kostenlos registrieren
       </.link>
       <.link
         navigate={~p"/users/log-in"}
         class="inline-flex items-center gap-2 bg-white text-sky-600 text-[15px] font-semibold px-7 py-3.5 rounded-[14px] border-[1.5px] border-sky-200 transition-all duration-150 hover:bg-sky-50 active:scale-[0.98]"
       >
-        Log In
+        Anmelden
       </.link>
     </div>
   <% end %>
@@ -157,7 +157,7 @@
           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
-      No credit card required · Start organizing today
+      Keine Kreditkarte erforderlich · Jetzt mit der Organisation beginnen
     </p>
   <% end %>
 
