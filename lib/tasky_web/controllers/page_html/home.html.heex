@@ -7,7 +7,7 @@
       <%= if @current_scope && Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) do %>
         Willkommen, <span class="text-sky-500">{@current_scope.user.firstname}</span>
       <% else %>
-        Willkommen bei <em class="italic text-sky-500">Tasky</em>
+        Willkommen bei <em class="italic text-sky-500">LearningLine</em>
       <% end %>
     <% end %>
   </h1>
@@ -142,7 +142,19 @@
   <% end %>
 
   <%= unless @current_scope do %>
-    <p class="mt-5 text-[13px] text-stone-400 flex items-center gap-1.5">
+    <p class="mt-6 text-[14px] text-stone-500">
+      Informationen zum Excel Kurs findest du unter:
+      <a
+        href="https://excel-unterricht.cc/"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-sky-500 font-semibold hover:text-sky-600 underline underline-offset-2 transition-colors duration-150"
+      >
+        excel-unterricht.cc
+      </a>
+    </p>
+
+    <p class="mt-3 text-[13px] text-stone-400 flex items-center gap-1.5">
       <svg
         width="14"
         height="14"
