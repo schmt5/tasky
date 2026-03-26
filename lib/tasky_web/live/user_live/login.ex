@@ -216,21 +216,23 @@ defmodule TaskyWeb.UserLive.Login do
 
   @impl true
   def handle_event("submit", %{"user" => %{"email" => email}}, socket) do
-    if user = Accounts.get_user_by_email(email) do
-      Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{email}")
+    magic_link =
+      if user = Accounts.get_user_by_email(email) do
+        Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{email}")
 
-      Accounts.deliver_login_instructions(
-        user,
-        &url(~p"/users/log-in/#{&1}")
-      )
-    end
+        Accounts.deliver_login_instructions(
+          user,
+          &url(~p"/users/log-in/#{&1}")
+        )
 
-    {:noreply, assign(socket, submitted: true, submitted_email: email)}
-  end
+        receive do
+          {:magic_link, url} -> url
+        after
+          3000 -> nil
+        end
+      end
 
-  @impl true
-  def handle_info({:magic_link, url}, socket) do
-    {:noreply, assign(socket, magic_link: url)}
+    {:noreply, assign(socket, submitted: true, submitted_email: email, magic_link: magic_link)}
   end
 
   defp local_mail_adapter? do
