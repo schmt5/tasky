@@ -44,6 +44,8 @@ config :tasky, TaskyWeb.Endpoint,
 # at the `config/runtime.exs`.
 config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Local
 
+config :swoosh, local: true
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",
