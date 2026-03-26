@@ -34,14 +34,6 @@ defmodule TaskyWeb.Router do
     post "/webhooks/tally", TallyWebhookController, :receive
   end
 
-  import Phoenix.LiveDashboard.Router
-
-  scope "/dev" do
-    pipe_through :browser
-
-    forward "/mailbox", Plug.Swoosh.MailboxPreview
-  end
-
   ## Task routes (Teachers and Admins only)
 
   scope "/", TaskyWeb do

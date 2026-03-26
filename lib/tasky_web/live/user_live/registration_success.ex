@@ -35,7 +35,7 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
               Dein Konto wurde erstellt. Fast geschafft!
             </p>
           </div>
-          <%!-- Demo / Dev: show green mailbox info box --%>
+          <%!-- Demo: show magic link directly --%>
           <%= if local_mail_adapter?() do %>
             <div class="mb-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[12px] border border-emerald-200 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.1)] animate-[fadeSlideIn_0.35s_ease-out]">
               <div class="flex items-start gap-3">
@@ -59,15 +59,24 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
 
                 <div class="flex-1">
                   <p class="text-[13px] font-semibold text-emerald-900 mb-1">Demo Instanz</p>
-
-                  <p class="text-[13px] text-emerald-800 leading-[1.5]">
-                    Das E-Mail für das Login findest du unter <.link
-                      href="/dev/mailbox"
-                      class="font-semibold text-emerald-900 underline hover:text-emerald-950"
+                  <%= if @magic_link do %>
+                    <p class="text-[13px] text-emerald-800 leading-[1.5] mb-2">
+                      Klicke direkt auf den Link um dich anzumelden:
+                    </p>
+                    <.link
+                      href={@magic_link}
+                      class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 underline hover:text-emerald-950 break-all"
                     >
-                      Mail aufrufen
-                    </.link>.
-                  </p>
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" class="shrink-0">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                      Jetzt anmelden
+                    </.link>
+                  <% else %>
+                    <p class="text-[13px] text-emerald-800 leading-[1.5]">
+                      Magic Link wird generiert…
+                    </p>
+                  <% end %>
                 </div>
               </div>
             </div>
@@ -142,14 +151,20 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
 
   @impl true
   def mount(%{"email" => email}, _session, socket) do
-    {:ok, assign(socket, email: email)}
+    Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{email}")
+    {:ok, assign(socket, email: email, magic_link: nil)}
   end
 
   def mount(_params, _session, socket) do
     {:ok, redirect(socket, to: ~p"/users/register")}
   end
 
+  @impl true
+  def handle_info({:magic_link, url}, socket) do
+    {:noreply, assign(socket, magic_link: url)}
+  end
+
   defp local_mail_adapter? do
-    Application.get_env(:tasky, Tasky.Mailer)[:adapter] == Swoosh.Adapters.Local
+    Application.get_env(:tasky, Tasky.Mailer)[:adapter] == Swoosh.Adapters.Logger
   end
 end
