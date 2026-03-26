@@ -5,12 +5,12 @@ defmodule Tasky.Application do
 
   use Application
 
-  @swoosh_local? Application.compile_env(:tasky, Tasky.Mailer)[:adapter] == Swoosh.Adapters.Local
+  @mix_env Mix.env()
 
   @impl true
   def start(_type, _args) do
     swoosh_children =
-      if @swoosh_local?, do: [{Swoosh.Adapters.Local.Storage.Memory, []}], else: []
+      if @mix_env in [:dev, :demo], do: [{Swoosh.Adapters.Local.Storage.Memory, []}], else: []
 
     children =
       [
