@@ -10,18 +10,15 @@ config :tasky, TaskyWeb.Endpoint,
     hosts: ["localhost", "127.0.0.1"]
   ]
 
-# Unlike prod: keep the local mail adapter so demo users get magic links
-# delivered to the in-app mailbox at /dev/mailbox instead of a real inbox.
-config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Local
+# Use the Logger adapter so magic links appear in fly logs (fly logs | grep URL)
+# No GenServer process needed — zero risk of crashes.
+config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Logger
 
-# Keep Swoosh local memory storage enabled (needed for the local adapter)
-config :swoosh, local: true
+# Disable Swoosh local memory storage (not needed for Logger adapter)
+config :swoosh, local: false
 
 # Use the Req-based API client for any other Swoosh adapters that may be used
 config :swoosh, api_client: Swoosh.ApiClient.Req
-
-# Enable dev routes so /dev/mailbox is accessible in demo
-config :tasky, dev_routes: true
 
 # Do not print debug messages in demo
 config :logger, level: :info
