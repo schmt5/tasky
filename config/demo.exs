@@ -20,5 +20,8 @@ config :swoosh, local: true
 # Use the Req-based API client for any other Swoosh adapters that may be used
 config :swoosh, api_client: Swoosh.ApiClient.Req
 
+# Enable dev routes so /dev/mailbox is accessible in demo
+config :tasky, dev_routes: true
+
 # Do not print debug messages in demo
 config :logger, level: :info

@@ -5,20 +5,26 @@ defmodule Tasky.Application do
 
   use Application
 
+  @swoosh_local? Application.compile_env(:tasky, Tasky.Mailer)[:adapter] == Swoosh.Adapters.Local
+
   @impl true
   def start(_type, _args) do
-    children = [
-      TaskyWeb.Telemetry,
-      Tasky.Repo,
-      {Ecto.Migrator,
-       repos: Application.fetch_env!(:tasky, :ecto_repos), skip: skip_migrations?()},
-      {DNSCluster, query: Application.get_env(:tasky, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: Tasky.PubSub},
-      # Start a worker by calling: Tasky.Worker.start_link(arg)
-      # {Tasky.Worker, arg},
-      # Start to serve requests, typically the last entry
-      TaskyWeb.Endpoint
-    ]
+    swoosh_children =
+      if @swoosh_local?, do: [{Swoosh.Adapters.Local.Storage.Memory, []}], else: []
+
+    children =
+      [
+        TaskyWeb.Telemetry,
+        Tasky.Repo,
+        {Ecto.Migrator,
+         repos: Application.fetch_env!(:tasky, :ecto_repos), skip: skip_migrations?()},
+        {DNSCluster, query: Application.get_env(:tasky, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: Tasky.PubSub},
+        # Start a worker by calling: Tasky.Worker.start_link(arg)
+        # {Tasky.Worker, arg},
+        # Start to serve requests, typically the last entry
+        TaskyWeb.Endpoint
+      ] ++ swoosh_children
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
