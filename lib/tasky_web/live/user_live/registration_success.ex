@@ -150,18 +150,13 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
   end
 
   @impl true
-  def mount(%{"email" => email}, _session, socket) do
-    Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{email}")
-    {:ok, assign(socket, email: email, magic_link: nil)}
+  def mount(%{"email" => email} = params, _session, socket) do
+    magic_link = params["magic_link"]
+    {:ok, assign(socket, email: email, magic_link: magic_link)}
   end
 
   def mount(_params, _session, socket) do
     {:ok, redirect(socket, to: ~p"/users/register")}
-  end
-
-  @impl true
-  def handle_info({:magic_link, url}, socket) do
-    {:noreply, assign(socket, magic_link: url)}
   end
 
   defp local_mail_adapter? do
