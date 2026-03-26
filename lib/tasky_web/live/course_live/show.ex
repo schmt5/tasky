@@ -98,12 +98,6 @@ defmodule TaskyWeb.CourseLive.Show do
 
             <div class="flex items-center gap-2">
               <.link
-                navigate={~p"/courses/#{@course}/reorder"}
-                class="inline-flex items-center gap-2 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-              >
-                <.icon name="hero-arrows-up-down" class="w-4 h-4" /> Sortieren
-              </.link>
-              <.link
                 navigate={~p"/courses/#{@course}/export"}
                 class="inline-flex items-center gap-2 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-amber-300 hover:text-amber-700"
               >

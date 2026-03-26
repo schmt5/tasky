@@ -24,10 +24,6 @@ import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 import { hooks as colocatedHooks } from "phoenix-colocated/tasky";
 import topbar from "../vendor/topbar";
-import Sortable from "sortablejs";
-
-// Expose Sortable globally for use in LiveView hooks
-window.Sortable = Sortable;
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
