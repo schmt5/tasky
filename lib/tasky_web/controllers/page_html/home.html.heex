@@ -7,7 +7,7 @@
       <%= if @current_scope && Tasky.Accounts.Scope.admin_or_teacher?(@current_scope) do %>
         Willkommen, <span class="text-sky-500">{@current_scope.user.firstname}</span>
       <% else %>
-        Willkommen bei <em class="italic text-sky-500">Tasky</em>
+        Willkommen bei <em class="italic text-sky-500">LearningLine</em>
       <% end %>
     <% end %>
   </h1>
