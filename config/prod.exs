@@ -17,11 +17,11 @@ config :tasky, TaskyWeb.Endpoint,
     hosts: ["localhost", "127.0.0.1"]
   ]
 
+# Use local adapter so emails are stored in-memory and visible at /dev/mailbox
+config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Local
+
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req
-
-# Disable Swoosh Local Memory Storage
-config :swoosh, local: false
 
 # Do not print debug messages in production
 config :logger, level: :info

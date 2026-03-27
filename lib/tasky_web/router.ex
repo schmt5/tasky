@@ -21,6 +21,11 @@ defmodule TaskyWeb.Router do
     plug :accepts, ["json"]
   end
 
+  scope "/dev" do
+    pipe_through :browser
+    forward "/mailbox", Plug.Swoosh.MailboxPreview
+  end
+
   scope "/", TaskyWeb do
     pipe_through :browser
 
