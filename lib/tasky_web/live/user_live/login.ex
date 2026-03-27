@@ -75,38 +75,40 @@ defmodule TaskyWeb.UserLive.Login do
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">E-Mail verschickt!</p>
-                  <p class="text-[13px] text-emerald-800 leading-[1.5]">
-                    Falls ein Konto für <strong>{@submitted_email}</strong>
-                    existiert, haben wir einen Magic Link gesendet. Bitte prüfe dein Postfach.
-                  </p>
                   <%= if @magic_link do %>
-                    <div class="mt-3 pt-3 border-t border-emerald-200">
-                      <p class="text-[12px] text-emerald-700 mb-1.5 font-medium">
-                        Demo — direkt anmelden:
-                      </p>
-                      <.link
-                        href={@magic_link}
-                        class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 underline hover:text-emerald-950 break-all"
+                    <p class="text-[13px] font-semibold text-emerald-900 mb-1">
+                      Demo — Magic Link bereit!
+                    </p>
+                    <p class="text-[13px] text-emerald-800 leading-[1.5] mb-2">
+                      Klicke direkt auf den Link um dich anzumelden:
+                    </p>
+                    <.link
+                      href={@magic_link}
+                      class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 underline hover:text-emerald-950 break-all"
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        class="shrink-0"
                       >
-                        <svg
-                          width="14"
-                          height="14"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          stroke-width="2.5"
-                          class="shrink-0"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M14 5l7 7m0 0l-7 7m7-7H3"
-                          />
-                        </svg>
-                        Jetzt anmelden
-                      </.link>
-                    </div>
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14 5l7 7m0 0l-7 7m7-7H3"
+                        />
+                      </svg>
+                      Jetzt anmelden
+                    </.link>
+                  <% else %>
+                    <p class="text-[13px] font-semibold text-emerald-900 mb-1">E-Mail verschickt!</p>
+                    <p class="text-[13px] text-emerald-800 leading-[1.5]">
+                      Falls ein Konto für <strong>{@submitted_email}</strong>
+                      existiert, haben wir einen Magic Link gesendet. Bitte prüfe dein Postfach.
+                    </p>
                   <% end %>
                 </div>
               </div>
