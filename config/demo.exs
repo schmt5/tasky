@@ -10,11 +10,8 @@ config :tasky, TaskyWeb.Endpoint,
     hosts: ["localhost", "127.0.0.1"]
   ]
 
-# Use the Logger adapter — magic link URLs are printed to stdout/fly logs
-config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Logger
-
-# No local memory storage needed for Logger adapter
-config :swoosh, local: false
+# Use local adapter so emails are stored in-memory and visible at /dev/mailbox
+config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Local
 
 # Use the Req-based API client for any other Swoosh adapters that may be used
 config :swoosh, api_client: Swoosh.ApiClient.Req

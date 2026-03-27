@@ -35,103 +35,44 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
               Dein Konto wurde erstellt. Fast geschafft!
             </p>
           </div>
-          <%!-- Demo: show magic link directly --%>
-          <%= if local_mail_adapter?() do %>
-            <div class="mb-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[12px] border border-emerald-200 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.1)] animate-[fadeSlideIn_0.35s_ease-out]">
-              <div class="flex items-start gap-3">
-                <div class="w-8 h-8 bg-emerald-100 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg
-                    width="18"
-                    height="18"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    class="text-emerald-600"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
+          <%!-- Email instruction card --%>
+          <div class="mb-6 bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-6 animate-[fadeSlideIn_0.35s_ease-out]">
+            <div class="flex items-start gap-4">
+              <div class="w-10 h-10 bg-sky-100 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                <svg
+                  width="20"
+                  height="20"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  class="text-sky-600"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+              </div>
 
-                <div class="flex-1">
-                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">Demo Instanz</p>
-                  <%= if @magic_link do %>
-                    <p class="text-[13px] text-emerald-800 leading-[1.5] mb-2">
-                      Klicke direkt auf den Link um dich anzumelden:
-                    </p>
-                    <.link
-                      href={@magic_link}
-                      class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 underline hover:text-emerald-950 break-all"
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        class="shrink-0"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M14 5l7 7m0 0l-7 7m7-7H3"
-                        />
-                      </svg>
-                      Jetzt anmelden
-                    </.link>
-                  <% else %>
-                    <p class="text-[13px] text-emerald-800 leading-[1.5]">
-                      Magic Link wird generiert…
-                    </p>
-                  <% end %>
-                </div>
+              <div class="flex-1">
+                <p class="text-[14px] font-semibold text-stone-800 mb-1">
+                  Bestätige deine E-Mail-Adresse
+                </p>
+
+                <p class="text-[13px] text-stone-500 leading-[1.6]">
+                  Wir haben einen Anmeldelink an
+                </p>
+
+                <p class="text-[14px] font-semibold text-sky-600 mt-1 mb-2 break-all">{@email}</p>
+
+                <p class="text-[13px] text-stone-500 leading-[1.6]">
+                  gesendet. Bitte öffne dein Postfach und klicke auf den Link, um dich anzumelden.
+                </p>
               </div>
             </div>
-          <% else %>
-            <%!-- Production: show email instruction card --%>
-            <div class="mb-6 bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-6 animate-[fadeSlideIn_0.35s_ease-out]">
-              <div class="flex items-start gap-4">
-                <div class="w-10 h-10 bg-sky-100 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg
-                    width="20"
-                    height="20"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    class="text-sky-600"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-
-                <div class="flex-1">
-                  <p class="text-[14px] font-semibold text-stone-800 mb-1">
-                    Bestätige deine E-Mail-Adresse
-                  </p>
-
-                  <p class="text-[13px] text-stone-500 leading-[1.6]">
-                    Wir haben einen Anmeldelink an
-                  </p>
-
-                  <p class="text-[14px] font-semibold text-sky-600 mt-1 mb-2 break-all">{@email}</p>
-
-                  <p class="text-[13px] text-stone-500 leading-[1.6]">
-                    gesendet. Bitte öffne dein Postfach und klicke auf den Link, um dich anzumelden.
-                  </p>
-                </div>
-              </div>
-            </div>
-          <% end %>
+          </div>
           <%!-- Back to login link --%>
           <div class="text-center">
             <.link
@@ -162,16 +103,11 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
   end
 
   @impl true
-  def mount(%{"email" => email} = params, _session, socket) do
-    magic_link = params["magic_link"]
-    {:ok, assign(socket, email: email, magic_link: magic_link)}
+  def mount(%{"email" => email}, _session, socket) do
+    {:ok, assign(socket, email: email)}
   end
 
   def mount(_params, _session, socket) do
     {:ok, redirect(socket, to: ~p"/users/register")}
-  end
-
-  defp local_mail_adapter? do
-    Application.get_env(:tasky, Tasky.Mailer)[:adapter] == Swoosh.Adapters.Logger
   end
 end

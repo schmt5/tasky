@@ -194,27 +194,13 @@ defmodule TaskyWeb.UserLive.Registration do
 
     case Accounts.register_user(user_params) do
       {:ok, user} ->
-        Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{user.email}")
-
         {:ok, _} =
           Accounts.deliver_login_instructions(
             user,
             &url(~p"/users/log-in/#{&1}")
           )
 
-        magic_link =
-          receive do
-            {:magic_link, url} -> url
-          after
-            3000 -> nil
-          end
-
-        redirect_params =
-          if magic_link do
-            "?email=#{URI.encode_www_form(user.email)}&magic_link=#{URI.encode_www_form(magic_link)}"
-          else
-            "?email=#{URI.encode_www_form(user.email)}"
-          end
+        redirect_params = "?email=#{URI.encode_www_form(user.email)}"
 
         {:noreply, push_navigate(socket, to: ~p"/users/register/success" <> redirect_params)}
 

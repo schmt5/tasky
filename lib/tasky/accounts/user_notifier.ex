@@ -5,7 +5,7 @@ defmodule Tasky.Accounts.UserNotifier do
   alias Tasky.Accounts.User
 
   # Delivers the email using the application mailer.
-  defp deliver(recipient, subject, body, url \\ nil) do
+  defp deliver(recipient, subject, body) do
     email =
       new()
       |> to(recipient)
@@ -14,10 +14,6 @@ defmodule Tasky.Accounts.UserNotifier do
       |> text_body(body)
 
     with {:ok, _metadata} <- Mailer.deliver(email) do
-      if url do
-        Phoenix.PubSub.broadcast(Tasky.PubSub, "magic_link:#{recipient}", {:magic_link, url})
-      end
-
       {:ok, email}
     end
   end
@@ -69,8 +65,7 @@ defmodule Tasky.Accounts.UserNotifier do
       If you didn't request this email, please ignore this.
 
       ==============================
-      """,
-      url
+      """
     )
   end
 
@@ -91,8 +86,7 @@ defmodule Tasky.Accounts.UserNotifier do
       If you didn't create an account with us, please ignore this.
 
       ==============================
-      """,
-      url
+      """
     )
   end
 end
