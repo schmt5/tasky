@@ -325,7 +325,7 @@ defmodule TaskyWeb.Student.TaskLive do
         "dynamicHeight=1",
         "task_id=#{task_id}",
         "user_id=#{user.id}",
-        "user_name=#{URI.encode_www_form(user.email)}"
+        "user_name=#{URI.encode_www_form(user.firstname || user.email)}"
       ]
       |> Enum.join("&")
 

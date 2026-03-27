@@ -84,8 +84,20 @@ defmodule TaskyWeb.UserLive.Login do
                       href={@magic_link}
                       class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 underline hover:text-emerald-950 break-all"
                     >
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" class="shrink-0">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      <svg
+                        width="14"
+                        height="14"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        class="shrink-0"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14 5l7 7m0 0l-7 7m7-7H3"
+                        />
                       </svg>
                       Jetzt anmelden
                     </.link>
