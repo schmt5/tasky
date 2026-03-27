@@ -35,18 +35,18 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
               Dein Konto wurde erstellt. Fast geschafft!
             </p>
           </div>
-          <%!-- Email instruction card --%>
-          <div class="mb-6 bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-6 animate-[fadeSlideIn_0.35s_ease-out]">
-            <div class="flex items-start gap-4">
-              <div class="w-10 h-10 bg-sky-100 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5">
+          <%!-- Demo mailbox info card --%>
+          <div class="mb-6 bg-emerald-50 rounded-[12px] border border-emerald-200 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.1)] animate-[fadeSlideIn_0.35s_ease-out]">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 bg-emerald-100 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">
                 <svg
-                  width="20"
-                  height="20"
+                  width="18"
+                  height="18"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                   stroke-width="2"
-                  class="text-sky-600"
+                  class="text-emerald-600"
                 >
                   <path
                     stroke-linecap="round"
@@ -57,19 +57,35 @@ defmodule TaskyWeb.UserLive.RegistrationSuccess do
               </div>
 
               <div class="flex-1">
-                <p class="text-[14px] font-semibold text-stone-800 mb-1">
-                  Bestätige deine E-Mail-Adresse
+                <p class="text-[13px] font-semibold text-emerald-900 mb-1">
+                  Demo — E-Mail abgefangen
                 </p>
-
-                <p class="text-[13px] text-stone-500 leading-[1.6]">
-                  Wir haben einen Anmeldelink an
+                <p class="text-[13px] text-emerald-800 leading-[1.5] mb-2">
+                  Der Bestätigungslink für <strong>{@email}</strong>
+                  wurde nicht wirklich versendet. Öffne die Demo-Mailbox um ihn abzurufen:
                 </p>
-
-                <p class="text-[14px] font-semibold text-sky-600 mt-1 mb-2 break-all">{@email}</p>
-
-                <p class="text-[13px] text-stone-500 leading-[1.6]">
-                  gesendet. Bitte öffne dein Postfach und klicke auf den Link, um dich anzumelden.
-                </p>
+                <a
+                  href="/dev/mailbox"
+                  target="_blank"
+                  class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-3 py-1.5 rounded-[8px] transition-colors duration-150"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    class="shrink-0"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
+                  </svg>
+                  /dev/mailbox öffnen
+                </a>
               </div>
             </div>
           </div>

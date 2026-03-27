@@ -75,11 +75,35 @@ defmodule TaskyWeb.UserLive.Login do
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">E-Mail verschickt!</p>
-                  <p class="text-[13px] text-emerald-800 leading-[1.5]">
-                    Falls ein Konto für <strong>{@submitted_email}</strong>
-                    existiert, haben wir einen Magic Link gesendet. Bitte prüfe dein Postfach.
+                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">
+                    Demo — E-Mail abgefangen
                   </p>
+                  <p class="text-[13px] text-emerald-800 leading-[1.5] mb-2">
+                    Der Magic Link für <strong>{@submitted_email}</strong>
+                    wurde nicht wirklich versendet. Öffne die Demo-Mailbox um ihn abzurufen:
+                  </p>
+                  <a
+                    href="/dev/mailbox"
+                    target="_blank"
+                    class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-3 py-1.5 rounded-[8px] transition-colors duration-150"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      class="shrink-0"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                      />
+                    </svg>
+                    /dev/mailbox öffnen
+                  </a>
                 </div>
               </div>
             </div>
