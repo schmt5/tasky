@@ -53,8 +53,8 @@ defmodule TaskyWeb.UserLive.Login do
             </p>
           </div>
 
-          <%!-- Demo Magic Link — appears with animation after submit --%>
-          <%= if local_mail_adapter?() && @submitted do %>
+          <%!-- Success banner — appears after submit --%>
+          <%= if @submitted do %>
             <div class="mb-6 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-[12px] border border-emerald-200 p-4 shadow-[0_2px_8px_rgba(16,185,129,0.1)] animate-[fadeSlideIn_0.35s_ease-out]">
               <div class="flex items-start gap-3">
                 <div class="w-8 h-8 bg-emerald-100 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5">
@@ -70,13 +70,13 @@ defmodule TaskyWeb.UserLive.Login do
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                     />
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <p class="text-[13px] font-semibold text-emerald-900 mb-1">Demo Instanz</p>
-                  <%= if @magic_link do %>
+                  <%= if local_mail_adapter?() && @magic_link do %>
+                    <p class="text-[13px] font-semibold text-emerald-900 mb-1">Demo Instanz</p>
                     <p class="text-[13px] text-emerald-800 leading-[1.5] mb-2">
                       Klicke direkt auf den Link um dich anzumelden:
                     </p>
@@ -102,8 +102,10 @@ defmodule TaskyWeb.UserLive.Login do
                       Jetzt anmelden
                     </.link>
                   <% else %>
+                    <p class="text-[13px] font-semibold text-emerald-900 mb-1">E-Mail verschickt!</p>
                     <p class="text-[13px] text-emerald-800 leading-[1.5]">
-                      Magic Link wird generiert…
+                      Falls ein Konto für <strong>{@submitted_email}</strong>
+                      existiert, haben wir einen Magic Link gesendet. Bitte prüfe dein Postfach.
                     </p>
                   <% end %>
                 </div>
@@ -229,19 +231,31 @@ defmodule TaskyWeb.UserLive.Login do
   @impl true
   def handle_event("submit", %{"user" => %{"email" => email}}, socket) do
     magic_link =
-      if user = Accounts.get_user_by_email(email) do
-        Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{email}")
+      if local_mail_adapter?() do
+        if user = Accounts.get_user_by_email(email) do
+          Phoenix.PubSub.subscribe(Tasky.PubSub, "magic_link:#{email}")
 
-        Accounts.deliver_login_instructions(
-          user,
-          &url(~p"/users/log-in/#{&1}")
-        )
+          Accounts.deliver_login_instructions(
+            user,
+            &url(~p"/users/log-in/#{&1}")
+          )
 
-        receive do
-          {:magic_link, url} -> url
-        after
-          3000 -> nil
+          receive do
+            {:magic_link, url} -> url
+          after
+            3000 -> nil
+          end
         end
+      else
+        # In production, fire-and-forget — don't block the LiveView process
+        if user = Accounts.get_user_by_email(email) do
+          Accounts.deliver_login_instructions(
+            user,
+            &url(~p"/users/log-in/#{&1}")
+          )
+        end
+
+        nil
       end
 
     {:noreply, assign(socket, submitted: true, submitted_email: email, magic_link: magic_link)}
