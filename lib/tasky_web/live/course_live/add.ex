@@ -346,7 +346,7 @@ defmodule TaskyWeb.CourseLive.Add do
         case Tasks.create_task(socket.assigns.current_scope, task_attrs) do
           {:ok, _task} ->
             # Create webhook for the form
-            webhook_url = "https://roxann-fluttery-jacqueline.ngrok-free.dev/api/webhooks/tally"
+            webhook_url = TaskyWeb.Endpoint.url() <> "/api/webhooks/tally"
 
             case Client.create_webhook(socket.assigns.current_scope, form["id"], webhook_url) do
               {:ok, _webhook} ->
