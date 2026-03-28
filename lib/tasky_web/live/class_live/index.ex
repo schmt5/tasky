@@ -18,7 +18,7 @@ defmodule TaskyWeb.ClassLive.Index do
           </h1>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
-            Verwalte deine Klassen und teile Registrierungslinks mit deinen Schülern.
+            Verwalte deine Klassen und teile Registrierungslinks mit deinen Lernenden.
           </p>
         </div>
       </div>
@@ -93,7 +93,7 @@ defmodule TaskyWeb.ClassLive.Index do
                 type="button"
                 phx-click="delete"
                 phx-value-id={class.id}
-                data-confirm="Möchten Sie diese Klasse wirklich löschen? Schüler werden nicht gelöscht."
+                data-confirm="Möchten Sie diese Klasse wirklich löschen? Lernende werden nicht gelöscht."
                 class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-red-50 hover:text-red-600"
                 title="Löschen"
               >
@@ -111,7 +111,7 @@ defmodule TaskyWeb.ClassLive.Index do
           <h3 class="text-base font-semibold text-stone-700 mb-2">Noch keine Klassen</h3>
 
           <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
-            Erstelle deine erste Klasse, um Schüler zu organisieren und Registrierungslinks zu teilen.
+            Erstelle deine erste Klasse, um Lernende zu organisieren und Registrierungslinks zu teilen.
           </p>
 
           <.link

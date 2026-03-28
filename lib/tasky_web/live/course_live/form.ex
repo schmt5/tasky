@@ -32,7 +32,7 @@ defmodule TaskyWeb.CourseLive.Form do
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
-              do: "Erstelle einen neuen Kurs für deine Aufgaben und Studenten.",
+              do: "Erstelle einen neuen Kurs für deine Aufgaben und Lernende.",
               else: "Bearbeite die Kursinformationen."}
           </p>
         </div>

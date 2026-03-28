@@ -18,7 +18,7 @@ defmodule TaskyWeb.CourseLive.Index do
           </h1>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
-            Verwalte deine Kurse, Aufgaben und eingeschriebene Studenten.
+            Verwalte deine Kurse, Aufgaben und eingeschriebene Lernende.
           </p>
         </div>
       </div>

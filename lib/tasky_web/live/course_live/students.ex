@@ -20,16 +20,16 @@ defmodule TaskyWeb.CourseLive.Students do
             <.breadcrumbs crumbs={[
               %{label: "Kurse", navigate: ~p"/courses"},
               %{label: @course.name, navigate: ~p"/courses/#{@course}"},
-              %{label: "Studenten"}
+              %{label: "Lernende"}
             ]} />
           </div>
 
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            Eingeschriebene Studenten
+            Eingeschriebene Lernende
           </h1>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
-            Verwalten Sie die Studenten für den Kurs "{@course.name}"
+            Verwalten Sie die Lernenden für den Kurs "{@course.name}"
           </p>
         </div>
       </div>
@@ -39,10 +39,10 @@ defmodule TaskyWeb.CourseLive.Students do
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="flex items-center justify-between p-6 border-b border-stone-100">
             <div>
-              <h2 class="text-lg font-semibold text-stone-800">Eingeschriebene Studenten</h2>
+              <h2 class="text-lg font-semibold text-stone-800">Eingeschriebene Lernende</h2>
 
               <p class="text-sm text-stone-500 mt-1">
-                {if @has_students, do: "#{@student_count} Studenten", else: "Keine Studenten"}
+                {if @has_students, do: "#{@student_count} Lernende", else: "Keine Lernenden"}
               </p>
             </div>
 
@@ -51,7 +51,7 @@ defmodule TaskyWeb.CourseLive.Students do
               phx-click="show_enroll_modal"
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
             >
-              <.icon name="hero-user-plus" class="w-4 h-4" /> Studenten einschreiben
+              <.icon name="hero-user-plus" class="w-4 h-4" /> Lernende einschreiben
             </button>
           </div>
 
@@ -73,7 +73,7 @@ defmodule TaskyWeb.CourseLive.Students do
                 phx-click={
                   JS.push("unenroll_student", value: %{student_id: student.id}) |> hide("##{id}")
                 }
-                data-confirm="Sind Sie sicher, dass Sie diesen Studenten ausschreiben möchten?"
+                data-confirm="Sind Sie sicher, dass Sie diese/n Lernende/n ausschreiben möchten?"
                 class="inline-flex items-center gap-2 text-red-600 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-red-100 hover:text-red-700"
               >
                 <.icon name="hero-x-mark" class="w-4 h-4" /> Ausschreiben
@@ -86,10 +86,10 @@ defmodule TaskyWeb.CourseLive.Students do
               <.icon name="hero-users" class="w-6 h-6" />
             </div>
 
-            <h3 class="text-base font-semibold text-stone-700 mb-2">Noch keine Studenten</h3>
+            <h3 class="text-base font-semibold text-stone-700 mb-2">Noch keine Lernenden</h3>
 
             <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6] mb-6">
-              Schreiben Sie Studenten ein, um zu beginnen.
+              Schreiben Sie Lernende ein, um zu beginnen.
             </p>
 
             <button
@@ -97,7 +97,7 @@ defmodule TaskyWeb.CourseLive.Students do
               phx-click="show_enroll_modal"
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
             >
-              <.icon name="hero-user-plus" class="w-4 h-4" /> Erste Studenten einschreiben
+              <.icon name="hero-user-plus" class="w-4 h-4" /> Erste Lernende einschreiben
             </button>
           </div>
         </div>
@@ -115,7 +115,7 @@ defmodule TaskyWeb.CourseLive.Students do
           <%!-- Modal box --%>
           <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
             <div class="p-6 border-b border-stone-100">
-              <h3 class="text-lg font-semibold text-stone-800">Studenten einschreiben</h3>
+              <h3 class="text-lg font-semibold text-stone-800">Lernende einschreiben</h3>
             </div>
 
             <div class="p-6">
@@ -135,10 +135,10 @@ defmodule TaskyWeb.CourseLive.Students do
                 <div class="mb-4 p-4 bg-sky-50 rounded-[10px] border border-sky-100">
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex-1">
-                      <p class="text-sm font-medium text-sky-900 mb-1">Alle Studenten einschreiben</p>
+                      <p class="text-sm font-medium text-sky-900 mb-1">Alle Lernenden einschreiben</p>
 
                       <p class="text-xs text-sky-700">
-                        {length(@unenrolled_students)} Studenten aus dieser Klasse gleichzeitig einschreiben
+                        {length(@unenrolled_students)} Lernende aus dieser Klasse gleichzeitig einschreiben
                       </p>
                     </div>
 
@@ -186,7 +186,7 @@ defmodule TaskyWeb.CourseLive.Students do
                   <.icon name="hero-check-circle" class="w-6 h-6" />
                 </div>
 
-                <p class="text-sm">Alle Studenten sind bereits in diesem Kurs eingeschrieben.</p>
+                <p class="text-sm">Alle Lernenden sind bereits in diesem Kurs eingeschrieben.</p>
               </div>
             </div>
 
@@ -213,7 +213,7 @@ defmodule TaskyWeb.CourseLive.Students do
 
     {:ok,
      socket
-     |> assign(:page_title, "Studenten - #{course.name}")
+     |> assign(:page_title, "Lernende - #{course.name}")
      |> assign(:course, course)
      |> assign(:show_enroll_modal, false)
      |> assign(:unenrolled_students, [])
@@ -268,7 +268,7 @@ defmodule TaskyWeb.CourseLive.Students do
   def handle_event("enroll_all_from_class", _params, socket) do
     case socket.assigns.unenrolled_students do
       [] ->
-        {:noreply, put_flash(socket, :info, "Keine Studenten zum Einschreiben verfügbar")}
+        {:noreply, put_flash(socket, :info, "Keine Lernenden zum Einschreiben verfügbar")}
 
       students ->
         results =
@@ -295,7 +295,7 @@ defmodule TaskyWeb.CourseLive.Students do
          put_flash(
            socket,
            :info,
-           "#{success_count} Studenten wurden erfolgreich eingeschrieben"
+           "#{success_count} Lernende wurden erfolgreich eingeschrieben"
          )}
     end
   end

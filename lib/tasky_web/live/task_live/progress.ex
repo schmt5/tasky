@@ -30,7 +30,7 @@ defmodule TaskyWeb.TaskLive.Progress do
           </h1>
 
           <p class="text-[15px] text-stone-500 leading-[1.7]">
-            Übersicht über den Fortschritt aller Studenten für diese Aufgabe
+            Übersicht über den Fortschritt aller Lernenden für diese Aufgabe
           </p>
         </div>
       </div>
@@ -168,7 +168,7 @@ defmodule TaskyWeb.TaskLive.Progress do
               <h3 class="text-base font-semibold text-stone-700 mb-2">Keine Daten verfügbar</h3>
 
               <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6]">
-                Schreiben Sie Studenten in den Kurs ein, um den Fortschritt zu verfolgen.
+                Schreiben Sie Lernende in den Kurs ein, um den Fortschritt zu verfolgen.
               </p>
             </div>
           <% end %>
@@ -399,7 +399,7 @@ defmodule TaskyWeb.TaskLive.Progress do
               <div class="bg-stone-50 px-8 py-5 border-t border-stone-200">
                 <div class="flex items-center gap-2 mb-3">
                   <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4 text-stone-500" />
-                  <span class="text-[13px] font-semibold text-stone-700">Feedback an Schüler</span>
+                  <span class="text-[13px] font-semibold text-stone-700">Feedback an Lernende</span>
                   <%= if @feedback_saved do %>
                     <span class="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-600 ml-1">
                       <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> Gespeichert
@@ -414,7 +414,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                   <.input
                     type="textarea"
                     field={@feedback_form[:feedback]}
-                    placeholder="Schreibe hier dein Feedback für den Schüler..."
+                    placeholder="Schreibe hier dein Feedback für die/den Lernende/n..."
                     rows="3"
                     class="w-full text-[13px] text-stone-800 bg-white border border-stone-200 rounded-[8px] px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent placeholder:text-stone-300 transition"
                   />
@@ -574,7 +574,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
           assign(socket,
             loading_submission: false,
-            submission_error: "Keine Tally-Einreichung für diesen Studenten gefunden",
+            submission_error: "Keine Tally-Einreichung für diese/n Lernende/n gefunden",
             selected_submission_record: submission_record,
             feedback_form: to_form(%{"feedback" => existing_feedback}, as: :submission),
             feedback_saved: false

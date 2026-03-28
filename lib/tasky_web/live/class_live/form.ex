@@ -32,7 +32,7 @@ defmodule TaskyWeb.ClassLive.Form do
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
-              do: "Erstelle eine neue Klasse für deine Schüler.",
+              do: "Erstelle eine neue Klasse für deine Lernenden.",
               else: "Bearbeite die Klasseninformationen."}
           </p>
         </div>
@@ -63,7 +63,7 @@ defmodule TaskyWeb.ClassLive.Form do
 
                   <div class="flex-1">
                     <p class="text-[13px] text-stone-700 leading-[1.5]">
-                      Nach dem Erstellen erhältst du einen Link, den du an deine Schüler weitergeben kannst. Schüler, die sich über diesen Link registrieren, werden automatisch dieser Klasse zugeordnet.
+                      Nach dem Erstellen erhältst du einen Link, den du an deine Lernenden weitergeben kannst. Lernende, die sich über diesen Link registrieren, werden automatisch dieser Klasse zugeordnet.
                     </p>
                   </div>
                 </div>

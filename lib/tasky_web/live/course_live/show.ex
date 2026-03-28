@@ -52,7 +52,7 @@ defmodule TaskyWeb.CourseLive.Show do
                   Fortschritt anzeigen
                 </h3>
                 <p class="text-sm text-stone-500 leading-relaxed">
-                  Sehen Sie den Lernfortschritt aller eingeschriebenen Studenten im Kurs
+                  Sehen Sie den Lernfortschritt aller eingeschriebenen Lernenden im Kurs
                 </p>
               </div>
               <.icon
@@ -73,10 +73,10 @@ defmodule TaskyWeb.CourseLive.Show do
               </div>
               <div class="flex-1">
                 <h3 class="text-base font-semibold text-stone-800 mb-1.5 group-hover:text-purple-600 transition-colors duration-150">
-                  Studenten verwalten
+                  Lernende verwalten
                 </h3>
                 <p class="text-sm text-stone-500 leading-relaxed">
-                  Studenten in den Kurs einschreiben oder aus dem Kurs ausschreiben
+                  Lernende in den Kurs einschreiben oder aus dem Kurs ausschreiben
                 </p>
               </div>
               <.icon
@@ -141,7 +141,7 @@ defmodule TaskyWeb.CourseLive.Show do
 
                 <%= if task.locked do %>
                   <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
-                    Schüler sehen diese Aufgabe, können sie aber nicht starten.
+                    Lernende sehen diese Aufgabe, können sie aber nicht starten.
                   </p>
                 <% end %>
 

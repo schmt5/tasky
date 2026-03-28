@@ -27,7 +27,7 @@ defmodule TaskyWeb.CourseLive.Progress do
           </h1>
 
           <p class="text-[15px] text-stone-500 leading-[1.7]">
-            Übersicht über den Fortschritt aller Studenten
+            Übersicht über den Fortschritt aller Lernenden
           </p>
         </div>
       </div>
@@ -154,7 +154,7 @@ defmodule TaskyWeb.CourseLive.Progress do
               <h3 class="text-base font-semibold text-stone-700 mb-2">Keine Daten verfügbar</h3>
 
               <p class="text-sm text-stone-400 max-w-[320px] leading-[1.6]">
-                Fügen Sie Lerneinheiten hinzu und schreiben Sie Studenten ein, um den Fortschritt zu verfolgen.
+                Fügen Sie Lerneinheiten hinzu und schreiben Sie Lernende ein, um den Fortschritt zu verfolgen.
               </p>
             </div>
           <% end %>

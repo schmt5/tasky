@@ -10,7 +10,7 @@ defmodule TaskyWeb.Student.CoursesLive do
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-4 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="text-[10px] tracking-[0.12em] uppercase font-semibold text-sky-500 mb-2">
-            Studenten Portal
+            Lernenden Portal
           </div>
 
           <h1 class="font-serif text-[36px] text-stone-900 leading-[1.1] mb-2 font-normal">

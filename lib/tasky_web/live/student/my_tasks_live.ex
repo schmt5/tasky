@@ -18,7 +18,7 @@ defmodule TaskyWeb.Student.MyTasksLive do
     <div id="my-tasks-container" phx-hook=".OpenLink">
       <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/student/my-tasks"}>
         <div class="page-header">
-          <div class="page-header-eyebrow">Studenten Portal</div>
+          <div class="page-header-eyebrow">Lernenden Portal</div>
           <h1>
             Meine <em>Aufgaben</em>
           </h1>
