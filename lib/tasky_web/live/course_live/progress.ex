@@ -12,7 +12,7 @@ defmodule TaskyWeb.CourseLive.Progress do
       current_path={~p"/courses/#{@course}/progress"}
     >
       <%!-- Page Header --%>
-      <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
+      <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-7xl mx-auto">
           <div class="flex items-center justify-between mb-3">
             <.breadcrumbs crumbs={[
