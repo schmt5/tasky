@@ -110,6 +110,18 @@ defmodule TaskyWeb.Layouts do
                 >
                   Klassen
                 </.link>
+                <.link
+                  navigate={~p"/exams"}
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/exams"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
+                >
+                  Prüfungen
+                </.link>
               <% true -> %>
             <% end %>
           <% end %>
@@ -214,6 +226,48 @@ defmodule TaskyWeb.Layouts do
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
     </div>
+    """
+  end
+
+  @doc """
+  Renders a minimal guest layout for exam participants.
+
+  This layout provides a distraction-free experience with just
+  the LearningLine logo and no navigation or user controls.
+
+  ## Examples
+
+      <Layouts.guest flash={@flash}>
+        <h1>Exam Content</h1>
+      </Layouts.guest>
+
+  """
+  attr :flash, :map, required: true, doc: "the map of flash messages"
+  slot :inner_block, required: true
+
+  def guest(assigns) do
+    ~H"""
+    <header class="px-6 py-4 bg-white border-b border-stone-100">
+      <div class="max-w-4xl mx-auto flex items-center justify-center">
+        <svg width="36" height="36" viewBox="190 60 370 220" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(190, 60)">
+            <path
+              d="M 55 55 L 55 130 Q 55 195 120 195 Q 185 195 185 130 L 185 120 Q 185 55 250 55 Q 315 55 315 120 L 315 195"
+              style="fill:none;stroke:#0ea5e9;stroke-width:52px;stroke-linecap:round;stroke-linejoin:round;"
+            />
+            <circle cx="55" cy="55" r="34" style="fill:#0ea5e9;" />
+            <circle cx="315" cy="195" r="34" style="fill:#0ea5e9;" />
+          </g>
+        </svg>
+        <span class="text-base font-bold text-stone-800 tracking-tight">LearningLine</span>
+      </div>
+    </header>
+
+    <main class="bg-stone-50 min-h-screen">
+      {render_slot(@inner_block)}
+    </main>
+
+    <.flash_group flash={@flash} />
     """
   end
 

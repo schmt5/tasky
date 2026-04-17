@@ -32,6 +32,17 @@ defmodule TaskyWeb.Router do
     get "/", PageController, :home
   end
 
+  ## Guest exam routes (no authentication required)
+
+  scope "/guest", TaskyWeb.Guest do
+    pipe_through [:browser]
+
+    live_session :guest do
+      live "/enroll/:enrollment_token", EnrollLive, :enroll
+      live "/exam/:exam_token", ExamLive, :show
+    end
+  end
+
   # Webhook endpoints (no authentication required)
   scope "/api", TaskyWeb do
     pipe_through :webhook
@@ -60,6 +71,12 @@ defmodule TaskyWeb.Router do
       live "/classes", ClassLive.Index, :index
       live "/classes/new", ClassLive.Form, :new
       live "/classes/:id/edit", ClassLive.Form, :edit
+
+      live "/exams", ExamLive.Index, :index
+      live "/exams/new", ExamLive.Form, :new
+      live "/exams/:id", ExamLive.Show, :show
+      live "/exams/:id/edit", ExamLive.Form, :edit
+      live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
     end
 
     live_session :teacher_settings,
