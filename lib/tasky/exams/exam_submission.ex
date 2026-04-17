@@ -6,6 +6,7 @@ defmodule Tasky.Exams.ExamSubmission do
     field :firstname, :string
     field :lastname, :string
     field :exam_token, :string
+    field :submitted, :boolean, default: false
 
     belongs_to :exam, Tasky.Exams.Exam
 

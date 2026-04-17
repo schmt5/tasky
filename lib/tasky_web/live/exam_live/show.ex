@@ -6,7 +6,7 @@ defmodule TaskyWeb.ExamLive.Show do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams/\#{@exam}"}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams/#{@exam}"}>
       <%!-- Page Header --%>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
@@ -17,20 +17,28 @@ defmodule TaskyWeb.ExamLive.Show do
             ]} />
 
             <div class="flex items-center gap-2">
-              <.link
-                navigate={~p"/exams/\#{@exam}/edit?return_to=show"}
-                class="inline-flex items-center gap-2 bg-amber-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
-              >
-                <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
-              </.link>
               <button
                 type="button"
                 phx-click="delete"
                 data-confirm="Bist du sicher, dass du diese Prüfung löschen möchtest?"
-                class="inline-flex items-center gap-2 text-red-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-red-200 transition-all duration-150 hover:bg-red-50 hover:border-red-300"
+                class="inline-flex items-center gap-2 text-stone-400 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:text-red-600 hover:bg-red-50"
               >
                 <.icon name="hero-trash" class="w-4 h-4" /> Löschen
               </button>
+              <.link
+                navigate={~p"/exams/#{@exam}/edit?return_to=show"}
+                class="inline-flex items-center gap-2 text-stone-700 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+              >
+                <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
+              </.link>
+              <%= if @exam.status in ["open", "running"] do %>
+                <.link
+                  navigate={~p"/exams/#{@exam}/cockpit"}
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                >
+                  <.icon name="hero-computer-desktop" class="w-4 h-4" /> Cockpit
+                </.link>
+              <% end %>
             </div>
           </div>
 
@@ -39,27 +47,7 @@ defmodule TaskyWeb.ExamLive.Show do
           </h1>
 
           <div class="flex items-center gap-3 mt-2">
-            <span class={[
-              "inline-flex items-center text-[12px] font-semibold px-3 py-1 rounded-full",
-              @exam.status == "draft" && "bg-amber-100 text-amber-700",
-              @exam.status == "open" && "bg-sky-100 text-sky-700",
-              @exam.status == "running" && "bg-emerald-100 text-emerald-700",
-              @exam.status == "finished" && "bg-purple-100 text-purple-700",
-              @exam.status == "archived" && "bg-stone-100 text-stone-500"
-            ]}>
-              <%= cond do %>
-                <% @exam.status == "open" -> %>
-                  Offen
-                <% @exam.status == "running" -> %>
-                  Laufend
-                <% @exam.status == "finished" -> %>
-                  Beendet
-                <% @exam.status == "archived" -> %>
-                  Archiviert
-                <% true -> %>
-                  Entwurf
-              <% end %>
-            </span>
+            <.exam_status_chip status={@exam.status} />
             <span class="text-[13px] text-stone-400 flex items-center gap-1">
               <.icon name="hero-user" class="w-3.5 h-3.5" /> {@exam.teacher.email}
             </span>
@@ -109,6 +97,16 @@ defmodule TaskyWeb.ExamLive.Show do
                     >
                       Durchführung öffnen
                     </button>
+                  </div>
+                <% end %>
+                <%= if @exam.status in ["open", "running"] do %>
+                  <div class="mt-4 flex items-center gap-3">
+                    <.link
+                      navigate={~p"/exams/#{@exam}/cockpit"}
+                      class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                    >
+                      <.icon name="hero-computer-desktop" class="w-4 h-4" /> Zum Cockpit
+                    </.link>
                   </div>
                 <% end %>
               </div>

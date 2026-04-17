@@ -33,7 +33,7 @@ defmodule TaskyWeb.ExamLive.Index do
 
           <.link
             navigate={~p"/exams/new"}
-            class="inline-flex items-center gap-2 bg-amber-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
+            class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
           >
             <.icon name="hero-plus" class="w-4 h-4" /> Neue Prüfung
           </.link>
@@ -96,7 +96,7 @@ defmodule TaskyWeb.ExamLive.Index do
             <div class="flex items-center gap-2 shrink-0 pt-0.5">
               <.link
                 navigate={~p"/exams/#{exam}/edit"}
-                class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-amber-50 hover:text-amber-600"
+                class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-700"
               >
                 <.icon name="hero-pencil-square" class="w-4 h-4" /> Bearbeiten
               </.link>
@@ -117,7 +117,7 @@ defmodule TaskyWeb.ExamLive.Index do
 
           <.link
             navigate={~p"/exams/new"}
-            class="inline-flex items-center gap-2 bg-amber-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
+            class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
           >
             <.icon name="hero-plus" class="w-4 h-4" /> Erste Prüfung erstellen
           </.link>

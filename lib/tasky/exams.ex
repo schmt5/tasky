@@ -148,6 +148,16 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Returns all exam submissions for a given exam, ordered by enrollment time.
+  """
+  def list_exam_submissions(%Exam{} = exam) do
+    ExamSubmission
+    |> where([s], s.exam_id == ^exam.id)
+    |> order_by([s], asc: s.inserted_at)
+    |> Repo.all()
+  end
+
+  @doc """
   Creates an exam submission for a guest user.
   The exam must be in "open" status.
   """
@@ -177,6 +187,22 @@ defmodule Tasky.Exams do
   """
   def change_exam_submission(%ExamSubmission{} = exam_submission, attrs \\ %{}) do
     ExamSubmission.changeset(exam_submission, attrs)
+  end
+
+  @doc """
+  Marks an exam submission as submitted.
+  Only allowed when the associated exam is still running.
+  """
+  def submit_exam_submission(%ExamSubmission{} = submission) do
+    submission = Repo.preload(submission, :exam, force: true)
+
+    if submission.exam.status != "running" do
+      {:error, :exam_not_running}
+    else
+      submission
+      |> Ecto.Changeset.change(%{submitted: true})
+      |> Repo.update()
+    end
   end
 
   # --- PubSub for exam status ---
