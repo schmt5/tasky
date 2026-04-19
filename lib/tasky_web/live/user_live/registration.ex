@@ -48,7 +48,14 @@ defmodule TaskyWeb.UserLive.Registration do
           </div>
           <%!-- Form Card --%>
           <div class="bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-hidden">
-            <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
+            <.form
+              for={@form}
+              id="registration_form"
+              phx-submit="save"
+              phx-change="validate"
+              action={~p"/users/log-in"}
+              phx-trigger-action={@trigger_submit}
+            >
               <div class="p-8 space-y-5">
                 <.input
                   field={@form[:firstname]}
@@ -77,6 +84,16 @@ defmodule TaskyWeb.UserLive.Registration do
                   required
                   class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
                   placeholder="max@beispiel.de"
+                />
+
+                <.input
+                  field={@form[:password]}
+                  type="password"
+                  label="Passwort"
+                  autocomplete="new-password"
+                  required
+                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                  placeholder="Mindestens 8 Zeichen"
                 />
 
                 <%= if @class_name do %>
@@ -177,6 +194,7 @@ defmodule TaskyWeb.UserLive.Registration do
     socket =
       socket
       |> assign_form(changeset)
+      |> assign(trigger_submit: false)
       |> handle_class_param(params)
 
     {:ok, socket, temporary_assigns: [form: nil]}
@@ -184,7 +202,6 @@ defmodule TaskyWeb.UserLive.Registration do
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
-    # Include class_id if it was set via query parameter
     user_params =
       if socket.assigns[:class_id] do
         Map.put(user_params, "class_id", socket.assigns.class_id)
@@ -193,16 +210,13 @@ defmodule TaskyWeb.UserLive.Registration do
       end
 
     case Accounts.register_user(user_params) do
-      {:ok, user} ->
-        {:ok, _} =
-          Accounts.deliver_login_instructions(
-            user,
-            &url(~p"/users/log-in/#{&1}")
-          )
+      {:ok, _user} ->
+        changeset = Accounts.change_user_registration(%User{}, user_params)
 
-        redirect_params = "?email=#{URI.encode_www_form(user.email)}"
-
-        {:noreply, push_navigate(socket, to: ~p"/users/register/success" <> redirect_params)}
+        {:noreply,
+         socket
+         |> assign(trigger_submit: true)
+         |> assign_form(changeset)}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}

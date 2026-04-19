@@ -2,49 +2,39 @@ defmodule TaskyWeb.UserSessionControllerTest do
   use TaskyWeb.ConnCase
 
   import Tasky.AccountsFixtures
-  alias Tasky.Accounts
 
   setup do
-    %{unconfirmed_user: unconfirmed_user_fixture(), user: user_fixture()}
+    %{user: user_fixture()}
   end
 
-  describe "POST /users/log-in - magic link" do
-    test "logs the user in", %{conn: conn, user: user} do
-      {token, _hashed_token} = generate_user_magic_link_token(user)
-
+  describe "POST /users/log-in" do
+    test "logs the user in with valid credentials", %{conn: conn, user: user} do
       conn =
         post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token}
+          "user" => %{"email" => user.email, "password" => "hello world!"}
         })
 
       assert get_session(conn, :user_token)
       assert redirected_to(conn) == ~p"/"
     end
 
-    test "confirms unconfirmed user", %{conn: conn, unconfirmed_user: user} do
-      {token, _hashed_token} = generate_user_magic_link_token(user)
-      refute user.confirmed_at
-
+    test "redirects to login page with invalid password", %{conn: conn, user: user} do
       conn =
         post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token},
-          "_action" => "confirmed"
+          "user" => %{"email" => user.email, "password" => "wrong"}
         })
 
-      assert get_session(conn, :user_token)
-      assert redirected_to(conn) == ~p"/"
-      assert Accounts.get_user!(user.id).confirmed_at
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Ungültige E-Mail oder Passwort."
+      assert redirected_to(conn) == ~p"/users/log-in"
     end
 
-    test "redirects to login page when magic link is invalid", %{conn: conn} do
+    test "redirects to login page with invalid email", %{conn: conn} do
       conn =
         post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => "invalid"}
+          "user" => %{"email" => "unknown@example.com", "password" => "hello world!"}
         })
 
-      assert Phoenix.Flash.get(conn.assigns.flash, :error) ==
-               "Der Link ist ungültig oder abgelaufen."
-
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Ungültige E-Mail oder Passwort."
       assert redirected_to(conn) == ~p"/users/log-in"
     end
   end

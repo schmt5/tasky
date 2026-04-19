@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for tasky-learn on 2026-03-26T09:30:46Z
+# fly.toml app configuration file generated for tasky-be-med
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'tasky-learn'
+app = 'tasky-be-med'
 primary_region = 'fra'
 kill_signal = 'SIGTERM'
 
@@ -14,7 +14,7 @@ kill_signal = 'SIGTERM'
 [env]
   DATABASE_PATH = '/mnt/name/name.db'
   MIX_ENV = 'demo'
-  PHX_HOST = 'tasky-learn.fly.dev'
+  PHX_HOST = 'tasky-be-med.fly.dev'
   PORT = '8080'
 
 [[mounts]]

@@ -107,18 +107,6 @@ defmodule TaskyWeb.UserLive.Settings do
                 />
               </div>
 
-              <div class="bg-amber-50 border border-amber-200 rounded-[10px] p-4">
-                <div class="flex items-start gap-3">
-                  <.icon
-                    name="hero-exclamation-triangle"
-                    class="w-5 h-5 text-amber-600 mt-0.5 shrink-0"
-                  />
-                  <p class="text-sm text-amber-800 leading-[1.6]">
-                    Sie erhalten einen Bestätigungslink an Ihre neue E-Mail-Adresse. Klicken Sie darauf, um die Änderung abzuschließen.
-                  </p>
-                </div>
-              </div>
-
               <div class="flex justify-end pt-2">
                 <.button
                   variant="primary"
@@ -176,19 +164,6 @@ defmodule TaskyWeb.UserLive.Settings do
   end
 
   @impl true
-  def mount(%{"token" => token}, _session, socket) do
-    socket =
-      case Accounts.update_user_email(socket.assigns.current_scope.user, token) do
-        {:ok, _user} ->
-          put_flash(socket, :info, "E-Mail erfolgreich geändert.")
-
-        {:error, _} ->
-          put_flash(socket, :error, "Der E-Mail-Änderungslink ist ungültig oder abgelaufen.")
-      end
-
-    {:ok, push_navigate(socket, to: ~p"/users/settings")}
-  end
-
   def mount(_params, _session, socket) do
     user = socket.assigns.current_scope.user
     email_changeset = Accounts.change_user_email(user, %{}, validate_unique: false)
@@ -219,22 +194,13 @@ defmodule TaskyWeb.UserLive.Settings do
   def handle_event("update_email", params, socket) do
     %{"user" => user_params} = params
     user = socket.assigns.current_scope.user
-    true = Accounts.sudo_mode?(user)
 
-    case Accounts.change_user_email(user, user_params) do
-      %{valid?: true} = changeset ->
-        Accounts.deliver_user_update_email_instructions(
-          Ecto.Changeset.apply_action!(changeset, :insert),
-          user.email,
-          &url(~p"/users/settings/confirm-email/#{&1}")
-        )
+    case Accounts.update_user_email_directly(user, user_params) do
+      {:ok, _user} ->
+        info = "E-Mail erfolgreich geändert."
+        {:noreply, socket |> put_flash(:info, info) |> push_navigate(to: ~p"/users/settings")}
 
-        info =
-          "Ein Link zur Bestätigung Ihrer E-Mail-Änderung wurde an die neue Adresse gesendet."
-
-        {:noreply, socket |> put_flash(:info, info)}
-
-      changeset ->
+      {:error, changeset} ->
         {:noreply, assign(socket, :email_form, to_form(changeset, action: :insert))}
     end
   end

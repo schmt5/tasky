@@ -10,6 +10,8 @@ defmodule Tasky.Accounts.User do
     field :authenticated_at, :utc_datetime, virtual: true
     field :role, :string, default: "student"
     field :tally_api_key, :string
+    field :password, :string, virtual: true, redact: true
+    field :hashed_password, :string, redact: true
 
     # Virtual fields for UI representation
     field :is_teacher, :boolean, virtual: true, default: false
@@ -27,41 +29,20 @@ defmodule Tasky.Accounts.User do
     timestamps(type: :utc_datetime)
   end
 
-  @valid_roles ~w(admin teacher student)
-
   @doc """
   Returns the list of valid roles.
   """
-  def valid_roles, do: @valid_roles
+  def valid_roles, do: ["admin", "teacher", "student"]
 
   @doc """
-  A user changeset for registering or changing the email.
+  A user changeset for registration.
 
-  It requires the email to change otherwise an error is added.
-
-  ## Options
-
-    * `:validate_unique` - Set to false if you don't want to validate the
-      uniqueness of the email, useful when displaying live validations.
-      Defaults to `true`.
-  """
-  def email_changeset(user, attrs, opts \\ []) do
-    user
-    |> cast(attrs, [:email])
-    |> validate_email(opts)
-  end
-
-  @doc """
-  A user changeset for registration that includes role.
-
-  ## Options
-
-    * `:validate_unique` - Set to false if you don't want to validate the
-      uniqueness of the email. Defaults to `true`.
+  Casts email, password, firstname, lastname, is_teacher, and class_id.
+  Validates email and password, and sets the role based on is_teacher.
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :firstname, :lastname, :is_teacher, :class_id])
+    |> cast(attrs, [:email, :password, :firstname, :lastname, :is_teacher, :class_id])
     |> transform_is_teacher_to_role()
     |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
     |> validate_length(:firstname,
@@ -75,27 +56,45 @@ defmodule Tasky.Accounts.User do
       message: "muss zwischen 1 und 100 Zeichen lang sein"
     )
     |> validate_email(opts)
+    |> validate_password(opts)
     |> validate_role()
     |> foreign_key_constraint(:class_id)
   end
 
-  # Transform virtual field is_teacher to role field
-  defp transform_is_teacher_to_role(changeset) do
-    case get_change(changeset, :is_teacher) do
-      true ->
-        put_change(changeset, :role, "teacher")
+  @doc """
+  A user changeset for changing the password.
+  """
+  def password_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:password])
+    |> validate_confirmation(:password, message: "stimmt nicht überein")
+    |> validate_password(opts)
+  end
 
-      false ->
-        put_change(changeset, :role, "student")
+  @doc """
+  A user changeset for changing the email.
 
-      nil ->
-        # If is_teacher is not provided, default to student
-        put_change(changeset, :role, "student")
+  It requires the email to change otherwise an error is added.
+  """
+  def email_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:email])
+    |> validate_email(opts)
+    |> case do
+      %{changes: %{email: _}} = changeset -> changeset
+      %{} = changeset -> add_error(changeset, :email, "hat sich nicht geändert")
     end
   end
 
   @doc """
-  A user changeset for updating profile information (firstname and lastname).
+  Confirms the account by setting `confirmed_at`.
+  """
+  def confirm_changeset(user) do
+    change(user, confirmed_at: DateTime.utc_now(:second))
+  end
+
+  @doc """
+  A user changeset for changing the profile (firstname and lastname).
   """
   def profile_changeset(user, attrs) do
     user
@@ -114,75 +113,88 @@ defmodule Tasky.Accounts.User do
   end
 
   @doc """
-  A user changeset for updating the Tally API key.
+  A user changeset for changing the Tally API key.
   """
   def tally_api_key_changeset(user, attrs) do
     user
     |> cast(attrs, [:tally_api_key])
-    |> validate_tally_api_key()
+    |> validate_required([:tally_api_key], message: "darf nicht leer sein")
   end
 
-  defp validate_tally_api_key(changeset) do
-    case get_change(changeset, :tally_api_key) do
-      nil ->
-        # No change, valid
-        changeset
+  @doc """
+  Verifies the password.
 
-      "" ->
-        # Empty string not allowed
-        add_error(changeset, :tally_api_key, "darf nicht leer sein")
+  If there is no user or the user doesn't have a password, we call
+  `Bcrypt.no_user_verify/0` to avoid timing attacks.
+  """
+  def valid_password?(%Tasky.Accounts.User{hashed_password: hashed_password}, password)
+      when is_binary(hashed_password) and byte_size(password) > 0 do
+    Bcrypt.verify_pass(password, hashed_password)
+  end
 
-      value when is_binary(value) ->
-        # Trim and validate length
-        changeset
-        |> put_change(:tally_api_key, String.trim(value))
-        |> validate_length(:tally_api_key,
-          min: 1,
-          max: 255,
-          message: "muss zwischen 1 und 255 Zeichen lang sein"
-        )
+  def valid_password?(_, _) do
+    Bcrypt.no_user_verify()
+    false
+  end
+
+  defp validate_email(changeset, opts) do
+    changeset
+    |> validate_required([:email], message: "darf nicht leer sein")
+    |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/,
+      message: "muss ein @-Zeichen enthalten und darf keine Leerzeichen haben"
+    )
+    |> validate_length(:email, max: 160, message: "darf maximal 160 Zeichen lang sein")
+    |> maybe_validate_unique_email(opts)
+  end
+
+  defp validate_password(changeset, opts) do
+    changeset
+    |> validate_required([:password], message: "darf nicht leer sein")
+    |> validate_length(:password,
+      min: 8,
+      max: 72,
+      message: "muss zwischen 8 und 72 Zeichen lang sein"
+    )
+    |> maybe_hash_password(opts)
+  end
+
+  defp maybe_hash_password(changeset, opts) do
+    hash_password? = Keyword.get(opts, :hash_password, true)
+    password = get_change(changeset, :password)
+
+    if hash_password? && password && changeset.valid? do
+      changeset
+      |> validate_length(:password,
+        max: 72,
+        count: :bytes,
+        message: "darf maximal 72 Bytes lang sein"
+      )
+      |> put_change(:hashed_password, Bcrypt.hash_pwd_salt(password))
+      |> delete_change(:password)
+    else
+      changeset
+    end
+  end
+
+  defp maybe_validate_unique_email(changeset, opts) do
+    if Keyword.get(opts, :validate_email, true) do
+      changeset
+      |> unsafe_validate_unique(:email, Tasky.Repo)
+      |> unique_constraint(:email)
+    else
+      changeset
+    end
+  end
+
+  defp transform_is_teacher_to_role(changeset) do
+    case get_change(changeset, :is_teacher) do
+      true -> put_change(changeset, :role, "teacher")
+      false -> put_change(changeset, :role, "student")
+      nil -> changeset
     end
   end
 
   defp validate_role(changeset) do
-    changeset
-    |> validate_inclusion(:role, @valid_roles,
-      message: "muss einer der folgenden Werte sein: #{Enum.join(@valid_roles, ", ")}"
-    )
-  end
-
-  defp validate_email(changeset, opts) do
-    changeset =
-      changeset
-      |> validate_required([:email], message: "darf nicht leer sein")
-      |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+\.[^@,;\s]{2,}$/,
-        message: "muss eine gültige E-Mail-Adresse sein (z.B. max@beispiel.de)"
-      )
-      |> validate_length(:email, max: 160, message: "darf maximal 160 Zeichen lang sein")
-
-    if Keyword.get(opts, :validate_unique, true) do
-      changeset
-      |> unsafe_validate_unique(:email, Tasky.Repo)
-      |> unique_constraint(:email)
-      |> validate_email_changed()
-    else
-      changeset
-    end
-  end
-
-  defp validate_email_changed(changeset) do
-    if get_field(changeset, :email) && get_change(changeset, :email) == nil do
-      add_error(changeset, :email, "hat sich nicht geändert")
-    else
-      changeset
-    end
-  end
-
-  @doc """
-  Confirms the account by setting `confirmed_at`.
-  """
-  def confirm_changeset(user) do
-    now = DateTime.utc_now(:second)
-    change(user, confirmed_at: now)
+    validate_inclusion(changeset, :role, valid_roles())
   end
 end

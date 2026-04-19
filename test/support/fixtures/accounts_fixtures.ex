@@ -15,7 +15,8 @@ defmodule Tasky.AccountsFixtures do
     Enum.into(attrs, %{
       email: unique_user_email(),
       firstname: "Test",
-      lastname: "User"
+      lastname: "User",
+      password: "hello world!"
     })
   end
 
@@ -31,15 +32,10 @@ defmodule Tasky.AccountsFixtures do
   def user_fixture(attrs \\ %{}) do
     {role, attrs} = Map.pop(attrs, :role)
 
-    user = unconfirmed_user_fixture(attrs)
-
-    token =
-      extract_user_token(fn url ->
-        Accounts.deliver_login_instructions(user, url)
-      end)
-
-    {:ok, {user, _expired_tokens}} =
-      Accounts.login_user_by_magic_link(token)
+    {:ok, user} =
+      attrs
+      |> valid_user_attributes()
+      |> Accounts.register_user()
 
     # Apply role after registration since registration_changeset derives role
     # from :is_teacher and does not cast :role directly.
@@ -76,12 +72,6 @@ defmodule Tasky.AccountsFixtures do
       ),
       set: [authenticated_at: authenticated_at]
     )
-  end
-
-  def generate_user_magic_link_token(user) do
-    {encoded_token, user_token} = Accounts.UserToken.build_email_token(user, "login")
-    Tasky.Repo.insert!(user_token)
-    {encoded_token, user_token.token}
   end
 
   def offset_user_token(token, amount_to_add, unit) do

@@ -71,6 +71,14 @@ defmodule TaskyWeb.Admin.UserLive do
 
               <div class="ks-item-actions">
                 <%= if user.id != @current_scope.user.id do %>
+                  <button
+                    type="button"
+                    phx-click="open_password_modal"
+                    phx-value-user-id={user.id}
+                    class="inline-flex items-center gap-1.5 text-sm font-medium text-sky-600 hover:text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-2 rounded-lg transition-all duration-150"
+                  >
+                    <.icon name="hero-key" class="w-4 h-4" /> Passwort
+                  </button>
                   <.form
                     for={%{}}
                     id={"role-form-#{user.id}"}
@@ -112,6 +120,76 @@ defmodule TaskyWeb.Admin.UserLive do
           <% end %>
         </div>
       </div>
+
+      <%= if @show_password_modal do %>
+        <dialog
+          class="modal modal-open"
+          phx-window-keydown="close_password_modal"
+          phx-key="escape"
+        >
+          <div class="modal-box max-w-md">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-10 h-10 bg-sky-100 rounded-xl flex items-center justify-center">
+                <.icon name="hero-key" class="w-5 h-5 text-sky-600" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-stone-900">Passwort zurücksetzen</h3>
+                <p class="text-sm text-stone-500">{@selected_user.email}</p>
+              </div>
+            </div>
+
+            <.form
+              for={@password_form}
+              id={"password-reset-form-#{@selected_user.id}"}
+              phx-submit="reset_password"
+            >
+              <div class="space-y-4">
+                <.input
+                  field={@password_form[:password]}
+                  type="text"
+                  label="Neues Passwort"
+                  placeholder="Mindestens 8 Zeichen"
+                  required
+                  phx-mounted={JS.focus()}
+                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                />
+
+                <div class="bg-amber-50 border border-amber-200 rounded-[10px] p-3">
+                  <div class="flex items-start gap-2">
+                    <.icon
+                      name="hero-exclamation-triangle"
+                      class="w-4 h-4 text-amber-600 mt-0.5 shrink-0"
+                    />
+                    <p class="text-xs text-amber-800 leading-[1.5]">
+                      Das Passwort wird sofort geändert. Der Benutzer muss sich mit dem neuen Passwort anmelden.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  phx-click="close_password_modal"
+                  class="px-4 py-2.5 text-sm font-medium text-stone-700 bg-white border border-stone-200 rounded-[10px] hover:bg-stone-50 transition-all duration-150"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  phx-disable-with="Wird gespeichert..."
+                  class="px-4 py-2.5 text-sm font-semibold text-white bg-sky-500 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600 transition-all duration-150"
+                >
+                  Passwort setzen
+                </button>
+              </div>
+            </.form>
+          </div>
+          <div class="modal-backdrop bg-black/50" phx-click="close_password_modal">
+            <button class="cursor-default">close</button>
+          </div>
+        </dialog>
+      <% end %>
     </Layouts.app>
     """
   end
@@ -123,7 +201,10 @@ defmodule TaskyWeb.Admin.UserLive do
     {:ok,
      socket
      |> assign(:users_by_role, users_by_role)
-     |> assign(:page_title, "User Management")}
+     |> assign(:page_title, "User Management")
+     |> assign(:show_password_modal, false)
+     |> assign(:selected_user, nil)
+     |> assign(:password_form, to_form(%{"password" => ""}, as: "password_reset"))}
   end
 
   @impl true
@@ -141,6 +222,42 @@ defmodule TaskyWeb.Admin.UserLive do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to update user role")}
+    end
+  end
+
+  def handle_event("open_password_modal", %{"user-id" => user_id}, socket) do
+    user = Accounts.get_user!(user_id)
+
+    {:noreply,
+     socket
+     |> assign(:show_password_modal, true)
+     |> assign(:selected_user, user)
+     |> assign(:password_form, to_form(%{"password" => ""}, as: "password_reset"))}
+  end
+
+  def handle_event("close_password_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_password_modal, false)
+     |> assign(:selected_user, nil)
+     |> assign(:password_form, to_form(%{"password" => ""}, as: "password_reset"))}
+  end
+
+  def handle_event("reset_password", %{"password_reset" => %{"password" => password}}, socket) do
+    user = socket.assigns.selected_user
+
+    case Accounts.admin_reset_password(user, password) do
+      {:ok, _user} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Passwort für #{user.email} wurde zurückgesetzt.")
+         |> assign(:show_password_modal, false)
+         |> assign(:selected_user, nil)}
+
+      {:error, changeset} ->
+        {:noreply,
+         socket
+         |> assign(:password_form, to_form(changeset, as: "password_reset"))}
     end
   end
 end

@@ -4,27 +4,14 @@ defmodule TaskyWeb.UserSessionController do
   alias Tasky.Accounts
   alias TaskyWeb.UserAuth
 
-  def create(conn, %{"_action" => "confirmed"} = params) do
-    create(conn, params, nil)
-  end
-
-  def create(conn, params) do
-    create(conn, params, nil)
-  end
-
-  # magic link login
-  defp create(conn, %{"user" => %{"token" => token} = user_params}, _info) do
-    case Accounts.login_user_by_magic_link(token) do
-      {:ok, {user, tokens_to_disconnect}} ->
-        UserAuth.disconnect_sessions(tokens_to_disconnect)
-
-        conn
-        |> UserAuth.log_in_user(user, user_params)
-
-      _ ->
-        conn
-        |> put_flash(:error, "Der Link ist ungültig oder abgelaufen.")
-        |> redirect(to: ~p"/users/log-in")
+  def create(conn, %{"user" => %{"email" => email, "password" => password} = user_params}) do
+    if user = Accounts.get_user_by_email_and_password(email, password) do
+      conn
+      |> UserAuth.log_in_user(user, user_params)
+    else
+      conn
+      |> put_flash(:error, "Ungültige E-Mail oder Passwort.")
+      |> redirect(to: ~p"/users/log-in")
     end
   end
 

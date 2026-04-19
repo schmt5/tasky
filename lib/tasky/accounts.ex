@@ -27,6 +27,24 @@ defmodule Tasky.Accounts do
   end
 
   @doc """
+  Gets a user by email and password.
+
+  ## Examples
+
+      iex> get_user_by_email_and_password("foo@example.com", "correct_password")
+      %User{}
+
+      iex> get_user_by_email_and_password("foo@example.com", "invalid_password")
+      nil
+
+  """
+  def get_user_by_email_and_password(email, password)
+      when is_binary(email) and is_binary(password) do
+    user = Repo.get_by(User, email: email)
+    if User.valid_password?(user, password), do: user
+  end
+
+  @doc """
   Gets a single user.
 
   Raises `Ecto.NoResultsError` if the User does not exist.
@@ -47,6 +65,8 @@ defmodule Tasky.Accounts do
   @doc """
   Registers a user.
 
+  The user is automatically confirmed upon registration.
+
   ## Examples
 
       iex> register_user(%{field: value})
@@ -59,6 +79,7 @@ defmodule Tasky.Accounts do
   def register_user(attrs) do
     %User{}
     |> User.registration_changeset(attrs)
+    |> Ecto.Changeset.put_change(:confirmed_at, DateTime.utc_now(:second))
     |> Repo.insert()
   end
 
@@ -189,6 +210,33 @@ defmodule Tasky.Accounts do
     end)
   end
 
+  @doc """
+  Updates the user email directly without token verification.
+  """
+  def update_user_email_directly(user, attrs) do
+    user
+    |> User.email_changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Resets a user's password (admin action).
+
+  ## Examples
+
+      iex> admin_reset_password(user, "new_password123")
+      {:ok, %User{}}
+
+      iex> admin_reset_password(user, "short")
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def admin_reset_password(user, new_password) do
+    user
+    |> User.password_changeset(%{password: new_password})
+    |> Repo.update()
+  end
+
   ## Session
 
   @doc """
@@ -210,49 +258,6 @@ defmodule Tasky.Accounts do
     Repo.one(query)
   end
 
-  @doc """
-  Gets the user with the given magic link token.
-  """
-  def get_user_by_magic_link_token(token) do
-    with {:ok, query} <- UserToken.verify_magic_link_token_query(token),
-         {user, _token} <- Repo.one(query) do
-      user
-    else
-      _ -> nil
-    end
-  end
-
-  @doc """
-  Logs the user in by magic link.
-
-  There are three cases to consider:
-
-  1. The user has already confirmed their email. They are logged in
-     and the magic link is expired.
-
-  2. The user has not confirmed their email.
-     In this case, the user gets confirmed, logged in, and all tokens -
-     including session ones - are expired. In theory, no other tokens
-     exist but we delete all of them for best security practices.
-  """
-  def login_user_by_magic_link(token) do
-    {:ok, query} = UserToken.verify_magic_link_token_query(token)
-
-    case Repo.one(query) do
-      {%User{confirmed_at: nil} = user, _token} ->
-        user
-        |> User.confirm_changeset()
-        |> update_user_and_delete_all_tokens()
-
-      {user, token} ->
-        Repo.delete!(token)
-        {:ok, {user, []}}
-
-      nil ->
-        {:error, :not_found}
-    end
-  end
-
   @doc ~S"""
   Delivers the update email instructions to the given user.
 
@@ -271,35 +276,11 @@ defmodule Tasky.Accounts do
   end
 
   @doc """
-  Delivers the magic link login instructions to the given user.
-  """
-  def deliver_login_instructions(%User{} = user, magic_link_url_fun)
-      when is_function(magic_link_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "login")
-    Repo.insert!(user_token)
-    UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
-  end
-
-  @doc """
   Deletes the signed token with the given context.
   """
   def delete_user_session_token(token) do
     Repo.delete_all(from(UserToken, where: [token: ^token, context: "session"]))
     :ok
-  end
-
-  ## Token helper
-
-  defp update_user_and_delete_all_tokens(changeset) do
-    Repo.transact(fn ->
-      with {:ok, user} <- Repo.update(changeset) do
-        tokens_to_expire = Repo.all_by(UserToken, user_id: user.id)
-
-        Repo.delete_all(from(t in UserToken, where: t.id in ^Enum.map(tokens_to_expire, & &1.id)))
-
-        {:ok, {user, tokens_to_expire}}
-      end
-    end)
   end
 
   ## Role management

@@ -30,6 +30,22 @@ defmodule Tasky.AccountsTest do
     end
   end
 
+  describe "get_user_by_email_and_password/2" do
+    test "does not return the user if the email does not exist" do
+      refute Accounts.get_user_by_email_and_password("unknown@example.com", "hello world!")
+    end
+
+    test "does not return the user if the password is not valid" do
+      user = user_fixture()
+      refute Accounts.get_user_by_email_and_password(user.email, "invalid")
+    end
+
+    test "returns the user if the email and password are valid" do
+      %{id: id} = user = user_fixture()
+      assert %User{id: ^id} = Accounts.get_user_by_email_and_password(user.email, "hello world!")
+    end
+  end
+
   describe "register_user/1" do
     test "requires email to be set" do
       {:error, changeset} = Accounts.register_user(%{})
@@ -40,7 +56,7 @@ defmodule Tasky.AccountsTest do
     test "validates email when given" do
       {:error, changeset} = Accounts.register_user(%{email: "not valid"})
 
-      assert %{email: ["muss eine gültige E-Mail-Adresse sein (z.B. max@beispiel.de)"]} =
+      assert %{email: ["muss ein @-Zeichen enthalten und darf keine Leerzeichen haben"]} =
                errors_on(changeset)
     end
 
@@ -60,11 +76,31 @@ defmodule Tasky.AccountsTest do
       assert "has already been taken" in errors_on(changeset).email
     end
 
-    test "registers users without password" do
+    test "registers users with password and auto-confirms" do
       email = unique_user_email()
       {:ok, user} = Accounts.register_user(valid_user_attributes(email: email))
       assert user.email == email
-      assert is_nil(user.confirmed_at)
+      assert user.hashed_password != ""
+      assert is_struct(user.confirmed_at, DateTime)
+    end
+
+    test "requires password" do
+      {:error, changeset} =
+        Accounts.register_user(%{email: unique_user_email(), firstname: "A", lastname: "B"})
+
+      assert %{password: ["darf nicht leer sein"]} = errors_on(changeset)
+    end
+
+    test "validates password length" do
+      {:error, changeset} =
+        Accounts.register_user(%{
+          email: unique_user_email(),
+          firstname: "A",
+          lastname: "B",
+          password: "short"
+        })
+
+      assert %{password: ["muss zwischen 8 und 72 Zeichen lang sein"]} = errors_on(changeset)
     end
   end
 
@@ -216,75 +252,12 @@ defmodule Tasky.AccountsTest do
     end
   end
 
-  describe "get_user_by_magic_link_token/1" do
-    setup do
-      user = user_fixture()
-      {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
-      %{user: user, token: encoded_token}
-    end
-
-    test "returns user by token", %{user: user, token: token} do
-      assert session_user = Accounts.get_user_by_magic_link_token(token)
-      assert session_user.id == user.id
-    end
-
-    test "does not return user for invalid token" do
-      refute Accounts.get_user_by_magic_link_token("oops")
-    end
-
-    test "does not return user for expired token", %{token: token} do
-      {1, nil} = Repo.update_all(UserToken, set: [inserted_at: ~N[2020-01-01 00:00:00]])
-      refute Accounts.get_user_by_magic_link_token(token)
-    end
-  end
-
-  describe "login_user_by_magic_link/1" do
-    test "confirms user and expires tokens" do
-      user = unconfirmed_user_fixture()
-      refute user.confirmed_at
-      {encoded_token, hashed_token} = generate_user_magic_link_token(user)
-
-      assert {:ok, {user, [%{token: ^hashed_token}]}} =
-               Accounts.login_user_by_magic_link(encoded_token)
-
-      assert user.confirmed_at
-    end
-
-    test "returns user and (deleted) token for confirmed user" do
-      user = user_fixture()
-      assert user.confirmed_at
-      {encoded_token, _hashed_token} = generate_user_magic_link_token(user)
-      assert {:ok, {^user, []}} = Accounts.login_user_by_magic_link(encoded_token)
-      # one time use only
-      assert {:error, :not_found} = Accounts.login_user_by_magic_link(encoded_token)
-    end
-  end
-
   describe "delete_user_session_token/1" do
     test "deletes the token" do
       user = user_fixture()
       token = Accounts.generate_user_session_token(user)
       assert Accounts.delete_user_session_token(token) == :ok
       refute Accounts.get_user_by_session_token(token)
-    end
-  end
-
-  describe "deliver_login_instructions/2" do
-    setup do
-      %{user: unconfirmed_user_fixture()}
-    end
-
-    test "sends token through notification", %{user: user} do
-      token =
-        extract_user_token(fn url ->
-          Accounts.deliver_login_instructions(user, url)
-        end)
-
-      {:ok, token} = Base.url_decode64(token, padding: false)
-      assert user_token = Repo.get_by(UserToken, token: :crypto.hash(:sha256, token))
-      assert user_token.user_id == user.id
-      assert user_token.sent_to == user.email
-      assert user_token.context == "login"
     end
   end
 end
