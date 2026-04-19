@@ -17,6 +17,14 @@ defmodule TaskyWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Session-authenticated JSON API (for React components on authenticated pages)
+  pipeline :authenticated_api do
+    plug :accepts, ["json"]
+    plug :fetch_session
+    plug :protect_from_forgery
+    plug :fetch_current_scope_for_user
+  end
+
   pipeline :webhook do
     plug :accepts, ["json"]
   end
@@ -48,6 +56,13 @@ defmodule TaskyWeb.Router do
     pipe_through :webhook
 
     post "/webhooks/tally", TallyWebhookController, :receive
+  end
+
+  # Session-authenticated JSON API (teachers/admins only)
+  scope "/api", TaskyWeb do
+    pipe_through [:authenticated_api, :require_authenticated_user, :require_admin_or_teacher]
+
+    put "/exams/:id/content", ExamContentApiController, :update
   end
 
   ## Task routes (Teachers and Admins only)

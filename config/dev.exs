@@ -1,5 +1,12 @@
 import Config
 
+# Development esbuild: override NODE_ENV define so React loads its dev build
+config :esbuild, :tasky,
+  args:
+    ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --format=esm --splitting --chunk-names=chunks/[name]-[hash] --jsx=automatic --define:process.env.NODE_ENV=\"development\" --external:/fonts/* --external:/images/* --alias:@=.),
+  cd: Path.expand("../assets", __DIR__),
+  env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
+
 # Configure your database
 config :tasky, Tasky.Repo,
   database: Path.expand("../tasky_dev.db", __DIR__),
@@ -60,7 +67,9 @@ config :tasky, TaskyWeb.Endpoint,
       ~r"priv/gettext/.*\.po$",
       # Router, Controllers, LiveViews and LiveComponents
       ~r"lib/tasky_web/router\.ex$",
-      ~r"lib/tasky_web/(controllers|live|components)/.*\.(ex|heex)$"
+      ~r"lib/tasky_web/(controllers|live|components)/.*\.(ex|heex)$",
+      # React/JSX source files
+      ~r"assets/js/.*\.(jsx|js|css)$"
     ]
   ]
 

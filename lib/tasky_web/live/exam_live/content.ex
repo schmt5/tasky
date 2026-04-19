@@ -24,7 +24,14 @@ defmodule TaskyWeb.ExamLive.Content do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8">
-        <pre class="text-sm text-stone-700 bg-stone-50 p-6 rounded-[14px] border border-stone-200 overflow-x-auto leading-relaxed"><code phx-no-curly-interpolation>{@content_json}</code></pre>
+        <div
+          id={"exam-content-editor-#{@exam.id}"}
+          phx-hook="ExamContentEditor"
+          phx-update="ignore"
+          data-exam-id={@exam.id}
+          data-content={@content_json}
+        >
+        </div>
       </div>
     </Layouts.app>
     """
@@ -34,12 +41,7 @@ defmodule TaskyWeb.ExamLive.Content do
   def mount(%{"id" => id}, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
 
-    content_json =
-      if exam.content && exam.content != %{} do
-        Jason.encode!(exam.content, pretty: true)
-      else
-        "{}"
-      end
+    content_json = Jason.encode!(exam.content || %{})
 
     {:ok,
      socket
