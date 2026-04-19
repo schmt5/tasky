@@ -117,8 +117,24 @@ defmodule TaskyWeb.ExamLive.Show do
         <%!-- Content Section --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6 border-b border-stone-100">
-            <h2 class="text-lg font-semibold text-stone-800">Inhalt</h2>
-            <p class="text-sm text-stone-500 mt-1">Der Inhalt dieser Prüfung als JSON-Daten</p>
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-stone-800">Inhalt</h2>
+                <p class="text-sm text-stone-500 mt-1">Der Inhalt dieser Prüfung als JSON-Daten</p>
+              </div>
+              <.link
+                navigate={~p"/exams/#{@exam}/content"}
+                class={[
+                  "inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-[6px] transition-all duration-150 active:scale-[0.98]",
+                  if(@exam.status == "draft",
+                    do: "bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600",
+                    else: "text-stone-500 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
+                  )
+                ]}
+              >
+                <.icon name="hero-pencil" class="w-3.5 h-3.5" /> Bearbeiten
+              </.link>
+            </div>
           </div>
           <div class="p-6">
             <%= if @exam.content && @exam.content != %{} do %>

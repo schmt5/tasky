@@ -77,6 +77,7 @@ defmodule TaskyWeb.Router do
       live "/exams/:id", ExamLive.Show, :show
       live "/exams/:id/edit", ExamLive.Form, :edit
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
+      live "/exams/:id/content", ExamLive.Content, :content
     end
 
     live_session :teacher_settings,
