@@ -132,8 +132,8 @@ defmodule TaskyWeb.UserLive.Registration do
                     </div>
                   </div>
                 </div>
-              </div>
                 <% end %>
+              </div>
 
               <div class="px-8 pb-8">
                 <button
