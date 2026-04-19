@@ -107,6 +107,7 @@ defmodule TaskyWeb.UserLive.Registration do
                   />
                 <% end %>
 
+                <%= unless @class_name do %>
                 <div class="pt-2 border-t border-stone-100 mt-6 pt-6">
                   <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
                     <div class="flex items-start gap-3">
@@ -132,6 +133,7 @@ defmodule TaskyWeb.UserLive.Registration do
                   </div>
                 </div>
               </div>
+                <% end %>
 
               <div class="px-8 pb-8">
                 <button
