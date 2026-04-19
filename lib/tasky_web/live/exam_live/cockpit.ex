@@ -50,7 +50,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
-        <%= if @exam.status != "finished" do %>
+        <%= if @exam.status not in ["finished", "running"] do %>
           <%!-- Enrollment Token Card --%>
           <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
             <div class="p-6 border-b border-stone-100">
