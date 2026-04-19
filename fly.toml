@@ -8,8 +8,6 @@ primary_region = 'fra'
 kill_signal = 'SIGTERM'
 
 [build]
-  [build.args]
-    MIX_ENV = 'demo'
 
 [env]
   DATABASE_PATH = '/mnt/name/name.db'

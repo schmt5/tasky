@@ -17,7 +17,6 @@ ARG DEBIAN_VERSION=trixie-20260316-slim
 
 ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
 ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}"
-ARG MIX_ENV="demo"
 
 FROM ${BUILDER_IMAGE} AS builder
 
@@ -34,7 +33,7 @@ RUN mix local.hex --force \
   && mix local.rebar --force
 
 # set build ENV
-ENV MIX_ENV="${MIX_ENV}"
+ENV MIX_ENV="demo"
 
 # install mix dependencies
 COPY mix.exs mix.lock ./
@@ -87,7 +86,7 @@ WORKDIR "/app"
 RUN chown nobody /app
 
 # set runner ENV
-ENV MIX_ENV="${MIX_ENV}"
+ENV MIX_ENV="demo"
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/tasky ./
