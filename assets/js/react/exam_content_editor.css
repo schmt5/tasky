@@ -117,6 +117,8 @@
 .exam-editor__content .ProseMirror {
   outline: none;
   min-height: 280px;
+  max-width: 210mm;
+  margin: 0 auto;
   color: #1c1917;
   font-size: 15px;
   line-height: 1.65;
