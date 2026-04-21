@@ -17,6 +17,14 @@ defmodule TaskyWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Session-authenticated JSON API (for React components on authenticated pages)
+  pipeline :authenticated_api do
+    plug :accepts, ["json"]
+    plug :fetch_session
+    plug :protect_from_forgery
+    plug :fetch_current_scope_for_user
+  end
+
   pipeline :webhook do
     plug :accepts, ["json"]
   end
@@ -27,11 +35,29 @@ defmodule TaskyWeb.Router do
     get "/", PageController, :home
   end
 
+  ## Guest exam routes (no authentication required)
+
+  scope "/guest", TaskyWeb.Guest do
+    pipe_through [:browser]
+
+    live_session :guest do
+      live "/enroll/:enrollment_token", EnrollLive, :enroll
+      live "/exam/:exam_token", ExamLive, :show
+    end
+  end
+
   # Webhook endpoints (no authentication required)
   scope "/api", TaskyWeb do
     pipe_through :webhook
 
     post "/webhooks/tally", TallyWebhookController, :receive
+  end
+
+  # Session-authenticated JSON API (teachers/admins only)
+  scope "/api", TaskyWeb do
+    pipe_through [:authenticated_api, :require_authenticated_user, :require_admin_or_teacher]
+
+    put "/exams/:id/content", ExamContentApiController, :update
   end
 
   ## Task routes (Teachers and Admins only)
@@ -55,6 +81,13 @@ defmodule TaskyWeb.Router do
       live "/classes", ClassLive.Index, :index
       live "/classes/new", ClassLive.Form, :new
       live "/classes/:id/edit", ClassLive.Form, :edit
+
+      live "/exams", ExamLive.Index, :index
+      live "/exams/new", ExamLive.Form, :new
+      live "/exams/:id", ExamLive.Show, :show
+      live "/exams/:id/edit", ExamLive.Form, :edit
+      live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
+      live "/exams/:id/content", ExamLive.Content, :content
     end
 
     live_session :teacher_settings,

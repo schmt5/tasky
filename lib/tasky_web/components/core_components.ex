@@ -651,4 +651,33 @@ defmodule TaskyWeb.CoreComponents do
   def translate_errors(errors, field) when is_list(errors) do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
+
+  attr :status, :string, required: true
+
+  def exam_status_chip(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @status == "open" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-blue-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Offen
+        </span>
+      <% @status == "running" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-emerald-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Laufend
+        </span>
+      <% @status == "finished" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-stone-100 text-stone-500 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-stone-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-stone-400"></span> Beendet
+        </span>
+      <% @status == "archived" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-stone-100 text-stone-400 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-stone-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-stone-300"></span> Archiviert
+        </span>
+      <% true -> %>
+        <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-amber-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Entwurf
+        </span>
+    <% end %>
+    """
+  end
 end

@@ -14,6 +14,7 @@ defmodule Tasky.Application do
        repos: Application.fetch_env!(:tasky, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:tasky, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Tasky.PubSub},
+      TaskyWeb.Presence,
       # Start a worker by calling: Tasky.Worker.start_link(arg)
       # {Tasky.Worker, arg},
       # Start to serve requests, typically the last entry
