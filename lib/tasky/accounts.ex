@@ -345,4 +345,29 @@ defmodule Tasky.Accounts do
     |> Enum.map(fn role -> {role, list_users_by_role(role)} end)
     |> Enum.into(%{})
   end
+
+  @doc """
+  Returns all users with their class preloaded, ordered by lastname then firstname.
+  """
+  def list_users do
+    Repo.all(from u in User, order_by: [asc: u.lastname, asc: u.firstname])
+    |> Repo.preload(:class)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for admin editing of a user
+  (firstname, lastname, email).
+  """
+  def change_user_admin(user, attrs \\ %{}, opts \\ []) do
+    User.admin_update_changeset(user, attrs, opts)
+  end
+
+  @doc """
+  Admin update of a user's firstname, lastname, and email.
+  """
+  def admin_update_user(user, attrs) do
+    user
+    |> User.admin_update_changeset(attrs)
+    |> Repo.update()
+  end
 end

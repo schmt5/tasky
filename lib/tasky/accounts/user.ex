@@ -113,6 +113,27 @@ defmodule Tasky.Accounts.User do
   end
 
   @doc """
+  A user changeset for admin editing (firstname, lastname, email).
+  Unlike `email_changeset/3`, it does not error when the email is unchanged.
+  """
+  def admin_update_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:firstname, :lastname, :email])
+    |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
+    |> validate_length(:firstname,
+      min: 1,
+      max: 100,
+      message: "muss zwischen 1 und 100 Zeichen lang sein"
+    )
+    |> validate_length(:lastname,
+      min: 1,
+      max: 100,
+      message: "muss zwischen 1 und 100 Zeichen lang sein"
+    )
+    |> validate_email(opts)
+  end
+
+  @doc """
   A user changeset for changing the Tally API key.
   """
   def tally_api_key_changeset(user, attrs) do

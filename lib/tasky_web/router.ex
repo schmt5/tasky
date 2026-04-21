@@ -85,6 +85,7 @@ defmodule TaskyWeb.Router do
     live_session :admin,
       on_mount: [{TaskyWeb.UserAuth, :require_admin}] do
       live "/users", UserLive, :index
+      live "/users/:id/edit", UserEditLive, :edit
     end
   end
 
