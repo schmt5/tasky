@@ -347,12 +347,33 @@ defmodule Tasky.Accounts do
   end
 
   @doc """
-  Returns all users with their class preloaded, ordered by lastname then firstname.
+  Returns users with their class preloaded, ordered by lastname then firstname.
+
+  Accepts an optional keyword list of filters:
+    * `:role` — "admin" | "teacher" | "student"
+    * `:class_id` — integer class id, or `:none` for users without a class
   """
-  def list_users do
-    Repo.all(from u in User, order_by: [asc: u.lastname, asc: u.firstname])
-    |> Repo.preload(:class)
+  def list_users(filters \\ []) do
+    base = from(u in User, order_by: [asc: u.lastname, asc: u.firstname], preload: :class)
+
+    filters
+    |> Enum.reduce(base, &apply_user_filter/2)
+    |> Repo.all()
   end
+
+  defp apply_user_filter({:role, role}, query) when role in ["admin", "teacher", "student"] do
+    from u in query, where: u.role == ^role
+  end
+
+  defp apply_user_filter({:class_id, :none}, query) do
+    from u in query, where: is_nil(u.class_id)
+  end
+
+  defp apply_user_filter({:class_id, id}, query) when is_integer(id) do
+    from u in query, where: u.class_id == ^id
+  end
+
+  defp apply_user_filter(_, query), do: query
 
   @doc """
   Returns an `%Ecto.Changeset{}` for admin editing of a user

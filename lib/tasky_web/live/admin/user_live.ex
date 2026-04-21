@@ -17,53 +17,57 @@ defmodule TaskyWeb.Admin.UserLive do
         <p>Manage users across the platform.</p>
       </div>
 
-      <div class="flex flex-wrap items-end gap-4 mb-6">
-        <div class="flex flex-col">
-          <label for="role-filter" class="text-xs font-semibold text-stone-500 mb-1">
-            Rolle
-          </label>
-          <select
-            id="role-filter"
-            phx-change="filter_role"
-            name="role"
-            class="text-sm px-3 py-2 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-          >
-            <option value="">Alle Rollen</option>
-            <option :for={{label, value} <- role_options()} value={value} selected={value == @role_filter}>
-              {label}
-            </option>
-          </select>
-        </div>
-
-        <div class="flex flex-col">
-          <label for="class-filter" class="text-xs font-semibold text-stone-500 mb-1">
-            Klasse
-          </label>
-          <select
-            id="class-filter"
-            phx-change="filter_class"
-            name="class_id"
-            class="text-sm px-3 py-2 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-          >
-            <option value="">Alle Klassen</option>
-            <option value="none" selected={@class_filter == "none"}>Keine Klasse</option>
-            <option
-              :for={class <- @classes}
-              value={Integer.to_string(class.id)}
-              selected={@class_filter == Integer.to_string(class.id)}
+      <div class="max-w-5xl mx-auto mt-8">
+        <form phx-change="filter" class="flex flex-wrap items-end gap-4 mb-6">
+          <div class="flex flex-col">
+            <label for="role-filter" class="text-xs font-semibold text-stone-500 mb-1">
+              Rolle
+            </label>
+            <select
+              id="role-filter"
+              name="role"
+              class="text-sm px-3 py-2 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
             >
-              {class.name}
-            </option>
-          </select>
-        </div>
+              <option value="">Alle Rollen</option>
+              <option
+                :for={{label, value} <- role_options()}
+                value={value}
+                selected={value == @role_filter}
+              >
+                {label}
+              </option>
+            </select>
+          </div>
 
-        <div class="ml-auto text-sm text-stone-500">
-          {length(@filtered_users)} {if length(@filtered_users) == 1, do: "Benutzer", else: "Benutzer"}
-        </div>
+          <div class="flex flex-col">
+            <label for="class-filter" class="text-xs font-semibold text-stone-500 mb-1">
+              Klasse
+            </label>
+            <select
+              id="class-filter"
+              name="class_id"
+              class="text-sm px-3 py-2 bg-white border border-stone-200 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+            >
+              <option value="">Alle Klassen</option>
+              <option value="none" selected={@class_filter == "none"}>Keine Klasse</option>
+              <option
+                :for={class <- @classes}
+                value={Integer.to_string(class.id)}
+                selected={@class_filter == Integer.to_string(class.id)}
+              >
+                {class.name}
+              </option>
+            </select>
+          </div>
+
+          <div class="ml-auto text-sm text-stone-500">
+            {length(@users)} Benutzer
+          </div>
+        </form>
       </div>
 
-      <div class="bg-white border border-stone-200 rounded-[14px] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-        <.table id="users" rows={@filtered_users}>
+      <div class="max-w-5xl mx-auto bg-white border border-stone-200 rounded-[14px] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+        <.table id="users" rows={@users}>
           <:col :let={user} label="Vorname">{user.firstname}</:col>
           <:col :let={user} label="Nachname">{user.lastname}</:col>
           <:col :let={user} label="E-Mail">{user.email}</:col>
@@ -105,7 +109,7 @@ defmodule TaskyWeb.Admin.UserLive do
           </:action>
         </.table>
 
-        <%= if @filtered_users == [] do %>
+        <%= if @users == [] do %>
           <div class="flex flex-col items-center text-center py-14 px-8">
             <div class="w-12 h-12 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-4">
               <.icon name="hero-user-group" class="w-6 h-6" />
@@ -128,47 +132,37 @@ defmodule TaskyWeb.Admin.UserLive do
     {:ok,
      socket
      |> assign(:page_title, "User Management")
-     |> assign(:users, Accounts.list_users())
      |> assign(:classes, Classes.list_classes())
      |> assign(:role_filter, "")
      |> assign(:class_filter, "")
-     |> assign_filtered_users()}
+     |> load_users()}
   end
 
   @impl true
-  def handle_event("filter_role", %{"role" => role}, socket) do
+  def handle_event("filter", %{"role" => role, "class_id" => class_id}, socket) do
     {:noreply,
      socket
      |> assign(:role_filter, role)
-     |> assign_filtered_users()}
-  end
-
-  def handle_event("filter_class", %{"class_id" => class_id}, socket) do
-    {:noreply,
-     socket
      |> assign(:class_filter, class_id)
-     |> assign_filtered_users()}
+     |> load_users()}
   end
 
-  defp assign_filtered_users(socket) do
-    %{users: users, role_filter: role, class_filter: class} = socket.assigns
+  defp load_users(socket) do
+    filters =
+      []
+      |> put_role_filter(socket.assigns.role_filter)
+      |> put_class_filter(socket.assigns.class_filter)
 
-    filtered =
-      users
-      |> filter_by_role(role)
-      |> filter_by_class(class)
-
-    assign(socket, :filtered_users, filtered)
+    assign(socket, :users, Accounts.list_users(filters))
   end
 
-  defp filter_by_role(users, ""), do: users
-  defp filter_by_role(users, role), do: Enum.filter(users, &(&1.role == role))
+  defp put_role_filter(filters, ""), do: filters
+  defp put_role_filter(filters, role), do: [{:role, role} | filters]
 
-  defp filter_by_class(users, ""), do: users
-  defp filter_by_class(users, "none"), do: Enum.filter(users, &is_nil(&1.class_id))
+  defp put_class_filter(filters, ""), do: filters
+  defp put_class_filter(filters, "none"), do: [{:class_id, :none} | filters]
 
-  defp filter_by_class(users, class_id) do
-    id = String.to_integer(class_id)
-    Enum.filter(users, &(&1.class_id == id))
+  defp put_class_filter(filters, class_id) do
+    [{:class_id, String.to_integer(class_id)} | filters]
   end
 end
