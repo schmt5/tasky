@@ -8,30 +8,26 @@ defmodule TaskyWeb.ExamLive.Content do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams/#{@exam}/content"}>
       <%!-- Page Header --%>
-      <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
-        <div class="max-w-6xl mx-auto">
-          <div class="flex items-center justify-between mb-3">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-              %{label: "Inhalt"}
-            ]} />
-          </div>
-          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+      <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 h-[54px] flex items-center">
+        <div class="max-w-6xl mx-auto w-full flex items-center justify-between gap-4">
+          <.breadcrumbs crumbs={[
+            %{label: "Prüfungen", navigate: ~p"/exams"},
+            %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+            %{label: "Inhalt"}
+          ]} />
+          <h1 class="font-serif text-xl text-stone-900 leading-none font-normal truncate">
             {@exam.name} – Inhalt
           </h1>
         </div>
       </div>
 
-      <div class="max-w-6xl mx-auto px-8 pb-8">
-        <div
-          id={"exam-content-editor-#{@exam.id}"}
-          phx-hook="ExamContentEditor"
-          phx-update="ignore"
-          data-exam-id={@exam.id}
-          data-content={@content_json}
-        >
-        </div>
+      <div
+        id={"exam-content-editor-#{@exam.id}"}
+        phx-hook="ExamContentEditor"
+        phx-update="ignore"
+        data-exam-id={@exam.id}
+        data-content={@content_json}
+      >
       </div>
     </Layouts.app>
     """

@@ -1,19 +1,58 @@
 .exam-editor {
-  border: 1px solid #e7e5e4;
-  border-radius: 14px;
-  background: #fff;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .exam-editor__toolbar {
+  background: #fafaf9;
+  border-top: 1px solid #e7e5e4;
+  border-bottom: 1px solid #e7e5e4;
+  position: sticky;
+  top: 54px;
+  z-index: 10;
+}
+
+.exam-editor__toolbar-inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 6px 2rem;
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+}
+
+.exam-editor__group {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  padding: 8px;
-  border-bottom: 1px solid #e7e5e4;
-  background: #fafaf9;
+  padding: 0 10px;
+  border-right: 1px solid #e7e5e4;
+}
+
+.exam-editor__group:last-of-type {
+  border-right: none;
+}
+
+.exam-editor__group-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #a8a29e;
+  text-align: center;
+}
+
+.exam-editor__group-btns {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+.exam-editor__content-inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 2rem 2rem;
 }
 
 .exam-editor__btn {
@@ -21,12 +60,21 @@
   border: 1px solid transparent;
   background: transparent;
   border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #44403c;
   cursor: pointer;
   line-height: 1;
+}
+
+.exam-editor__icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
 }
 
 .exam-editor__btn:hover {
@@ -34,9 +82,9 @@
 }
 
 .exam-editor__btn.is-active {
-  background: #292524;
-  color: #fafaf9;
-  border-color: #292524;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
 }
 
 .exam-editor__btn:disabled {
@@ -44,18 +92,12 @@
   cursor: not-allowed;
 }
 
-.exam-editor__sep {
-  width: 1px;
-  background: #e7e5e4;
-  margin: 4px 2px;
-}
-
 .exam-editor__status {
   margin-left: auto;
-  align-self: center;
+  align-self: flex-start;
   font-size: 12px;
   color: #78716c;
-  padding: 0 8px;
+  padding: 10px 8px 0;
 }
 
 .exam-editor__status--saving {
@@ -67,8 +109,9 @@
 }
 
 .exam-editor__content {
-  padding: 20px 24px;
   min-height: 320px;
+  padding-top: 20px;
+  background: #fff;
 }
 
 .exam-editor__content .ProseMirror {
@@ -77,6 +120,16 @@
   color: #1c1917;
   font-size: 15px;
   line-height: 1.65;
+  border: 1px solid #e7e5e4;
+  border-radius: 10px;
+  padding: 20px 24px;
+  background: #fff;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.exam-editor__content .ProseMirror:focus,
+.exam-editor__content .ProseMirror.ProseMirror-focused {
+  border-color: #d6d3d1;
 }
 
 .exam-editor__content .ProseMirror > * + * {
@@ -108,6 +161,52 @@
   padding-left: 1.4em;
 }
 
+.exam-editor__content .ProseMirror ul {
+  list-style: disc;
+}
+
+.exam-editor__content .ProseMirror ol {
+  list-style: decimal;
+}
+
+.exam-editor__content .ProseMirror ul ul {
+  list-style: circle;
+}
+
+.exam-editor__content .ProseMirror ul ul ul {
+  list-style: square;
+}
+
+.exam-editor__content .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.exam-editor__content .ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.exam-editor__content .ProseMirror ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  user-select: none;
+}
+
+.exam-editor__content .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #292524;
+  cursor: pointer;
+}
+
+.exam-editor__content .ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+
 .exam-editor__content .ProseMirror blockquote {
   border-left: 3px solid #d6d3d1;
   padding-left: 1em;
@@ -115,55 +214,60 @@
   font-style: italic;
 }
 
-.exam-editor__content .ProseMirror code {
-  background: #f5f5f4;
-  border: 1px solid #e7e5e4;
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 0.9em;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
-
-/* Code block styled as a student answer field */
-.exam-editor__content .ProseMirror pre {
-  position: relative;
+.exam-editor__content .ProseMirror .lueckentext {
+  display: inline-flex;
+  align-items: center;
   background: #f5f5f4;
   border: 1px dashed #a8a29e;
-  border-radius: 10px;
-  padding: 28px 16px 16px;
-  margin: 1em 0;
-  min-height: 96px;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.95em;
-  color: #44403c;
-  white-space: pre-wrap;
-}
-
-.exam-editor__content .ProseMirror pre::before {
-  content: "Antwortfeld";
-  position: absolute;
-  top: 8px;
-  left: 14px;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #78716c;
-}
-
-.exam-editor__content .ProseMirror pre code {
-  background: transparent;
-  border: none;
-  padding: 0;
+  border-radius: 6px;
+  padding: 4px;
+  padding-inline: 12px;
+  min-height: 36px;
+  vertical-align: middle;
+  font-family: inherit;
   font-size: inherit;
-  color: inherit;
+  color: #44403c;
 }
 
-.exam-editor__content .ProseMirror hr {
-  border: none;
-  border-top: 1px solid #e7e5e4;
-  margin: 1.5em 0;
+.exam-editor__content .ProseMirror .answer-block {
+  background: #f5f5f4;
+  border: 1px dashed #a8a29e;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 0.5em 0;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.exam-editor__content .ProseMirror .answer-block > * + * {
+  margin-top: 0.5em;
+}
+
+.exam-editor__content .ProseMirror .page-break {
+  position: relative;
+  border-top: 1px dashed #a8a29e;
+  margin: 2em 0 2.25em;
+  height: 0;
+}
+
+.exam-editor__content .ProseMirror .page-break::after {
+  content: "Seite " attr(data-page-id);
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 2px);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a8a29e;
+  background: #fff;
+  padding: 0 6px;
+}
+
+.exam-editor__content .ProseMirror .page-break.ProseMirror-selectednode {
+  border-top-color: #292524;
 }
 
 .exam-editor__content .ProseMirror p.is-editor-empty:first-child::before {
