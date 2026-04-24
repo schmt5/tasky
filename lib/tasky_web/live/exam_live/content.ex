@@ -6,7 +6,11 @@ defmodule TaskyWeb.ExamLive.Content do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams/#{@exam}/content"}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      current_path={~p"/exams/#{@exam}/content"}
+    >
       <%!-- Page Header --%>
       <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 h-[54px] flex items-center">
         <div class="max-w-6xl mx-auto w-full flex items-center justify-between gap-4">
@@ -15,9 +19,6 @@ defmodule TaskyWeb.ExamLive.Content do
             %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
             %{label: "Inhalt"}
           ]} />
-          <h1 class="font-serif text-xl text-stone-900 leading-none font-normal truncate">
-            {@exam.name} – Inhalt
-          </h1>
         </div>
       </div>
 

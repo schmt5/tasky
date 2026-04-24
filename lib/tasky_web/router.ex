@@ -25,6 +25,13 @@ defmodule TaskyWeb.Router do
     plug :fetch_current_scope_for_user
   end
 
+  # Guest JSON API (CSRF-protected, no user auth — access gated by exam token)
+  pipeline :guest_api do
+    plug :accepts, ["json"]
+    plug :fetch_session
+    plug :protect_from_forgery
+  end
+
   pipeline :webhook do
     plug :accepts, ["json"]
   end
@@ -58,6 +65,13 @@ defmodule TaskyWeb.Router do
     pipe_through [:authenticated_api, :require_authenticated_user, :require_admin_or_teacher]
 
     put "/exams/:id/content", ExamContentApiController, :update
+  end
+
+  # Guest JSON API (token-gated via exam_token in URL)
+  scope "/api/guest", TaskyWeb.Guest do
+    pipe_through :guest_api
+
+    put "/exam/:token/content", ExamSubmissionContentApiController, :update
   end
 
   ## Task routes (Teachers and Admins only)

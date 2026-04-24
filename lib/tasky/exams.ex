@@ -190,6 +190,29 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Updates the content (TipTap doc JSON) of a non-submitted exam submission.
+  Only allowed when the associated exam is still running and the submission
+  has not been submitted yet.
+  """
+  def update_exam_submission_content(%ExamSubmission{} = submission, content)
+      when is_map(content) do
+    submission = Repo.preload(submission, :exam, force: true)
+
+    cond do
+      submission.submitted ->
+        {:error, :already_submitted}
+
+      submission.exam.status != "running" ->
+        {:error, :exam_not_running}
+
+      true ->
+        submission
+        |> ExamSubmission.content_changeset(%{content: content})
+        |> Repo.update()
+    end
+  end
+
+  @doc """
   Marks an exam submission as submitted.
   Only allowed when the associated exam is still running.
   """

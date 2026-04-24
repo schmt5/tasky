@@ -1,11 +1,11 @@
 import "../react/exam_content_editor.css";
 
-export const ExamContentEditor = {
+export const ExamSubmissionEditor = {
   async mounted() {
     const [
       ReactDOMClient,
       { default: ExamContentEditorComponent },
-      { saveExamContent },
+      { saveExamSubmissionContent },
     ] = await Promise.all([
       import("react-dom/client"),
       import("../react/ExamContentEditor"),
@@ -15,19 +15,23 @@ export const ExamContentEditor = {
     const createRoot =
       ReactDOMClient.createRoot ?? ReactDOMClient.default?.createRoot;
 
-    const { examId, content } = this.el.dataset;
+    const { examToken, content } = this.el.dataset;
     let initialContent = {};
     try {
       initialContent = content ? JSON.parse(content) : {};
     } catch (err) {
-      console.error("ExamContentEditor: invalid initial content JSON", err);
+      console.error(
+        "ExamSubmissionEditor: invalid initial content JSON",
+        err,
+      );
     }
 
     this.root = createRoot(this.el);
     this.root.render(
       <ExamContentEditorComponent
         initialContent={initialContent}
-        save={(doc) => saveExamContent(examId, doc)}
+        save={(doc) => saveExamSubmissionContent(examToken, doc)}
+        hideAnswers={true}
       />,
     );
   },

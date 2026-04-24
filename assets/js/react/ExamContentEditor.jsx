@@ -152,7 +152,6 @@ import {
   ArrowLongLeftIcon,
   ArrowLongRightIcon,
 } from "@heroicons/react/24/outline";
-import { saveExamContent } from "./api";
 
 const AUTOSAVE_DELAY_MS = 1000;
 
@@ -196,7 +195,11 @@ function isEmptyDoc(doc) {
   return !doc || Object.keys(doc).length === 0;
 }
 
-export default function ExamContentEditor({ examId, initialContent }) {
+export default function ExamContentEditor({
+  initialContent,
+  save,
+  hideAnswers = false,
+}) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
   const saveTimerRef = useRef(null);
@@ -209,13 +212,13 @@ export default function ExamContentEditor({ examId, initialContent }) {
     setStatus("saving");
     setErrorMsg(null);
     try {
-      await saveExamContent(examId, doc);
+      await save(doc);
       setStatus("saved");
     } catch (err) {
       setStatus("error");
       setErrorMsg(err.message || "Speichern fehlgeschlagen");
     }
-  }, [examId]);
+  }, [save]);
 
   const scheduleSave = useCallback(
     (doc) => {
@@ -273,7 +276,12 @@ export default function ExamContentEditor({ examId, initialContent }) {
 
   return (
     <div className="exam-editor">
-      <Toolbar editor={editor} status={status} errorMsg={errorMsg} />
+      <Toolbar
+        editor={editor}
+        status={status}
+        errorMsg={errorMsg}
+        hideAnswers={hideAnswers}
+      />
       <div className="exam-editor__content">
         <div className="exam-editor__content-inner">
           <EditorContent editor={editor} />
@@ -283,7 +291,7 @@ export default function ExamContentEditor({ examId, initialContent }) {
   );
 }
 
-function Toolbar({ editor, status, errorMsg }) {
+function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
   const active = useEditorState({
@@ -499,32 +507,33 @@ function Toolbar({ editor, status, errorMsg }) {
                 active.orderedList,
               ),
             ])}
-            {group("Antworten", [
-              btn(
-                "Lückentextfeld",
-                <CodeBracketIcon className={iconCls} />,
-                () => editor.chain().focus().setLueckentext().run(),
-                active.lueckentext,
-              ),
-              btn(
-                "Antwortfeld",
-                <CodeBracketSquareIcon className={iconCls} />,
-                () => editor.chain().focus().setAnswerBlock().run(),
-                active.answerBlock,
-              ),
-              btn(
-                "Aufgabenliste",
-                <CheckCircleIcon className={iconCls} />,
-                () => editor.chain().focus().toggleTaskList().run(),
-                active.taskList,
-              ),
-              btn(
-                "Zitat",
-                <ChatBubbleBottomCenterTextIcon className={iconCls} />,
-                () => editor.chain().focus().toggleBlockquote().run(),
-                active.blockquote,
-              ),
-            ])}
+            {!hideAnswers &&
+              group("Antworten", [
+                btn(
+                  "Lückentextfeld",
+                  <CodeBracketIcon className={iconCls} />,
+                  () => editor.chain().focus().setLueckentext().run(),
+                  active.lueckentext,
+                ),
+                btn(
+                  "Antwortfeld",
+                  <CodeBracketSquareIcon className={iconCls} />,
+                  () => editor.chain().focus().setAnswerBlock().run(),
+                  active.answerBlock,
+                ),
+                btn(
+                  "Aufgabenliste",
+                  <CheckCircleIcon className={iconCls} />,
+                  () => editor.chain().focus().toggleTaskList().run(),
+                  active.taskList,
+                ),
+                btn(
+                  "Zitat",
+                  <ChatBubbleBottomCenterTextIcon className={iconCls} />,
+                  () => editor.chain().focus().toggleBlockquote().run(),
+                  active.blockquote,
+                ),
+              ])}
             {group("Struktur", [
               btn(
                 "Seitenumbruch",

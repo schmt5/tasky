@@ -120,15 +120,17 @@ defmodule TaskyWeb.ExamLive.Show do
             <div class="flex items-center justify-between">
               <div>
                 <h2 class="text-lg font-semibold text-stone-800">Inhalt</h2>
-                <p class="text-sm text-stone-500 mt-1">Der Inhalt dieser Prüfung als JSON-Daten</p>
+                <p class="text-sm text-stone-500 mt-1">Vorschau des Prüfungsinhalts</p>
               </div>
               <.link
                 navigate={~p"/exams/#{@exam}/content"}
                 class={[
                   "inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-[6px] transition-all duration-150 active:scale-[0.98]",
                   if(@exam.status == "draft",
-                    do: "bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600",
-                    else: "text-stone-500 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
+                    do:
+                      "bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600",
+                    else:
+                      "text-stone-500 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
                   )
                 ]}
               >
@@ -138,7 +140,22 @@ defmodule TaskyWeb.ExamLive.Show do
           </div>
           <div class="p-6">
             <%= if @exam.content && @exam.content != %{} do %>
-              <pre class="text-sm text-stone-600 bg-stone-50 p-4 rounded-lg border border-stone-200 overflow-x-auto"><code phx-no-curly-interpolation>{Jason.encode!(@exam.content, pretty: true)}</code></pre>
+              <% heading_text = extract_first_heading(@exam.content) %>
+              <%= if heading_text do %>
+                <div class="flex items-start gap-3">
+                  <div class="w-1 self-stretch rounded-full bg-stone-200 shrink-0"></div>
+                  <div>
+                    <p class="text-base text-stone-700 font-medium leading-relaxed">{heading_text}</p>
+                    <p class="text-xs text-stone-400 mt-2 tracking-wide uppercase">
+                      Auszug aus dem Prüfungsinhalt
+                    </p>
+                  </div>
+                </div>
+              <% else %>
+                <p class="text-sm text-stone-400 italic">
+                  Inhalt vorhanden, aber keine Überschrift gefunden
+                </p>
+              <% end %>
             <% else %>
               <p class="text-sm text-stone-400">Kein Inhalt vorhanden</p>
             <% end %>
@@ -163,6 +180,26 @@ defmodule TaskyWeb.ExamLive.Show do
     </Layouts.app>
     """
   end
+
+  defp extract_first_heading(%{"content" => blocks}) when is_list(blocks) do
+    Enum.find_value(blocks, fn
+      %{"type" => "heading", "content" => children} when is_list(children) ->
+        children
+        |> Enum.map_join("", fn
+          %{"text" => text} -> text
+          _ -> ""
+        end)
+        |> case do
+          "" -> nil
+          text -> text
+        end
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp extract_first_heading(_), do: nil
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do

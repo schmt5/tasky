@@ -7,10 +7,20 @@ defmodule Tasky.Exams.ExamSubmission do
     field :lastname, :string
     field :exam_token, :string
     field :submitted, :boolean, default: false
+    field :content, :map, default: %{}
 
     belongs_to :exam, Tasky.Exams.Exam
 
     timestamps(type: :utc_datetime)
+  end
+
+  @doc """
+  Changeset for updating only the submission content (used by the student editor).
+  """
+  def content_changeset(exam_submission, attrs) do
+    exam_submission
+    |> cast(attrs, [:content])
+    |> validate_required([:content])
   end
 
   @doc false

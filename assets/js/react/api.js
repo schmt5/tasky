@@ -34,3 +34,10 @@ export function saveExamContent(examId, content) {
     body: JSON.stringify({ content }),
   });
 }
+
+export function saveExamSubmissionContent(token, content) {
+  return request(`/api/guest/exam/${token}/content`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
