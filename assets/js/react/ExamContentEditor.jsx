@@ -6,7 +6,9 @@ import { TaskList } from "@tiptap/extension-list/task-list";
 import { TaskItem } from "@tiptap/extension-list/task-item";
 import { TableKit } from "@tiptap/extension-table";
 import { Highlight } from "@tiptap/extension-highlight";
+import { TextStyle, Color } from "@tiptap/extension-text-style";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Tabs from "@radix-ui/react-tabs";
 
 const Lueckentext = Node.create({
   name: "lueckentext",
@@ -145,6 +147,10 @@ import {
   ViewColumnsIcon,
   Bars3Icon,
   PaintBrushIcon,
+  ArrowLongUpIcon,
+  ArrowLongDownIcon,
+  ArrowLongLeftIcon,
+  ArrowLongRightIcon,
 } from "@heroicons/react/24/outline";
 import { saveExamContent } from "./api";
 
@@ -158,6 +164,33 @@ const HIGHLIGHT_COLORS = [
   { name: "Blau", value: "#bfdbfe" },
   { name: "Lila", value: "#e9d5ff" },
 ];
+
+const TEXT_COLORS = [
+  { name: "Rot", value: "#dc2626" },
+  { name: "Orange", value: "#ea580c" },
+  { name: "Gelb", value: "#ca8a04" },
+  { name: "Grün", value: "#16a34a" },
+  { name: "Blau", value: "#2563eb" },
+  { name: "Lila", value: "#9333ea" },
+];
+
+function TextColorIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 19 L12 5 L18 19" />
+      <path d="M8.5 14 H15.5" />
+    </svg>
+  );
+}
 
 function isEmptyDoc(doc) {
   return !doc || Object.keys(doc).length === 0;
@@ -206,6 +239,8 @@ export default function ExamContentEditor({ examId, initialContent }) {
       TaskItem.configure({ nested: true }),
       TableKit.configure({ table: { resizable: true } }),
       Highlight.configure({ multicolor: true }),
+      TextStyle,
+      Color,
     ],
     content: isEmptyDoc(initialContent) ? "" : initialContent,
     onUpdate: ({ editor }) => {
@@ -269,6 +304,9 @@ function Toolbar({ editor, status, errorMsg }) {
       highlightColor: HIGHLIGHT_COLORS.find((c) =>
         editor.isActive("highlight", { color: c.value }),
       )?.value,
+      textColor: TEXT_COLORS.find((c) =>
+        editor.isActive("textStyle", { color: c.value }),
+      )?.value,
     }),
   });
 
@@ -288,25 +326,28 @@ function Toolbar({ editor, status, errorMsg }) {
 
   const iconCls = "exam-editor__icon";
 
-  const highlightMenu = (
+  const colorMenu = ({
+    title,
+    icon,
+    colors,
+    activeColor,
+    onPick,
+    onClear,
+    clearLabel,
+  }) => (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          title="Markieren"
-          aria-label="Markieren"
-          className={
-            "exam-editor__btn" +
-            (active.highlightColor ? " is-active" : "")
-          }
+          title={title}
+          aria-label={title}
+          className={"exam-editor__btn" + (activeColor ? " is-active" : "")}
           onMouseDown={(e) => e.preventDefault()}
         >
-          <PaintBrushIcon className={iconCls} />
+          {icon}
           <span
             className="exam-editor__btn-bar"
-            style={{
-              backgroundColor: active.highlightColor || "transparent",
-            }}
+            style={{ backgroundColor: activeColor || "transparent" }}
           />
         </button>
       </DropdownMenu.Trigger>
@@ -317,17 +358,11 @@ function Toolbar({ editor, status, errorMsg }) {
           align="start"
         >
           <div className="exam-editor__menu-swatches">
-            {HIGHLIGHT_COLORS.map((c) => (
+            {colors.map((c) => (
               <DropdownMenu.Item
                 key={c.value}
                 asChild
-                onSelect={() =>
-                  editor
-                    .chain()
-                    .focus()
-                    .toggleHighlight({ color: c.value })
-                    .run()
-                }
+                onSelect={() => onPick(c.value)}
               >
                 <button
                   type="button"
@@ -335,9 +370,7 @@ function Toolbar({ editor, status, errorMsg }) {
                   aria-label={c.name}
                   className={
                     "exam-editor__swatch" +
-                    (active.highlightColor === c.value
-                      ? " is-active"
-                      : "")
+                    (activeColor === c.value ? " is-active" : "")
                   }
                   style={{ backgroundColor: c.value }}
                 />
@@ -347,16 +380,36 @@ function Toolbar({ editor, status, errorMsg }) {
           <DropdownMenu.Separator className="exam-editor__menu-separator" />
           <DropdownMenu.Item
             className="exam-editor__menu-item"
-            onSelect={() =>
-              editor.chain().focus().unsetHighlight().run()
-            }
+            onSelect={onClear}
           >
-            Markierung entfernen
+            {clearLabel}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   );
+
+  const textColorMenu = colorMenu({
+    title: "Textfarbe",
+    icon: <TextColorIcon className={iconCls} />,
+    colors: TEXT_COLORS,
+    activeColor: active.textColor,
+    onPick: (value) =>
+      editor.chain().focus().setColor(value).run(),
+    onClear: () => editor.chain().focus().unsetColor().run(),
+    clearLabel: "Farbe entfernen",
+  });
+
+  const highlightMenu = colorMenu({
+    title: "Markieren",
+    icon: <PaintBrushIcon className={iconCls} />,
+    colors: HIGHLIGHT_COLORS,
+    activeColor: active.highlightColor,
+    onPick: (value) =>
+      editor.chain().focus().toggleHighlight({ color: value }).run(),
+    onClear: () => editor.chain().focus().unsetHighlight().run(),
+    clearLabel: "Markierung entfernen",
+  });
 
   const group = (label, children) => (
     <div className="exam-editor__group">
@@ -367,127 +420,200 @@ function Toolbar({ editor, status, errorMsg }) {
     </div>
   );
 
+  const [tab, setTab] = useState("start");
+
+  useEffect(() => {
+    setTab(active.table ? "tabellen" : "start");
+  }, [active.table]);
+
   return (
     <div className="exam-editor__toolbar">
-      <div className="exam-editor__toolbar-inner">
-        {group("Schriftart", [
-          btn(
-            "Fett",
-            <BoldIcon className={iconCls} />,
-            () => editor.chain().focus().toggleBold().run(),
-            active.bold,
-          ),
-          btn(
-            "Kursiv",
-            <ItalicIcon className={iconCls} />,
-            () => editor.chain().focus().toggleItalic().run(),
-            active.italic,
-          ),
-          highlightMenu,
-        ])}
-        {group("Überschriften", [
-          btn(
-            "Überschrift 1",
-            <H1Icon className={iconCls} />,
-            () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
-            active.h1,
-          ),
-          btn(
-            "Überschrift 2",
-            <H2Icon className={iconCls} />,
-            () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
-            active.h2,
-          ),
-          btn(
-            "Überschrift 3",
-            <H3Icon className={iconCls} />,
-            () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
-            active.h3,
-          ),
-        ])}
-        {group("Listen", [
-          btn(
-            "Aufzählung",
-            <ListBulletIcon className={iconCls} />,
-            () => editor.chain().focus().toggleBulletList().run(),
-            active.bulletList,
-          ),
-          btn(
-            "Nummerierte Liste",
-            <NumberedListIcon className={iconCls} />,
-            () => editor.chain().focus().toggleOrderedList().run(),
-            active.orderedList,
-          ),
-        ])}
-        {group("Antworten", [
-          btn(
-            "Lückentextfeld",
-            <CodeBracketIcon className={iconCls} />,
-            () => editor.chain().focus().setLueckentext().run(),
-            active.lueckentext,
-          ),
-          btn(
-            "Antwortfeld",
-            <CodeBracketSquareIcon className={iconCls} />,
-            () => editor.chain().focus().setAnswerBlock().run(),
-            active.answerBlock,
-          ),
-          btn(
-            "Aufgabenliste",
-            <CheckCircleIcon className={iconCls} />,
-            () => editor.chain().focus().toggleTaskList().run(),
-            active.taskList,
-          ),
-          btn(
-            "Zitat",
-            <ChatBubbleBottomCenterTextIcon className={iconCls} />,
-            () => editor.chain().focus().toggleBlockquote().run(),
-            active.blockquote,
-          ),
-        ])}
-        {group("Struktur", [
-          btn(
-            "Seitenumbruch",
-            <MinusIcon className={iconCls} />,
-            () => editor.chain().focus().setPageBreak().run(),
-          ),
-        ])}
-        {group("Tabelle", [
-          btn(
-            "Tabelle einfügen",
-            <TableCellsIcon className={iconCls} />,
-            () =>
-              editor
-                .chain()
-                .focus()
-                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                .run(),
-            active.table,
-          ),
-          btn(
-            "Spalte hinzufügen",
-            <ViewColumnsIcon className={iconCls} />,
-            () => editor.chain().focus().addColumnAfter().run(),
-            false,
-            !active.table,
-          ),
-          btn(
-            "Zeile hinzufügen",
-            <Bars3Icon className={iconCls} />,
-            () => editor.chain().focus().addRowAfter().run(),
-            false,
-            !active.table,
-          ),
-          btn(
-            "Tabelle löschen",
-            <TrashIcon className={iconCls} />,
-            () => editor.chain().focus().deleteTable().run(),
-            false,
-            !active.table,
-          ),
-        ])}
-        <StatusIndicator status={status} errorMsg={errorMsg} />
-      </div>
+      <Tabs.Root
+        value={tab}
+        onValueChange={setTab}
+        className="exam-editor__tabs"
+      >
+        <div className="exam-editor__tabs-bar">
+          <Tabs.List className="exam-editor__tabs-list">
+            <Tabs.Trigger value="start" className="exam-editor__tab">
+              Start
+            </Tabs.Trigger>
+            <Tabs.Trigger value="tabellen" className="exam-editor__tab">
+              Tabellen
+            </Tabs.Trigger>
+          </Tabs.List>
+          <StatusIndicator status={status} errorMsg={errorMsg} />
+        </div>
+        <Tabs.Content value="start" className="exam-editor__tab-content">
+          <div className="exam-editor__toolbar-inner">
+            {group("Schriftart", [
+              btn(
+                "Fett",
+                <BoldIcon className={iconCls} />,
+                () => editor.chain().focus().toggleBold().run(),
+                active.bold,
+              ),
+              btn(
+                "Kursiv",
+                <ItalicIcon className={iconCls} />,
+                () => editor.chain().focus().toggleItalic().run(),
+                active.italic,
+              ),
+              textColorMenu,
+              highlightMenu,
+            ])}
+            {group("Überschriften", [
+              btn(
+                "Überschrift 1",
+                <H1Icon className={iconCls} />,
+                () =>
+                  editor.chain().focus().toggleHeading({ level: 1 }).run(),
+                active.h1,
+              ),
+              btn(
+                "Überschrift 2",
+                <H2Icon className={iconCls} />,
+                () =>
+                  editor.chain().focus().toggleHeading({ level: 2 }).run(),
+                active.h2,
+              ),
+              btn(
+                "Überschrift 3",
+                <H3Icon className={iconCls} />,
+                () =>
+                  editor.chain().focus().toggleHeading({ level: 3 }).run(),
+                active.h3,
+              ),
+            ])}
+            {group("Listen", [
+              btn(
+                "Aufzählung",
+                <ListBulletIcon className={iconCls} />,
+                () => editor.chain().focus().toggleBulletList().run(),
+                active.bulletList,
+              ),
+              btn(
+                "Nummerierte Liste",
+                <NumberedListIcon className={iconCls} />,
+                () => editor.chain().focus().toggleOrderedList().run(),
+                active.orderedList,
+              ),
+            ])}
+            {group("Antworten", [
+              btn(
+                "Lückentextfeld",
+                <CodeBracketIcon className={iconCls} />,
+                () => editor.chain().focus().setLueckentext().run(),
+                active.lueckentext,
+              ),
+              btn(
+                "Antwortfeld",
+                <CodeBracketSquareIcon className={iconCls} />,
+                () => editor.chain().focus().setAnswerBlock().run(),
+                active.answerBlock,
+              ),
+              btn(
+                "Aufgabenliste",
+                <CheckCircleIcon className={iconCls} />,
+                () => editor.chain().focus().toggleTaskList().run(),
+                active.taskList,
+              ),
+              btn(
+                "Zitat",
+                <ChatBubbleBottomCenterTextIcon className={iconCls} />,
+                () => editor.chain().focus().toggleBlockquote().run(),
+                active.blockquote,
+              ),
+            ])}
+            {group("Struktur", [
+              btn(
+                "Seitenumbruch",
+                <MinusIcon className={iconCls} />,
+                () => editor.chain().focus().setPageBreak().run(),
+              ),
+              btn(
+                "Tabelle einfügen",
+                <TableCellsIcon className={iconCls} />,
+                () =>
+                  editor
+                    .chain()
+                    .focus()
+                    .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                    .run(),
+              ),
+            ])}
+          </div>
+        </Tabs.Content>
+        <Tabs.Content
+          value="tabellen"
+          className="exam-editor__tab-content"
+        >
+          <div className="exam-editor__toolbar-inner">
+            {group("Zeilen", [
+              btn(
+                "Zeile darüber einfügen",
+                <ArrowLongUpIcon className={iconCls} />,
+                () => editor.chain().focus().addRowBefore().run(),
+                false,
+                !active.table,
+              ),
+              btn(
+                "Zeile darunter einfügen",
+                <ArrowLongDownIcon className={iconCls} />,
+                () => editor.chain().focus().addRowAfter().run(),
+                false,
+                !active.table,
+              ),
+              btn(
+                "Zeile löschen",
+                <Bars3Icon className={iconCls} />,
+                () => editor.chain().focus().deleteRow().run(),
+                false,
+                !active.table,
+              ),
+            ])}
+            {group("Spalten", [
+              btn(
+                "Spalte davor einfügen",
+                <ArrowLongLeftIcon className={iconCls} />,
+                () => editor.chain().focus().addColumnBefore().run(),
+                false,
+                !active.table,
+              ),
+              btn(
+                "Spalte danach einfügen",
+                <ArrowLongRightIcon className={iconCls} />,
+                () => editor.chain().focus().addColumnAfter().run(),
+                false,
+                !active.table,
+              ),
+              btn(
+                "Spalte löschen",
+                <ViewColumnsIcon className={iconCls} />,
+                () => editor.chain().focus().deleteColumn().run(),
+                false,
+                !active.table,
+              ),
+            ])}
+            {group("Tabelle", [
+              btn(
+                "Kopfzeile umschalten",
+                <TableCellsIcon className={iconCls} />,
+                () => editor.chain().focus().toggleHeaderRow().run(),
+                false,
+                !active.table,
+              ),
+              btn(
+                "Tabelle löschen",
+                <TrashIcon className={iconCls} />,
+                () => editor.chain().focus().deleteTable().run(),
+                false,
+                !active.table,
+              ),
+            ])}
+          </div>
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 }

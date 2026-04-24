@@ -12,6 +12,45 @@
   z-index: 10;
 }
 
+.exam-editor__tabs-bar {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.exam-editor__tabs-list {
+  display: flex;
+  gap: 2px;
+}
+
+.exam-editor__tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #78716c;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.exam-editor__tab:hover {
+  color: #292524;
+}
+
+.exam-editor__tab[data-state="active"] {
+  color: #0369a1;
+  border-bottom-color: #0369a1;
+}
+
+.exam-editor__tab-content:focus {
+  outline: none;
+}
+
 .exam-editor__toolbar-inner {
   max-width: 72rem;
   margin: 0 auto;
