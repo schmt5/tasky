@@ -13,7 +13,7 @@
 }
 
 .exam-editor__tabs-bar {
-    max-width: 72rem;
+    max-width: 64rem;
     margin: 0 auto;
     padding: 0 2rem;
     display: flex;
@@ -57,6 +57,8 @@
 }
 
 .exam-editor__tab-content {
+    max-width: 64rem;
+    margin: 0 auto;
     padding: 0 2rem;
 }
 
@@ -414,20 +416,6 @@
     border-top: 1px dashed #a8a29e;
     margin: 2em 0 2.25em;
     height: 0;
-}
-
-.exam-editor__content .ProseMirror .page-break::after {
-    content: "Seite " attr(data-page-id);
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translate(-50%, 2px);
-    font-size: 9px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #a8a29e;
-    background: #fff;
-    padding: 0 6px;
 }
 
 .exam-editor__content .ProseMirror .page-break.ProseMirror-selectednode {
