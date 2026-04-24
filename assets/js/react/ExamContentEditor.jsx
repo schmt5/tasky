@@ -1,6 +1,7 @@
 import { Children, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
-import { Node } from "@tiptap/core";
+import { Node, Extension } from "@tiptap/core";
+import { Plugin, PluginKey } from "prosemirror-state";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskList } from "@tiptap/extension-list/task-list";
 import { TaskItem } from "@tiptap/extension-list/task-item";
@@ -138,20 +139,42 @@ import {
   ListBulletIcon,
   NumberedListIcon,
   ChatBubbleBottomCenterTextIcon,
-  CodeBracketIcon,
-  CodeBracketSquareIcon,
   MinusIcon,
-  CheckCircleIcon,
   TableCellsIcon,
-  TrashIcon,
-  ViewColumnsIcon,
-  Bars3Icon,
   PaintBrushIcon,
-  ArrowLongUpIcon,
-  ArrowLongDownIcon,
-  ArrowLongLeftIcon,
-  ArrowLongRightIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
 } from "@heroicons/react/24/outline";
+
+function countByType(doc, typeName) {
+  let n = 0;
+  doc.descendants((node) => {
+    if (node.type.name === typeName) n++;
+  });
+  return n;
+}
+
+const PreventNodeDeletion = Extension.create({
+  name: "preventNodeDeletion",
+
+  addProseMirrorPlugins() {
+    const protectedTypes = ["lueckentext", "answerBlock", "pageBreak"];
+    return [
+      new Plugin({
+        key: new PluginKey("preventNodeDeletion"),
+        filterTransaction(tr, state) {
+          if (!tr.docChanged) return true;
+          for (const t of protectedTypes) {
+            if (countByType(tr.doc, t) < countByType(state.doc, t)) {
+              return false;
+            }
+          }
+          return true;
+        },
+      }),
+    ];
+  },
+});
 
 const AUTOSAVE_DELAY_MS = 1000;
 
@@ -187,6 +210,320 @@ function TextColorIcon({ className }) {
     >
       <path d="M6 19 L12 5 L18 19" />
       <path d="M8.5 14 H15.5" />
+    </svg>
+  );
+}
+
+function FreitextIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <text
+        x="2"
+        y="18"
+        fontFamily="Fraunces, serif"
+        fontStyle="italic"
+        fontWeight="500"
+        fontSize="18"
+        fill="currentColor"
+        stroke="none"
+      >
+        A
+      </text>
+      <path d="M13 9h8M13 13h8M13 17h5" />
+    </svg>
+  );
+}
+
+function FreitextAbcIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <text
+        x="3"
+        y="16"
+        fontFamily="Fraunces, serif"
+        fontStyle="italic"
+        fontWeight="400"
+        fontSize="15"
+        fill="currentColor"
+        stroke="none"
+      >
+        abc
+      </text>
+      <path d="M3 20h14" strokeWidth="1.4" opacity="0.5" />
+    </svg>
+  );
+}
+
+function LueckentextIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 10h4M17 10h4" />
+      <rect
+        x="9"
+        y="7"
+        width="6"
+        height="6"
+        rx="1"
+        fill="currentColor"
+        opacity="0.18"
+        stroke="none"
+      />
+      <rect x="9" y="7" width="6" height="6" rx="1" />
+      <path d="M3 17h18" opacity="0.4" />
+    </svg>
+  );
+}
+
+function MultipleChoiceIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="6" cy="7" r="2.2" />
+      <circle cx="6" cy="17" r="2.2" />
+      <circle cx="6" cy="17" r="0.8" fill="currentColor" stroke="none" />
+      <path d="M11 7h9M11 17h9" />
+    </svg>
+  );
+}
+
+function AddRowAboveIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="10" width="18" height="10" rx="1.5" />
+      <line x1="3" y1="15" x2="21" y2="15" />
+      <line x1="9" y1="10" x2="9" y2="20" />
+      <line x1="15" y1="10" x2="15" y2="20" />
+      <path d="M12 3v5" strokeWidth="1.8" />
+      <path d="M9.5 5.5L12 3l2.5 2.5" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function AddRowBelowIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="10" rx="1.5" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="4" x2="9" y2="14" />
+      <line x1="15" y1="4" x2="15" y2="14" />
+      <path d="M12 21v-5" strokeWidth="1.8" />
+      <path d="M9.5 18.5L12 21l2.5-2.5" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function RemoveRowIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+      <line x1="3" y1="9.33" x2="21" y2="9.33" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+      <rect
+        x="3"
+        y="9.33"
+        width="18"
+        height="5.33"
+        fill="currentColor"
+        opacity="0.14"
+        stroke="none"
+      />
+      <line x1="5" y1="14.66" x2="21" y2="14.66" />
+      <path d="M5 12l14 0" strokeWidth="2" opacity="0.9" />
+    </svg>
+  );
+}
+
+function AddColumnLeftIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="4" width="12" height="16" rx="1.5" />
+      <line x1="9" y1="9.33" x2="21" y2="9.33" />
+      <line x1="9" y1="14.66" x2="21" y2="14.66" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+      <path d="M3 12h5" strokeWidth="1.8" />
+      <path d="M5.5 9.5L3 12l2.5 2.5" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function AddColumnRightIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="12" height="16" rx="1.5" />
+      <line x1="3" y1="9.33" x2="15" y2="9.33" />
+      <line x1="3" y1="14.66" x2="15" y2="14.66" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+      <path d="M21 12h-5" strokeWidth="1.8" />
+      <path d="M18.5 9.5L21 12l-2.5 2.5" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function RemoveColumnIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+      <line x1="3" y1="9.33" x2="21" y2="9.33" />
+      <line x1="3" y1="14.66" x2="21" y2="14.66" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+      <line x1="15" y1="4" x2="15" y2="20" />
+      <rect
+        x="9"
+        y="4"
+        width="6"
+        height="16"
+        fill="currentColor"
+        opacity="0.14"
+        stroke="none"
+      />
+      <path d="M12 6v16" strokeWidth="2" opacity="0.9" />
+    </svg>
+  );
+}
+
+function HeaderRowIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+      <path
+        d="M3 5.5a1.5 1.5 0 0 1 1.5-1.5h15a1.5 1.5 0 0 1 1.5 1.5v3.83h-18z"
+        fill="currentColor"
+        opacity="0.22"
+        stroke="none"
+      />
+      <line x1="3" y1="9.33" x2="21" y2="9.33" strokeWidth="1.8" />
+      <line x1="3" y1="14.66" x2="21" y2="14.66" />
+      <line x1="9" y1="9.33" x2="9" y2="20" />
+      <line x1="15" y1="9.33" x2="15" y2="20" />
+    </svg>
+  );
+}
+
+function RemoveTableIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="1.5" opacity="0.45" />
+      <line x1="3" y1="9.33" x2="21" y2="9.33" opacity="0.45" />
+      <line x1="3" y1="14.66" x2="21" y2="14.66" opacity="0.45" />
+      <line x1="9" y1="4" x2="9" y2="20" opacity="0.45" />
+      <line x1="15" y1="4" x2="15" y2="20" opacity="0.45" />
+      <circle
+        cx="18"
+        cy="18"
+        r="4.5"
+        fill="var(--panel, #fff)"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path d="M16 16l4 4M20 16l-4 4" strokeWidth="1.6" />
     </svg>
   );
 }
@@ -244,6 +581,7 @@ export default function ExamContentEditor({
       Highlight.configure({ multicolor: true }),
       TextStyle,
       Color,
+      ...(hideAnswers ? [PreventNodeDeletion] : []),
     ],
     content: isEmptyDoc(initialContent) ? "" : initialContent,
     onUpdate: ({ editor }) => {
@@ -315,6 +653,8 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
       textColor: TEXT_COLORS.find((c) =>
         editor.isActive("textStyle", { color: c.value }),
       )?.value,
+      canUndo: editor.can().undo(),
+      canRedo: editor.can().redo(),
     }),
   });
 
@@ -402,8 +742,7 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
     icon: <TextColorIcon className={iconCls} />,
     colors: TEXT_COLORS,
     activeColor: active.textColor,
-    onPick: (value) =>
-      editor.chain().focus().setColor(value).run(),
+    onPick: (value) => editor.chain().focus().setColor(value).run(),
     onClear: () => editor.chain().focus().unsetColor().run(),
     clearLabel: "Farbe entfernen",
   });
@@ -430,10 +769,6 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
 
   const [tab, setTab] = useState("start");
 
-  useEffect(() => {
-    setTab(active.table ? "tabellen" : "start");
-  }, [active.table]);
-
   return (
     <div className="exam-editor__toolbar">
       <Tabs.Root
@@ -454,6 +789,22 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
         </div>
         <Tabs.Content value="start" className="exam-editor__tab-content">
           <div className="exam-editor__toolbar-inner">
+            {group("Aktionen", [
+              btn(
+                "Rückgängig",
+                <ArrowUturnLeftIcon className={iconCls} />,
+                () => editor.chain().focus().undo().run(),
+                false,
+                !active.canUndo,
+              ),
+              btn(
+                "Wiederholen",
+                <ArrowUturnRightIcon className={iconCls} />,
+                () => editor.chain().focus().redo().run(),
+                false,
+                !active.canRedo,
+              ),
+            ])}
             {group("Schriftart", [
               btn(
                 "Fett",
@@ -474,22 +825,19 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
               btn(
                 "Überschrift 1",
                 <H1Icon className={iconCls} />,
-                () =>
-                  editor.chain().focus().toggleHeading({ level: 1 }).run(),
+                () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
                 active.h1,
               ),
               btn(
                 "Überschrift 2",
                 <H2Icon className={iconCls} />,
-                () =>
-                  editor.chain().focus().toggleHeading({ level: 2 }).run(),
+                () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
                 active.h2,
               ),
               btn(
                 "Überschrift 3",
                 <H3Icon className={iconCls} />,
-                () =>
-                  editor.chain().focus().toggleHeading({ level: 3 }).run(),
+                () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
                 active.h3,
               ),
             ])}
@@ -511,19 +859,19 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
               group("Antworten", [
                 btn(
                   "Lückentextfeld",
-                  <CodeBracketIcon className={iconCls} />,
+                  <LueckentextIcon className={iconCls} />,
                   () => editor.chain().focus().setLueckentext().run(),
                   active.lueckentext,
                 ),
                 btn(
                   "Antwortfeld",
-                  <CodeBracketSquareIcon className={iconCls} />,
+                  <FreitextAbcIcon className={iconCls} />,
                   () => editor.chain().focus().setAnswerBlock().run(),
                   active.answerBlock,
                 ),
                 btn(
                   "Aufgabenliste",
-                  <CheckCircleIcon className={iconCls} />,
+                  <MultipleChoiceIcon className={iconCls} />,
                   () => editor.chain().focus().toggleTaskList().run(),
                   active.taskList,
                 ),
@@ -535,11 +883,15 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
                 ),
               ])}
             {group("Struktur", [
-              btn(
-                "Seitenumbruch",
-                <MinusIcon className={iconCls} />,
-                () => editor.chain().focus().setPageBreak().run(),
+              btn("Seitenumbruch", <MinusIcon className={iconCls} />, () =>
+                editor.chain().focus().setPageBreak().run(),
               ),
+            ])}
+          </div>
+        </Tabs.Content>
+        <Tabs.Content value="tabellen" className="exam-editor__tab-content">
+          <div className="exam-editor__toolbar-inner">
+            {group("Tabelle", [
               btn(
                 "Tabelle einfügen",
                 <TableCellsIcon className={iconCls} />,
@@ -550,32 +902,39 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
                     .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
                     .run(),
               ),
+              btn(
+                "Kopfzeile umschalten",
+                <HeaderRowIcon className={iconCls} />,
+                () => editor.chain().focus().toggleHeaderRow().run(),
+                false,
+                !active.table,
+              ),
+              btn(
+                "Tabelle löschen",
+                <RemoveTableIcon className={iconCls} />,
+                () => editor.chain().focus().deleteTable().run(),
+                false,
+                !active.table,
+              ),
             ])}
-          </div>
-        </Tabs.Content>
-        <Tabs.Content
-          value="tabellen"
-          className="exam-editor__tab-content"
-        >
-          <div className="exam-editor__toolbar-inner">
             {group("Zeilen", [
               btn(
                 "Zeile darüber einfügen",
-                <ArrowLongUpIcon className={iconCls} />,
+                <AddRowAboveIcon className={iconCls} />,
                 () => editor.chain().focus().addRowBefore().run(),
                 false,
                 !active.table,
               ),
               btn(
                 "Zeile darunter einfügen",
-                <ArrowLongDownIcon className={iconCls} />,
+                <AddRowBelowIcon className={iconCls} />,
                 () => editor.chain().focus().addRowAfter().run(),
                 false,
                 !active.table,
               ),
               btn(
                 "Zeile löschen",
-                <Bars3Icon className={iconCls} />,
+                <RemoveRowIcon className={iconCls} />,
                 () => editor.chain().focus().deleteRow().run(),
                 false,
                 !active.table,
@@ -584,38 +943,22 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
             {group("Spalten", [
               btn(
                 "Spalte davor einfügen",
-                <ArrowLongLeftIcon className={iconCls} />,
+                <AddColumnLeftIcon className={iconCls} />,
                 () => editor.chain().focus().addColumnBefore().run(),
                 false,
                 !active.table,
               ),
               btn(
                 "Spalte danach einfügen",
-                <ArrowLongRightIcon className={iconCls} />,
+                <AddColumnRightIcon className={iconCls} />,
                 () => editor.chain().focus().addColumnAfter().run(),
                 false,
                 !active.table,
               ),
               btn(
                 "Spalte löschen",
-                <ViewColumnsIcon className={iconCls} />,
+                <RemoveColumnIcon className={iconCls} />,
                 () => editor.chain().focus().deleteColumn().run(),
-                false,
-                !active.table,
-              ),
-            ])}
-            {group("Tabelle", [
-              btn(
-                "Kopfzeile umschalten",
-                <TableCellsIcon className={iconCls} />,
-                () => editor.chain().focus().toggleHeaderRow().run(),
-                false,
-                !active.table,
-              ),
-              btn(
-                "Tabelle löschen",
-                <TrashIcon className={iconCls} />,
-                () => editor.chain().focus().deleteTable().run(),
                 false,
                 !active.table,
               ),
@@ -642,8 +985,7 @@ function StatusIndicator({ status, errorMsg }) {
   return (
     <div
       className={
-        "exam-editor__status" +
-        (isError ? " exam-editor__status--error" : "")
+        "exam-editor__status" + (isError ? " exam-editor__status--error" : "")
       }
     >
       <span
