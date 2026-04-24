@@ -92,20 +92,117 @@
   cursor: not-allowed;
 }
 
-.exam-editor__status {
-  margin-left: auto;
-  align-self: flex-start;
-  font-size: 12px;
-  color: #78716c;
-  padding: 10px 8px 0;
+.exam-editor__swatch {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  line-height: 1;
 }
 
-.exam-editor__status--saving {
-  color: #a16207;
+.exam-editor__swatch:hover,
+.exam-editor__swatch:focus-visible {
+  outline: 2px solid #d6d3d1;
+  outline-offset: 1px;
+}
+
+.exam-editor__swatch.is-active {
+  outline: 2px solid #292524;
+  outline-offset: 1px;
+}
+
+.exam-editor__btn {
+  position: relative;
+}
+
+.exam-editor__btn-bar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.exam-editor__menu {
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  padding: 8px;
+  min-width: 180px;
+  z-index: 50;
+}
+
+.exam-editor__menu-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.exam-editor__menu-separator {
+  height: 1px;
+  background: #e7e5e4;
+  margin: 8px -8px;
+}
+
+.exam-editor__menu-item {
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: #44403c;
+  cursor: pointer;
+  outline: none;
+  text-align: center;
+}
+
+.exam-editor__menu-item[data-highlighted] {
+  background: #f5f5f4;
+}
+
+.exam-editor__content .ProseMirror mark {
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.exam-editor__status {
+  margin-left: auto;
+  align-self: center;
+  font-size: 12px;
+  color: #78716c;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .exam-editor__status--error {
   color: #b91c1c;
+}
+
+.exam-editor__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a8a29e;
+  display: inline-block;
+}
+
+.exam-editor__status-dot--saving {
+  animation: exam-editor-pulse 1s ease-in-out infinite;
+}
+
+.exam-editor__status-dot--error {
+  background: #dc2626;
+}
+
+@keyframes exam-editor-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .exam-editor__content {
@@ -278,4 +375,50 @@
   float: left;
   height: 0;
   pointer-events: none;
+}
+
+.exam-editor__content .ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0.75em 0;
+  overflow: hidden;
+}
+
+.exam-editor__content .ProseMirror table td,
+.exam-editor__content .ProseMirror table th {
+  border: 1px solid #d6d3d1;
+  padding: 6px 10px;
+  vertical-align: top;
+  position: relative;
+  box-sizing: border-box;
+  min-width: 1em;
+}
+
+.exam-editor__content .ProseMirror table th {
+  background: #f5f5f4;
+  font-weight: 600;
+  text-align: left;
+}
+
+.exam-editor__content .ProseMirror table .selectedCell {
+  background: rgba(41, 37, 36, 0.08);
+}
+
+.exam-editor__content .ProseMirror table .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #292524;
+  pointer-events: none;
+}
+
+.exam-editor__content .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+.exam-editor__content .tableWrapper {
+  overflow-x: auto;
 }

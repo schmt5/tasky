@@ -4,6 +4,9 @@ import { Node } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskList } from "@tiptap/extension-list/task-list";
 import { TaskItem } from "@tiptap/extension-list/task-item";
+import { TableKit } from "@tiptap/extension-table";
+import { Highlight } from "@tiptap/extension-highlight";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 const Lueckentext = Node.create({
   name: "lueckentext",
@@ -137,10 +140,24 @@ import {
   CodeBracketSquareIcon,
   MinusIcon,
   CheckCircleIcon,
+  TableCellsIcon,
+  TrashIcon,
+  ViewColumnsIcon,
+  Bars3Icon,
+  PaintBrushIcon,
 } from "@heroicons/react/24/outline";
 import { saveExamContent } from "./api";
 
 const AUTOSAVE_DELAY_MS = 1000;
+
+const HIGHLIGHT_COLORS = [
+  { name: "Rot", value: "#fecaca" },
+  { name: "Orange", value: "#fed7aa" },
+  { name: "Gelb", value: "#fef08a" },
+  { name: "Grün", value: "#bbf7d0" },
+  { name: "Blau", value: "#bfdbfe" },
+  { name: "Lila", value: "#e9d5ff" },
+];
 
 function isEmptyDoc(doc) {
   return !doc || Object.keys(doc).length === 0;
@@ -187,6 +204,8 @@ export default function ExamContentEditor({ examId, initialContent }) {
       AnswerBlock,
       TaskList,
       TaskItem.configure({ nested: true }),
+      TableKit.configure({ table: { resizable: true } }),
+      Highlight.configure({ multicolor: true }),
     ],
     content: isEmptyDoc(initialContent) ? "" : initialContent,
     onUpdate: ({ editor }) => {
@@ -246,6 +265,10 @@ function Toolbar({ editor, status, errorMsg }) {
       blockquote: editor.isActive("blockquote"),
       lueckentext: editor.isActive("lueckentext"),
       answerBlock: editor.isActive("answerBlock"),
+      table: editor.isActive("table"),
+      highlightColor: HIGHLIGHT_COLORS.find((c) =>
+        editor.isActive("highlight", { color: c.value }),
+      )?.value,
     }),
   });
 
@@ -264,6 +287,76 @@ function Toolbar({ editor, status, errorMsg }) {
   );
 
   const iconCls = "exam-editor__icon";
+
+  const highlightMenu = (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          title="Markieren"
+          aria-label="Markieren"
+          className={
+            "exam-editor__btn" +
+            (active.highlightColor ? " is-active" : "")
+          }
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <PaintBrushIcon className={iconCls} />
+          <span
+            className="exam-editor__btn-bar"
+            style={{
+              backgroundColor: active.highlightColor || "transparent",
+            }}
+          />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="exam-editor__menu"
+          sideOffset={4}
+          align="start"
+        >
+          <div className="exam-editor__menu-swatches">
+            {HIGHLIGHT_COLORS.map((c) => (
+              <DropdownMenu.Item
+                key={c.value}
+                asChild
+                onSelect={() =>
+                  editor
+                    .chain()
+                    .focus()
+                    .toggleHighlight({ color: c.value })
+                    .run()
+                }
+              >
+                <button
+                  type="button"
+                  title={c.name}
+                  aria-label={c.name}
+                  className={
+                    "exam-editor__swatch" +
+                    (active.highlightColor === c.value
+                      ? " is-active"
+                      : "")
+                  }
+                  style={{ backgroundColor: c.value }}
+                />
+              </DropdownMenu.Item>
+            ))}
+          </div>
+          <DropdownMenu.Separator className="exam-editor__menu-separator" />
+          <DropdownMenu.Item
+            className="exam-editor__menu-item"
+            onSelect={() =>
+              editor.chain().focus().unsetHighlight().run()
+            }
+          >
+            Markierung entfernen
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
 
   const group = (label, children) => (
     <div className="exam-editor__group">
@@ -290,6 +383,7 @@ function Toolbar({ editor, status, errorMsg }) {
             () => editor.chain().focus().toggleItalic().run(),
             active.italic,
           ),
+          highlightMenu,
         ])}
         {group("Überschriften", [
           btn(
@@ -358,6 +452,40 @@ function Toolbar({ editor, status, errorMsg }) {
             () => editor.chain().focus().setPageBreak().run(),
           ),
         ])}
+        {group("Tabelle", [
+          btn(
+            "Tabelle einfügen",
+            <TableCellsIcon className={iconCls} />,
+            () =>
+              editor
+                .chain()
+                .focus()
+                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                .run(),
+            active.table,
+          ),
+          btn(
+            "Spalte hinzufügen",
+            <ViewColumnsIcon className={iconCls} />,
+            () => editor.chain().focus().addColumnAfter().run(),
+            false,
+            !active.table,
+          ),
+          btn(
+            "Zeile hinzufügen",
+            <Bars3Icon className={iconCls} />,
+            () => editor.chain().focus().addRowAfter().run(),
+            false,
+            !active.table,
+          ),
+          btn(
+            "Tabelle löschen",
+            <TrashIcon className={iconCls} />,
+            () => editor.chain().focus().deleteTable().run(),
+            false,
+            !active.table,
+          ),
+        ])}
         <StatusIndicator status={status} errorMsg={errorMsg} />
       </div>
     </div>
@@ -365,19 +493,35 @@ function Toolbar({ editor, status, errorMsg }) {
 }
 
 function StatusIndicator({ status, errorMsg }) {
-  const label =
+  const isError = status === "error";
+  const dotTitle =
     status === "saving"
       ? "Speichert..."
-      : status === "saved"
-        ? "Gespeichert"
-        : status === "error"
-          ? errorMsg || "Fehler beim Speichern"
-          : "";
-  const mod =
-    status === "saving"
-      ? " exam-editor__status--saving"
-      : status === "error"
-        ? " exam-editor__status--error"
-        : "";
-  return <div className={"exam-editor__status" + mod}>{label}</div>;
+      : isError
+        ? errorMsg || "Fehler beim Speichern"
+        : "Gespeichert";
+  const dotCls =
+    "exam-editor__status-dot" +
+    (status === "saving" ? " exam-editor__status-dot--saving" : "") +
+    (isError ? " exam-editor__status-dot--error" : "");
+  return (
+    <div
+      className={
+        "exam-editor__status" +
+        (isError ? " exam-editor__status--error" : "")
+      }
+    >
+      <span
+        className={dotCls}
+        title={dotTitle}
+        aria-label={dotTitle}
+        role="status"
+      />
+      {isError && (
+        <span className="exam-editor__status-label">
+          {errorMsg || "Fehler beim Speichern"}
+        </span>
+      )}
+    </div>
+  );
 }
