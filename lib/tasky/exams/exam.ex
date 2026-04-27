@@ -9,6 +9,9 @@ defmodule Tasky.Exams.Exam do
     field :sample_solution_points, :map, default: %{}
     field :enrollment_token, :string
     field :status, :string, default: "draft"
+    field :seb_enabled, :boolean, default: false
+    field :seb_quit_password, :string
+    field :ai_correction_config, :map, default: %{}
 
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :exam_submissions, Tasky.Exams.ExamSubmission
@@ -25,7 +28,10 @@ defmodule Tasky.Exams.Exam do
       :sample_solution,
       :sample_solution_points,
       :enrollment_token,
-      :status
+      :status,
+      :seb_enabled,
+      :seb_quit_password,
+      :ai_correction_config
     ])
     |> validate_required([:name])
     |> validate_length(:name, min: 3, max: 255)

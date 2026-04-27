@@ -136,54 +136,71 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 </div>
 
                 <div class="p-5 border-b border-stone-100 space-y-2">
-                  <button
-                    type="button"
-                    phx-click="ai_correct"
-                    disabled={@ai_correcting or is_nil(@max_points)}
-                    title={
-                      cond do
-                        @ai_correcting -> "KI korrigiert gerade..."
-                        is_nil(@max_points) -> "Keine Maximalpunkte in der Musterlösung gesetzt"
-                        true -> "Automatisch mit KI korrigieren"
-                      end
-                    }
-                    class={[
-                      "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
-                      if(@ai_correcting,
-                        do: "bg-indigo-100 text-indigo-400 border border-indigo-200 cursor-wait",
-                        else:
-                          "text-indigo-600 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-indigo-200"
-                      )
-                    ]}
-                  >
-                    <%= if @ai_correcting do %>
-                      <svg
-                        class="animate-spin w-4 h-4"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          class="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          stroke-width="4"
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      phx-click="ai_correct"
+                      disabled={@ai_correcting or is_nil(@max_points)}
+                      title={
+                        cond do
+                          @ai_correcting -> "KI korrigiert gerade..."
+                          is_nil(@max_points) -> "Keine Maximalpunkte in der Musterlösung gesetzt"
+                          true -> "Automatisch mit KI korrigieren"
+                        end
+                      }
+                      class={[
+                        "flex-1 inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
+                        if(@ai_correcting,
+                          do: "bg-indigo-100 text-indigo-400 border border-indigo-200 cursor-wait",
+                          else:
+                            "text-indigo-600 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-indigo-200"
+                        )
+                      ]}
+                    >
+                      <%= if @ai_correcting do %>
+                        <svg
+                          class="animate-spin w-4 h-4"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
                         >
-                        </circle>
-                        <path
-                          class="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        >
-                        </path>
-                      </svg>
-                      KI korrigiert...
-                    <% else %>
-                      <.icon name="hero-sparkles" class="w-4 h-4" /> KI korrigieren
-                    <% end %>
-                  </button>
+                          <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"
+                          >
+                          </circle>
+                          <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          >
+                          </path>
+                        </svg>
+                        KI korrigiert...
+                      <% else %>
+                        <.icon name="hero-sparkles" class="w-4 h-4" /> KI korrigieren
+                      <% end %>
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="show_ai_config_modal"
+                      class={[
+                        "shrink-0 inline-flex items-center justify-center w-10 h-[42px] rounded-lg border transition-all duration-150 active:scale-[0.98]",
+                        if(@ignore_spelling,
+                          do: "border-indigo-300 bg-indigo-50 text-indigo-600",
+                          else:
+                            "border-indigo-200 text-indigo-400 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600"
+                        )
+                      ]}
+                      title="KI-Korrektur konfigurieren"
+                    >
+                      <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
+                    </button>
+                  </div>
                   <%= if @pre_ai_nodes do %>
                     <button
                       type="button"
@@ -273,6 +290,66 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 <button
                   type="button"
                   phx-click="close_sample_solution_modal"
+                  class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+                >
+                  Schliessen
+                </button>
+              </div>
+            </div>
+          </dialog>
+        <% end %>
+
+        <%= if @show_ai_config_modal do %>
+          <dialog
+            id="ai-config-modal"
+            class="modal modal-open"
+            phx-window-keydown="close_ai_config_modal"
+            phx-key="escape"
+          >
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_ai_config_modal"></div>
+            <div class="modal-box max-w-md p-0 bg-white rounded-[16px] shadow-2xl">
+              <div class="px-6 pt-6 pb-4 border-b border-stone-100 flex items-start gap-4">
+                <div class="w-10 h-10 rounded-[10px] bg-indigo-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-cog-6-tooth" class="w-5 h-5 text-indigo-500" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-lg font-semibold text-stone-900">KI-Korrektur Einstellungen</h3>
+                  <p class="text-sm text-stone-500 mt-0.5">{@current_part.label}</p>
+                </div>
+                <button
+                  type="button"
+                  phx-click="close_ai_config_modal"
+                  class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
+                  title="Schliessen"
+                >
+                  <.icon name="hero-x-mark" class="w-5 h-5" />
+                </button>
+              </div>
+              <div class="p-6">
+                <label class="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={@ignore_spelling}
+                    phx-click="toggle_ignore_spelling"
+                    class="mt-0.5 w-5 h-5 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <div>
+                    <span class="text-sm font-semibold text-stone-800 group-hover:text-stone-900">
+                      Rechtschreibung ignorieren
+                    </span>
+                    <p class="text-xs text-stone-500 mt-1 leading-relaxed">
+                      Wenn aktiviert, werden Rechtschreibfehler bei der KI-Korrektur nicht als falsch gewertet.
+                      Geeignet für Fächer wie Geschichte oder Geografie, bei denen der Inhalt wichtiger ist
+                      als die exakte Schreibweise. Für Sprachprüfungen (z.B. Englisch, Französisch) sollte
+                      diese Option deaktiviert bleiben.
+                    </p>
+                  </div>
+                </label>
+              </div>
+              <div class="px-6 pb-6 pt-3 flex items-center justify-end border-t border-stone-100">
+                <button
+                  type="button"
+                  phx-click="close_ai_config_modal"
                   class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
                 >
                   Schliessen
@@ -383,6 +460,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        )
        |> assign(:show_sample_solution_modal, false)
        |> assign(:sample_solution_json, nil)
+       |> assign(:show_ai_config_modal, false)
+       |> assign(
+         :ignore_spelling,
+         (exam.ai_correction_config || %{})
+         |> Map.get(part_id, %{})
+         |> Map.get("ignore_spelling", false)
+       )
        |> assign(:ai_correcting, false)
        |> assign(:ai_error, nil)
        |> assign(:pre_ai_nodes, nil)
@@ -437,6 +521,29 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     {:noreply, assign(socket, :show_sample_solution_modal, false)}
   end
 
+  def handle_event("show_ai_config_modal", _params, socket) do
+    {:noreply, assign(socket, :show_ai_config_modal, true)}
+  end
+
+  def handle_event("close_ai_config_modal", _params, socket) do
+    {:noreply, assign(socket, :show_ai_config_modal, false)}
+  end
+
+  def handle_event("toggle_ignore_spelling", _params, socket) do
+    new_val = !socket.assigns.ignore_spelling
+    part_id = socket.assigns.current_part.id
+
+    {:ok, updated_exam} =
+      Exams.update_ai_correction_config(socket.assigns.exam, part_id, %{
+        "ignore_spelling" => new_val
+      })
+
+    {:noreply,
+     socket
+     |> assign(:exam, updated_exam)
+     |> assign(:ignore_spelling, new_val)}
+  end
+
   def handle_event("ai_correct", _params, socket) do
     %{exam: exam, current_part: part, max_points: max_points} = socket.assigns
 
@@ -452,6 +559,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         p -> p.nodes
       end
 
+    opts = %{ignore_spelling: socket.assigns.ignore_spelling}
     task_ref = make_ref()
     pid = self()
 
@@ -460,7 +568,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         Tasky.AI.CorrectionClient.correct_part(
           submission_nodes,
           sample_solution_nodes,
-          max_points
+          max_points,
+          opts
         )
 
       send(pid, {:ai_correction_result, task_ref, result})

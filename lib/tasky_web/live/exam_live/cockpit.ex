@@ -23,26 +23,36 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               Cockpit
             </h1>
 
-            <%= if @exam.status == "open" do %>
-              <button
-                type="button"
-                phx-click="show_confirm"
-                phx-value-action="start_exam"
-                class="inline-flex items-center gap-2.5 bg-emerald-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(16,185,129,0.3)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98]"
+            <div class="flex items-center gap-3">
+              <.link
+                navigate={~p"/exams/#{@exam}/cockpit/config"}
+                id="cockpit-config-btn"
+                class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]"
               >
-                <.icon name="hero-play" class="w-5 h-5" /> Prüfung starten
-              </button>
-            <% end %>
-            <%= if @exam.status == "running" do %>
-              <button
-                type="button"
-                phx-click="show_confirm"
-                phx-value-action="end_exam"
-                class="inline-flex items-center gap-2.5 bg-red-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(239,68,68,0.3)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
-              >
-                <.icon name="hero-stop" class="w-5 h-5" /> Prüfung beenden
-              </button>
-            <% end %>
+                <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Konfigurieren
+              </.link>
+
+              <%= if @exam.status == "open" do %>
+                <button
+                  type="button"
+                  phx-click="show_confirm"
+                  phx-value-action="start_exam"
+                  class="inline-flex items-center gap-2.5 bg-emerald-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(16,185,129,0.3)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98]"
+                >
+                  <.icon name="hero-play" class="w-5 h-5" /> Prüfung starten
+                </button>
+              <% end %>
+              <%= if @exam.status == "running" do %>
+                <button
+                  type="button"
+                  phx-click="show_confirm"
+                  phx-value-action="end_exam"
+                  class="inline-flex items-center gap-2.5 bg-red-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(239,68,68,0.3)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
+                >
+                  <.icon name="hero-stop" class="w-5 h-5" /> Prüfung beenden
+                </button>
+              <% end %>
+            </div>
           </div>
 
           <.exam_status_chip status={@exam.status} />

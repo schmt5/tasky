@@ -8,6 +8,52 @@ defmodule TaskyWeb.Guest.ExamLive do
     ~H"""
     <Layouts.guest flash={@flash}>
       <%= cond do %>
+        <% @exam.seb_enabled and not @in_seb and @exam.status in ["open", "running"] -> %>
+          <%!-- SEB Required Gate --%>
+          <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
+            <div class="w-full max-w-lg">
+              <div class="text-center mb-8">
+                <div class="w-16 h-16 rounded-2xl bg-sky-50 flex items-center justify-center mx-auto mb-4">
+                  <.icon name="hero-shield-check" class="w-8 h-8 text-sky-500" />
+                </div>
+                <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
+                  Safe Exam Browser erforderlich
+                </h1>
+                <p class="text-stone-500 text-sm">
+                  Diese Prüfung erfordert den Safe Exam Browser (SEB).
+                </p>
+              </div>
+
+              <div class="bg-white rounded-2xl border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-6 space-y-4">
+                <div class="bg-sky-50 rounded-xl p-4 border border-sky-100">
+                  <div class="flex items-start gap-3">
+                    <.icon
+                      name="hero-information-circle"
+                      class="w-5 h-5 text-sky-500 shrink-0 mt-0.5"
+                    />
+                    <div class="text-sm text-sky-800 leading-relaxed">
+                      <p class="mb-2">
+                        Der Safe Exam Browser sperrt deinen Computer in einen sicheren Kiosk-Modus
+                        während der Prüfung.
+                      </p>
+                      <p>
+                        Klicke auf den Button unten, um die Prüfung im Safe Exam Browser zu öffnen.
+                        Falls SEB noch nicht installiert ist, installiere ihn zuerst.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href={~p"/guest/exam/#{@submission.exam_token}/seb-config"}
+                  id="open-in-seb-btn"
+                  class="w-full inline-flex items-center justify-center gap-2.5 bg-sky-500 text-white text-sm font-semibold px-6 py-3.5 rounded-xl shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                >
+                  <.icon name="hero-shield-check" class="w-5 h-5" /> Im Safe Exam Browser öffnen
+                </a>
+              </div>
+            </div>
+          </div>
         <% @exam.status == "open" -> %>
           <%!-- Waiting Room --%>
           <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
@@ -69,6 +115,15 @@ defmodule TaskyWeb.Guest.ExamLive do
               <p class="text-stone-400 text-xs mt-2">
                 Du kannst diese Seite jetzt schliessen.
               </p>
+              <%= if @exam.seb_enabled and @in_seb do %>
+                <a
+                  href={~p"/guest/exam/#{@submission.exam_token}/seb-quit"}
+                  id="quit-seb-btn"
+                  class="mt-6 inline-flex items-center gap-2 bg-stone-800 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-md transition-all duration-150 hover:bg-stone-900 active:scale-[0.98]"
+                >
+                  <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> SEB beenden
+                </a>
+              <% end %>
             </div>
           </div>
         <% @exam.status == "running" -> %>
@@ -176,6 +231,15 @@ defmodule TaskyWeb.Guest.ExamLive do
                 Die Prüfung <span class="font-semibold text-stone-700">{@exam.name}</span>
                 wurde beendet.
               </p>
+              <%= if @exam.seb_enabled and @in_seb do %>
+                <a
+                  href={~p"/guest/exam/#{@submission.exam_token}/seb-quit"}
+                  id="quit-seb-btn"
+                  class="mt-6 inline-flex items-center gap-2 bg-stone-800 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-md transition-all duration-150 hover:bg-stone-900 active:scale-[0.98]"
+                >
+                  <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> SEB beenden
+                </a>
+              <% end %>
             </div>
           </div>
         <% true -> %>
@@ -225,13 +289,24 @@ defmodule TaskyWeb.Guest.ExamLive do
 
     content_json = Jason.encode!(initial_content)
 
+    in_seb =
+      if connected?(socket) do
+        case get_connect_info(socket, :user_agent) do
+          ua when is_binary(ua) -> String.contains?(ua, "SEB")
+          _ -> false
+        end
+      else
+        false
+      end
+
     {:ok,
      socket
      |> assign(:page_title, exam.name)
      |> assign(:exam, exam)
      |> assign(:submission, submission)
      |> assign(:content_json, content_json)
-     |> assign(:show_submit_modal, false)}
+     |> assign(:show_submit_modal, false)
+     |> assign(:in_seb, in_seb)}
   end
 
   @impl true

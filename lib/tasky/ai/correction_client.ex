@@ -15,19 +15,19 @@ defmodule Tasky.AI.CorrectionClient do
   Returns `{:ok, %{corrected_nodes: list(), points: number()}}` on success,
   or `{:error, reason}` on failure.
   """
-  def correct_part(submission_nodes, sample_solution_nodes, max_points)
+  def correct_part(submission_nodes, sample_solution_nodes, max_points, opts \\ %{})
       when is_list(submission_nodes) and is_list(sample_solution_nodes) do
     case api_key() do
       key when is_binary(key) and key != "" ->
-        do_correct(key, submission_nodes, sample_solution_nodes, max_points)
+        do_correct(key, submission_nodes, sample_solution_nodes, max_points, opts)
 
       _ ->
         {:error, "Kein Anthropic API Key konfiguriert."}
     end
   end
 
-  defp do_correct(api_key, submission_nodes, sample_solution_nodes, max_points) do
-    system_prompt = build_system_prompt()
+  defp do_correct(api_key, submission_nodes, sample_solution_nodes, max_points, opts) do
+    system_prompt = build_system_prompt(opts)
     user_message = build_user_message(submission_nodes, sample_solution_nodes, max_points)
 
     body = %{
@@ -61,8 +61,8 @@ defmodule Tasky.AI.CorrectionClient do
     end
   end
 
-  defp build_system_prompt do
-    """
+  defp build_system_prompt(opts) do
+    base = """
     You are an exam correction assistant. You receive two JSON documents representing parts of an exam in TipTap/ProseMirror JSON format:
 
     1. A student's submission (TipTap JSON nodes array)
@@ -82,6 +82,21 @@ defmodule Tasky.AI.CorrectionClient do
     - If a "text" node already starts with ✅ or ❌, do NOT add another marker.
     - Points can be integers or decimals with 0.5 steps (e.g. 0, 0.5, 1, 1.5, 2, ...).
     """
+
+    spelling_note =
+      if Map.get(opts, :ignore_spelling, false) do
+        """
+
+        SPELLING NOTE: Spelling and minor typos should be IGNORED when evaluating answers. Focus only on whether the student conveyed the correct meaning and content. A misspelled but semantically correct answer should be marked as ✅ correct. Only mark answers as ❌ incorrect if they are factually wrong, not because of spelling errors.
+        """
+      else
+        """
+
+        SPELLING NOTE: Spelling is IMPORTANT and must be considered when evaluating answers. Answers must be spelled correctly to be marked as ✅ correct. Misspelled words in answers should be marked as ❌ incorrect, even if the intended meaning is clear. This is especially important for language exams where exact spelling matters.
+        """
+      end
+
+    base <> spelling_note
   end
 
   defp build_user_message(submission_nodes, sample_solution_nodes, max_points) do

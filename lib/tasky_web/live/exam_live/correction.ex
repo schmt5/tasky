@@ -21,8 +21,6 @@ defmodule TaskyWeb.ExamLive.Correction do
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
             Korrektur
           </h1>
-
-          <.exam_status_chip status={@exam.status} />
         </div>
       </div>
 

@@ -47,6 +47,9 @@ defmodule TaskyWeb.Router do
   scope "/guest", TaskyWeb.Guest do
     pipe_through [:browser]
 
+    get "/exam/:exam_token/seb-config", SebController, :config
+    get "/exam/:exam_token/seb-quit", SebController, :quit
+
     live_session :guest do
       live "/enroll/:enrollment_token", EnrollLive, :enroll
       live "/exam/:exam_token", ExamLive, :show
@@ -109,6 +112,7 @@ defmodule TaskyWeb.Router do
       live "/exams/:id", ExamLive.Show, :show
       live "/exams/:id/edit", ExamLive.Form, :edit
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
+      live "/exams/:id/cockpit/config", ExamLive.CockpitConfig, :config
       live "/exams/:id/correction", ExamLive.Correction, :correction
 
       live "/exams/:id/correction/:submission_id/parts/:part_id",

@@ -490,6 +490,20 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Updates the AI correction configuration for a single part of an exam.
+  The config is stored as a map keyed by part_id.
+  """
+  def update_ai_correction_config(%Exam{} = exam, part_id, config)
+      when is_binary(part_id) and is_map(config) do
+    current = exam.ai_correction_config || %{}
+    updated = Map.put(current, part_id, config)
+
+    exam
+    |> Ecto.Changeset.change(%{ai_correction_config: updated})
+    |> Repo.update()
+  end
+
+  @doc """
   Subscribes to correction-grid events for a given exam ID.
   """
   def subscribe_correction(exam_id) do
