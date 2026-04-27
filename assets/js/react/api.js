@@ -41,3 +41,20 @@ export function saveExamSubmissionContent(token, content) {
     body: JSON.stringify({ content }),
   });
 }
+
+export function saveExamSampleSolution(examId, content) {
+  return request(`/api/exams/${examId}/sample-solution`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function saveExamCorrectionPart(examId, submissionId, partId, nodes) {
+  return request(
+    `/api/exams/${examId}/submissions/${submissionId}/parts/${partId}/content`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ nodes }),
+    },
+  );
+}

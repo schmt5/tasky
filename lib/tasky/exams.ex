@@ -222,10 +222,221 @@ defmodule Tasky.Exams do
     if submission.exam.status != "running" do
       {:error, :exam_not_running}
     else
-      submission
-      |> Ecto.Changeset.change(%{submitted: true})
-      |> Repo.update()
+      case submission
+           |> Ecto.Changeset.change(%{submitted: true})
+           |> Repo.update() do
+        {:ok, updated} = result ->
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "exam_cockpit:#{submission.exam.id}",
+            {:submission_submitted, updated}
+          )
+
+          result
+
+        error ->
+          error
+      end
     end
+  end
+
+  @doc """
+  Splits a TipTap document into parts separated by pageBreak nodes.
+
+  Returns a list of `%{id, label, nodes}`:
+    * `id` — the pageBreak's `pageId` (string), or `"start"` for the first part
+    * `label` — the text of the first heading found in the part, or `"Teil N"`
+    * `nodes` — the nodes belonging to this part (pageBreak markers excluded)
+  """
+  def split_content_into_parts(doc) when is_map(doc) do
+    nodes = Map.get(doc, "content", []) || []
+
+    {parts, last} =
+      Enum.reduce(nodes, {[], %{id: "start", nodes: []}}, fn node, {acc, current} ->
+        case node do
+          %{"type" => "pageBreak"} = pb ->
+            page_id =
+              pb |> Map.get("attrs", %{}) |> Map.get("pageId") |> to_string_or_nil() ||
+                "page-#{length(acc) + 1}"
+
+            {[current | acc], %{id: page_id, nodes: []}}
+
+          other ->
+            {acc, %{current | nodes: current.nodes ++ [other]}}
+        end
+      end)
+
+    [last | parts]
+    |> Enum.reverse()
+    |> Enum.with_index(1)
+    |> Enum.map(fn {part, idx} ->
+      %{
+        id: part.id,
+        label: first_heading_text(part.nodes) || "Teil #{idx}",
+        nodes: part.nodes
+      }
+    end)
+  end
+
+  def split_content_into_parts(_), do: []
+
+  defp to_string_or_nil(nil), do: nil
+  defp to_string_or_nil(v), do: to_string(v)
+
+  defp first_heading_text(nodes) do
+    Enum.find_value(nodes, fn
+      %{"type" => "heading", "content" => children} when is_list(children) ->
+        children
+        |> Enum.map_join("", fn
+          %{"text" => text} -> text
+          _ -> ""
+        end)
+        |> case do
+          "" -> nil
+          text -> text
+        end
+
+      _ ->
+        nil
+    end)
+  end
+
+  @doc """
+  Reassembles a list of parts (as returned by `split_content_into_parts/1`)
+  back into a TipTap doc, inserting pageBreak nodes between parts.
+  The first part's id (`"start"` by convention) is dropped as a marker.
+  """
+  def assemble_parts_into_content(parts) when is_list(parts) do
+    nodes =
+      parts
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {part, idx} ->
+        if idx == 0 do
+          part.nodes
+        else
+          [%{"type" => "pageBreak", "attrs" => %{"pageId" => part.id}} | part.nodes]
+        end
+      end)
+
+    %{"type" => "doc", "content" => nodes}
+  end
+
+  @doc """
+  Returns the decoded submission content for correction.
+  Prefers `corrected_content` if present, falls back to the original `content`.
+  Both are stored as maps; this helper exists to centralise the precedence rule.
+  """
+  def correction_content(%ExamSubmission{} = submission) do
+    case submission.corrected_content do
+      c when is_map(c) and map_size(c) > 0 -> c
+      _ -> submission.content || %{}
+    end
+  end
+
+  @doc ~S"""
+  Marks a single part of a submission as corrected (idempotent).
+  Broadcasts `{:submission_corrected_parts_changed, submission}` on the
+  `exam_correction:#{exam_id}` topic.
+  """
+  def mark_part_corrected(%ExamSubmission{} = submission, part_id)
+      when is_binary(part_id) do
+    parts = Enum.uniq([part_id | submission.corrected_parts || []])
+    update_corrected_parts(submission, parts)
+  end
+
+  @doc """
+  Removes a part from the submission's corrected list.
+  """
+  def unmark_part_corrected(%ExamSubmission{} = submission, part_id)
+      when is_binary(part_id) do
+    parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
+    update_corrected_parts(submission, parts)
+  end
+
+  defp update_corrected_parts(submission, parts) do
+    case submission
+         |> Ecto.Changeset.change(%{corrected_parts: parts})
+         |> Repo.update() do
+      {:ok, updated} = result ->
+        Phoenix.PubSub.broadcast(
+          Tasky.PubSub,
+          "exam_correction:#{updated.exam_id}",
+          {:submission_corrected_parts_changed, updated}
+        )
+
+        result
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Persists the teacher's corrected content for a single part.
+
+  `part_id` identifies the page boundary (the same id returned by
+  `split_content_into_parts/1`); `part_nodes` is the new list of nodes for
+  that part. The function loads the current correction doc, splits it,
+  replaces the matching part, reassembles, and saves back into
+  `corrected_content`. Raises if `part_id` is not present.
+  """
+  def update_corrected_part_content(%ExamSubmission{} = submission, part_id, part_nodes)
+      when is_binary(part_id) and is_list(part_nodes) do
+    parts =
+      submission
+      |> correction_content()
+      |> split_content_into_parts()
+
+    unless Enum.any?(parts, &(&1.id == part_id)) do
+      raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+    end
+
+    new_parts = Enum.map(parts, fn p -> if p.id == part_id, do: %{p | nodes: part_nodes}, else: p end)
+    new_doc = assemble_parts_into_content(new_parts)
+
+    submission
+    |> Ecto.Changeset.change(%{corrected_content: new_doc})
+    |> Repo.update()
+  end
+
+  @doc """
+  Sets (or clears, when `points` is `nil`) the points awarded for a single
+  part of a submission. Broadcasts the updated submission so the correction
+  grid stays in sync.
+  """
+  def set_part_points(%ExamSubmission{} = submission, part_id, points)
+      when is_binary(part_id) do
+    current = submission.points_per_part || %{}
+
+    new_map =
+      if is_nil(points) do
+        Map.delete(current, part_id)
+      else
+        Map.put(current, part_id, points)
+      end
+
+    case submission
+         |> Ecto.Changeset.change(%{points_per_part: new_map})
+         |> Repo.update() do
+      {:ok, updated} = result ->
+        Phoenix.PubSub.broadcast(
+          Tasky.PubSub,
+          "exam_correction:#{updated.exam_id}",
+          {:submission_corrected_parts_changed, updated}
+        )
+
+        result
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Subscribes to correction-grid events for a given exam ID.
+  """
+  def subscribe_correction(exam_id) do
+    Phoenix.PubSub.subscribe(Tasky.PubSub, "exam_correction:#{exam_id}")
   end
 
   # --- PubSub for exam status ---

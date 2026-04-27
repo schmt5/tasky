@@ -1,6 +1,6 @@
 import { Children, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
-import { Node, Extension } from "@tiptap/core";
+import { Node, Mark, Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "prosemirror-state";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskList } from "@tiptap/extension-list/task-list";
@@ -130,6 +130,28 @@ const PageBreak = Node.create({
     };
   },
 });
+const TeacherComment = Mark.create({
+  name: "teacherComment",
+
+  parseHTML() {
+    return [{ tag: "span.teacher-comment" }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["span", { ...HTMLAttributes, class: "teacher-comment" }, 0];
+  },
+
+  addCommands() {
+    return {
+      toggleTeacherComment:
+        () =>
+        ({ commands }) => {
+          return commands.toggleMark(this.name);
+        },
+    };
+  },
+});
+
 import {
   BoldIcon,
   ItalicIcon,
@@ -139,6 +161,7 @@ import {
   ListBulletIcon,
   NumberedListIcon,
   ChatBubbleBottomCenterTextIcon,
+  ChatBubbleLeftEllipsisIcon,
   MinusIcon,
   TableCellsIcon,
   PaintBrushIcon,
@@ -154,8 +177,58 @@ function countByType(doc, typeName) {
   return n;
 }
 
+function findAncestorDepth($pos, typeName) {
+  for (let d = $pos.depth; d > 0; d--) {
+    if ($pos.node(d).type.name === typeName) return d;
+  }
+  return null;
+}
+
+function handleLueckentextKey(editor, direction) {
+  const { state } = editor;
+  const { selection } = state;
+  const { $from, empty } = selection;
+
+  const depth = findAncestorDepth($from, "lueckentext");
+  if (depth === null) return false;
+
+  const node = $from.node(depth);
+  const nodeStart = $from.start(depth);
+  const nodeEnd = $from.end(depth);
+
+  if (empty) {
+    // Cursor at boundary — block so we don't exit / remove the node
+    if (direction === "backspace" && $from.parentOffset === 0) return true;
+    if (direction === "delete" && $from.parentOffset === node.content.size)
+      return true;
+
+    // Deleting the last remaining character — clear content, keep node
+    if (node.content.size === 1) {
+      editor.view.dispatch(state.tr.delete(nodeStart, nodeEnd));
+      return true;
+    }
+  } else {
+    // Non-empty selection: if it covers ALL content, clear manually
+    const selFrom = selection.from;
+    const selTo = selection.to;
+    if (selFrom <= nodeStart && selTo >= nodeEnd) {
+      editor.view.dispatch(state.tr.delete(nodeStart, nodeEnd));
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const PreventNodeDeletion = Extension.create({
   name: "preventNodeDeletion",
+
+  addKeyboardShortcuts() {
+    return {
+      Backspace: ({ editor }) => handleLueckentextKey(editor, "backspace"),
+      Delete: ({ editor }) => handleLueckentextKey(editor, "delete"),
+    };
+  },
 
   addProseMirrorPlugins() {
     const protectedTypes = ["lueckentext", "answerBlock", "pageBreak"];
@@ -536,6 +609,8 @@ export default function ExamContentEditor({
   initialContent,
   save,
   hideAnswers = false,
+  correctionMode = false,
+  notFullWidth = false,
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
@@ -582,6 +657,7 @@ export default function ExamContentEditor({
       TextStyle,
       Color,
       ...(hideAnswers ? [PreventNodeDeletion] : []),
+      ...(correctionMode ? [TeacherComment] : []),
     ],
     content: isEmptyDoc(initialContent) ? "" : initialContent,
     onUpdate: ({ editor }) => {
@@ -613,12 +689,17 @@ export default function ExamContentEditor({
   if (!editor) return null;
 
   return (
-    <div className="exam-editor">
+    <div
+      className={
+        "exam-editor" + (notFullWidth ? " exam-editor--not-full-width" : "")
+      }
+    >
       <Toolbar
         editor={editor}
         status={status}
         errorMsg={errorMsg}
         hideAnswers={hideAnswers}
+        correctionMode={correctionMode}
       />
       <div className="exam-editor__content">
         <div className="exam-editor__content-inner">
@@ -629,7 +710,13 @@ export default function ExamContentEditor({
   );
 }
 
-function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
+function Toolbar({
+  editor,
+  status,
+  errorMsg,
+  hideAnswers = false,
+  correctionMode = false,
+}) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
   const active = useEditorState({
@@ -647,6 +734,7 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
       lueckentext: editor.isActive("lueckentext"),
       answerBlock: editor.isActive("answerBlock"),
       table: editor.isActive("table"),
+      teacherComment: editor.isActive("teacherComment"),
       highlightColor: HIGHLIGHT_COLORS.find((c) =>
         editor.isActive("highlight", { color: c.value }),
       )?.value,
@@ -784,6 +872,11 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
             <Tabs.Trigger value="tabellen" className="exam-editor__tab">
               Tabellen
             </Tabs.Trigger>
+            {correctionMode && (
+              <Tabs.Trigger value="korrektur" className="exam-editor__tab">
+                Korrektur
+              </Tabs.Trigger>
+            )}
           </Tabs.List>
           <StatusIndicator status={status} errorMsg={errorMsg} />
         </div>
@@ -882,11 +975,12 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
                   active.blockquote,
                 ),
               ])}
-            {group("Struktur", [
-              btn("Seitenumbruch", <MinusIcon className={iconCls} />, () =>
-                editor.chain().focus().setPageBreak().run(),
-              ),
-            ])}
+            {!correctionMode &&
+              group("Struktur", [
+                btn("Seitenumbruch", <MinusIcon className={iconCls} />, () =>
+                  editor.chain().focus().setPageBreak().run(),
+                ),
+              ])}
           </div>
         </Tabs.Content>
         <Tabs.Content value="tabellen" className="exam-editor__tab-content">
@@ -965,6 +1059,36 @@ function Toolbar({ editor, status, errorMsg, hideAnswers = false }) {
             ])}
           </div>
         </Tabs.Content>
+        {correctionMode && (
+          <Tabs.Content value="korrektur" className="exam-editor__tab-content">
+            <div className="exam-editor__toolbar-inner">
+              {group("Anmerkungen", [
+                btn(
+                  "Lehrerkommentar",
+                  <ChatBubbleLeftEllipsisIcon className={iconCls} />,
+                  () => editor.chain().focus().toggleTeacherComment().run(),
+                  active.teacherComment,
+                ),
+              ])}
+              {group("Bewertung", [
+                btn(
+                  "Falsch",
+                  <span className="exam-editor__emoji" aria-hidden="true">
+                    ❌
+                  </span>,
+                  () => editor.chain().focus().insertContent("❌").run(),
+                ),
+                btn(
+                  "Richtig",
+                  <span className="exam-editor__emoji" aria-hidden="true">
+                    ✅
+                  </span>,
+                  () => editor.chain().focus().insertContent("✅").run(),
+                ),
+              ])}
+            </div>
+          </Tabs.Content>
+        )}
       </Tabs.Root>
     </div>
   );

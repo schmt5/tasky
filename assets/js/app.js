@@ -26,6 +26,8 @@ import { hooks as colocatedHooks } from "phoenix-colocated/tasky";
 import topbar from "../vendor/topbar";
 import { ExamContentEditor } from "./hooks/exam_content_editor_hook";
 import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
+import { ExamSampleSolutionEditor } from "./hooks/exam_sample_solution_editor_hook";
+import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
@@ -33,7 +35,13 @@ const csrfToken = document
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ExamContentEditor, ExamSubmissionEditor },
+  hooks: {
+    ...colocatedHooks,
+    ExamContentEditor,
+    ExamSubmissionEditor,
+    ExamSampleSolutionEditor,
+    ExamCorrectionEditor,
+  },
 });
 
 // Show progress bar on live navigation and form submits

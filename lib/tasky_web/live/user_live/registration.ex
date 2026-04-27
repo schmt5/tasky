@@ -108,30 +108,30 @@ defmodule TaskyWeb.UserLive.Registration do
                 <% end %>
 
                 <%= unless @class_name do %>
-                <div class="pt-2 border-t border-stone-100 mt-6 pt-6">
-                  <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
-                    <div class="flex items-start gap-3">
-                      <div class="mt-0.5">
-                        <.input
-                          field={@form[:is_teacher]}
-                          type="checkbox"
-                          label=""
-                          class="w-5 h-5 text-sky-500 bg-white border-stone-300 rounded-[6px] focus:ring-4 focus:ring-sky-100 focus:ring-offset-0 transition-all duration-150 cursor-pointer"
-                        />
-                      </div>
-                      <div class="flex-1 -mt-1">
-                        <label for={@form[:is_teacher].id} class="cursor-pointer">
-                          <span class="block text-[14px] font-semibold text-stone-800 hover:text-stone-900 transition-colors">
-                            Ich bin eine Lehrperson
-                          </span>
-                          <span class="block text-[13px] text-stone-600 mt-0.5 leading-[1.5]">
-                            Lehrpersonen können Kurse erstellen und Lerneinheiten verwalten.
-                          </span>
-                        </label>
+                  <div class="pt-2 border-t border-stone-100 mt-6 pt-6">
+                    <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
+                      <div class="flex items-start gap-3">
+                        <div class="mt-0.5">
+                          <.input
+                            field={@form[:is_teacher]}
+                            type="checkbox"
+                            label=""
+                            class="w-5 h-5 text-sky-500 bg-white border-stone-300 rounded-[6px] focus:ring-4 focus:ring-sky-100 focus:ring-offset-0 transition-all duration-150 cursor-pointer"
+                          />
+                        </div>
+                        <div class="flex-1 -mt-1">
+                          <label for={@form[:is_teacher].id} class="cursor-pointer">
+                            <span class="block text-[14px] font-semibold text-stone-800 hover:text-stone-900 transition-colors">
+                              Ich bin eine Lehrperson
+                            </span>
+                            <span class="block text-[13px] text-stone-600 mt-0.5 leading-[1.5]">
+                              Lehrpersonen können Kurse erstellen und Lerneinheiten verwalten.
+                            </span>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
                 <% end %>
               </div>
 

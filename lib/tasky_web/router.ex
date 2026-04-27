@@ -65,6 +65,11 @@ defmodule TaskyWeb.Router do
     pipe_through [:authenticated_api, :require_authenticated_user, :require_admin_or_teacher]
 
     put "/exams/:id/content", ExamContentApiController, :update
+    put "/exams/:id/sample-solution", ExamSampleSolutionApiController, :update
+
+    put "/exams/:id/submissions/:submission_id/parts/:part_id/content",
+        ExamCorrectionContentApiController,
+        :update
   end
 
   # Guest JSON API (token-gated via exam_token in URL)
@@ -101,7 +106,13 @@ defmodule TaskyWeb.Router do
       live "/exams/:id", ExamLive.Show, :show
       live "/exams/:id/edit", ExamLive.Form, :edit
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
+      live "/exams/:id/correction", ExamLive.Correction, :correction
+
+      live "/exams/:id/correction/:submission_id/parts/:part_id",
+           ExamLive.CorrectionPart,
+           :correction_part
       live "/exams/:id/content", ExamLive.Content, :content
+      live "/exams/:id/sample-solution", ExamLive.SampleSolution, :sample_solution
     end
 
     live_session :teacher_settings,

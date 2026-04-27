@@ -107,6 +107,33 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           </div>
         <% end %>
 
+        <%= if @exam.status == "finished" do %>
+          <%!-- Correction Ready Card --%>
+          <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <div class="p-6">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 bg-purple-50 text-purple-500">
+                    <.icon name="hero-clipboard-document-check" class="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 class="text-lg font-semibold text-stone-800">Prüfung beendet</h2>
+                    <p class="text-sm text-stone-500 mt-0.5">
+                      Die Prüfung kann jetzt korrigiert werden.
+                    </p>
+                  </div>
+                </div>
+                <.link
+                  navigate={~p"/exams/#{@exam}/correction"}
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                >
+                  <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4" /> Zur Korrektur
+                </.link>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
         <%!-- Submissions Card --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6 border-b border-stone-100">
@@ -182,6 +209,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     {submission.exam_token}
                   </span>
                 </div>
+                <%= if submission.submitted do %>
+                  <span class="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                    <.icon name="hero-check-circle-mini" class="w-3.5 h-3.5" /> Abgegeben
+                  </span>
+                <% end %>
               </div>
             </div>
           </div>
@@ -354,6 +386,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Tasky.PubSub, "exam_waiting:#{exam.id}")
+      Phoenix.PubSub.subscribe(Tasky.PubSub, "exam_cockpit:#{exam.id}")
     end
 
     submissions = Exams.list_exam_submissions(exam)
@@ -392,6 +425,10 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      socket
      |> assign(:present_tokens, present_tokens)
      |> stream(:submissions, submissions, reset: true)}
+  end
+
+  def handle_info({:submission_submitted, submission}, socket) do
+    {:noreply, stream_insert(socket, :submissions, submission)}
   end
 
   @impl true

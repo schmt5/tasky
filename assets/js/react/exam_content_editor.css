@@ -12,6 +12,12 @@
     z-index: 10;
 }
 
+.exam-editor--not-full-width .exam-editor__toolbar {
+    border-left: 1px solid #e7e5e4;
+    border-right: 1px solid #e7e5e4;
+    border-radius: 12px;
+}
+
 .exam-editor__tabs-bar {
     max-width: 64rem;
     margin: 0 auto;
@@ -131,6 +137,16 @@
     width: 18px;
     height: 18px;
     stroke-width: 2;
+}
+
+.exam-editor__emoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 16px;
+    line-height: 1;
 }
 
 .exam-editor__btn:hover {
@@ -381,15 +397,15 @@
 }
 
 .exam-editor__content .ProseMirror .lueckentext {
-    display: inline-flex;
-    align-items: center;
+    display: inline-block;
     background: #f5f5f4;
     border: 1px dashed #a8a29e;
     border-radius: 6px;
-    padding: 4px;
-    padding-inline: 12px;
-    min-height: 36px;
-    vertical-align: middle;
+    padding: 2px 12px;
+    min-width: 40px;
+    min-height: 30px;
+    line-height: 30px;
+    vertical-align: baseline;
     font-family: inherit;
     font-size: inherit;
     color: #44403c;
@@ -475,3 +491,12 @@
 .exam-editor__content .tableWrapper {
     overflow-x: auto;
 }
+
+.exam-editor__content .ProseMirror .teacher-comment {
+    color: #dc2626;
+    background: #fef2f2;
+    border-bottom: 1px dashed #fca5a5;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
