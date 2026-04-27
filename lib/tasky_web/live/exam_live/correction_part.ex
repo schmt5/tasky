@@ -10,115 +10,277 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams/#{@exam}"}>
       <div class="bg-white min-h-screen">
-      <%!-- Compact Header --%>
-      <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 py-3">
-        <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <.breadcrumbs crumbs={[
-            %{label: "Prüfungen", navigate: ~p"/exams"},
-            %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-            %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
-            %{label: "#{@submission.firstname} #{@submission.lastname} – #{@current_part.label}"}
-          ]} />
+        <%!-- Compact Header --%>
+        <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 py-3">
+          <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <.breadcrumbs crumbs={[
+              %{label: "Prüfungen", navigate: ~p"/exams"},
+              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+              %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
+              %{label: "#{@submission.firstname} #{@submission.lastname} – #{@current_part.label}"}
+            ]} />
 
-          <div class="flex items-center gap-2 shrink-0">
-            <.nav_chevron
-              direction="up"
-              target={@prev_submission_path}
-              title="Vorheriger Teilnehmer"
-            />
-            <.nav_chevron
-              direction="down"
-              target={@next_submission_path}
-              title="Nächster Teilnehmer"
-            />
-            <span class="w-px h-6 bg-stone-200 mx-1" />
-            <.nav_chevron direction="left" target={@prev_part_path} title="Vorheriger Teil" />
-            <.nav_chevron direction="right" target={@next_part_path} title="Nächster Teil" />
-          </div>
-        </div>
-      </div>
-
-      <div class="max-w-7xl mx-auto px-8 py-6">
-        <div class="grid grid-cols-4 gap-6 items-start">
-          <%!-- Editor (3/4) --%>
-          <div class="col-span-3 min-w-0">
-            <div
-              id={"correction-part-editor-#{@submission.id}-#{@current_part.id}"}
-              phx-hook="ExamCorrectionEditor"
-              phx-update="ignore"
-              data-exam-id={@exam.id}
-              data-submission-id={@submission.id}
-              data-part-id={@current_part.id}
-              data-content={@part_doc_json}
-            >
+            <div class="flex items-center gap-2 shrink-0">
+              <.nav_chevron
+                direction="up"
+                target={@prev_submission_path}
+                title="Vorheriger Teilnehmer"
+              />
+              <.nav_chevron
+                direction="down"
+                target={@next_submission_path}
+                title="Nächster Teilnehmer"
+              />
+              <span class="w-px h-6 bg-stone-200 mx-1" />
+              <.nav_chevron direction="left" target={@prev_part_path} title="Vorheriger Teil" />
+              <.nav_chevron direction="right" target={@next_part_path} title="Nächster Teil" />
             </div>
           </div>
+        </div>
 
-          <%!-- Sidebar (1/4, sticky) --%>
-          <aside class="col-span-1 sticky top-[72px]">
-            <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-              <div class="p-5 border-b border-stone-100">
-                <h2 class="text-base font-semibold text-stone-800 truncate">
-                  {@current_part.label}
-                </h2>
-                <p class="text-xs text-stone-500 mt-1">
-                  <span class="font-medium text-stone-700">
-                    {@submission.firstname} {@submission.lastname}
-                  </span>
-                  <span class="text-stone-300 mx-1">·</span>
-                  <%= if @submission.submitted do %>
-                    <span class="text-purple-500 font-medium">Abgegeben</span>
-                  <% else %>
-                    <span class="text-stone-400">Nicht abgegeben</span>
-                  <% end %>
-                </p>
+        <div class="max-w-7xl mx-auto px-8 py-6">
+          <div class="grid grid-cols-4 gap-6 items-start">
+            <%!-- Editor (3/4) --%>
+            <div class="col-span-3 min-w-0">
+              <div
+                id={"correction-part-editor-#{@submission.id}-#{@current_part.id}"}
+                phx-hook="ExamCorrectionEditor"
+                phx-update="ignore"
+                data-exam-id={@exam.id}
+                data-submission-id={@submission.id}
+                data-part-id={@current_part.id}
+                data-content={@part_doc_json}
+              >
               </div>
+            </div>
 
-              <div class="p-5 border-b border-stone-100">
-                <form phx-change="set_points" phx-submit="set_points">
-                  <label
-                    for="part-points-input"
-                    class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2"
+            <%!-- Sidebar (1/4, sticky) --%>
+            <aside class="col-span-1 sticky top-[72px]">
+              <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+                <div class="p-5 border-b border-stone-100">
+                  <h2 class="text-base font-semibold text-stone-800 truncate">
+                    {@current_part.label}
+                  </h2>
+                  <p class="text-xs text-stone-500 mt-1">
+                    <span class="font-medium text-stone-700">
+                      {@submission.firstname} {@submission.lastname}
+                    </span>
+                    <span class="text-stone-300 mx-1">·</span>
+                    <%= if @submission.submitted do %>
+                      <span class="text-purple-500 font-medium">Abgegeben</span>
+                    <% else %>
+                      <span class="text-stone-400">Nicht abgegeben</span>
+                    <% end %>
+                  </p>
+                </div>
+
+                <div class="p-5 border-b border-stone-100">
+                  <form phx-change="set_points" phx-submit="set_points">
+                    <div class="flex items-center justify-between mb-2">
+                      <label
+                        for="part-points-input"
+                        class="block text-xs font-semibold text-stone-500 uppercase tracking-wide"
+                      >
+                        Punkte
+                      </label>
+                      <%= if @max_points do %>
+                        <span class="text-xs text-stone-400">
+                          max {format_points(@max_points)}
+                        </span>
+                      <% end %>
+                    </div>
+                    <input
+                      id="part-points-input"
+                      type="number"
+                      name="points"
+                      value={@points || ""}
+                      step="0.5"
+                      inputmode="decimal"
+                      phx-debounce="500"
+                      placeholder="—"
+                      class="w-full font-mono text-base text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                    />
+                  </form>
+                  <div class="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      phx-click="set_points_max"
+                      disabled={is_nil(@max_points)}
+                      title={
+                        if is_nil(@max_points),
+                          do: "Keine Maximalpunkte in der Musterlösung gesetzt",
+                          else: "Maximale Punkte vergeben"
+                      }
+                      class="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-stone-200"
+                    >
+                      <.icon name="hero-check" class="w-3.5 h-3.5" /> Max
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="set_points_zero"
+                      class="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
+                    >
+                      <.icon name="hero-x-mark" class="w-3.5 h-3.5" /> 0
+                    </button>
+                  </div>
+                </div>
+
+                <div class="p-5 border-b border-stone-100">
+                  <button
+                    type="button"
+                    phx-click="show_sample_solution_modal"
+                    class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
                   >
-                    Punkte
-                  </label>
-                  <input
-                    id="part-points-input"
-                    type="number"
-                    name="points"
-                    value={@points || ""}
-                    step="0.5"
-                    min="0"
-                    inputmode="decimal"
-                    phx-debounce="500"
-                    placeholder="—"
-                    class="w-full font-mono text-base text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
-                  />
-                </form>
-              </div>
+                    <.icon name="hero-light-bulb" class="w-4 h-4" /> Musterlösung anzeigen
+                  </button>
+                </div>
 
-              <div class="p-5">
+                <div class="p-5 border-b border-stone-100 space-y-2">
+                  <button
+                    type="button"
+                    phx-click="ai_correct"
+                    disabled={@ai_correcting or is_nil(@max_points)}
+                    title={
+                      cond do
+                        @ai_correcting -> "KI korrigiert gerade..."
+                        is_nil(@max_points) -> "Keine Maximalpunkte in der Musterlösung gesetzt"
+                        true -> "Automatisch mit KI korrigieren"
+                      end
+                    }
+                    class={[
+                      "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
+                      if(@ai_correcting,
+                        do: "bg-indigo-100 text-indigo-400 border border-indigo-200 cursor-wait",
+                        else:
+                          "text-indigo-600 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-indigo-200"
+                      )
+                    ]}
+                  >
+                    <%= if @ai_correcting do %>
+                      <svg
+                        class="animate-spin w-4 h-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          class="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          stroke-width="4"
+                        >
+                        </circle>
+                        <path
+                          class="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        >
+                        </path>
+                      </svg>
+                      KI korrigiert...
+                    <% else %>
+                      <.icon name="hero-sparkles" class="w-4 h-4" /> KI korrigieren
+                    <% end %>
+                  </button>
+                  <%= if @pre_ai_nodes do %>
+                    <button
+                      type="button"
+                      phx-click="undo_ai_correct"
+                      class="w-full inline-flex items-center justify-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-amber-600 border border-amber-200 hover:bg-amber-50 hover:border-amber-300"
+                    >
+                      <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5" /> Rückgängig
+                    </button>
+                  <% end %>
+                  <%= if @ai_error do %>
+                    <p class="text-xs text-red-500 mt-1">{@ai_error}</p>
+                  <% end %>
+                </div>
+
+                <div class="p-5">
+                  <button
+                    type="button"
+                    phx-click="toggle_corrected"
+                    class={[
+                      "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
+                      if(@is_corrected,
+                        do:
+                          "bg-purple-500 text-white shadow-[0_2px_8px_rgba(168,85,247,0.25)] hover:bg-purple-600",
+                        else:
+                          "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
+                      )
+                    ]}
+                  >
+                    <.icon name="hero-check-badge" class="w-4 h-4" />
+                    {if @is_corrected, do: "Korrigiert", else: "Als korrigiert markieren"}
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <%= if @show_sample_solution_modal do %>
+          <dialog
+            id="sample-solution-preview-modal"
+            class="modal modal-open"
+            phx-window-keydown="close_sample_solution_modal"
+            phx-key="escape"
+          >
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_sample_solution_modal"></div>
+            <div class="modal-box max-w-6xl w-[90vw] p-0 bg-white rounded-[16px] shadow-2xl flex flex-col max-h-[90vh]">
+              <div class="px-6 pt-6 pb-4 border-b border-stone-100 flex items-start gap-4">
+                <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-light-bulb" class="w-5 h-5 text-sky-500" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-lg font-semibold text-stone-900 truncate">
+                    Musterlösung – {@current_part.label}
+                  </h3>
+                  <%= if @max_points do %>
+                    <p class="text-sm text-stone-500 mt-1">
+                      Max. Punkte:
+                      <span class="font-semibold text-stone-700">{format_points(@max_points)}</span>
+                    </p>
+                  <% end %>
+                </div>
                 <button
                   type="button"
-                  phx-click="toggle_corrected"
-                  class={[
-                    "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
-                    if(@is_corrected,
-                      do:
-                        "bg-purple-500 text-white shadow-[0_2px_8px_rgba(168,85,247,0.25)] hover:bg-purple-600",
-                      else:
-                        "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
-                    )
-                  ]}
+                  phx-click="close_sample_solution_modal"
+                  class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
+                  title="Schliessen"
                 >
-                  <.icon name="hero-check-badge" class="w-4 h-4" />
-                  <%= if @is_corrected, do: "Korrigiert", else: "Als korrigiert markieren" %>
+                  <.icon name="hero-x-mark" class="w-5 h-5" />
+                </button>
+              </div>
+              <div class="p-6 overflow-y-auto flex-1">
+                <%= if @sample_solution_json do %>
+                  <div
+                    id={"sample-solution-viewer-#{@current_part.id}"}
+                    phx-hook="ExamReadOnlyViewer"
+                    phx-update="ignore"
+                    data-content={@sample_solution_json}
+                  >
+                  </div>
+                <% else %>
+                  <p class="text-sm text-stone-400 italic">
+                    Keine Musterlösung für diesen Teil vorhanden.
+                  </p>
+                <% end %>
+              </div>
+              <div class="px-6 pb-6 pt-3 flex items-center justify-end border-t border-stone-100">
+                <button
+                  type="button"
+                  phx-click="close_sample_solution_modal"
+                  class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+                >
+                  Schliessen
                 </button>
               </div>
             </div>
-          </aside>
-        </div>
-      </div>
+          </dialog>
+        <% end %>
       </div>
     </Layouts.app>
     """
@@ -173,7 +335,9 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     {:ok,
      socket
      |> assign(:exam, exam)
-     |> assign(:submissions, submissions)}
+     |> assign(:submissions, submissions)
+     |> assign(:show_sample_solution_modal, false)
+     |> assign(:sample_solution_json, nil)}
   end
 
   @impl true
@@ -213,6 +377,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        |> assign(:part_doc_json, part_doc_json)
        |> assign(:is_corrected, current_part.id in (submission.corrected_parts || []))
        |> assign(:points, Map.get(submission.points_per_part || %{}, current_part.id))
+       |> assign(
+         :max_points,
+         Map.get(exam.sample_solution_points || %{}, current_part.id)
+       )
+       |> assign(:show_sample_solution_modal, false)
+       |> assign(:sample_solution_json, nil)
+       |> assign(:ai_correcting, false)
+       |> assign(:ai_error, nil)
+       |> assign(:pre_ai_nodes, nil)
        |> assign(:prev_part_path, sibling_part_path(exam, submission, parts, part_index, -1))
        |> assign(:next_part_path, sibling_part_path(exam, submission, parts, part_index, +1))
        |> assign(
@@ -227,21 +400,108 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   @impl true
-  def handle_event("set_points", %{"points" => raw}, socket) do
-    %{submission: submission, current_part: part} = socket.assigns
-
-    points = parse_points(raw)
-
-    case Exams.set_part_points(submission, part.id, points) do
-      {:ok, updated} ->
-        {:noreply,
-         socket
-         |> assign(:submission, updated)
-         |> assign(:points, points)}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Punkte konnten nicht gespeichert werden.")}
+  def handle_event("set_points_max", _params, socket) do
+    case socket.assigns.max_points do
+      nil -> {:noreply, socket}
+      max -> save_points(socket, max)
     end
+  end
+
+  def handle_event("set_points_zero", _params, socket) do
+    save_points(socket, 0)
+  end
+
+  def handle_event("show_sample_solution_modal", _params, socket) do
+    %{exam: exam, current_part: part} = socket.assigns
+
+    nodes =
+      exam.sample_solution
+      |> Kernel.||(%{})
+      |> Exams.split_content_into_parts()
+      |> Enum.find(&(&1.id == part.id))
+      |> case do
+        nil -> []
+        p -> p.nodes
+      end
+
+    doc = %{"type" => "doc", "content" => nodes}
+    sample_solution_json = Jason.encode!(doc)
+
+    {:noreply,
+     socket
+     |> assign(:show_sample_solution_modal, true)
+     |> assign(:sample_solution_json, sample_solution_json)}
+  end
+
+  def handle_event("close_sample_solution_modal", _params, socket) do
+    {:noreply, assign(socket, :show_sample_solution_modal, false)}
+  end
+
+  def handle_event("ai_correct", _params, socket) do
+    %{exam: exam, current_part: part, max_points: max_points} = socket.assigns
+
+    submission_nodes = part.nodes
+
+    sample_solution_nodes =
+      exam.sample_solution
+      |> Kernel.||(%{})
+      |> Exams.split_content_into_parts()
+      |> Enum.find(&(&1.id == part.id))
+      |> case do
+        nil -> []
+        p -> p.nodes
+      end
+
+    task_ref = make_ref()
+    pid = self()
+
+    Task.start(fn ->
+      result =
+        Tasky.AI.CorrectionClient.correct_part(
+          submission_nodes,
+          sample_solution_nodes,
+          max_points
+        )
+
+      send(pid, {:ai_correction_result, task_ref, result})
+    end)
+
+    {:noreply,
+     socket
+     |> assign(:ai_correcting, true)
+     |> assign(:ai_error, nil)
+     |> assign(:ai_task_ref, task_ref)
+     |> assign(:pre_ai_nodes, submission_nodes)}
+  end
+
+  def handle_event("undo_ai_correct", _params, socket) do
+    %{submission: submission, current_part: part, pre_ai_nodes: pre_ai_nodes} = socket.assigns
+
+    if pre_ai_nodes do
+      case Exams.update_corrected_part_content(submission, part.id, pre_ai_nodes) do
+        {:ok, updated_submission} ->
+          part_doc = %{"type" => "doc", "content" => pre_ai_nodes}
+          part_doc_json = Jason.encode!(part_doc)
+
+          {:noreply,
+           socket
+           |> assign(:submission, updated_submission)
+           |> assign(:current_part, %{part | nodes: pre_ai_nodes})
+           |> assign(:part_doc_json, part_doc_json)
+           |> assign(:pre_ai_nodes, nil)
+           |> assign(:points, nil)
+           |> push_event("reload-content", %{content: part_doc_json})}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Rückgängig machen fehlgeschlagen.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_points", %{"points" => raw}, socket) do
+    save_points(socket, parse_points(raw))
   end
 
   def handle_event("toggle_corrected", _params, socket) do
@@ -265,6 +525,91 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         {:noreply, put_flash(socket, :error, "Status konnte nicht aktualisiert werden.")}
     end
   end
+
+  @impl true
+  def handle_info({:ai_correction_result, ref, result}, socket) do
+    if ref == socket.assigns[:ai_task_ref] do
+      socket = assign(socket, :ai_correcting, false)
+
+      case result do
+        {:ok, %{corrected_nodes: nodes, points: points}} ->
+          %{submission: submission, current_part: part, max_points: max_points} = socket.assigns
+
+          # Clamp points to [0, max_points]
+          clamped_points =
+            if max_points do
+              points |> max(0) |> min(max_points)
+            else
+              max(points, 0)
+            end
+
+          case Exams.update_corrected_part_content(submission, part.id, nodes) do
+            {:ok, updated_submission} ->
+              # Also save the points
+              case Exams.set_part_points(updated_submission, part.id, clamped_points) do
+                {:ok, updated_submission2} ->
+                  part_doc = %{"type" => "doc", "content" => nodes}
+                  part_doc_json = Jason.encode!(part_doc)
+
+                  {:noreply,
+                   socket
+                   |> assign(:submission, updated_submission2)
+                   |> assign(:current_part, %{part | nodes: nodes})
+                   |> assign(:part_doc_json, part_doc_json)
+                   |> assign(:points, clamped_points)
+                   |> push_event("reload-content", %{content: part_doc_json})}
+
+                {:error, _} ->
+                  # Content saved but points failed — still show updated content
+                  part_doc = %{"type" => "doc", "content" => nodes}
+                  part_doc_json = Jason.encode!(part_doc)
+
+                  {:noreply,
+                   socket
+                   |> assign(:submission, updated_submission)
+                   |> assign(:current_part, %{part | nodes: nodes})
+                   |> assign(:part_doc_json, part_doc_json)
+                   |> assign(:ai_error, "Punkte konnten nicht gespeichert werden.")
+                   |> push_event("reload-content", %{content: part_doc_json})}
+              end
+
+            {:error, _} ->
+              {:noreply,
+               assign(socket, :ai_error, "Korrigierter Inhalt konnte nicht gespeichert werden.")}
+          end
+
+        {:error, reason} ->
+          {:noreply, assign(socket, :ai_error, reason)}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp save_points(socket, points) do
+    %{submission: submission, current_part: part} = socket.assigns
+
+    case Exams.set_part_points(submission, part.id, points) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> assign(:submission, updated)
+         |> assign(:points, points)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Punkte konnten nicht gespeichert werden.")}
+    end
+  end
+
+  defp format_points(n) when is_integer(n), do: Integer.to_string(n)
+
+  defp format_points(n) when is_float(n) do
+    if n == trunc(n),
+      do: Integer.to_string(trunc(n)),
+      else: :erlang.float_to_binary(n, decimals: 1)
+  end
+
+  defp format_points(_), do: "—"
 
   defp parse_points(value) when is_binary(value) do
     case String.trim(value) do

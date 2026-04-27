@@ -391,11 +391,68 @@ defmodule Tasky.Exams do
       raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
     end
 
-    new_parts = Enum.map(parts, fn p -> if p.id == part_id, do: %{p | nodes: part_nodes}, else: p end)
+    new_parts =
+      Enum.map(parts, fn p -> if p.id == part_id, do: %{p | nodes: part_nodes}, else: p end)
+
     new_doc = assemble_parts_into_content(new_parts)
 
     submission
     |> Ecto.Changeset.change(%{corrected_content: new_doc})
+    |> Repo.update()
+  end
+
+  @doc """
+  Persists the teacher's sample solution for a single part.
+
+  `part_id` identifies the page boundary (the same id returned by
+  `split_content_into_parts/1` over the sample solution); `part_nodes` is the
+  new list of nodes for that part. The function loads the current sample
+  solution, splits it, replaces the matching part, reassembles, and saves
+  back into `sample_solution`. Raises if `part_id` is not present.
+  """
+  def update_sample_solution_part_content(%Exam{} = exam, part_id, part_nodes)
+      when is_binary(part_id) and is_list(part_nodes) do
+    doc =
+      case exam.sample_solution do
+        s when is_map(s) and map_size(s) > 0 -> s
+        _ -> exam.content || %{}
+      end
+
+    parts = split_content_into_parts(doc)
+
+    unless Enum.any?(parts, &(&1.id == part_id)) do
+      raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+    end
+
+    new_parts =
+      Enum.map(parts, fn p ->
+        if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+      end)
+
+    new_doc = assemble_parts_into_content(new_parts)
+
+    exam
+    |> Ecto.Changeset.change(%{sample_solution: new_doc})
+    |> Repo.update()
+  end
+
+  @doc """
+  Sets (or clears, when `points` is `nil`) the maximum points for a single
+  part of an exam's sample solution.
+  """
+  def set_sample_solution_part_points(%Exam{} = exam, part_id, points)
+      when is_binary(part_id) do
+    current = exam.sample_solution_points || %{}
+
+    new_map =
+      if is_nil(points) do
+        Map.delete(current, part_id)
+      else
+        Map.put(current, part_id, points)
+      end
+
+    exam
+    |> Ecto.Changeset.change(%{sample_solution_points: new_map})
     |> Repo.update()
   end
 

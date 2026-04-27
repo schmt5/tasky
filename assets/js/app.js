@@ -26,8 +26,9 @@ import { hooks as colocatedHooks } from "phoenix-colocated/tasky";
 import topbar from "../vendor/topbar";
 import { ExamContentEditor } from "./hooks/exam_content_editor_hook";
 import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
-import { ExamSampleSolutionEditor } from "./hooks/exam_sample_solution_editor_hook";
+import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
 import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
+import { ExamReadOnlyViewer } from "./hooks/exam_readonly_viewer_hook";
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
@@ -39,8 +40,9 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ...colocatedHooks,
     ExamContentEditor,
     ExamSubmissionEditor,
-    ExamSampleSolutionEditor,
+    ExamSampleSolutionPartEditor,
     ExamCorrectionEditor,
+    ExamReadOnlyViewer,
   },
 });
 

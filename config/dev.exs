@@ -106,3 +106,5 @@ config :tasky, :tally_signing_secret, nil
 # Set your Tally API key to fetch submission data
 # Get your API key from: https://tally.so/account/api
 config :tasky, :tally_api_key, System.get_env("TALLY_API_KEY")
+
+config :tasky, :anthropic_api_key, System.get_env("ANTHROPIC_API_KEY")

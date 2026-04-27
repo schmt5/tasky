@@ -81,9 +81,7 @@ defmodule TaskyWeb.ExamLive.Correction do
                     <td :for={part <- @parts} class="px-4 py-3">
                       <div class="flex items-center gap-2">
                         <.link
-                          navigate={
-                            ~p"/exams/#{@exam}/correction/#{submission.id}/parts/#{part.id}"
-                          }
+                          navigate={~p"/exams/#{@exam}/correction/#{submission.id}/parts/#{part.id}"}
                           class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-500 border border-stone-200 transition-all duration-150 hover:bg-stone-100 hover:text-stone-700 hover:border-stone-300"
                           title={"#{part.label} ansehen"}
                         >
@@ -149,7 +147,9 @@ defmodule TaskyWeb.ExamLive.Correction do
   defp format_points(n) when is_integer(n), do: Integer.to_string(n)
 
   defp format_points(n) when is_float(n) do
-    if n == trunc(n), do: Integer.to_string(trunc(n)), else: :erlang.float_to_binary(n, decimals: 1)
+    if n == trunc(n),
+      do: Integer.to_string(trunc(n)),
+      else: :erlang.float_to_binary(n, decimals: 1)
   end
 
   defp load_sorted_submissions(exam) do

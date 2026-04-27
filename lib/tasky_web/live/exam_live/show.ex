@@ -202,25 +202,30 @@ defmodule TaskyWeb.ExamLive.Show do
             </div>
           </div>
           <div class="p-6">
-            <%= if @has_sample_solution do %>
-              <% heading_text = extract_first_heading(@exam.sample_solution) %>
-              <%= if heading_text do %>
-                <div class="flex items-start gap-3">
-                  <div class="w-1 self-stretch rounded-full bg-stone-200 shrink-0"></div>
-                  <div>
-                    <p class="text-base text-stone-700 font-medium leading-relaxed">{heading_text}</p>
-                    <p class="text-xs text-stone-400 mt-2 tracking-wide uppercase">
-                      Auszug aus der Musterlösung
-                    </p>
-                  </div>
-                </div>
-              <% else %>
+            <%= cond do %>
+              <% not @has_sample_solution -> %>
+                <p class="text-sm text-stone-400">Keine Musterlösung vorhanden</p>
+              <% @sample_solution_parts == [] -> %>
                 <p class="text-sm text-stone-400 italic">
-                  Musterlösung vorhanden, aber keine Überschrift gefunden
+                  Musterlösung vorhanden, aber keine Teile gefunden.
                 </p>
-              <% end %>
-            <% else %>
-              <p class="text-sm text-stone-400">Keine Musterlösung vorhanden</p>
+              <% true -> %>
+                <ul class="divide-y divide-stone-100 -mx-2">
+                  <li :for={part <- @sample_solution_parts}>
+                    <.link
+                      navigate={~p"/exams/#{@exam}/sample-solution/parts/#{part.id}"}
+                      class="flex items-center justify-between gap-4 px-3 py-2.5 rounded-lg transition-colors duration-150 hover:bg-stone-50 group"
+                    >
+                      <span class="text-sm font-medium text-stone-700 truncate group-hover:text-stone-900">
+                        {part.label}
+                      </span>
+                      <.icon
+                        name="hero-chevron-right"
+                        class="w-4 h-4 text-stone-300 group-hover:text-stone-500 shrink-0"
+                      />
+                    </.link>
+                  </li>
+                </ul>
             <% end %>
           </div>
         </div>
@@ -312,6 +317,10 @@ defmodule TaskyWeb.ExamLive.Show do
      |> assign(:page_title, exam.name)
      |> assign(:exam, exam)
      |> assign(:has_sample_solution, has_sample_solution?(exam))
+     |> assign(
+       :sample_solution_parts,
+       Exams.split_content_into_parts(exam.sample_solution || %{})
+     )
      |> assign(:show_sample_solution_modal, false)}
   end
 

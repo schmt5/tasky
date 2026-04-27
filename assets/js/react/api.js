@@ -42,10 +42,10 @@ export function saveExamSubmissionContent(token, content) {
   });
 }
 
-export function saveExamSampleSolution(examId, content) {
-  return request(`/api/exams/${examId}/sample-solution`, {
+export function saveExamSampleSolutionPart(examId, partId, nodes) {
+  return request(`/api/exams/${examId}/sample-solution/parts/${partId}/content`, {
     method: "PUT",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ nodes }),
   });
 }
 

@@ -611,6 +611,9 @@ export default function ExamContentEditor({
   hideAnswers = false,
   correctionMode = false,
   notFullWidth = false,
+  hidePageBreak = false,
+  editable = true,
+  containerRef = null,
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
@@ -659,9 +662,10 @@ export default function ExamContentEditor({
       ...(hideAnswers ? [PreventNodeDeletion] : []),
       ...(correctionMode ? [TeacherComment] : []),
     ],
+    editable: editable,
     content: isEmptyDoc(initialContent) ? "" : initialContent,
     onUpdate: ({ editor }) => {
-      scheduleSave(editor.getJSON());
+      if (editable) scheduleSave(editor.getJSON());
     },
     editorProps: {
       attributes: {
@@ -686,6 +690,22 @@ export default function ExamContentEditor({
     };
   }, [flush]);
 
+  // Listen for external "tiptap:setContent" DOM events on the container element
+  useEffect(() => {
+    const container = containerRef?.current;
+    if (!container || !editor) return;
+
+    const handler = (e) => {
+      const newContent = e.detail;
+      if (newContent) {
+        editor.commands.setContent(newContent);
+      }
+    };
+
+    container.addEventListener("tiptap:setContent", handler);
+    return () => container.removeEventListener("tiptap:setContent", handler);
+  }, [editor, containerRef]);
+
   if (!editor) return null;
 
   return (
@@ -694,13 +714,16 @@ export default function ExamContentEditor({
         "exam-editor" + (notFullWidth ? " exam-editor--not-full-width" : "")
       }
     >
-      <Toolbar
-        editor={editor}
-        status={status}
-        errorMsg={errorMsg}
-        hideAnswers={hideAnswers}
-        correctionMode={correctionMode}
-      />
+      {editable && (
+        <Toolbar
+          editor={editor}
+          status={status}
+          errorMsg={errorMsg}
+          hideAnswers={hideAnswers}
+          correctionMode={correctionMode}
+          hidePageBreak={hidePageBreak}
+        />
+      )}
       <div className="exam-editor__content">
         <div className="exam-editor__content-inner">
           <EditorContent editor={editor} />
@@ -716,6 +739,7 @@ function Toolbar({
   errorMsg,
   hideAnswers = false,
   correctionMode = false,
+  hidePageBreak = false,
 }) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
@@ -976,6 +1000,7 @@ function Toolbar({
                 ),
               ])}
             {!correctionMode &&
+              !hidePageBreak &&
               group("Struktur", [
                 btn("Seitenumbruch", <MinusIcon className={iconCls} />, () =>
                   editor.chain().focus().setPageBreak().run(),

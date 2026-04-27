@@ -20,11 +20,11 @@ export const ExamCorrectionEditor = {
     try {
       initialContent = content ? JSON.parse(content) : {};
     } catch (err) {
-      console.error(
-        "ExamCorrectionEditor: invalid initial content JSON",
-        err,
-      );
+      console.error("ExamCorrectionEditor: invalid initial content JSON", err);
     }
+
+    // Store a ref to the container element for dispatching DOM events
+    this._containerRef = { current: this.el };
 
     this.root = createRoot(this.el);
     this.root.render(
@@ -41,8 +41,23 @@ export const ExamCorrectionEditor = {
         hideAnswers={true}
         correctionMode={true}
         notFullWidth={true}
+        containerRef={this._containerRef}
       />,
     );
+
+    // Listen for server-pushed content reload (e.g. after AI correction)
+    this.handleEvent("reload-content", ({ content: json }) => {
+      let newContent = {};
+      try {
+        newContent = json ? JSON.parse(json) : {};
+      } catch (err) {
+        console.error("ExamCorrectionEditor: invalid reload content JSON", err);
+      }
+      // Dispatch a custom DOM event that the TipTap editor listens for
+      this.el.dispatchEvent(
+        new CustomEvent("tiptap:setContent", { detail: newContent }),
+      );
+    });
   },
 
   destroyed() {

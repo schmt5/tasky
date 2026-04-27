@@ -129,4 +129,6 @@ if config_env() in [:prod, :demo] do
   #     export TALLY_API_KEY="your-api-key-here"
   #
   config :tasky, :tally_api_key, System.get_env("TALLY_API_KEY")
+
+  config :tasky, :anthropic_api_key, System.get_env("ANTHROPIC_API_KEY")
 end
