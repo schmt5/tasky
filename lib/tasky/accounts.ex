@@ -373,6 +373,22 @@ defmodule Tasky.Accounts do
     from u in query, where: u.class_id == ^id
   end
 
+  defp apply_user_filter({:search, term}, query) when is_binary(term) do
+    trimmed = String.trim(term)
+
+    if trimmed == "" do
+      query
+    else
+      pattern = "%" <> String.replace(trimmed, ["%", "_"], &("\\" <> &1)) <> "%"
+
+      from u in query,
+        where:
+          ilike(u.firstname, ^pattern) or
+            ilike(u.lastname, ^pattern) or
+            ilike(u.email, ^pattern)
+    end
+  end
+
   defp apply_user_filter(_, query), do: query
 
   @doc """

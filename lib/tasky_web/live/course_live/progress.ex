@@ -45,50 +45,63 @@ defmodule TaskyWeb.CourseLive.Progress do
                         scope="col"
                         class="sticky left-0 z-10 bg-stone-50 px-6 py-4 text-left text-xs font-semibold text-stone-700 uppercase tracking-wider border-r border-stone-200"
                       >
-                        Aufgabe
+                        <button
+                          type="button"
+                          phx-click="toggle_anonymize"
+                          class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
+                          title={
+                            if @anonymized,
+                              do: "Namen anzeigen",
+                              else: "Namen ausblenden"
+                          }
+                        >
+                          <.icon
+                            name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
+                            class="w-4 h-4 text-stone-600"
+                          />
+                          <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                            Lernende
+                          </span>
+                        </button>
                       </th>
 
                       <th
-                        :for={student <- @students}
+                        :for={task <- @tasks}
                         scope="col"
-                        class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[120px]"
+                        class="px-3 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[100px] max-w-[140px]"
                       >
-                        <div class="flex flex-col items-center gap-1">
-                          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 mx-auto mb-2 text-[11px] font-semibold">
-                            {get_initials(student)}
-                          </div>
-                          <span class="line-clamp-2 text-[11px]">
-                            {get_email_username(student.email)}
+                        <.link
+                          navigate={~p"/progress/#{task.id}"}
+                          title={task.name}
+                          class="block hover:text-sky-700 transition-colors"
+                        >
+                          <span class="line-clamp-2 text-[12px] font-medium text-stone-800 hover:text-sky-700 normal-case">
+                            {task.name}
                           </span>
-                        </div>
+                        </.link>
                       </th>
                     </tr>
                   </thead>
 
                   <tbody class="bg-white divide-y divide-stone-100">
                     <tr
-                      :for={task <- @tasks}
+                      :for={{student, index} <- Enum.with_index(@students)}
                       class="hover:bg-stone-50 transition-colors duration-150"
                     >
-                      <td class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-4 whitespace-nowrap border-r border-stone-200">
-                        <.link
-                          navigate={~p"/progress/#{task.id}"}
-                          class="flex items-center gap-3 hover:bg-sky-50 hover:text-sky-700 transition-all duration-200 rounded-lg px-2 py-1 -mx-2 -my-1 group/link"
-                        >
-                          <div class="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 bg-sky-100 text-sky-600 group-hover/link:bg-sky-200 transition-colors">
-                            <.icon name="hero-clipboard-document-list" class="w-5 h-5" />
+                      <td class="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap border-r border-stone-200">
+                        <div class="flex items-center gap-3">
+                          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
+                            {if @anonymized, do: "?", else: get_initials(student)}
                           </div>
-                          <span class="text-[14px] font-medium text-stone-800 group-hover/link:text-sky-700 transition-all">
-                            {task.name}
+                          <span class="text-[14px] font-medium text-stone-800">
+                            {if @anonymized,
+                              do: "Lernende #{index + 1}",
+                              else: get_full_name(student)}
                           </span>
-                          <.icon
-                            name="hero-arrow-right"
-                            class="w-4 h-4 text-stone-400 group-hover/link:text-sky-600 opacity-0 group-hover/link:opacity-100 transition-all"
-                          />
-                        </.link>
+                        </div>
                       </td>
 
-                      <td :for={student <- @students} class="px-4 py-4">
+                      <td :for={task <- @tasks} class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= case get_submission_status(@progress_map, student.id, task.id) do %>
                             <% :completed -> %>
@@ -187,7 +200,13 @@ defmodule TaskyWeb.CourseLive.Progress do
      |> assign(:students, students)
      |> assign(:tasks, tasks)
      |> assign(:progress_map, progress_map)
-     |> assign(:has_data, has_data)}
+     |> assign(:has_data, has_data)
+     |> assign(:anonymized, false)}
+  end
+
+  @impl true
+  def handle_event("toggle_anonymize", _params, socket) do
+    {:noreply, assign(socket, :anonymized, !socket.assigns.anonymized)}
   end
 
   @impl true
@@ -235,9 +254,13 @@ defmodule TaskyWeb.CourseLive.Progress do
     "#{first_initial}#{last_initial}"
   end
 
-  defp get_email_username(email) when is_binary(email) do
-    email |> String.split("@") |> List.first()
-  end
+  defp get_full_name(student) do
+    first = student.firstname || ""
+    last = student.lastname || ""
 
-  defp get_email_username(_), do: ""
+    case String.trim("#{first} #{last}") do
+      "" -> student.email || ""
+      name -> name
+    end
+  end
 end

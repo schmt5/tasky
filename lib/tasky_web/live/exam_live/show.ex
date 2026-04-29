@@ -25,6 +25,13 @@ defmodule TaskyWeb.ExamLive.Show do
               >
                 <.icon name="hero-trash" class="w-4 h-4" /> Löschen
               </button>
+              <button
+                type="button"
+                phx-click="duplicate_exam"
+                class="inline-flex items-center gap-2 text-stone-400 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:text-sky-600 hover:bg-sky-50"
+              >
+                <.icon name="hero-document-duplicate" class="w-4 h-4" /> Duplizieren
+              </button>
               <.link
                 navigate={~p"/exams/#{@exam}/edit?return_to=show"}
                 class="inline-flex items-center gap-2 text-stone-700 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
@@ -332,6 +339,17 @@ defmodule TaskyWeb.ExamLive.Show do
      socket
      |> put_flash(:info, "Prüfung erfolgreich gelöscht")
      |> push_navigate(to: ~p"/exams")}
+  end
+
+  @impl true
+  def handle_event("duplicate_exam", _params, socket) do
+    case Exams.duplicate_exam(socket.assigns.current_scope, socket.assigns.exam) do
+      {:ok, new_exam} ->
+        {:noreply, push_navigate(socket, to: ~p"/exams/#{new_exam}")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Prüfung konnte nicht kopiert werden.")}
+    end
   end
 
   @impl true

@@ -69,7 +69,11 @@ const AnswerBlock = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ["div", { ...HTMLAttributes, class: "answer-block" }, 0];
+    return [
+      "div",
+      { ...HTMLAttributes, class: "answer-block", tabindex: "0" },
+      0,
+    ];
   },
 
   addCommands() {
@@ -190,7 +194,23 @@ function handleLueckentextKey(editor, direction) {
   const { $from, empty } = selection;
 
   const depth = findAncestorDepth($from, "lueckentext");
-  if (depth === null) return false;
+
+  // Cursor is outside any lueckentext — block if adjacent to one
+  if (depth === null) {
+    if (empty) {
+      if (
+        direction === "backspace" &&
+        $from.nodeBefore?.type.name === "lueckentext"
+      )
+        return true;
+      if (
+        direction === "delete" &&
+        $from.nodeAfter?.type.name === "lueckentext"
+      )
+        return true;
+    }
+    return false;
+  }
 
   const node = $from.node(depth);
   const nodeStart = $from.start(depth);
@@ -975,12 +995,6 @@ function Toolbar({
             {!hideAnswers &&
               group("Antworten", [
                 btn(
-                  "Lückentextfeld",
-                  <LueckentextIcon className={iconCls} />,
-                  () => editor.chain().focus().setLueckentext().run(),
-                  active.lueckentext,
-                ),
-                btn(
                   "Antwortfeld",
                   <FreitextAbcIcon className={iconCls} />,
                   () => editor.chain().focus().setAnswerBlock().run(),
@@ -991,6 +1005,12 @@ function Toolbar({
                   <MultipleChoiceIcon className={iconCls} />,
                   () => editor.chain().focus().toggleTaskList().run(),
                   active.taskList,
+                ),
+                btn(
+                  "Lückentextfeld",
+                  <LueckentextIcon className={iconCls} />,
+                  () => editor.chain().focus().setLueckentext().run(),
+                  active.lueckentext,
                 ),
                 btn(
                   "Zitat",

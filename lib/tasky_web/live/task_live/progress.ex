@@ -48,36 +48,61 @@ defmodule TaskyWeb.TaskLive.Progress do
                         scope="col"
                         class="sticky left-0 z-10 bg-stone-50 px-6 py-4 text-left text-xs font-semibold text-stone-700 uppercase tracking-wider border-r border-stone-200"
                       >
-                        -
+                        <button
+                          type="button"
+                          phx-click="toggle_anonymize"
+                          class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
+                          title={
+                            if @anonymized,
+                              do: "Namen anzeigen",
+                              else: "Namen ausblenden"
+                          }
+                        >
+                          <.icon
+                            name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
+                            class="w-4 h-4 text-stone-600"
+                          />
+                          <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                            Lernende
+                          </span>
+                        </button>
                       </th>
 
                       <th
-                        :for={student <- @students}
                         scope="col"
-                        class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[120px]"
+                        class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[140px]"
                       >
-                        <div class="flex flex-col items-center gap-1">
-                          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 mx-auto mb-2 text-[11px] font-semibold">
-                            {get_initials(student)}
-                          </div>
+                        Fortschritt
+                      </th>
 
-                          <span class="line-clamp-2 text-[11px] text-stone-600">
-                            {get_email_username(student.email)}
-                          </span>
-                        </div>
+                      <th
+                        scope="col"
+                        class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[140px]"
+                      >
+                        Antworten
                       </th>
                     </tr>
                   </thead>
 
                   <tbody class="bg-white divide-y divide-stone-100">
-                    <tr class="hover:bg-stone-50 transition-colors duration-150">
-                      <td class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-4 whitespace-nowrap border-r border-stone-200">
+                    <tr
+                      :for={{student, index} <- Enum.with_index(@students)}
+                      class="hover:bg-stone-50 transition-colors duration-150"
+                    >
+                      <td class="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap border-r border-stone-200">
                         <div class="flex items-center gap-3">
-                          <span class="text-[14px] font-medium text-stone-800">Fortschritt</span>
+                          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
+                            {if @anonymized, do: "?", else: get_initials(student)}
+                          </div>
+                          <span class="text-[14px] font-medium text-stone-800">
+                            {if @anonymized,
+                              do: "Lernende #{index + 1}",
+                              else: get_student_full_name(student)}
+                          </span>
                         </div>
                       </td>
 
-                      <td :for={student <- @students} class="px-4 py-4">
+                      <td class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= case get_submission_status(@progress_map, student.id) do %>
                             <% :completed -> %>
@@ -104,16 +129,8 @@ defmodule TaskyWeb.TaskLive.Progress do
                           <% end %>
                         </div>
                       </td>
-                    </tr>
-                    <%!-- Submission Actions Row --%>
-                    <tr class="hover:bg-stone-50 transition-colors duration-150">
-                      <td class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-4 whitespace-nowrap border-r border-stone-200">
-                        <div class="flex items-center gap-3">
-                          <span class="text-[14px] font-medium text-stone-800">Antworten</span>
-                        </div>
-                      </td>
 
-                      <td :for={student <- @students} class="px-4 py-4">
+                      <td class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= if has_submission?(@progress_map, student.id) do %>
                             <button
@@ -477,7 +494,8 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:students_with_submissions, [])
      |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
      |> assign(:feedback_saved, false)
-     |> assign(:selected_submission_record, nil)}
+     |> assign(:selected_submission_record, nil)
+     |> assign(:anonymized, false)}
   end
 
   @impl true
@@ -585,6 +603,10 @@ defmodule TaskyWeb.TaskLive.Progress do
   end
 
   @impl true
+  def handle_event("toggle_anonymize", _params, socket) do
+    {:noreply, assign(socket, :anonymized, !socket.assigns.anonymized)}
+  end
+
   def handle_event("show_submission", %{"student-id" => student_id}, socket) do
     student_id = String.to_integer(student_id)
     student = Enum.find(socket.assigns.students, &(&1.id == student_id))

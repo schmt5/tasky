@@ -66,6 +66,31 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Duplicates an existing exam. The copy is always in "draft" status with no
+  enrollment_token. If SEB is enabled, a fresh quit password is generated.
+  """
+  def duplicate_exam(scope, %Exam{} = source) do
+    attrs = %{
+      "name" => String.slice("Kopie von — #{source.name}", 0, 255),
+      "content" => source.content || %{},
+      "sample_solution" => source.sample_solution || %{},
+      "sample_solution_points" => source.sample_solution_points || %{},
+      "seb_enabled" => source.seb_enabled,
+      "seb_quit_password" =>
+        if(source.seb_enabled,
+          do: (:rand.uniform(899_999) + 100_000) |> Integer.to_string(),
+          else: nil
+        ),
+      "ai_correction_config" => source.ai_correction_config || %{}
+      # status defaults to "draft" via schema
+      # enrollment_token stays nil
+      # teacher_id set from scope via create_changeset
+    }
+
+    create_exam(scope, attrs)
+  end
+
+  @doc """
   Updates an exam.
   """
   def update_exam(%Exam{} = exam, attrs) do

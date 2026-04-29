@@ -118,7 +118,7 @@ defmodule Tasky.Accounts.User do
   """
   def admin_update_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:firstname, :lastname, :email])
+    |> cast(attrs, [:firstname, :lastname, :email, :class_id])
     |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
     |> validate_length(:firstname,
       min: 1,
@@ -131,6 +131,7 @@ defmodule Tasky.Accounts.User do
       message: "muss zwischen 1 und 100 Zeichen lang sein"
     )
     |> validate_email(opts)
+    |> foreign_key_constraint(:class_id)
   end
 
   @doc """
