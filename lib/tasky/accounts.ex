@@ -383,9 +383,9 @@ defmodule Tasky.Accounts do
 
       from u in query,
         where:
-          ilike(u.firstname, ^pattern) or
-            ilike(u.lastname, ^pattern) or
-            ilike(u.email, ^pattern)
+          like(u.firstname, ^pattern) or
+            like(u.lastname, ^pattern) or
+            like(u.email, ^pattern)
     end
   end
 
