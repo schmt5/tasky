@@ -14,6 +14,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   alias Tasky.Exams
   alias Tasky.Exams.ExamSubmission
   alias Tasky.AI.CorrectionClient
+  alias Tasky.AI.NodePatcher
   alias Tasky.Repo
 
   @doc """
@@ -102,16 +103,19 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          {:ok, submission_nodes} <- fetch_part_nodes(submission, part_id),
          sample_nodes = sample_solution_part_nodes(exam, part_id),
          max_points = Map.get(exam.sample_solution_points || %{}, part_id),
-         {:ok, %{corrected_nodes: nodes, points: points}} <-
+         {annotated_nodes, answer_count} = NodePatcher.annotate(submission_nodes),
+         :ok <- ensure_has_answers(answer_count),
+         {:ok, %{verdicts: verdicts, points: points}} <-
            CorrectionClient.correct_part(
-             submission_nodes,
+             annotated_nodes,
              sample_nodes,
              max_points,
              %{ignore_spelling: ignore_spelling}
            ),
+         corrected_nodes = NodePatcher.apply_verdicts(annotated_nodes, verdicts),
          clamped = clamp_points(points, max_points),
          {:ok, updated_submission} <-
-           Exams.update_corrected_part_content(submission, part_id, nodes),
+           Exams.update_corrected_part_content(submission, part_id, corrected_nodes),
          {:ok, updated_submission} <-
            Exams.set_part_points(updated_submission, part_id, clamped),
          {:ok, _} <- Exams.mark_part_auto_corrected(updated_submission, part_id) do
@@ -125,6 +129,9 @@ defmodule Tasky.AI.BulkCorrectionRunner do
       Logger.error("Bulk correction job crashed: #{Exception.message(exception)}")
       {:error, Exception.message(exception)}
   end
+
+  defp ensure_has_answers(0), do: {:error, "Aufgabe enthält keine Antwortfelder"}
+  defp ensure_has_answers(_), do: :ok
 
   defp fetch_submission(exam_id, submission_id) do
     case Repo.get_by(ExamSubmission, id: submission_id, exam_id: exam_id) do

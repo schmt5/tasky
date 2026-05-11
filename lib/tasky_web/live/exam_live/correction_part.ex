@@ -61,16 +61,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   <h2 class="text-base font-semibold text-stone-800 truncate">
                     {@current_part.label}
                   </h2>
-                  <p class="text-xs text-stone-500 mt-1">
-                    <span class="font-medium text-stone-700">
-                      {@submission.firstname} {@submission.lastname}
-                    </span>
-                    <span class="text-stone-300 mx-1">·</span>
-                    <%= if @submission.submitted do %>
-                      <span class="text-purple-500 font-medium">Abgegeben</span>
-                    <% else %>
-                      <span class="text-stone-400">Nicht abgegeben</span>
-                    <% end %>
+                  <p class="text-sm font-semibold text-stone-700 mt-1">
+                    {@submission.firstname} {@submission.lastname}
                   </p>
                 </div>
 
@@ -227,7 +219,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
             </div>
           </dialog>
         <% end %>
-
       </div>
     </Layouts.app>
     """
