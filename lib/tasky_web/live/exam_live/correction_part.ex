@@ -135,85 +135,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   </button>
                 </div>
 
-                <div class="p-5 border-b border-stone-100 space-y-2">
-                  <div class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      phx-click="ai_correct"
-                      disabled={@ai_correcting or is_nil(@max_points)}
-                      title={
-                        cond do
-                          @ai_correcting -> "KI korrigiert gerade..."
-                          is_nil(@max_points) -> "Keine Maximalpunkte in der Musterlösung gesetzt"
-                          true -> "Automatisch mit KI korrigieren"
-                        end
-                      }
-                      class={[
-                        "flex-1 inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
-                        if(@ai_correcting,
-                          do: "bg-indigo-100 text-indigo-400 border border-indigo-200 cursor-wait",
-                          else:
-                            "text-indigo-600 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-indigo-200"
-                        )
-                      ]}
-                    >
-                      <%= if @ai_correcting do %>
-                        <svg
-                          class="animate-spin w-4 h-4"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            class="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="4"
-                          >
-                          </circle>
-                          <path
-                            class="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          >
-                          </path>
-                        </svg>
-                        KI korrigiert...
-                      <% else %>
-                        <.icon name="hero-sparkles" class="w-4 h-4" /> KI korrigieren
-                      <% end %>
-                    </button>
-                    <button
-                      type="button"
-                      phx-click="show_ai_config_modal"
-                      class={[
-                        "shrink-0 inline-flex items-center justify-center w-10 h-[42px] rounded-lg border transition-all duration-150 active:scale-[0.98]",
-                        if(@ignore_spelling,
-                          do: "border-indigo-300 bg-indigo-50 text-indigo-600",
-                          else:
-                            "border-indigo-200 text-indigo-400 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600"
-                        )
-                      ]}
-                      title="KI-Korrektur konfigurieren"
-                    >
-                      <.icon name="hero-cog-6-tooth" class="w-4 h-4" />
-                    </button>
+                <%= if @current_part.id in (@submission.auto_corrected_parts || []) do %>
+                  <div class="p-5 border-b border-stone-100 flex items-center gap-2.5">
+                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500 shrink-0">
+                      <.icon name="hero-sparkles" class="w-5 h-5" />
+                    </span>
+                    <span class="text-sm font-medium text-purple-600">Automatisch korrigiert</span>
                   </div>
-                  <%= if @pre_ai_nodes do %>
-                    <button
-                      type="button"
-                      phx-click="undo_ai_correct"
-                      class="w-full inline-flex items-center justify-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-amber-600 border border-amber-200 hover:bg-amber-50 hover:border-amber-300"
-                    >
-                      <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5" /> Rückgängig
-                    </button>
-                  <% end %>
-                  <%= if @ai_error do %>
-                    <p class="text-xs text-red-500 mt-1">{@ai_error}</p>
-                  <% end %>
-                </div>
+                <% end %>
 
                 <div class="p-5">
                   <button
@@ -299,65 +228,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
           </dialog>
         <% end %>
 
-        <%= if @show_ai_config_modal do %>
-          <dialog
-            id="ai-config-modal"
-            class="modal modal-open"
-            phx-window-keydown="close_ai_config_modal"
-            phx-key="escape"
-          >
-            <div class="modal-backdrop bg-stone-900/50" phx-click="close_ai_config_modal"></div>
-            <div class="modal-box max-w-md p-0 bg-white rounded-[16px] shadow-2xl">
-              <div class="px-6 pt-6 pb-4 border-b border-stone-100 flex items-start gap-4">
-                <div class="w-10 h-10 rounded-[10px] bg-indigo-50 flex items-center justify-center shrink-0">
-                  <.icon name="hero-cog-6-tooth" class="w-5 h-5 text-indigo-500" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h3 class="text-lg font-semibold text-stone-900">KI-Korrektur Einstellungen</h3>
-                  <p class="text-sm text-stone-500 mt-0.5">{@current_part.label}</p>
-                </div>
-                <button
-                  type="button"
-                  phx-click="close_ai_config_modal"
-                  class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
-                  title="Schliessen"
-                >
-                  <.icon name="hero-x-mark" class="w-5 h-5" />
-                </button>
-              </div>
-              <div class="p-6">
-                <label class="flex items-start gap-3 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={@ignore_spelling}
-                    phx-click="toggle_ignore_spelling"
-                    class="mt-0.5 w-5 h-5 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <div>
-                    <span class="text-sm font-semibold text-stone-800 group-hover:text-stone-900">
-                      Rechtschreibung ignorieren
-                    </span>
-                    <p class="text-xs text-stone-500 mt-1 leading-relaxed">
-                      Wenn aktiviert, werden Rechtschreibfehler bei der KI-Korrektur nicht als falsch gewertet.
-                      Geeignet für Fächer wie Geschichte oder Geografie, bei denen der Inhalt wichtiger ist
-                      als die exakte Schreibweise. Für Sprachprüfungen (z.B. Englisch, Französisch) sollte
-                      diese Option deaktiviert bleiben.
-                    </p>
-                  </div>
-                </label>
-              </div>
-              <div class="px-6 pb-6 pt-3 flex items-center justify-end border-t border-stone-100">
-                <button
-                  type="button"
-                  phx-click="close_ai_config_modal"
-                  class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-                >
-                  Schliessen
-                </button>
-              </div>
-            </div>
-          </dialog>
-        <% end %>
       </div>
     </Layouts.app>
     """
@@ -460,16 +330,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        )
        |> assign(:show_sample_solution_modal, false)
        |> assign(:sample_solution_json, nil)
-       |> assign(:show_ai_config_modal, false)
-       |> assign(
-         :ignore_spelling,
-         (exam.ai_correction_config || %{})
-         |> Map.get(part_id, %{})
-         |> Map.get("ignore_spelling", false)
-       )
-       |> assign(:ai_correcting, false)
-       |> assign(:ai_error, nil)
-       |> assign(:pre_ai_nodes, nil)
        |> assign(:prev_part_path, sibling_part_path(exam, submission, parts, part_index, -1))
        |> assign(:next_part_path, sibling_part_path(exam, submission, parts, part_index, +1))
        |> assign(
@@ -521,100 +381,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     {:noreply, assign(socket, :show_sample_solution_modal, false)}
   end
 
-  def handle_event("show_ai_config_modal", _params, socket) do
-    {:noreply, assign(socket, :show_ai_config_modal, true)}
-  end
-
-  def handle_event("close_ai_config_modal", _params, socket) do
-    {:noreply, assign(socket, :show_ai_config_modal, false)}
-  end
-
-  def handle_event("toggle_ignore_spelling", _params, socket) do
-    new_val = !socket.assigns.ignore_spelling
-    part_id = socket.assigns.current_part.id
-
-    {:ok, updated_exam} =
-      Exams.update_ai_correction_config(socket.assigns.exam, part_id, %{
-        "ignore_spelling" => new_val
-      })
-
-    {:noreply,
-     socket
-     |> assign(:exam, updated_exam)
-     |> assign(:ignore_spelling, new_val)}
-  end
-
-  def handle_event("ai_correct", _params, socket) do
-    %{exam: exam, current_part: part, max_points: max_points} = socket.assigns
-
-    submission_nodes = part.nodes
-
-    sample_solution_nodes =
-      exam.sample_solution
-      |> Kernel.||(%{})
-      |> Exams.split_content_into_parts()
-      |> Enum.find(&(&1.id == part.id))
-      |> case do
-        nil -> []
-        p -> p.nodes
-      end
-
-    opts = %{ignore_spelling: socket.assigns.ignore_spelling}
-    task_ref = make_ref()
-    pid = self()
-
-    Task.start(fn ->
-      result =
-        Tasky.AI.CorrectionClient.correct_part(
-          submission_nodes,
-          sample_solution_nodes,
-          max_points,
-          opts
-        )
-
-      send(pid, {:ai_correction_result, task_ref, result})
-    end)
-
-    {:noreply,
-     socket
-     |> assign(:ai_correcting, true)
-     |> assign(:ai_error, nil)
-     |> assign(:ai_task_ref, task_ref)
-     |> assign(:pre_ai_nodes, submission_nodes)}
-  end
-
-  def handle_event("undo_ai_correct", _params, socket) do
-    %{submission: submission, current_part: part, pre_ai_nodes: pre_ai_nodes} = socket.assigns
-
-    if pre_ai_nodes do
-      case Exams.update_corrected_part_content(submission, part.id, pre_ai_nodes) do
-        {:ok, updated_submission} ->
-          updated_submission =
-            case Exams.unmark_part_auto_corrected(updated_submission, part.id) do
-              {:ok, s} -> s
-              _ -> updated_submission
-            end
-
-          part_doc = %{"type" => "doc", "content" => pre_ai_nodes}
-          part_doc_json = Jason.encode!(part_doc)
-
-          {:noreply,
-           socket
-           |> assign(:submission, updated_submission)
-           |> assign(:current_part, %{part | nodes: pre_ai_nodes})
-           |> assign(:part_doc_json, part_doc_json)
-           |> assign(:pre_ai_nodes, nil)
-           |> assign(:points, nil)
-           |> push_event("reload-content", %{content: part_doc_json})}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Rückgängig machen fehlgeschlagen.")}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
   def handle_event("set_points", %{"points" => raw}, socket) do
     save_points(socket, parse_points(raw))
   end
@@ -638,72 +404,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Status konnte nicht aktualisiert werden.")}
-    end
-  end
-
-  @impl true
-  def handle_info({:ai_correction_result, ref, result}, socket) do
-    if ref == socket.assigns[:ai_task_ref] do
-      socket = assign(socket, :ai_correcting, false)
-
-      case result do
-        {:ok, %{corrected_nodes: nodes, points: points}} ->
-          %{submission: submission, current_part: part, max_points: max_points} = socket.assigns
-
-          # Clamp points to [0, max_points]
-          clamped_points =
-            if max_points do
-              points |> max(0) |> min(max_points)
-            else
-              max(points, 0)
-            end
-
-          case Exams.update_corrected_part_content(submission, part.id, nodes) do
-            {:ok, updated_submission} ->
-              # Also save the points
-              case Exams.set_part_points(updated_submission, part.id, clamped_points) do
-                {:ok, updated_submission2} ->
-                  updated_submission3 =
-                    case Exams.mark_part_auto_corrected(updated_submission2, part.id) do
-                      {:ok, s} -> s
-                      _ -> updated_submission2
-                    end
-
-                  part_doc = %{"type" => "doc", "content" => nodes}
-                  part_doc_json = Jason.encode!(part_doc)
-
-                  {:noreply,
-                   socket
-                   |> assign(:submission, updated_submission3)
-                   |> assign(:current_part, %{part | nodes: nodes})
-                   |> assign(:part_doc_json, part_doc_json)
-                   |> assign(:points, clamped_points)
-                   |> push_event("reload-content", %{content: part_doc_json})}
-
-                {:error, _} ->
-                  # Content saved but points failed — still show updated content
-                  part_doc = %{"type" => "doc", "content" => nodes}
-                  part_doc_json = Jason.encode!(part_doc)
-
-                  {:noreply,
-                   socket
-                   |> assign(:submission, updated_submission)
-                   |> assign(:current_part, %{part | nodes: nodes})
-                   |> assign(:part_doc_json, part_doc_json)
-                   |> assign(:ai_error, "Punkte konnten nicht gespeichert werden.")
-                   |> push_event("reload-content", %{content: part_doc_json})}
-              end
-
-            {:error, _} ->
-              {:noreply,
-               assign(socket, :ai_error, "Korrigierter Inhalt konnte nicht gespeichert werden.")}
-          end
-
-        {:error, reason} ->
-          {:noreply, assign(socket, :ai_error, reason)}
-      end
-    else
-      {:noreply, socket}
     end
   end
 
