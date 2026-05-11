@@ -599,6 +599,10 @@ defmodule Tasky.Exams do
   Enumerates `(submission, part, ignore_spelling?)` triples eligible for bulk
   AI correction across all submissions of the exam. Excludes parts without a
   max-points entry or without content for that submission.
+
+  Jobs are grouped by `part_id` (all submissions for part A, then all for
+  part B, ...) so that consecutive Anthropic calls reuse the same cached
+  system prefix (rules + sample solution) within the 5-minute cache TTL.
   """
   def list_bulk_correction_jobs(%Exam{} = exam) do
     config = exam.ai_correction_config || %{}
@@ -634,6 +638,7 @@ defmodule Tasky.Exams do
           }
         end
       end)
+      |> Enum.sort_by(& &1.part_id)
     end
   end
 

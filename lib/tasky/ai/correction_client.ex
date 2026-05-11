@@ -2,12 +2,41 @@ defmodule Tasky.AI.CorrectionClient do
   @moduledoc """
   Calls the Anthropic Claude API to auto-correct an exam submission part
   by comparing it against a sample solution.
+
+  Uses tool-use to enforce the response shape, `temperature: 0` for
+  repeatable grading, and prompt caching on the system block (rules +
+  sample solution) so consecutive corrections of the same part within
+  the cache TTL reuse the prefix.
   """
 
   require Logger
 
   @api_url "https://api.anthropic.com/v1/messages"
   @model "claude-sonnet-4-20250514"
+
+  @tool_name "submit_correction"
+
+  @tool %{
+    "name" => @tool_name,
+    "description" =>
+      "Submit the corrected exam submission. Provide the full corrected_nodes array (the student submission with ✅/❌ markers prepended to answer text) and the awarded points.",
+    "input_schema" => %{
+      "type" => "object",
+      "properties" => %{
+        "corrected_nodes" => %{
+          "type" => "array",
+          "description" =>
+            "The student submission nodes, structurally unchanged, with ✅ or ❌ prepended to text content within answer nodes."
+        },
+        "points" => %{
+          "type" => "number",
+          "description" =>
+            "Awarded points in the range [0, max_points]. Integer or decimal with 0.5 steps."
+        }
+      },
+      "required" => ["corrected_nodes", "points"]
+    }
+  }
 
   @doc """
   Sends the submission and sample solution JSON nodes to Claude for correction.
@@ -27,15 +56,18 @@ defmodule Tasky.AI.CorrectionClient do
   end
 
   defp do_correct(api_key, submission_nodes, sample_solution_nodes, max_points, opts) do
-    system_prompt = build_system_prompt(opts)
-    user_message = build_user_message(submission_nodes, sample_solution_nodes, max_points)
-
     body = %{
       "model" => @model,
       "max_tokens" => 8192,
-      "system" => system_prompt,
+      "temperature" => 0,
+      "system" => build_system_blocks(sample_solution_nodes, max_points, opts),
+      "tools" => [@tool],
+      "tool_choice" => %{"type" => "tool", "name" => @tool_name},
       "messages" => [
-        %{"role" => "user", "content" => user_message}
+        %{
+          "role" => "user",
+          "content" => build_user_message(submission_nodes)
+        }
       ]
     }
 
@@ -61,24 +93,43 @@ defmodule Tasky.AI.CorrectionClient do
     end
   end
 
-  defp build_system_prompt(opts) do
-    base = """
-    You are an exam correction assistant. You receive two JSON documents representing parts of an exam in TipTap/ProseMirror JSON format:
+  defp build_system_blocks(sample_solution_nodes, max_points, opts) do
+    rules = build_rules(opts)
 
-    1. A student's submission (TipTap JSON nodes array)
-    2. The teacher's sample solution (TipTap JSON nodes array) with the maximum achievable points
+    sample_block = """
+    SAMPLE SOLUTION (TipTap JSON nodes, identical for every student of this question):
+    #{Jason.encode!(sample_solution_nodes)}
+
+    MAXIMUM POINTS: #{max_points || 0}
+    """
+
+    cacheable_text = rules <> "\n\n" <> sample_block
+
+    [
+      %{
+        "type" => "text",
+        "text" => cacheable_text,
+        "cache_control" => %{"type" => "ephemeral"}
+      }
+    ]
+  end
+
+  defp build_rules(opts) do
+    base = """
+    You are an exam correction assistant. The exam content is in German; spelling judgments must follow German orthography.
+
+    You receive a student's submission (TipTap/ProseMirror JSON nodes array) and a sample solution (also TipTap JSON nodes) with a maximum point value.
 
     Your tasks:
-    1. Analyze both documents to identify which content represents ANSWERS (text the student wrote/selected, typically inside "answerBlock" nodes, filled-in "lueckentext" nodes, or checked "taskItem" nodes) versus structural CONTENT (headings, questions, instructions).
-    2. Compare each student answer against the corresponding part in the sample solution.
+    1. Identify which content represents ANSWERS (text the student wrote/selected, typically inside "answerBlock" nodes, filled-in "lueckentext" nodes, or checked "taskItem" nodes) versus structural CONTENT (headings, questions, instructions).
+    2. Compare each student answer against the sample solution.
     3. For each answer: prepend ✅ to the text if correct, or ❌ if incorrect. Only modify text nodes that are part of answers. Do NOT modify structural content, headings, or question text.
     4. Determine a fair point score between 0 and the maximum points based on overall correctness. Partial credit is allowed.
 
     IMPORTANT RULES:
-    - Return ONLY valid JSON, no markdown code fences, no explanation.
-    - The JSON must have exactly two keys: "corrected_nodes" (the edited submission nodes array with ✅/❌ markers) and "points" (a number between 0 and max points).
-    - Keep the exact same JSON structure of the submission nodes. Only prepend ✅ or ❌ to text content within answer areas.
-    - Do NOT remove or restructure any nodes. Only modify "text" values within answer nodes.
+    - Submit the result by calling the `submit_correction` tool.
+    - The `corrected_nodes` value must keep the exact same JSON structure as the submission nodes — same node order, same node types, same attributes. Only modify "text" values within answer nodes.
+    - Do NOT remove or restructure any nodes.
     - If a "text" node already starts with ✅ or ❌, do NOT add another marker.
     - Points can be integers or decimals with 0.5 steps (e.g. 0, 0.5, 1, 1.5, 2, ...).
     """
@@ -99,42 +150,28 @@ defmodule Tasky.AI.CorrectionClient do
     base <> spelling_note
   end
 
-  defp build_user_message(submission_nodes, sample_solution_nodes, max_points) do
+  defp build_user_message(submission_nodes) do
     """
-    STUDENT SUBMISSION (JSON nodes):
+    STUDENT SUBMISSION (TipTap JSON nodes):
     #{Jason.encode!(submission_nodes)}
 
-    SAMPLE SOLUTION (JSON nodes):
-    #{Jason.encode!(sample_solution_nodes)}
-
-    MAXIMUM POINTS: #{max_points || 0}
-
-    Please correct the submission and return the result as JSON with "corrected_nodes" and "points".
+    Please correct the submission by calling the submit_correction tool.
     """
   end
 
-  defp parse_response(%{"content" => [%{"type" => "text", "text" => text} | _]}) do
-    # Claude may wrap JSON in code fences, strip them
-    json_text =
-      text
-      |> String.trim()
-      |> strip_code_fences()
-
-    case Jason.decode(json_text) do
-      {:ok, %{"corrected_nodes" => nodes, "points" => points}}
+  defp parse_response(%{"content" => blocks}) when is_list(blocks) do
+    case Enum.find(blocks, &(&1["type"] == "tool_use" and &1["name"] == @tool_name)) do
+      %{"input" => %{"corrected_nodes" => nodes, "points" => points}}
       when is_list(nodes) and is_number(points) ->
         {:ok, %{corrected_nodes: nodes, points: normalize_points(points)}}
 
-      {:ok, _other} ->
-        Logger.error("Claude returned unexpected JSON structure: #{json_text}")
+      %{"input" => other} ->
+        Logger.error("Claude tool_use input had unexpected shape: #{inspect(other)}")
         {:error, "Unerwartetes Antwortformat von Claude."}
 
-      {:error, decode_error} ->
-        Logger.error(
-          "Failed to parse Claude response as JSON: #{inspect(decode_error)}, text: #{json_text}"
-        )
-
-        {:error, "Claude-Antwort konnte nicht als JSON gelesen werden."}
+      _ ->
+        Logger.error("Claude response missing #{@tool_name} tool_use block: #{inspect(blocks)}")
+        {:error, "Claude hat das Korrektur-Tool nicht aufgerufen."}
     end
   end
 
@@ -143,14 +180,7 @@ defmodule Tasky.AI.CorrectionClient do
     {:error, "Unerwartete Antwortstruktur von Claude."}
   end
 
-  defp strip_code_fences(text) do
-    text
-    |> String.replace(~r/\A```(?:json)?\s*\n?/, "")
-    |> String.replace(~r/\n?```\s*\z/, "")
-  end
-
   defp normalize_points(points) when is_float(points) do
-    # Round to nearest 0.5
     rounded = Float.round(points * 2) / 2
 
     if rounded == trunc(rounded) do

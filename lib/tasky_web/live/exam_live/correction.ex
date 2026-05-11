@@ -135,9 +135,15 @@ defmodule TaskyWeb.ExamLive.Correction do
                     </th>
                     <th
                       :for={part <- @parts}
-                      class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide"
+                      scope="col"
+                      class="px-3 py-3 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide min-w-[100px] max-w-[140px]"
                     >
-                      {part.label}
+                      <span
+                        class="line-clamp-2 text-[12px] font-semibold text-stone-700 normal-case"
+                        title={part.label}
+                      >
+                        {part.label}
+                      </span>
                     </th>
                   </tr>
                 </thead>
@@ -282,8 +288,11 @@ defmodule TaskyWeb.ExamLive.Correction do
 
     msg =
       case errors do
-        [] -> "Automatische Korrektur abgeschlossen (#{total})."
-        _ -> "Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen."
+        [] ->
+          "Automatische Korrektur abgeschlossen (#{total})."
+
+        _ ->
+          "Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen."
       end
 
     {:noreply, put_flash(socket, :info, msg)}
