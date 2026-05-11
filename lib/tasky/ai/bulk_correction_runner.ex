@@ -112,7 +112,9 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          clamped = clamp_points(points, max_points),
          {:ok, updated_submission} <-
            Exams.update_corrected_part_content(submission, part_id, nodes),
-         {:ok, _} <- Exams.set_part_points(updated_submission, part_id, clamped) do
+         {:ok, updated_submission} <-
+           Exams.set_part_points(updated_submission, part_id, clamped),
+         {:ok, _} <- Exams.mark_part_auto_corrected(updated_submission, part_id) do
       :ok
     else
       {:error, reason} -> {:error, reason}

@@ -9,6 +9,7 @@ defmodule Tasky.Exams.ExamSubmission do
     field :submitted, :boolean, default: false
     field :content, :map, default: %{}
     field :corrected_parts, {:array, :string}, default: []
+    field :auto_corrected_parts, {:array, :string}, default: []
     field :corrected_content, :map, default: %{}
     field :points_per_part, :map, default: %{}
 

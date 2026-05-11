@@ -397,6 +397,43 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Marks a single part of a submission as AI-auto-corrected (idempotent).
+  Broadcasts `{:submission_corrected_parts_changed, submission}`.
+  """
+  def mark_part_auto_corrected(%ExamSubmission{} = submission, part_id)
+      when is_binary(part_id) do
+    parts = Enum.uniq([part_id | submission.auto_corrected_parts || []])
+    update_auto_corrected_parts(submission, parts)
+  end
+
+  @doc """
+  Removes a part from the submission's AI-auto-corrected list.
+  """
+  def unmark_part_auto_corrected(%ExamSubmission{} = submission, part_id)
+      when is_binary(part_id) do
+    parts = Enum.reject(submission.auto_corrected_parts || [], &(&1 == part_id))
+    update_auto_corrected_parts(submission, parts)
+  end
+
+  defp update_auto_corrected_parts(submission, parts) do
+    case submission
+         |> Ecto.Changeset.change(%{auto_corrected_parts: parts})
+         |> Repo.update() do
+      {:ok, updated} = result ->
+        Phoenix.PubSub.broadcast(
+          Tasky.PubSub,
+          "exam_correction:#{updated.exam_id}",
+          {:submission_corrected_parts_changed, updated}
+        )
+
+        result
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
   Persists the teacher's corrected content for a single part.
 
   `part_id` identifies the page boundary (the same id returned by

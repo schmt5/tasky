@@ -589,6 +589,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     if pre_ai_nodes do
       case Exams.update_corrected_part_content(submission, part.id, pre_ai_nodes) do
         {:ok, updated_submission} ->
+          updated_submission =
+            case Exams.unmark_part_auto_corrected(updated_submission, part.id) do
+              {:ok, s} -> s
+              _ -> updated_submission
+            end
+
           part_doc = %{"type" => "doc", "content" => pre_ai_nodes}
           part_doc_json = Jason.encode!(part_doc)
 
@@ -657,12 +663,18 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
               # Also save the points
               case Exams.set_part_points(updated_submission, part.id, clamped_points) do
                 {:ok, updated_submission2} ->
+                  updated_submission3 =
+                    case Exams.mark_part_auto_corrected(updated_submission2, part.id) do
+                      {:ok, s} -> s
+                      _ -> updated_submission2
+                    end
+
                   part_doc = %{"type" => "doc", "content" => nodes}
                   part_doc_json = Jason.encode!(part_doc)
 
                   {:noreply,
                    socket
-                   |> assign(:submission, updated_submission2)
+                   |> assign(:submission, updated_submission3)
                    |> assign(:current_part, %{part | nodes: nodes})
                    |> assign(:part_doc_json, part_doc_json)
                    |> assign(:points, clamped_points)

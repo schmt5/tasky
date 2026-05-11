@@ -45,42 +45,75 @@ defmodule TaskyWeb.ExamLive.Correction do
               >
                 <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Konfigurieren
               </.link>
-              <%= case @bulk_status do %>
-                <% {:running, %{done: done, total: total}} -> %>
-                  <span class="font-mono text-xs font-semibold text-stone-500 tabular-nums">
-                    {done} / {total}
-                  </span>
+              <button
+                type="button"
+                phx-click="run_auto_correction"
+                disabled={not @any_auto_correct or match?({:running, _}, @bulk_status)}
+                title={
+                  cond do
+                    match?({:running, _}, @bulk_status) -> "Korrektur läuft bereits"
+                    @any_auto_correct -> "Automatische Korrektur starten"
+                    true -> "Bitte zuerst eine Aufgabe konfigurieren"
+                  end
+                }
+                class={[
+                  "inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-all duration-150",
+                  cond do
+                    match?({:running, _}, @bulk_status) ->
+                      "text-white bg-gradient-to-r from-amber-300 to-orange-300 opacity-60 cursor-not-allowed"
+
+                    @any_auto_correct ->
+                      "text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-md cursor-pointer"
+
+                    true ->
+                      "text-stone-400 bg-stone-100 border border-stone-200 cursor-not-allowed"
+                  end
+                ]}
+              >
+                <.icon name="hero-sparkles" class="w-4 h-4" /> Korrigieren lassen
+              </button>
+            </div>
+          </div>
+
+          <%= case @bulk_status do %>
+            <% {:running, %{done: done, total: total}} -> %>
+              <div class="border-t border-stone-100 bg-gradient-to-r from-amber-50/40 via-orange-50/30 to-amber-50/40 px-6 py-5">
+                <div class="flex items-center justify-between gap-4">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="relative flex h-2.5 w-2.5 shrink-0">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75">
+                      </span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-stone-700 animate-pulse">
+                        Am korrigieren...
+                      </p>
+                      <p class="text-xs text-stone-500 mt-0.5 tabular-nums">
+                        <span class="font-semibold text-stone-700">{done}</span>
+                        von <span class="font-semibold text-stone-700">{total}</span>
+                        Aufgaben verarbeitet
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     phx-click="cancel_auto_correction"
-                    class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg transition-all duration-150 hover:bg-red-50 hover:border-red-300 cursor-pointer"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg transition-all duration-150 hover:bg-red-50 hover:border-red-300 cursor-pointer shrink-0"
                   >
                     <.icon name="hero-x-mark" class="w-4 h-4" /> Abbrechen
                   </button>
-                <% _ -> %>
-                  <button
-                    type="button"
-                    phx-click="run_auto_correction"
-                    disabled={not @any_auto_correct}
-                    title={
-                      if @any_auto_correct,
-                        do: "Automatische Korrektur starten",
-                        else: "Bitte zuerst eine Aufgabe konfigurieren"
-                    }
-                    class={[
-                      "inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-all duration-150",
-                      if(@any_auto_correct,
-                        do:
-                          "text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-md cursor-pointer",
-                        else: "text-stone-400 bg-stone-100 border border-stone-200 cursor-not-allowed"
-                      )
-                    ]}
+                </div>
+                <div class="mt-4 h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+                  <div
+                    class="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-500 ease-out"
+                    style={"width: #{progress_percent(done, total)}%"}
                   >
-                    <.icon name="hero-sparkles" class="w-4 h-4" /> Korrigieren lassen
-                  </button>
-              <% end %>
-            </div>
-          </div>
+                  </div>
+                </div>
+              </div>
+            <% _ -> %>
+          <% end %>
         </div>
 
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
@@ -143,6 +176,14 @@ defmodule TaskyWeb.ExamLive.Correction do
                         >
                           <.icon name="hero-eye" class="w-4 h-4" />
                         </.link>
+                        <%= if part.id in (submission.auto_corrected_parts || []) do %>
+                          <span
+                            class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500"
+                            title="Automatisch durch KI korrigiert"
+                          >
+                            <.icon name="hero-sparkles" class="w-5 h-5" />
+                          </span>
+                        <% end %>
                         <%= if part.id in submission.corrected_parts do %>
                           <span
                             class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500"
@@ -265,6 +306,9 @@ defmodule TaskyWeb.ExamLive.Correction do
       _, acc -> acc
     end)
   end
+
+  defp progress_percent(_done, 0), do: 0
+  defp progress_percent(done, total), do: round(done * 100 / total)
 
   defp format_points(0), do: "—"
   defp format_points(n) when is_integer(n), do: Integer.to_string(n)
