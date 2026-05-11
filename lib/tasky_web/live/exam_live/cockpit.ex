@@ -82,7 +82,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   <input
                     id="enrollment-token-field"
                     type="text"
-                    value={"http://localhost:4000/guest/enroll/#{@exam.enrollment_token}"}
+                    value={url(~p"/guest/enroll/#{@exam.enrollment_token}")}
                     readonly
                     class="flex-1 font-mono text-sm text-stone-700 bg-stone-50 border border-stone-200 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 select-all cursor-text"
                     phx-hook=".CopyToClipboard"
