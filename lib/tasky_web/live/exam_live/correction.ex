@@ -2,6 +2,7 @@ defmodule TaskyWeb.ExamLive.Correction do
   use TaskyWeb, :live_view
 
   alias Tasky.Exams
+  alias Tasky.AI.BulkCorrectionRunner
 
   @impl true
   def render(assigns) do
@@ -25,6 +26,63 @@ defmodule TaskyWeb.ExamLive.Correction do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
+        <%!-- Automatische Korrektur Card --%>
+        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+          <div class="px-6 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-sm">
+                <.icon name="hero-sparkles" class="w-5 h-5" />
+              </div>
+              <div>
+                <h2 class="text-base font-semibold text-stone-800">Automatische Korrektur</h2>
+                <p class="text-xs text-stone-400 mt-0.5">KI-gestützte Bewertung der Abgaben</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <.link
+                navigate={~p"/exams/#{@exam}/correction/config"}
+                class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-stone-600 bg-stone-50 border border-stone-200 rounded-lg transition-all duration-150 hover:bg-stone-100 hover:text-stone-800 hover:border-stone-300"
+              >
+                <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Konfigurieren
+              </.link>
+              <%= case @bulk_status do %>
+                <% {:running, %{done: done, total: total}} -> %>
+                  <span class="font-mono text-xs font-semibold text-stone-500 tabular-nums">
+                    {done} / {total}
+                  </span>
+                  <button
+                    type="button"
+                    phx-click="cancel_auto_correction"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg transition-all duration-150 hover:bg-red-50 hover:border-red-300 cursor-pointer"
+                  >
+                    <.icon name="hero-x-mark" class="w-4 h-4" /> Abbrechen
+                  </button>
+                <% _ -> %>
+                  <button
+                    type="button"
+                    phx-click="run_auto_correction"
+                    disabled={not @any_auto_correct}
+                    title={
+                      if @any_auto_correct,
+                        do: "Automatische Korrektur starten",
+                        else: "Bitte zuerst eine Aufgabe konfigurieren"
+                    }
+                    class={[
+                      "inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg shadow-sm transition-all duration-150",
+                      if(@any_auto_correct,
+                        do:
+                          "text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-md cursor-pointer",
+                        else: "text-stone-400 bg-stone-100 border border-stone-200 cursor-not-allowed"
+                      )
+                    ]}
+                  >
+                    <.icon name="hero-sparkles" class="w-4 h-4" /> Korrigieren lassen
+                  </button>
+              <% end %>
+            </div>
+          </div>
+        </div>
+
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @parts == [] do %>
             <div class="p-12 text-center text-stone-400">
@@ -119,7 +177,45 @@ defmodule TaskyWeb.ExamLive.Correction do
      |> assign(:page_title, exam.name <> " – Korrektur")
      |> assign(:exam, exam)
      |> assign(:parts, Exams.split_content_into_parts(exam.content || %{}))
-     |> assign(:submissions, load_sorted_submissions(exam))}
+     |> assign(:submissions, load_sorted_submissions(exam))
+     |> assign(:any_auto_correct, Exams.count_auto_correct_parts(exam) > 0)
+     |> assign(:bulk_status, :idle)
+     |> assign(:bulk_runner_pid, nil)}
+  end
+
+  @impl true
+  def handle_event("run_auto_correction", _params, socket) do
+    cond do
+      not socket.assigns.any_auto_correct ->
+        {:noreply, socket}
+
+      match?({:running, _}, socket.assigns.bulk_status) ->
+        {:noreply, socket}
+
+      true ->
+        case BulkCorrectionRunner.start(socket.assigns.exam, socket.assigns.current_scope) do
+          {:ok, pid} ->
+            total = length(Exams.list_bulk_correction_jobs(socket.assigns.exam))
+
+            {:noreply,
+             socket
+             |> assign(:bulk_runner_pid, pid)
+             |> assign(:bulk_status, {:running, %{done: 0, total: total}})}
+
+          {:error, reason} ->
+            {:noreply,
+             put_flash(socket, :error, "Konnte nicht gestartet werden: #{inspect(reason)}")}
+        end
+    end
+  end
+
+  def handle_event("cancel_auto_correction", _params, socket) do
+    case socket.assigns.bulk_runner_pid do
+      pid when is_pid(pid) -> BulkCorrectionRunner.cancel(pid)
+      _ -> :ok
+    end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -130,6 +226,35 @@ defmodule TaskyWeb.ExamLive.Correction do
       end)
 
     {:noreply, assign(socket, :submissions, submissions)}
+  end
+
+  def handle_info({:bulk_correction_progress, %{done: done, total: total}}, socket) do
+    {:noreply, assign(socket, :bulk_status, {:running, %{done: done, total: total}})}
+  end
+
+  def handle_info({:bulk_correction_done, %{total: total, errors: errors}}, socket) do
+    socket =
+      socket
+      |> assign(:bulk_status, :idle)
+      |> assign(:bulk_runner_pid, nil)
+      |> assign(:submissions, load_sorted_submissions(socket.assigns.exam))
+
+    msg =
+      case errors do
+        [] -> "Automatische Korrektur abgeschlossen (#{total})."
+        _ -> "Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen."
+      end
+
+    {:noreply, put_flash(socket, :info, msg)}
+  end
+
+  def handle_info({:bulk_correction_cancelled, %{done: done, total: total}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:bulk_status, :idle)
+     |> assign(:bulk_runner_pid, nil)
+     |> assign(:submissions, load_sorted_submissions(socket.assigns.exam))
+     |> put_flash(:info, "Korrektur abgebrochen (#{done}/#{total} verarbeitet).")}
   end
 
   defp total_points(submission) do

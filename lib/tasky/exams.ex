@@ -529,10 +529,93 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Bulk-updates the AI correction configuration for multiple parts at once.
+  `updates` is a map of `%{part_id => %{key => value, ...}, ...}`.
+  Each part's config is merged with the existing config for that part.
+  """
+  def update_ai_correction_config_bulk(%Exam{} = exam, updates) when is_map(updates) do
+    current = exam.ai_correction_config || %{}
+
+    merged =
+      Enum.reduce(updates, current, fn {part_id, new_config}, acc ->
+        existing = Map.get(acc, part_id, %{})
+        Map.put(acc, part_id, Map.merge(existing, new_config))
+      end)
+
+    exam
+    |> Ecto.Changeset.change(%{ai_correction_config: merged})
+    |> Repo.update()
+  end
+
+  @doc """
+  Counts how many parts of the exam are enabled for automatic AI correction.
+  """
+  def count_auto_correct_parts(%Exam{} = exam) do
+    config = exam.ai_correction_config || %{}
+
+    Enum.count(config, fn {_part_id, part_config} ->
+      is_map(part_config) and Map.get(part_config, "auto_correct") == true
+    end)
+  end
+
+  @doc """
+  Enumerates `(submission, part, ignore_spelling?)` triples eligible for bulk
+  AI correction across all submissions of the exam. Excludes parts without a
+  max-points entry or without content for that submission.
+  """
+  def list_bulk_correction_jobs(%Exam{} = exam) do
+    config = exam.ai_correction_config || %{}
+    max_points_map = exam.sample_solution_points || %{}
+
+    auto_correct_part_ids =
+      for {part_id, part_config} <- config,
+          is_map(part_config),
+          Map.get(part_config, "auto_correct") == true,
+          Map.get(max_points_map, part_id) not in [nil, 0],
+          into: MapSet.new(),
+          do: part_id
+
+    if MapSet.size(auto_correct_part_ids) == 0 do
+      []
+    else
+      exam
+      |> list_exam_submissions()
+      |> Enum.flat_map(fn submission ->
+        parts =
+          submission
+          |> correction_content()
+          |> split_content_into_parts()
+
+        for part <- parts,
+            MapSet.member?(auto_correct_part_ids, part.id),
+            part.nodes != [] do
+          %{
+            submission_id: submission.id,
+            part_id: part.id,
+            ignore_spelling:
+              config |> Map.get(part.id, %{}) |> Map.get("ignore_spelling", false) == true
+          }
+        end
+      end)
+    end
+  end
+
+  @doc """
   Subscribes to correction-grid events for a given exam ID.
   """
   def subscribe_correction(exam_id) do
     Phoenix.PubSub.subscribe(Tasky.PubSub, "exam_correction:#{exam_id}")
+  end
+
+  @doc """
+  Broadcasts a bulk-correction lifecycle event on the correction topic.
+  Payload shapes:
+    {:bulk_correction_progress, %{done: integer, total: integer, errors: integer}}
+    {:bulk_correction_done, %{total: integer, errors: list}}
+    {:bulk_correction_cancelled, %{done: integer, total: integer, errors: list}}
+  """
+  def broadcast_bulk_correction(exam_id, message) do
+    Phoenix.PubSub.broadcast(Tasky.PubSub, "exam_correction:#{exam_id}", message)
   end
 
   # --- PubSub for exam status ---

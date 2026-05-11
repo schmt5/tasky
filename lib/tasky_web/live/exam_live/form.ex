@@ -175,7 +175,7 @@ defmodule TaskyWeb.ExamLive.Form do
         {:noreply,
          socket
          |> put_flash(:info, "Prüfung erfolgreich erstellt")
-         |> push_navigate(to: return_path(socket.assigns.return_to, exam))}
+         |> push_navigate(to: ~p"/exams/#{exam}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset, as: :exam))}
