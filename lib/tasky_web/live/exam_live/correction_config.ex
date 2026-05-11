@@ -41,8 +41,11 @@ defmodule TaskyWeb.ExamLive.CorrectionConfig do
                 <%!-- Header Row --%>
                 <thead class="bg-stone-50 border-b border-stone-100">
                   <tr>
-                    <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide w-1/2">
+                    <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide w-5/12">
                       Aufgaben
+                    </th>
+                    <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide w-24">
+                      Anzeigen
                     </th>
                     <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
                       <div class="flex items-center gap-1.5">
@@ -80,6 +83,7 @@ defmodule TaskyWeb.ExamLive.CorrectionConfig do
                     <td class="px-6 py-3">
                       <span class="text-sm font-medium text-stone-400 italic">Alle Aufgaben</span>
                     </td>
+                    <td class="px-6 py-3"></td>
                     <td class="px-6 py-3">
                       <label class="inline-flex items-center cursor-pointer group">
                         <input
@@ -122,6 +126,17 @@ defmodule TaskyWeb.ExamLive.CorrectionConfig do
                       </div>
                     </td>
                     <td class="px-6 py-3">
+                      <button
+                        type="button"
+                        phx-click="show_sample_solution"
+                        phx-value-part-id={part.id}
+                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 hover:text-sky-600 hover:bg-sky-50 transition-colors duration-150 cursor-pointer"
+                        title="Musterlösung anzeigen"
+                      >
+                        <.icon name="hero-eye" class="w-[18px] h-[18px]" />
+                      </button>
+                    </td>
+                    <td class="px-6 py-3">
                       <label class="inline-flex items-center cursor-pointer group">
                         <input
                           type="checkbox"
@@ -157,6 +172,62 @@ defmodule TaskyWeb.ExamLive.CorrectionConfig do
           </div>
         <% end %>
       </div>
+
+      <%!-- Sample Solution Modal --%>
+      <%= if @show_sample_solution_part do %>
+        <dialog
+          id="sample-solution-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_sample_solution"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_sample_solution"></div>
+          <div class="modal-box max-w-6xl w-[90vw] p-0 bg-white rounded-[16px] shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="px-6 pt-6 pb-4 border-b border-stone-100 flex items-start gap-4">
+              <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
+                <.icon name="hero-light-bulb" class="w-5 h-5 text-sky-500" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-lg font-semibold text-stone-900 truncate">
+                  Musterlösung – {@show_sample_solution_part.label}
+                </h3>
+              </div>
+              <button
+                type="button"
+                phx-click="close_sample_solution"
+                class="text-stone-400 hover:text-stone-700 transition-colors duration-150 cursor-pointer"
+                title="Schliessen"
+              >
+                <.icon name="hero-x-mark" class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1">
+              <%= if @sample_solution_json do %>
+                <div
+                  id={"sample-solution-viewer-#{@show_sample_solution_part.id}"}
+                  phx-hook="ExamReadOnlyViewer"
+                  phx-update="ignore"
+                  data-content={@sample_solution_json}
+                >
+                </div>
+              <% else %>
+                <p class="text-sm text-stone-400 italic">
+                  Keine Musterlösung für diesen Teil vorhanden.
+                </p>
+              <% end %>
+            </div>
+            <div class="px-6 pb-6 pt-3 flex items-center justify-end border-t border-stone-100">
+              <button
+                type="button"
+                phx-click="close_sample_solution"
+                class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 cursor-pointer"
+              >
+                Schliessen
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
 
       <%!-- Info Modal --%>
       <%= if @show_info_modal do %>
@@ -248,7 +319,9 @@ defmodule TaskyWeb.ExamLive.CorrectionConfig do
      |> assign(:exam, exam)
      |> assign(:parts, parts)
      |> assign(:config, config)
-     |> assign(:show_info_modal, nil)}
+     |> assign(:show_info_modal, nil)
+     |> assign(:show_sample_solution_part, nil)
+     |> assign(:sample_solution_json, nil)}
   end
 
   @impl true
@@ -266,6 +339,37 @@ defmodule TaskyWeb.ExamLive.CorrectionConfig do
 
   def handle_event("toggle_all_ignore_spelling", _params, socket) do
     {:noreply, toggle_all_flag(socket, "ignore_spelling")}
+  end
+
+  def handle_event("show_sample_solution", %{"part-id" => part_id}, socket) do
+    %{exam: exam, parts: parts} = socket.assigns
+
+    part = Enum.find(parts, &(&1.id == part_id))
+
+    nodes =
+      exam.sample_solution
+      |> Kernel.||(%{})
+      |> Exams.split_content_into_parts()
+      |> Enum.find(&(&1.id == part_id))
+      |> case do
+        nil -> []
+        p -> p.nodes
+      end
+
+    doc = %{"type" => "doc", "content" => nodes}
+    sample_solution_json = Jason.encode!(doc)
+
+    {:noreply,
+     socket
+     |> assign(:show_sample_solution_part, part)
+     |> assign(:sample_solution_json, sample_solution_json)}
+  end
+
+  def handle_event("close_sample_solution", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_sample_solution_part, nil)
+     |> assign(:sample_solution_json, nil)}
   end
 
   def handle_event("show_info", %{"topic" => topic}, socket) do
