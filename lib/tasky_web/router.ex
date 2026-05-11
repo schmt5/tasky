@@ -144,7 +144,6 @@ defmodule TaskyWeb.Router do
       live "/courses", CoursesLive, :index
       live "/courses/:id", CourseLive, :show
       live "/tasks/:id", TaskLive, :show
-      live "/my-tasks", MyTasksLive, :index
     end
   end
 
