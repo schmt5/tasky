@@ -114,7 +114,6 @@ defmodule TaskyWeb.Router do
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
       live "/exams/:id/cockpit/config", ExamLive.CockpitConfig, :config
       live "/exams/:id/correction", ExamLive.Correction, :correction
-      live "/exams/:id/correction/config", ExamLive.CorrectionConfig, :correction_config
 
       live "/exams/:id/correction/:submission_id/parts/:part_id",
            ExamLive.CorrectionPart,
