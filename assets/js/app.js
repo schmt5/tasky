@@ -29,6 +29,7 @@ import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
 import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
 import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
 import { ExamReadOnlyViewer } from "./hooks/exam_readonly_viewer_hook";
+import { PowerView } from "./hooks/power_view_hook";
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
@@ -43,6 +44,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ExamSampleSolutionPartEditor,
     ExamCorrectionEditor,
     ExamReadOnlyViewer,
+    PowerView,
   },
 });
 

@@ -9,6 +9,7 @@ defmodule Tasky.Exams do
   alias Tasky.Exams.Exam
   alias Tasky.Exams.ExamSubmission
   alias Tasky.Accounts.Scope
+  alias Tasky.AI.NodePatcher
 
   @doc """
   Returns the list of exams for a given scope.
@@ -549,6 +550,170 @@ defmodule Tasky.Exams do
       error ->
         error
     end
+  end
+
+  @doc """
+  Lists the answer-bearing blocks in a single part of a submission, paired
+  with the teacher's current verdict for each (if any).
+
+  Each entry is `%{index: i, text: t, verdict: "correct" | "half" | "wrong" | nil}`.
+  Verdicts are keyed by `"<part_id>:<index>"` in `submission.block_verdicts`.
+  """
+  def list_part_answer_blocks(%ExamSubmission{} = submission, part_id)
+      when is_binary(part_id) do
+    parts =
+      submission
+      |> correction_content()
+      |> split_content_into_parts()
+
+    case Enum.find(parts, &(&1.id == part_id)) do
+      nil ->
+        []
+
+      part ->
+        explicit = submission.block_verdicts || %{}
+
+        part.nodes
+        |> NodePatcher.list_answer_blocks()
+        |> Enum.map(fn entry ->
+          key = block_verdict_key(part_id, entry.index)
+          verdict = Map.get(explicit, key) || entry.inferred_verdict
+          Map.put(entry, :verdict, verdict)
+        end)
+    end
+  end
+
+  @doc """
+  Sets (or clears, when `verdict` is `nil`) the teacher's verdict for a
+  single answer block in a single part of a submission.
+
+  Persists three things atomically:
+    * `block_verdicts` — keyed by `"<part_id>:<index>"`
+    * `corrected_content` — the trailing ✅/🟡/❌ marker on the affected
+      node is rewritten to match the new verdict
+    * `points_per_part[part_id]` — recomputed as
+      `(correct + 0.5 * half) * (max_points / block_count)`, rounded to
+      0.5 increments. If the part has no `max_points` configured or no
+      answer blocks, the entry is removed.
+
+  Broadcasts the updated submission so the correction grid stays in sync.
+  """
+  def set_block_verdict(%ExamSubmission{} = submission, part_id, index, verdict)
+      when is_binary(part_id) and is_integer(index) and
+             verdict in ["correct", "half", "wrong", nil] do
+    exam = Repo.get!(Exam, submission.exam_id)
+    max_points = Map.get(exam.sample_solution_points || %{}, part_id)
+
+    parts =
+      submission
+      |> correction_content()
+      |> split_content_into_parts()
+
+    case Enum.find(parts, &(&1.id == part_id)) do
+      nil ->
+        {:error, :unknown_part}
+
+      part ->
+        key = block_verdict_key(part_id, index)
+        current_verdicts = submission.block_verdicts || %{}
+
+        new_verdicts =
+          if is_nil(verdict) do
+            Map.delete(current_verdicts, key)
+          else
+            Map.put(current_verdicts, key, verdict)
+          end
+
+        # Effective verdict for each block: explicit teacher choice if any,
+        # otherwise fall back to the verdict inferred from the existing
+        # ✅/🟡/❌ marker on the node (e.g. left by AI auto-correction).
+        # This ensures untouched blocks keep their markers and contribute
+        # their points when the teacher only edits a single block.
+        blocks = NodePatcher.list_answer_blocks(part.nodes)
+        effective_indexed = effective_verdicts_for_part(blocks, new_verdicts, part_id)
+
+        block_count = length(blocks)
+
+        new_part_points =
+          compute_part_points_from_indexed(effective_indexed, block_count, max_points)
+
+        new_points_per_part =
+          if is_nil(new_part_points) do
+            Map.delete(submission.points_per_part || %{}, part_id)
+          else
+            Map.put(submission.points_per_part || %{}, part_id, new_part_points)
+          end
+
+        rewritten_nodes = NodePatcher.rewrite_markers(part.nodes, effective_indexed)
+
+        new_parts =
+          Enum.map(parts, fn p ->
+            if p.id == part_id, do: %{p | nodes: rewritten_nodes}, else: p
+          end)
+
+        new_doc = assemble_parts_into_content(new_parts)
+
+        case submission
+             |> Ecto.Changeset.change(%{
+               block_verdicts: new_verdicts,
+               corrected_content: new_doc,
+               points_per_part: new_points_per_part
+             })
+             |> Repo.update() do
+          {:ok, updated} = result ->
+            Phoenix.PubSub.broadcast(
+              Tasky.PubSub,
+              "exam_correction:#{updated.exam_id}",
+              {:submission_corrected_parts_changed, updated}
+            )
+
+            result
+
+          error ->
+            error
+        end
+    end
+  end
+
+  defp block_verdict_key(part_id, index), do: "#{part_id}:#{index}"
+
+  defp effective_verdicts_for_part(blocks, explicit_verdicts, part_id) do
+    Enum.reduce(blocks, %{}, fn entry, acc ->
+      key = block_verdict_key(part_id, entry.index)
+
+      case Map.get(explicit_verdicts, key) do
+        nil ->
+          case entry.inferred_verdict do
+            nil -> acc
+            v -> Map.put(acc, entry.index, v)
+          end
+
+        v ->
+          Map.put(acc, entry.index, v)
+      end
+    end)
+  end
+
+  defp compute_part_points_from_indexed(_indexed, 0, _max_points), do: nil
+  defp compute_part_points_from_indexed(_indexed, _count, nil), do: nil
+
+  defp compute_part_points_from_indexed(indexed, block_count, max_points)
+       when is_number(max_points) and block_count > 0 do
+    per_block = max_points / block_count
+
+    weighted_sum =
+      Enum.reduce(indexed, 0.0, fn
+        {_idx, "correct"}, acc -> acc + 1.0
+        {_idx, "half"}, acc -> acc + 0.5
+        {_idx, "wrong"}, acc -> acc + 0.0
+        _, acc -> acc
+      end)
+
+    total = weighted_sum * per_block
+
+    rounded = Float.round(total * 2) / 2
+
+    if rounded == trunc(rounded), do: trunc(rounded), else: rounded
   end
 
   @doc """

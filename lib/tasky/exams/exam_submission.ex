@@ -12,6 +12,7 @@ defmodule Tasky.Exams.ExamSubmission do
     field :auto_corrected_parts, {:array, :string}, default: []
     field :corrected_content, :map, default: %{}
     field :points_per_part, :map, default: %{}
+    field :block_verdicts, :map, default: %{}
 
     belongs_to :exam, Tasky.Exams.Exam
 

@@ -19,7 +19,127 @@ defmodule Tasky.AI.NodePatcher do
   """
 
   @answer_types ["answerBlock", "lueckentext", "taskItem"]
-  @trailing_marker_regex ~r/\s*[✅❌]\s*$/u
+  @trailing_marker_regex ~r/\s*[✅❌🟡]\s*$/u
+
+  @doc """
+  Returns the ordered list of answer-bearing nodes within the given
+  nodes list, paired with their zero-based positional index. Used by
+  the power-view to enumerate blocks for keyboard correction.
+
+  Each entry is `%{index: i, type: t, text: plain_text, inferred_verdict: v}`
+  where `inferred_verdict` reflects the trailing ✅/🟡/❌ marker on the
+  node (or `nil` if absent). Useful as a default verdict when the teacher
+  has not yet explicitly overridden the AI's call.
+  """
+  def list_answer_blocks(nodes) when is_list(nodes) do
+    {entries, _} = collect_blocks(nodes, [], 0)
+    Enum.reverse(entries)
+  end
+
+  defp collect_blocks([], acc, counter), do: {acc, counter}
+
+  defp collect_blocks([%{"type" => type} = node | rest], acc, counter)
+       when type in @answer_types do
+    raw_text = node |> Map.get("content", []) |> extract_plain_text()
+    text = raw_text |> strip_marker_text()
+    inferred = infer_verdict_from_text(raw_text)
+
+    entry = %{index: counter, type: type, text: text, inferred_verdict: inferred}
+    collect_blocks(rest, [entry | acc], counter + 1)
+  end
+
+  defp collect_blocks([%{"content" => content} | rest], acc, counter) when is_list(content) do
+    {acc, counter} = collect_blocks(content, acc, counter)
+    collect_blocks(rest, acc, counter)
+  end
+
+  defp collect_blocks([_ | rest], acc, counter), do: collect_blocks(rest, acc, counter)
+
+  defp extract_plain_text(content) when is_list(content) do
+    content
+    |> Enum.map(fn
+      %{"type" => "text", "text" => t} -> t
+      %{"content" => inner} when is_list(inner) -> extract_plain_text(inner)
+      _ -> ""
+    end)
+    |> Enum.join("")
+  end
+
+  defp extract_plain_text(_), do: ""
+
+  defp strip_marker_text(text) when is_binary(text) do
+    text
+    |> String.replace(@trailing_marker_regex, "")
+    |> String.trim()
+  end
+
+  defp infer_verdict_from_text(text) when is_binary(text) do
+    trimmed = String.trim_trailing(text)
+
+    cond do
+      String.ends_with?(trimmed, "✅") -> "correct"
+      String.ends_with?(trimmed, "🟡") -> "half"
+      String.ends_with?(trimmed, "❌") -> "wrong"
+      true -> nil
+    end
+  end
+
+  defp infer_verdict_from_text(_), do: nil
+
+  @doc """
+  Rewrites the trailing ✅/❌/🟡 markers on answer-bearing nodes within
+  the given nodes list, addressed by their positional index.
+
+  `verdicts` is a map `%{index_int_or_str => "correct" | "half" | "wrong" | nil}`.
+  An index not present in the map (or mapped to `nil`/unknown) yields no marker
+  (any pre-existing marker is stripped).
+  """
+  def rewrite_markers(nodes, verdicts) when is_list(nodes) and is_map(verdicts) do
+    normalized =
+      Enum.into(verdicts, %{}, fn {k, v} ->
+        {to_string(k), v}
+      end)
+
+    {new_nodes, _} = rewrite_walk(nodes, normalized, 0)
+    new_nodes
+  end
+
+  defp rewrite_walk(nodes, verdicts, counter) when is_list(nodes) do
+    Enum.map_reduce(nodes, counter, fn node, c -> rewrite_node(node, verdicts, c) end)
+  end
+
+  defp rewrite_node(%{"type" => type} = node, verdicts, counter) when type in @answer_types do
+    verdict = Map.get(verdicts, Integer.to_string(counter))
+    marker = power_marker(verdict)
+
+    content = Map.get(node, "content")
+
+    new_content =
+      cond do
+        is_list(content) and marker ->
+          content |> strip_markers() |> append_marker_to_last_text(marker)
+
+        is_list(content) ->
+          strip_markers(content)
+
+        true ->
+          content
+      end
+
+    {put_content(node, new_content), counter + 1}
+  end
+
+  defp rewrite_node(%{"content" => content} = node, verdicts, counter) when is_list(content) do
+    {new_content, new_counter} = rewrite_walk(content, verdicts, counter)
+    {Map.put(node, "content", new_content), new_counter}
+  end
+
+  defp rewrite_node(node, _verdicts, counter), do: {node, counter}
+
+  defp power_marker("correct"), do: "✅"
+  defp power_marker("half"), do: "🟡"
+  defp power_marker("wrong"), do: "❌"
+  defp power_marker(_), do: nil
 
   @doc """
   Returns `{annotated_nodes, answer_count}`.
