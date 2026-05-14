@@ -163,7 +163,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     ]}
                   >
                     <.icon name="hero-check-badge" class="w-4 h-4" />
-                    {if @is_corrected, do: "Korrigiert", else: "Als korrigiert markieren"}
+                    {if @is_corrected, do: "Erledigt", else: "Als erledigt markieren"}
                   </button>
                 </div>
               </div>
@@ -214,20 +214,34 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
               <div class="px-6 py-4 border-b border-stone-100 flex items-center gap-4 text-xs text-stone-500">
                 <span class="font-semibold uppercase tracking-wide">Tastatur</span>
                 <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">J</kbd>
+                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
+                    J
+                  </kbd>
                   Richtig
                 </span>
                 <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">K</kbd>
+                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
+                    K
+                  </kbd>
                   Halb-richtig
                 </span>
                 <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">L</kbd>
+                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
+                    L
+                  </kbd>
                   Falsch
                 </span>
                 <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">Tab</kbd>
+                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
+                    Tab
+                  </kbd>
                   Nächster Block
+                </span>
+                <span class="inline-flex items-center gap-1">
+                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
+                    Leertaste
+                  </kbd>
+                  Erledigt / Weiter
                 </span>
               </div>
 
@@ -283,6 +297,27 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     </div>
                   </div>
                 <% end %>
+
+                <button
+                  type="button"
+                  data-power-toggle-corrected
+                  phx-click="toggle_corrected"
+                  class={[
+                    "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] focus:outline-none focus:ring-4",
+                    if(@is_corrected,
+                      do:
+                        "bg-purple-500 text-white shadow-[0_2px_8px_rgba(168,85,247,0.25)] hover:bg-purple-600 focus:ring-purple-200",
+                      else:
+                        "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 focus:ring-stone-200"
+                    )
+                  ]}
+                >
+                  <.icon name="hero-check-badge" class="w-4 h-4" />
+                  {if @is_corrected, do: "Erledigt", else: "Als erledigt markieren"}
+                  <kbd class="ml-1 px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
+                    Leertaste
+                  </kbd>
+                </button>
               </div>
 
               <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-between gap-4">
@@ -295,15 +330,18 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   <% end %>
                 </div>
 
-                <div class="flex flex-row-reverse items-center gap-2">
+                <div class="flex items-center gap-2">
                   <button
                     type="button"
-                    data-power-footer
+                    data-power-next-submission
                     phx-click="goto_next_submission_power"
                     disabled={is_nil(@next_submission_path)}
                     class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                   >
                     Zum nächsten Teilnehmenden
+                    <kbd class="ml-1 px-1.5 py-0.5 bg-white/20 border border-white/30 rounded text-white/80 font-mono text-[10px]">
+                      Leertaste
+                    </kbd>
                     <.icon name="hero-arrow-right" class="w-4 h-4" />
                   </button>
                   <button
@@ -477,7 +515,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   @impl true
-  def handle_params(%{"submission_id" => submission_id, "part_id" => part_id} = params, _uri, socket) do
+  def handle_params(
+        %{"submission_id" => submission_id, "part_id" => part_id} = params,
+        _uri,
+        socket
+      ) do
     %{exam: exam, submissions: submissions} = socket.assigns
 
     submission =

@@ -3,12 +3,17 @@
 // Attached to the modal element. Manages:
 //   * Initial focus on the first row
 //   * J/K/L shortcuts → push "set_block_verdict" then advance focus
-//   * After the last row, focus jumps to the "next submission" footer button
+//   * After the last row, focus jumps to the "toggle corrected" button
+//   * Spacebar on "toggle corrected" → toggles + moves focus to "next submission"
+//   * Spacebar on "next submission" → navigates to next
 //   * Escape closes the modal (delegated to the existing close handler)
 export const PowerView = {
   mounted() {
     this.rows = () => Array.from(this.el.querySelectorAll("[data-power-row]"));
-    this.footer = () => this.el.querySelector("[data-power-footer]");
+    this.toggleCorrected = () =>
+      this.el.querySelector("[data-power-toggle-corrected]");
+    this.nextSubmission = () =>
+      this.el.querySelector("[data-power-next-submission]");
 
     // Defer focus until after LiveView's morphdom settles and the dialog is
     // actually painted. A single rAF isn't always enough on first mount.
@@ -72,6 +77,29 @@ export const PowerView = {
       }
 
       const active = document.activeElement;
+
+      // Spacebar handling for the action buttons
+      if (e.key === " " || e.key === "Spacebar") {
+        const toggle = this.toggleCorrected();
+        const next = this.nextSubmission();
+
+        if (active === toggle) {
+          e.preventDefault();
+          toggle.click();
+          // Move focus to "next submission" button after toggling
+          if (next && !next.disabled) {
+            setTimeout(() => next.focus(), 50);
+          }
+          return;
+        }
+
+        if (active === next && !next.disabled) {
+          e.preventDefault();
+          next.click();
+          return;
+        }
+      }
+
       const onRow = active && active.hasAttribute("data-power-row");
       if (!onRow) return;
 
@@ -84,14 +112,14 @@ export const PowerView = {
       const index = parseInt(active.dataset.powerRow, 10);
       this.pushEvent("set_block_verdict", { index, verdict });
 
-      // Advance focus: next row, or footer button if we just marked the last.
+      // Advance focus: next row, or "toggle corrected" button if last row.
       const rows = this.rows();
-      const next = rows[index + 1];
-      if (next) {
-        next.focus();
+      const nextRow = rows[index + 1];
+      if (nextRow) {
+        nextRow.focus();
       } else {
-        const footer = this.footer();
-        if (footer && !footer.disabled) footer.focus();
+        const toggle = this.toggleCorrected();
+        if (toggle) toggle.focus();
       }
     };
 

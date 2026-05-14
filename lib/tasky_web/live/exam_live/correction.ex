@@ -222,6 +222,9 @@ defmodule TaskyWeb.ExamLive.Correction do
                     <td class="px-4 py-3">
                       <span class="font-mono text-sm font-semibold text-stone-700">
                         {format_points(total_points(submission))}
+                        <span class="text-stone-400 font-normal">
+                          / {format_points(@total_max_points)}
+                        </span>
                       </span>
                     </td>
                     <td :for={part <- @parts} class="px-3 py-3">
@@ -423,6 +426,7 @@ defmodule TaskyWeb.ExamLive.Correction do
      |> assign(:any_auto_correct, any_auto_correct?(config, parts))
      |> assign(:bulk_status, :idle)
      |> assign(:bulk_runner_pid, nil)
+     |> assign(:total_max_points, total_max_points(exam))
      |> assign(:show_info_modal, nil)}
   end
 
@@ -615,6 +619,15 @@ defmodule TaskyWeb.ExamLive.Correction do
 
   defp total_points(submission) do
     (submission.points_per_part || %{})
+    |> Map.values()
+    |> Enum.reduce(0, fn
+      v, acc when is_number(v) -> acc + v
+      _, acc -> acc
+    end)
+  end
+
+  defp total_max_points(exam) do
+    (exam.sample_solution_points || %{})
     |> Map.values()
     |> Enum.reduce(0, fn
       v, acc when is_number(v) -> acc + v
