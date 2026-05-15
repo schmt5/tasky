@@ -247,7 +247,7 @@ defmodule TaskyWeb.ExamLive.Correction do
                         <%= if part.id in submission.corrected_parts do %>
                           <span
                             class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500"
-                            title="Als korrigiert markiert"
+                            title="Als erledigt markiert"
                           >
                             <.icon name="hero-check-badge" class="w-5 h-5" />
                           </span>
@@ -442,12 +442,28 @@ defmodule TaskyWeb.ExamLive.Correction do
       true ->
         case BulkCorrectionRunner.start(socket.assigns.exam, socket.assigns.current_scope) do
           {:ok, pid} ->
-            total = length(Exams.list_bulk_correction_jobs(socket.assigns.exam))
+            exam = socket.assigns.exam
+            total = length(Exams.list_bulk_correction_jobs(exam))
+            skipped = Exams.count_skipped_correction_jobs(exam)
 
-            {:noreply,
-             socket
-             |> assign(:bulk_runner_pid, pid)
-             |> assign(:bulk_status, {:running, %{done: 0, total: total}})}
+            socket =
+              socket
+              |> assign(:bulk_runner_pid, pid)
+              |> assign(:bulk_status, {:running, %{done: 0, total: total}})
+              |> assign(:bulk_skipped, skipped)
+
+            socket =
+              if skipped > 0 do
+                put_flash(
+                  socket,
+                  :info,
+                  "#{skipped} bereits als erledigt markierte Aufgaben werden übersprungen."
+                )
+              else
+                socket
+              end
+
+            {:noreply, socket}
 
           {:error, reason} ->
             {:noreply,
@@ -511,31 +527,47 @@ defmodule TaskyWeb.ExamLive.Correction do
   end
 
   def handle_info({:bulk_correction_done, %{total: total, errors: errors}}, socket) do
+    skipped = Map.get(socket.assigns, :bulk_skipped, 0)
+
     socket =
       socket
       |> assign(:bulk_status, :idle)
       |> assign(:bulk_runner_pid, nil)
+      |> assign(:bulk_skipped, 0)
       |> assign(:submissions, load_sorted_submissions(socket.assigns.exam))
+
+    skipped_note =
+      if skipped > 0,
+        do: " #{skipped} übersprungen (bereits als erledigt markiert).",
+        else: ""
 
     msg =
       case errors do
         [] ->
-          "Automatische Korrektur abgeschlossen (#{total})."
+          "Automatische Korrektur abgeschlossen (#{total}).#{skipped_note}"
 
         _ ->
-          "Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen."
+          "Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen.#{skipped_note}"
       end
 
     {:noreply, put_flash(socket, :info, msg)}
   end
 
   def handle_info({:bulk_correction_cancelled, %{done: done, total: total}}, socket) do
+    skipped = Map.get(socket.assigns, :bulk_skipped, 0)
+
+    skipped_note =
+      if skipped > 0,
+        do: " #{skipped} übersprungen (bereits als erledigt markiert).",
+        else: ""
+
     {:noreply,
      socket
      |> assign(:bulk_status, :idle)
      |> assign(:bulk_runner_pid, nil)
+     |> assign(:bulk_skipped, 0)
      |> assign(:submissions, load_sorted_submissions(socket.assigns.exam))
-     |> put_flash(:info, "Korrektur abgebrochen (#{done}/#{total} verarbeitet).")}
+     |> put_flash(:info, "Korrektur abgebrochen (#{done}/#{total} verarbeitet).#{skipped_note}")}
   end
 
   defp toggle_part_flag(socket, part_id, key) do

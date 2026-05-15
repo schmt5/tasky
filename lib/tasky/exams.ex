@@ -794,7 +794,8 @@ defmodule Tasky.Exams do
 
         for part <- parts,
             MapSet.member?(auto_correct_part_ids, part.id),
-            part.nodes != [] do
+            part.nodes != [],
+            part.id not in (submission.corrected_parts || []) do
           %{
             submission_id: submission.id,
             part_id: part.id,
@@ -804,6 +805,45 @@ defmodule Tasky.Exams do
         end
       end)
       |> Enum.sort_by(& &1.part_id)
+    end
+  end
+
+  @doc """
+  Counts how many correction jobs are skipped because the teacher already
+  marked the submission+part as corrected.
+  """
+  def count_skipped_correction_jobs(%Exam{} = exam) do
+    config = exam.ai_correction_config || %{}
+    max_points_map = exam.sample_solution_points || %{}
+
+    auto_correct_part_ids =
+      for {part_id, part_config} <- config,
+          is_map(part_config),
+          Map.get(part_config, "auto_correct") == true,
+          Map.get(max_points_map, part_id) not in [nil, 0],
+          into: MapSet.new(),
+          do: part_id
+
+    if MapSet.size(auto_correct_part_ids) == 0 do
+      0
+    else
+      exam
+      |> list_exam_submissions()
+      |> Enum.reduce(0, fn submission, acc ->
+        parts =
+          submission
+          |> correction_content()
+          |> split_content_into_parts()
+
+        skipped =
+          Enum.count(parts, fn part ->
+            MapSet.member?(auto_correct_part_ids, part.id) and
+              part.nodes != [] and
+              part.id in (submission.corrected_parts || [])
+          end)
+
+        acc + skipped
+      end)
     end
   end
 
