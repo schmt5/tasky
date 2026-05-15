@@ -20,20 +20,40 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
               %{label: "#{@submission.firstname} #{@submission.lastname} – #{@current_part.label}"}
             ]} />
 
-            <div class="flex items-center gap-2 shrink-0">
-              <.nav_chevron
-                direction="up"
-                target={@prev_submission_path}
-                title="Vorheriger Teilnehmer"
-              />
-              <.nav_chevron
-                direction="down"
-                target={@next_submission_path}
-                title="Nächster Teilnehmer"
-              />
-              <span class="w-px h-6 bg-stone-200 mx-1" />
-              <.nav_chevron direction="left" target={@prev_part_path} title="Vorheriger Teil" />
-              <.nav_chevron direction="right" target={@next_part_path} title="Nächster Teil" />
+            <div class="flex items-center gap-3 shrink-0">
+              <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
+                <.icon name="hero-user" class="w-4 h-4 text-sky-700" />
+                <span class="text-xs font-semibold text-sky-700 uppercase tracking-wide">
+                  Teilnehmer:in
+                </span>
+                <span class="text-xs font-mono font-semibold text-sky-700">
+                  {(@current_submission_index || 0) + 1}/{@total_submissions}
+                </span>
+                <div class="flex items-center gap-1 ml-1">
+                  <.nav_chevron
+                    direction="up"
+                    target={@prev_submission_path}
+                    title="Vorheriger Teilnehmer"
+                  />
+                  <.nav_chevron
+                    direction="down"
+                    target={@next_submission_path}
+                    title="Nächster Teilnehmer"
+                  />
+                </div>
+              </div>
+
+              <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
+                <.icon name="hero-document-text" class="w-4 h-4 text-sky-700" />
+                <span class="text-xs font-semibold text-sky-700 uppercase tracking-wide">Teil</span>
+                <span class="text-xs font-mono font-semibold text-sky-700">
+                  {(@current_part_index || 0) + 1}/{@total_parts}
+                </span>
+                <div class="flex items-center gap-1 ml-1">
+                  <.nav_chevron direction="left" target={@prev_part_path} title="Vorheriger Teil" />
+                  <.nav_chevron direction="right" target={@next_part_path} title="Nächster Teil" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -90,7 +110,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                       inputmode="decimal"
                       phx-debounce="500"
                       placeholder="—"
-                      class="w-full font-mono text-base text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                      class="w-full font-mono text-base text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
                     />
                   </form>
                   <div class="flex items-center gap-2 mt-3">
@@ -117,6 +137,29 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   </div>
                 </div>
 
+                <%= if @current_part.id in (@submission.auto_corrected_parts || []) do %>
+                  <div class="px-5 pt-5 pb-2 flex items-center gap-2.5">
+                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500 shrink-0">
+                      <.icon name="hero-sparkles" class="w-5 h-5" />
+                    </span>
+                    <span class="text-sm font-medium text-purple-600">Automatisch korrigiert</span>
+                  </div>
+                <% end %>
+
+                <div class="px-5 pt-5 pb-3">
+                  <label class="flex items-center gap-3 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      phx-click="toggle_corrected"
+                      checked={@is_corrected}
+                      class="w-5 h-5 rounded border-stone-300 text-stone-600 focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 cursor-pointer"
+                    />
+                    <span class="text-sm font-semibold text-stone-600 group-hover:text-stone-800 transition-colors duration-150">
+                      Als erledigt markieren
+                    </span>
+                  </label>
+                </div>
+
                 <div class="p-5 border-b border-stone-100">
                   <button
                     type="button"
@@ -128,7 +171,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 </div>
 
                 <%= if @power_blocks_count > 0 do %>
-                  <div class="p-5 border-b border-stone-100">
+                  <div class="p-5">
                     <button
                       type="button"
                       phx-click="open_power_view"
@@ -138,34 +181,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     </button>
                   </div>
                 <% end %>
-
-                <%= if @current_part.id in (@submission.auto_corrected_parts || []) do %>
-                  <div class="p-5 border-b border-stone-100 flex items-center gap-2.5">
-                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500 shrink-0">
-                      <.icon name="hero-sparkles" class="w-5 h-5" />
-                    </span>
-                    <span class="text-sm font-medium text-purple-600">Automatisch korrigiert</span>
-                  </div>
-                <% end %>
-
-                <div class="p-5">
-                  <button
-                    type="button"
-                    phx-click="toggle_corrected"
-                    class={[
-                      "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98]",
-                      if(@is_corrected,
-                        do:
-                          "bg-purple-500 text-white shadow-[0_2px_8px_rgba(168,85,247,0.25)] hover:bg-purple-600",
-                        else:
-                          "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
-                      )
-                    ]}
-                  >
-                    <.icon name="hero-check-badge" class="w-4 h-4" />
-                    {if @is_corrected, do: "Erledigt", else: "Als erledigt markieren"}
-                  </button>
-                </div>
               </div>
             </aside>
           </div>
@@ -250,7 +265,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   <div
                     tabindex="0"
                     data-power-row={block.index}
-                    class="grid grid-cols-[64px_1fr_auto] items-center gap-4 px-4 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-4 focus:ring-sky-200 focus:border-sky-400 focus:bg-sky-50/30 transition-all duration-100"
+                    class="grid grid-cols-[64px_1fr_auto] items-center gap-4 px-4 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
                   >
                     <div class="text-center">
                       <span class={[
@@ -298,26 +313,21 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   </div>
                 <% end %>
 
-                <button
-                  type="button"
-                  data-power-toggle-corrected
-                  phx-click="toggle_corrected"
-                  class={[
-                    "w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] focus:outline-none focus:ring-4",
-                    if(@is_corrected,
-                      do:
-                        "bg-purple-500 text-white shadow-[0_2px_8px_rgba(168,85,247,0.25)] hover:bg-purple-600 focus:ring-purple-200",
-                      else:
-                        "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 focus:ring-stone-200"
-                    )
-                  ]}
-                >
-                  <.icon name="hero-check-badge" class="w-4 h-4" />
-                  {if @is_corrected, do: "Erledigt", else: "Als erledigt markieren"}
+                <label class="w-full flex items-center justify-center gap-3 cursor-pointer select-none group px-4 py-2.5 rounded-lg border border-stone-200 hover:bg-stone-50 hover:border-stone-300 focus-within:ring-4 focus-within:ring-sky-600 focus-within:ring-offset-2 transition-all duration-150">
+                  <input
+                    type="checkbox"
+                    data-power-toggle-corrected
+                    phx-click="toggle_corrected"
+                    checked={@is_corrected}
+                    class="w-5 h-5 rounded border-stone-300 text-stone-600 focus:outline-none cursor-pointer"
+                  />
+                  <span class="text-sm font-semibold text-stone-600 group-hover:text-stone-800 transition-colors duration-150">
+                    Als erledigt markieren
+                  </span>
                   <kbd class="ml-1 px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
                     Leertaste
                   </kbd>
-                </button>
+                </label>
               </div>
 
               <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-between gap-4">
@@ -336,7 +346,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     data-power-next-submission
                     phx-click="goto_next_submission_power"
                     disabled={is_nil(@next_submission_path)}
-                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                   >
                     Zum nächsten Teilnehmenden
                     <kbd class="ml-1 px-1.5 py-0.5 bg-white/20 border border-white/30 rounded text-white/80 font-mono text-[10px]">
@@ -479,14 +489,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       <.link
         patch={@target}
         title={@title}
-        class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-600 border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-800"
+        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-700 bg-white border border-sky-300 transition-all duration-150 hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800"
       >
         <.icon name={@icon} class="w-4 h-4" />
       </.link>
     <% else %>
       <span
         title={@title}
-        class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-300 border border-stone-100 cursor-not-allowed"
+        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-300 bg-white/60 border border-sky-100 cursor-not-allowed"
       >
         <.icon name={@icon} class="w-4 h-4" />
       </span>
@@ -562,6 +572,10 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        |> assign(:max_points, max_points)
        |> assign(:show_sample_solution_modal, false)
        |> assign(:sample_solution_json, nil)
+       |> assign(:current_part_index, part_index)
+       |> assign(:total_parts, length(parts))
+       |> assign(:current_submission_index, submission_index)
+       |> assign(:total_submissions, length(submissions))
        |> assign(:prev_part_path, sibling_part_path(exam, submission, parts, part_index, -1))
        |> assign(:next_part_path, sibling_part_path(exam, submission, parts, part_index, +1))
        |> assign(

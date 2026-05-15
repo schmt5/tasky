@@ -21,9 +21,18 @@ defmodule TaskyWeb.ExamLive.SampleSolution do
               %{label: "Musterlösung – #{@current_part.label}"}
             ]} />
 
-            <div class="flex items-center gap-2 shrink-0">
-              <.nav_chevron direction="left" target={@prev_part_path} title="Vorheriger Teil" />
-              <.nav_chevron direction="right" target={@next_part_path} title="Nächster Teil" />
+            <div class="flex items-center gap-3 shrink-0">
+              <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
+                <.icon name="hero-document-text" class="w-4 h-4 text-sky-700" />
+                <span class="text-xs font-semibold text-sky-700 uppercase tracking-wide">Teil</span>
+                <span class="text-xs font-mono font-semibold text-sky-700">
+                  {(@current_part_index || 0) + 1}/{@total_parts}
+                </span>
+                <div class="flex items-center gap-1 ml-1">
+                  <.nav_chevron direction="left" target={@prev_part_path} title="Vorheriger Teil" />
+                  <.nav_chevron direction="right" target={@next_part_path} title="Nächster Teil" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -102,14 +111,14 @@ defmodule TaskyWeb.ExamLive.SampleSolution do
       <.link
         patch={@target}
         title={@title}
-        class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-600 border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-800"
+        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-700 bg-white border border-sky-300 transition-all duration-150 hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800"
       >
         <.icon name={@icon} class="w-4 h-4" />
       </.link>
     <% else %>
       <span
         title={@title}
-        class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-300 border border-stone-100 cursor-not-allowed"
+        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-300 bg-white/60 border border-sky-100 cursor-not-allowed"
       >
         <.icon name={@icon} class="w-4 h-4" />
       </span>
@@ -166,6 +175,8 @@ defmodule TaskyWeb.ExamLive.SampleSolution do
                :max_points,
                Map.get(exam.sample_solution_points || %{}, current_part.id)
              )
+             |> assign(:current_part_index, part_index)
+             |> assign(:total_parts, length(parts))
              |> assign(:prev_part_path, sibling_part_path(exam, parts, part_index, -1))
              |> assign(:next_part_path, sibling_part_path(exam, parts, part_index, +1))}
         end
