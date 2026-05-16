@@ -589,6 +589,44 @@ defmodule TaskyWeb.CoreComponents do
   end
 
   @doc """
+  Renders a circular icon-only back button, typically placed to the left of a page heading.
+
+  The `tooltip` is shown via the daisyUI `tooltip-delayed` pattern.
+
+  ## Examples
+
+      <.back_button navigate={~p"/exams/\#{@exam}"} tooltip={"Zurück zu \#{@exam.name}"} />
+  """
+  attr :navigate, :string, required: true
+  attr :tooltip, :string, required: true
+  attr :tooltip_position, :string, default: "tooltip-right"
+  attr :size, :string, default: "md", values: ~w(md sm)
+
+  def back_button(assigns) do
+    {box, icon} =
+      case assigns.size do
+        "sm" -> {"w-7 h-7", "w-4 h-4"}
+        _ -> {"w-10 h-10", "w-5 h-5"}
+      end
+
+    assigns = assign(assigns, box_class: box, icon_class: icon)
+
+    ~H"""
+    <div class={["tooltip tooltip-delayed", @tooltip_position]} data-tip={@tooltip}>
+      <.link
+        navigate={@navigate}
+        class={[
+          "inline-flex items-center justify-center rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150",
+          @box_class
+        ]}
+      >
+        <.icon name="hero-arrow-left" class={@icon_class} />
+      </.link>
+    </div>
+    """
+  end
+
+  @doc """
   Renders a breadcrumb trail.
 
   Each crumb is a map with `:label` (string) and optionally `:navigate` (path).

@@ -6,6 +6,12 @@
 @source "../js";
 @source "../../lib/tasky_web";
 
+/* Delay daisyUI tooltip on hover-in; disappears immediately on hover-out. */
+.tooltip-delayed:hover::before,
+.tooltip-delayed:hover::after {
+    transition-delay: 500ms;
+}
+
 /* ── Export / Print page ── */
 
 body:has(.page-wrapper) {

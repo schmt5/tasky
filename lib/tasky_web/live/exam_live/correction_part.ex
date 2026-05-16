@@ -13,12 +13,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         <%!-- Compact Header --%>
         <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 py-3">
           <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-              %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
-              %{label: "#{@submission.firstname} #{@submission.lastname} – #{@current_part.label}"}
-            ]} />
+            <div class="flex items-center gap-2 min-w-0">
+              <.back_button
+                navigate={~p"/exams/#{@exam}/correction"}
+                tooltip="Zurück zur Korrektur"
+                size="sm"
+              />
+              <.breadcrumbs crumbs={[
+                %{label: "Prüfungen", navigate: ~p"/exams"},
+                %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+                %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
+                %{label: "#{@submission.firstname} #{@submission.lastname} – #{@current_part.label}"}
+              ]} />
+            </div>
 
             <div class="flex items-center gap-3 shrink-0">
               <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
@@ -84,6 +91,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   <p class="text-sm font-semibold text-stone-700 mt-1">
                     {@submission.firstname} {@submission.lastname}
                   </p>
+                  <%= if @current_part.id in (@submission.auto_corrected_parts || []) do %>
+                    <div class="mt-2 inline-flex items-center gap-1.5">
+                      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-50 text-purple-500 shrink-0">
+                        <.icon name="hero-sparkles" class="w-3.5 h-3.5" />
+                      </span>
+                      <span class="text-xs font-medium text-purple-600">Automatisch korrigiert</span>
+                    </div>
+                  <% end %>
                 </div>
 
                 <div class="p-5 border-b border-stone-100">
@@ -114,19 +129,23 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     />
                   </form>
                   <div class="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      phx-click="set_points_max"
-                      disabled={is_nil(@max_points)}
-                      title={
+                    <div
+                      class="flex-1 tooltip tooltip-delayed"
+                      data-tip={
                         if is_nil(@max_points),
                           do: "Keine Maximalpunkte in der Musterlösung gesetzt",
                           else: "Maximale Punkte vergeben"
                       }
-                      class="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-stone-200"
                     >
-                      <.icon name="hero-check" class="w-3.5 h-3.5" /> Max
-                    </button>
+                      <button
+                        type="button"
+                        phx-click="set_points_max"
+                        disabled={is_nil(@max_points)}
+                        class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-stone-200"
+                      >
+                        <.icon name="hero-check" class="w-3.5 h-3.5" /> Max
+                      </button>
+                    </div>
                     <button
                       type="button"
                       phx-click="set_points_zero"
@@ -137,30 +156,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   </div>
                 </div>
 
-                <%= if @current_part.id in (@submission.auto_corrected_parts || []) do %>
-                  <div class="px-5 pt-5 pb-2 flex items-center gap-2.5">
-                    <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500 shrink-0">
-                      <.icon name="hero-sparkles" class="w-5 h-5" />
-                    </span>
-                    <span class="text-sm font-medium text-purple-600">Automatisch korrigiert</span>
-                  </div>
-                <% end %>
-
-                <div class="px-5 pt-5 pb-3">
-                  <label class="flex items-center gap-3 cursor-pointer select-none group">
-                    <input
-                      type="checkbox"
-                      phx-click="toggle_corrected"
-                      checked={@is_corrected}
-                      class="w-5 h-5 rounded border-stone-300 text-stone-600 focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 cursor-pointer"
-                    />
-                    <span class="text-sm font-semibold text-stone-600 group-hover:text-stone-800 transition-colors duration-150">
-                      Als erledigt markieren
-                    </span>
-                  </label>
-                </div>
-
-                <div class="p-5 border-b border-stone-100">
+                <div class="p-5 space-y-3">
                   <button
                     type="button"
                     phx-click="show_sample_solution_modal"
@@ -168,10 +164,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   >
                     <.icon name="hero-light-bulb" class="w-4 h-4" /> Musterlösung anzeigen
                   </button>
-                </div>
 
-                <%= if @power_blocks_count > 0 do %>
-                  <div class="p-5">
+                  <%= if @power_blocks_count > 0 do %>
                     <button
                       type="button"
                       phx-click="open_power_view"
@@ -179,8 +173,37 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     >
                       <.icon name="hero-bolt" class="w-4 h-4" /> Power-Ansicht
                     </button>
+                  <% end %>
+
+                  <div class="w-full flex items-center gap-2.5">
+                    <.icon
+                      name="hero-check-badge"
+                      class={[
+                        "w-6 h-6 shrink-0 transition-all duration-300 ease-out",
+                        if(@is_corrected,
+                          do: "text-green-600 scale-110",
+                          else: "text-stone-300"
+                        )
+                      ]}
+                    />
+                    <button
+                      type="button"
+                      phx-click="toggle_corrected"
+                      aria-pressed={@is_corrected}
+                      class={[
+                        "flex-1 inline-flex items-center justify-center text-sm font-semibold px-4 py-2.5 rounded-lg border transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2",
+                        if(@is_corrected,
+                          do:
+                            "bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200 hover:border-stone-400",
+                          else:
+                            "bg-green-50 border-green-500 text-green-700 hover:bg-green-100 hover:border-green-600"
+                        )
+                      ]}
+                    >
+                      {if @is_corrected, do: "Erledigt zurück nehmen", else: "Als erledigt markieren"}
+                    </button>
                   </div>
-                <% end %>
+                </div>
               </div>
             </aside>
           </div>
@@ -216,14 +239,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     <% end %>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  phx-click="close_power_view"
-                  class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
-                  title="Schliessen (Esc)"
-                >
-                  <.icon name="hero-x-mark" class="w-5 h-5" />
-                </button>
+                <div class="tooltip tooltip-left tooltip-delayed" data-tip="Schliessen (Esc)">
+                  <button
+                    type="button"
+                    phx-click="close_power_view"
+                    class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
+                  >
+                    <.icon name="hero-x-mark" class="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               <div class="px-6 py-4 border-b border-stone-100 flex items-center gap-4 text-xs text-stone-500">
@@ -313,21 +337,38 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   </div>
                 <% end %>
 
-                <label class="w-full flex items-center justify-center gap-3 cursor-pointer select-none group px-4 py-2.5 rounded-lg border border-stone-200 hover:bg-stone-50 hover:border-stone-300 focus-within:ring-4 focus-within:ring-sky-600 focus-within:ring-offset-2 transition-all duration-150">
-                  <input
-                    type="checkbox"
+                <div class="w-full flex items-center gap-2.5">
+                  <.icon
+                    name="hero-check-badge"
+                    class={[
+                      "w-6 h-6 shrink-0 transition-all duration-300 ease-out",
+                      if(@is_corrected,
+                        do: "text-green-600 scale-110",
+                        else: "text-stone-300"
+                      )
+                    ]}
+                  />
+                  <button
+                    type="button"
                     data-power-toggle-corrected
                     phx-click="toggle_corrected"
-                    checked={@is_corrected}
-                    class="w-5 h-5 rounded border-stone-300 text-stone-600 focus:outline-none cursor-pointer"
-                  />
-                  <span class="text-sm font-semibold text-stone-600 group-hover:text-stone-800 transition-colors duration-150">
-                    Als erledigt markieren
-                  </span>
-                  <kbd class="ml-1 px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
-                    Leertaste
-                  </kbd>
-                </label>
+                    aria-pressed={@is_corrected}
+                    class={[
+                      "flex-1 inline-flex items-center justify-center gap-3 text-sm font-semibold px-4 py-2.5 rounded-lg border transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2",
+                      if(@is_corrected,
+                        do:
+                          "bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200 hover:border-stone-400",
+                        else:
+                          "bg-green-50 border-green-500 text-green-700 hover:bg-green-100 hover:border-green-600"
+                      )
+                    ]}
+                  >
+                    {if @is_corrected, do: "Erledigt zurück nehmen", else: "Als erledigt markieren"}
+                    <kbd class="px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
+                      Leertaste
+                    </kbd>
+                  </button>
+                </div>
               </div>
 
               <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-between gap-4">
@@ -391,14 +432,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     </p>
                   <% end %>
                 </div>
-                <button
-                  type="button"
-                  phx-click="close_sample_solution_modal"
-                  class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
-                  title="Schliessen"
-                >
-                  <.icon name="hero-x-mark" class="w-5 h-5" />
-                </button>
+                <div class="tooltip tooltip-left tooltip-delayed" data-tip="Schliessen">
+                  <button
+                    type="button"
+                    phx-click="close_sample_solution_modal"
+                    class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
+                  >
+                    <.icon name="hero-x-mark" class="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               <div class="p-6 overflow-y-auto flex-1">
                 <%= if @sample_solution_json do %>
@@ -485,22 +527,20 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     assigns = assign(assigns, :icon, icon)
 
     ~H"""
-    <%= if @target do %>
-      <.link
-        patch={@target}
-        title={@title}
-        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-700 bg-white border border-sky-300 transition-all duration-150 hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800"
-      >
-        <.icon name={@icon} class="w-4 h-4" />
-      </.link>
-    <% else %>
-      <span
-        title={@title}
-        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-300 bg-white/60 border border-sky-100 cursor-not-allowed"
-      >
-        <.icon name={@icon} class="w-4 h-4" />
-      </span>
-    <% end %>
+    <div class="tooltip tooltip-bottom tooltip-delayed" data-tip={@title}>
+      <%= if @target do %>
+        <.link
+          patch={@target}
+          class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-700 bg-white border border-sky-300 transition-all duration-150 hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800"
+        >
+          <.icon name={@icon} class="w-4 h-4" />
+        </.link>
+      <% else %>
+        <span class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-300 bg-white/60 border border-sky-100 cursor-not-allowed">
+          <.icon name={@icon} class="w-4 h-4" />
+        </span>
+      <% end %>
+    </div>
     """
   end
 
