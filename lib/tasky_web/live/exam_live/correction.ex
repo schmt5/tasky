@@ -52,14 +52,17 @@ defmodule TaskyWeb.ExamLive.Correction do
             <div class="shrink-0">
               <%= cond do %>
                 <% is_nil(@summary.first_uncorrected) -> %>
-                  <span class="inline-flex items-center gap-2 text-sm font-semibold text-green-700">
-                    <.icon name="hero-check-circle" class="w-5 h-5" /> Alle Teile korrigiert
-                  </span>
+                  <.link
+                    navigate={~p"/exams/#{@exam}/correction/grading"}
+                    class="inline-flex items-center gap-2 text-sm font-semibold text-white bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 hover:shadow-md px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
+                  >
+                    <.icon name="hero-academic-cap" class="w-4 h-4" /> Zur Benotung
+                  </.link>
                 <% @summary.any_auto or @summary.manual_started -> %>
                   <% {sub, part} = @summary.first_uncorrected %>
                   <.link
                     navigate={~p"/exams/#{@exam}/correction/#{sub.id}/parts/#{part.id}"}
-                    class="inline-flex items-center gap-2 text-sm font-semibold text-white bg-green-500 hover:bg-green-600 px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(34,197,94,0.25)] transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-green-600 focus:ring-offset-2"
+                    class="inline-flex items-center gap-2 text-sm font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 hover:shadow-md px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(34,197,94,0.25)] transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-green-600 focus:ring-offset-2"
                   >
                     <.icon name="hero-play" class="w-4 h-4" />
                     {if @summary.corrected == 0, do: "Korrektur starten", else: "Korrektur fortsetzen"}

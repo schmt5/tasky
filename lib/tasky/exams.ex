@@ -717,6 +717,28 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Updates the grading max-points override for the exam. Pass `nil` to clear
+  the override (the grading view then falls back to the sum of
+  `sample_solution_points`).
+  """
+  def update_grading_max_points(%Exam{} = exam, value) do
+    exam
+    |> Ecto.Changeset.change(%{grading_max_points: value})
+    |> Repo.update()
+  end
+
+  @doc """
+  Sets (or clears, when `mark` is `nil`) the teacher-adjusted final mark for
+  a submission. The mark is stored as a float; when `nil`, callers should
+  fall back to the calculated mark from `points / max_points`.
+  """
+  def set_submission_mark(%ExamSubmission{} = submission, mark) do
+    submission
+    |> Ecto.Changeset.change(%{mark: mark})
+    |> Repo.update()
+  end
+
+  @doc """
   Updates the AI correction configuration for a single part of an exam.
   The config is stored as a map keyed by part_id.
   """

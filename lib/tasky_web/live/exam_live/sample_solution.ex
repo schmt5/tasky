@@ -70,26 +70,51 @@ defmodule TaskyWeb.ExamLive.SampleSolution do
                 </div>
 
                 <div class="p-5">
-                  <form phx-change="set_max_points" phx-submit="set_max_points">
-                    <label
-                      for="part-max-points-input"
-                      class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2"
+                  <label
+                    for="part-max-points-input"
+                    class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2"
+                  >
+                    Max. Punkte
+                  </label>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      phx-click="adjust_max_points"
+                      phx-value-direction="down"
+                      disabled={is_nil(@max_points) or @max_points <= 0}
+                      class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
+                      title="−0.25"
                     >
-                      Max. Punkte
-                    </label>
-                    <input
-                      id="part-max-points-input"
-                      type="number"
-                      name="points"
-                      value={@max_points || ""}
-                      step="0.5"
-                      min="0"
-                      inputmode="decimal"
-                      phx-debounce="500"
-                      placeholder="—"
-                      class="w-full font-mono text-base text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
-                    />
-                  </form>
+                      <.icon name="hero-minus" class="w-4 h-4" />
+                    </button>
+                    <form
+                      phx-change="set_max_points"
+                      phx-submit="set_max_points"
+                      class="flex-1"
+                    >
+                      <input
+                        id="part-max-points-input"
+                        type="number"
+                        name="points"
+                        value={@max_points || ""}
+                        step="0.25"
+                        min="0"
+                        inputmode="decimal"
+                        phx-debounce="500"
+                        placeholder="—"
+                        class="w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                      />
+                    </form>
+                    <button
+                      type="button"
+                      phx-click="adjust_max_points"
+                      phx-value-direction="up"
+                      class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 shrink-0"
+                      title="+0.25"
+                    >
+                      <.icon name="hero-plus" class="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </aside>
@@ -192,9 +217,17 @@ defmodule TaskyWeb.ExamLive.SampleSolution do
 
   @impl true
   def handle_event("set_max_points", %{"points" => raw}, socket) do
-    %{exam: exam, current_part: part} = socket.assigns
+    save_max_points(socket, parse_points(raw))
+  end
 
-    points = parse_points(raw)
+  def handle_event("adjust_max_points", %{"direction" => dir}, socket) do
+    delta = if dir == "up", do: 0.25, else: -0.25
+    new_value = max((socket.assigns.max_points || 0) + delta, 0)
+    save_max_points(socket, new_value)
+  end
+
+  defp save_max_points(socket, points) do
+    %{exam: exam, current_part: part} = socket.assigns
 
     case Exams.set_sample_solution_part_points(exam, part.id, points) do
       {:ok, updated} ->

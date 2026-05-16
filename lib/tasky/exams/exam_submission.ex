@@ -13,6 +13,7 @@ defmodule Tasky.Exams.ExamSubmission do
     field :corrected_content, :map, default: %{}
     field :points_per_part, :map, default: %{}
     field :block_verdicts, :map, default: %{}
+    field :mark, :float
 
     belongs_to :exam, Tasky.Exams.Exam
 

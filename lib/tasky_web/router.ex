@@ -119,6 +119,8 @@ defmodule TaskyWeb.Router do
            ExamLive.CorrectionPart,
            :correction_part
 
+      live "/exams/:id/correction/grading", ExamLive.Grading, :grading
+
       live "/exams/:id/content", ExamLive.Content, :content
       live "/exams/:id/sample-solution", ExamLive.SampleSolution, :sample_solution
 
@@ -168,6 +170,22 @@ defmodule TaskyWeb.Router do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
+  end
+
+  ## Token-authenticated print views (consumed by Gotenberg's headless Chrome).
+  scope "/print", TaskyWeb do
+    pipe_through [:browser]
+
+    live_session :print, layout: false do
+      live "/exam-submission/:exam_id/:submission_id", ExamLive.Print, :print
+    end
+  end
+
+  ## One-time download links for exported ZIPs.
+  scope "/exports", TaskyWeb do
+    pipe_through [:browser]
+
+    get "/download", ExportController, :download
   end
 
   scope "/", TaskyWeb do

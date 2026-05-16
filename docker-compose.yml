@@ -1,0 +1,23 @@
+# Local-dev services for the Tasky app.
+#
+# Usage:
+#   docker compose up gotenberg -d    # start the PDF rendering service
+#   docker compose down               # stop everything
+#
+# Production deployment for Gotenberg lives in deploy/gotenberg/.
+
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    ports:
+      - "3000:3000"
+    command:
+      - gotenberg
+      - --api-port=3000
+      - --api-timeout=120s
+      # On macOS/Linux, host.docker.internal lets Gotenberg's headless Chrome
+      # reach Phoenix running on the host at http://host.docker.internal:4000.
+      - --chromium-allow-list=.*
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

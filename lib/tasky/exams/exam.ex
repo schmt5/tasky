@@ -12,6 +12,7 @@ defmodule Tasky.Exams.Exam do
     field :seb_enabled, :boolean, default: false
     field :seb_quit_password, :string
     field :ai_correction_config, :map, default: %{}
+    field :grading_max_points, :float
 
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :exam_submissions, Tasky.Exams.ExamSubmission
@@ -31,7 +32,8 @@ defmodule Tasky.Exams.Exam do
       :status,
       :seb_enabled,
       :seb_quit_password,
-      :ai_correction_config
+      :ai_correction_config,
+      :grading_max_points
     ])
     |> validate_required([:name])
     |> validate_length(:name, min: 3, max: 255)

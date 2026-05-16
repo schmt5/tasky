@@ -53,6 +53,19 @@ topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" });
 window.addEventListener("phx:page-loading-start", (_info) => topbar.show(300));
 window.addEventListener("phx:page-loading-stop", (_info) => topbar.hide());
 
+// Trigger a file download when the server pushes `download-file`.
+// Pairs with Phoenix LiveView's `push_event("download-file", %{url: ...})`.
+window.addEventListener("phx:download-file", (e) => {
+  const url = e.detail && e.detail.url;
+  if (!url) return;
+  const a = document.createElement("a");
+  a.href = url;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
 // Handle copy-to-clipboard events
 window.addEventListener("phx:copy-to-clipboard", (e) => {
   const text = e.detail.text;

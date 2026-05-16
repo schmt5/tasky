@@ -1,0 +1,37 @@
+# Fly.io config for a generic Gotenberg PDF service.
+#
+# Deploy once per Fly organization, then point any Phoenix app at it via
+# the `GOTENBERG_URL` env var (e.g. http://<app-name>.internal:3000).
+#
+# Usage:
+#   fly apps create <unique-app-name>   # pick something like webbau-gotenberg
+#   fly deploy -c deploy/gotenberg/fly.toml -a <unique-app-name>
+#
+# This file does NOT set `app = "..."` on purpose, so the same config can
+# be reused for multiple Fly apps via the `-a` flag.
+
+primary_region = "ams"
+
+[build]
+  image = "gotenberg/gotenberg:8"
+
+[experimental]
+  cmd = [
+    "gotenberg",
+    "--api-port=3000",
+    "--api-timeout=120s",
+    # Allow Gotenberg's headless Chrome to fetch any URL on the Fly private
+    # network. Tighten this list if you want to lock it down further.
+    "--chromium-allow-list=.*",
+  ]
+
+[http_service]
+  internal_port = 3000
+  force_https = false
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
