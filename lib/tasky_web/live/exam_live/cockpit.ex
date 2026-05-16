@@ -43,7 +43,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   type="button"
                   phx-click="show_confirm"
                   phx-value-action="start_exam"
-                  class="inline-flex items-center gap-2.5 bg-emerald-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(16,185,129,0.3)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98]"
+                  class="inline-flex items-center gap-2.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 hover:shadow-md text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(16,185,129,0.3)] transition-all duration-150 active:scale-[0.98]"
                 >
                   <.icon name="hero-play" class="w-5 h-5" /> Prüfung starten
                 </button>
@@ -53,7 +53,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   type="button"
                   phx-click="show_confirm"
                   phx-value-action="end_exam"
-                  class="inline-flex items-center gap-2.5 bg-red-500 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(239,68,68,0.3)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
+                  class="inline-flex items-center gap-2.5 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 hover:shadow-md text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(239,68,68,0.3)] transition-all duration-150 active:scale-[0.98]"
                 >
                   <.icon name="hero-stop" class="w-5 h-5" /> Prüfung beenden
                 </button>
@@ -98,7 +98,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     type="button"
                     phx-hook=".CopyButton"
                     data-target="enrollment-token-field"
-                    class="inline-flex items-center gap-2 bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
+                    class="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-md text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 active:scale-[0.98]"
                   >
                     <.icon name="hero-clipboard-document" class="w-4 h-4" />
                     <span>Kopieren</span>

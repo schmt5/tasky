@@ -49,24 +49,32 @@ defmodule TaskyWeb.ExamLive.Print do
         </div>
       </header>
 
-      <%= if @combined_doc do %>
-        <section class="px-8 py-8">
-          <div
-            id={"print-viewer-#{@submission.id}"}
-            phx-hook="ExamReadOnlyViewer"
-            phx-update="ignore"
-            data-content={@combined_doc_json}
-          >
-          </div>
-        </section>
-      <% else %>
+      <%= if @sections == [] do %>
         <section class="px-8 py-8 text-stone-400 text-sm italic">
           Keine Inhalte zum Anzeigen ausgewählt.
         </section>
+      <% else %>
+        <%= for {section, idx} <- Enum.with_index(@sections) do %>
+          <section class={[
+            "px-8 py-8",
+            idx > 0 && "break-before-page"
+          ]}>
+            <%= if section.heading do %>
+              <h2 class="font-serif text-xl text-stone-900 mb-4">{section.heading}</h2>
+            <% end %>
+            <div
+              id={"print-viewer-#{@submission.id}-#{section.key}"}
+              phx-hook="ExamReadOnlyViewer"
+              phx-update="ignore"
+              data-content={section.doc_json}
+            >
+            </div>
+          </section>
+        <% end %>
       <% end %>
 
       <%!-- Tells Gotenberg we are ready to be printed. Small delay lets the
-           React-based TipTap viewer finish its first render. --%>
+           React-based TipTap viewer(s) finish their first render. --%>
       <script>
         window.printReady = false;
         setTimeout(function () {
@@ -75,7 +83,7 @@ defmodule TaskyWeb.ExamLive.Print do
               window.printReady = true;
             });
           });
-        }, 600);
+        }, 1000);
       </script>
     </main>
     """
@@ -104,8 +112,7 @@ defmodule TaskyWeb.ExamLive.Print do
     points = total_points(submission)
     mark = submission.mark || calculate_mark(points, max_points)
 
-    combined_doc = build_combined_doc(exam, submission, opts)
-    combined_doc_json = if combined_doc, do: Jason.encode!(combined_doc), else: nil
+    sections = build_sections(exam, submission, opts)
 
     {:ok,
      socket
@@ -115,8 +122,7 @@ defmodule TaskyWeb.ExamLive.Print do
      |> assign(:points, points)
      |> assign(:max_points, max_points)
      |> assign(:mark, mark)
-     |> assign(:combined_doc, combined_doc)
-     |> assign(:combined_doc_json, combined_doc_json)
+     |> assign(:sections, sections)
      |> assign(:error, nil)}
   end
 
@@ -126,62 +132,45 @@ defmodule TaskyWeb.ExamLive.Print do
     |> assign(:error, message)
   end
 
-  # Builds a single TipTap doc containing the optional submission content
-  # followed by the optional sample solution, with a heading separating
-  # them. Returns nil when nothing is requested.
-  defp build_combined_doc(exam, submission, opts) do
-    sections = []
+  # Each section ends up as its own TipTap viewer with its own visual frame
+  # (and a page break before the second section if both are present).
+  defp build_sections(exam, submission, opts) do
+    []
+    |> maybe_add_content_section(submission, opts)
+    |> maybe_add_sample_solution_section(exam, opts)
+  end
 
-    sections =
-      if opts[:show_content] do
-        nodes =
-          if opts[:show_correction] do
-            submission_nodes(submission.corrected_content || submission.content)
-          else
-            submission_nodes(submission.content)
-          end
+  defp maybe_add_content_section(sections, submission, opts) do
+    if opts[:show_content] do
+      nodes =
+        if opts[:show_correction] do
+          doc_nodes(submission.corrected_content || submission.content)
+        else
+          doc_nodes(submission.content)
+        end
 
-        sections ++ [{:content_heading?, false, nodes}]
-      else
-        sections
-      end
-
-    sections =
-      if opts[:show_sample_solution] do
-        sample_nodes = submission_nodes(exam.sample_solution)
-        heading? = sections != []
-        sections ++ [{:sample_heading?, heading?, sample_nodes}]
-      else
-        sections
-      end
-
-    case sections do
-      [] ->
-        nil
-
-      sections ->
-        nodes =
-          Enum.flat_map(sections, fn
-            {:content_heading?, true, nodes} -> [heading_node("Inhalt") | nodes]
-            {:content_heading?, false, nodes} -> nodes
-            {:sample_heading?, true, nodes} -> [heading_node("Musterlösung") | nodes]
-            {:sample_heading?, false, nodes} -> nodes
-          end)
-
-        %{"type" => "doc", "content" => nodes}
+      sections ++ [build_section(:content, nil, nodes)]
+    else
+      sections
     end
   end
 
-  defp submission_nodes(doc) when is_map(doc), do: Map.get(doc, "content", [])
-  defp submission_nodes(_), do: []
-
-  defp heading_node(text) do
-    %{
-      "type" => "heading",
-      "attrs" => %{"level" => 2},
-      "content" => [%{"type" => "text", "text" => text}]
-    }
+  defp maybe_add_sample_solution_section(sections, exam, opts) do
+    if opts[:show_sample_solution] do
+      sections ++
+        [build_section(:sample, "Musterlösung", doc_nodes(exam.sample_solution))]
+    else
+      sections
+    end
   end
+
+  defp build_section(key, heading, nodes) do
+    doc = %{"type" => "doc", "content" => nodes}
+    %{key: key, heading: heading, doc_json: Jason.encode!(doc)}
+  end
+
+  defp doc_nodes(doc) when is_map(doc), do: Map.get(doc, "content", [])
+  defp doc_nodes(_), do: []
 
   defp sum_map_points(nil), do: 0
 

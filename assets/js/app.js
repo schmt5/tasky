@@ -55,15 +55,42 @@ window.addEventListener("phx:page-loading-stop", (_info) => topbar.hide());
 
 // Trigger a file download when the server pushes `download-file`.
 // Pairs with Phoenix LiveView's `push_event("download-file", %{url: ...})`.
-window.addEventListener("phx:download-file", (e) => {
+//
+// We fetch the file as a blob and trigger the save via an object URL rather
+// than navigating to the file URL directly. A direct anchor-click navigation
+// causes the LiveView's WebSocket to drop (the browser sees a page transition
+// even though the response is `Content-Disposition: attachment`), which makes
+// the LV appear frozen until it reconnects.
+window.addEventListener("phx:download-file", async (e) => {
   const url = e.detail && e.detail.url;
   if (!url) return;
-  const a = document.createElement("a");
-  a.href = url;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+
+  try {
+    const response = await fetch(url, { credentials: "same-origin" });
+    if (!response.ok) {
+      console.error("download-file: bad response", response.status);
+      return;
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Best-effort extraction of the filename from Content-Disposition.
+    const cd = response.headers.get("content-disposition") || "";
+    const match = cd.match(/filename="?([^";]+)"?/);
+    const filename = match ? match[1] : "download";
+
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (err) {
+    console.error("download-file failed", err);
+  }
 });
 
 // Handle copy-to-clipboard events

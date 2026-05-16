@@ -377,7 +377,7 @@ defmodule TaskyWeb.ExamLive.Grading do
      |> assign(:show_export_modal, false)
      |> assign(:export_options, %{
        show_content: true,
-       show_correction: true,
+       show_correction: false,
        show_sample_solution: false
      })
      |> assign(:export_status, nil)}
