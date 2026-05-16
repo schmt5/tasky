@@ -49,9 +49,12 @@ defmodule TaskyWeb.ExamLive.Show do
             </div>
           </div>
 
-          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            {@exam.name}
-          </h1>
+          <div class="flex items-center gap-3 mb-3">
+            <.back_button navigate={~p"/exams"} tooltip="Zurück zu Prüfungen" />
+            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+              {@exam.name}
+            </h1>
+          </div>
 
           <div class="flex items-center gap-3 mt-2">
             <.exam_status_chip status={@exam.status} />

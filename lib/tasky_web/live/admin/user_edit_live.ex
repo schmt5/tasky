@@ -17,9 +17,12 @@ defmodule TaskyWeb.Admin.UserEditLive do
               %{label: full_name(@user)}
             ]} />
           </div>
-          <h1>
-            Benutzer <em>bearbeiten</em>
-          </h1>
+          <div class="flex items-center gap-3">
+            <.back_button navigate={~p"/admin/users"} tooltip="Zurück zu Benutzern" />
+            <h1>
+              Benutzer <em>bearbeiten</em>
+            </h1>
+          </div>
         </div>
       </div>
 

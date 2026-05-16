@@ -23,9 +23,12 @@ defmodule TaskyWeb.Student.CourseLive do
               ]} />
             </div>
 
-            <h1 class="font-serif text-[36px] text-stone-900 leading-[1.1] mb-2 font-normal">
-              {@course.name}
-            </h1>
+            <div class="flex items-center gap-3 mb-2">
+              <.back_button navigate={~p"/student/courses"} tooltip="Zurück zu meinen Kursen" />
+              <h1 class="font-serif text-[36px] text-stone-900 leading-[1.1] font-normal">
+                {@course.name}
+              </h1>
+            </div>
 
             <p class="text-[14px] text-stone-500 max-w-[560px] leading-[1.6]">
               {@course.description || "Sieh dir alle Aufgaben für diesen Kurs an"}

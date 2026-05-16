@@ -25,9 +25,15 @@ defmodule TaskyWeb.TaskLive.Progress do
             ]} />
           </div>
 
-          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            {@task.name}
-          </h1>
+          <div class="flex items-center gap-3 mb-3">
+            <.back_button
+              navigate={~p"/courses/#{@task.course_id}/progress"}
+              tooltip="Zurück zum Fortschritt"
+            />
+            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+              {@task.name}
+            </h1>
+          </div>
 
           <p class="text-[15px] text-stone-500 leading-[1.7]">
             Übersicht über den Fortschritt aller Lernenden für diese Aufgabe

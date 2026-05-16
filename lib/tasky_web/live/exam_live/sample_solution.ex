@@ -15,11 +15,18 @@ defmodule TaskyWeb.ExamLive.SampleSolution do
         <%!-- Compact Header --%>
         <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 py-3">
           <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-              %{label: "Musterlösung – #{@current_part.label}"}
-            ]} />
+            <div class="flex items-center gap-2 min-w-0">
+              <.back_button
+                navigate={~p"/exams/#{@exam}"}
+                tooltip={"Zurück zu #{@exam.name}"}
+                size="sm"
+              />
+              <.breadcrumbs crumbs={[
+                %{label: "Prüfungen", navigate: ~p"/exams"},
+                %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+                %{label: "Musterlösung – #{@current_part.label}"}
+              ]} />
+            </div>
 
             <div class="flex items-center gap-3 shrink-0">
               <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">

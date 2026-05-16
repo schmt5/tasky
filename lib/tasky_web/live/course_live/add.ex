@@ -36,9 +36,15 @@ defmodule TaskyWeb.CourseLive.Add do
             </div>
           </div>
 
-          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            Lerneinheiten hinzufügen
-          </h1>
+          <div class="flex items-center gap-3 mb-3">
+            <.back_button
+              navigate={~p"/courses/#{@course}"}
+              tooltip={"Zurück zu #{@course.name}"}
+            />
+            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+              Lerneinheiten hinzufügen
+            </h1>
+          </div>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             Fügen Sie neue Lerneinheiten zu

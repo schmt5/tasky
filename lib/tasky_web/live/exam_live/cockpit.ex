@@ -19,9 +19,15 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           </div>
 
           <div class="flex items-center justify-between">
-            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-              Cockpit
-            </h1>
+            <div class="flex items-center gap-3 mb-3">
+              <.back_button
+                navigate={~p"/exams/#{@exam}"}
+                tooltip={"Zurück zu #{@exam.name}"}
+              />
+              <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+                Cockpit
+              </h1>
+            </div>
 
             <div class="flex items-center gap-3">
               <.link

@@ -26,9 +26,19 @@ defmodule TaskyWeb.ExamLive.Form do
             <% end %>
           </div>
 
-          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            {@page_title}
-          </h1>
+          <div class="flex items-center gap-3 mb-3">
+            <%= if @live_action == :new do %>
+              <.back_button navigate={~p"/exams"} tooltip="Zurück zu Prüfungen" />
+            <% else %>
+              <.back_button
+                navigate={~p"/exams/#{@exam}"}
+                tooltip={"Zurück zu #{@exam.name}"}
+              />
+            <% end %>
+            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+              {@page_title}
+            </h1>
+          </div>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,

@@ -14,11 +14,18 @@ defmodule TaskyWeb.ExamLive.Content do
       <%!-- Page Header --%>
       <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 h-[54px] flex items-center">
         <div class="max-w-6xl mx-auto w-full flex items-center justify-between gap-4">
-          <.breadcrumbs crumbs={[
-            %{label: "Prüfungen", navigate: ~p"/exams"},
-            %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-            %{label: "Inhalt"}
-          ]} />
+          <div class="flex items-center gap-2 min-w-0">
+            <.back_button
+              navigate={~p"/exams/#{@exam}"}
+              tooltip={"Zurück zu #{@exam.name}"}
+              size="sm"
+            />
+            <.breadcrumbs crumbs={[
+              %{label: "Prüfungen", navigate: ~p"/exams"},
+              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+              %{label: "Inhalt"}
+            ]} />
+          </div>
         </div>
       </div>
 

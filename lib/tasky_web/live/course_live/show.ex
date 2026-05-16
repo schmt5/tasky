@@ -25,9 +25,12 @@ defmodule TaskyWeb.CourseLive.Show do
             </.link>
           </div>
 
-          <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            {@course.name}
-          </h1>
+          <div class="flex items-center gap-3 mb-3">
+            <.back_button navigate={~p"/courses"} tooltip="Zurück zu Kursen" />
+            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+              {@course.name}
+            </h1>
+          </div>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {@course.description || "Keine Beschreibung verfügbar"}
