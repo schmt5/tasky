@@ -27,14 +27,22 @@ near zero between PDF jobs. First request after idle adds ~5s cold-start.
 
 ## Wiring a Phoenix app to it
 
-Set `GOTENBERG_URL` on the consuming app:
+The app needs two secrets — one telling it where Gotenberg lives, and one
+telling Gotenberg where to fetch the print pages back from:
 
 ```sh
-fly secrets set GOTENBERG_URL="http://webbau-gotenberg.internal:3000" -a <your-app>
+fly secrets set \
+  GOTENBERG_URL="http://webbau-gotenberg.internal:3000" \
+  GOTENBERG_CALLBACK_URL="http://<your-app>.internal:<your-internal-port>" \
+  -a <your-app>
 ```
 
-The app's `config/runtime.exs` reads this env var. If unset, the PDF export
-feature stays disabled.
+`<your-internal-port>` is whatever `[http_service].internal_port` is set to in
+the consuming app's `fly.toml` (e.g. `8080`).
+
+The app's `config/runtime.exs` reads both env vars. If `GOTENBERG_URL` is
+unset, the PDF export feature stays disabled. If `GOTENBERG_CALLBACK_URL` is
+unset, starting an export fails with `:callback_url_not_configured`.
 
 ## Local development
 

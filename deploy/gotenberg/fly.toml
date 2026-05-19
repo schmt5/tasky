@@ -10,7 +10,7 @@
 # This file does NOT set `app = "..."` on purpose, so the same config can
 # be reused for multiple Fly apps via the `-a` flag.
 
-primary_region = "ams"
+primary_region = "fra"
 
 [build]
   image = "gotenberg/gotenberg:8"
