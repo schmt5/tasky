@@ -44,7 +44,8 @@ defmodule Tasky.PDF.Gotenberg do
         case Req.post(
                url: "#{base}/forms/chromium/convert/url",
                form_multipart: form,
-               receive_timeout: @timeout
+               receive_timeout: @timeout,
+               connect_options: [transport_opts: [inet6: true]]
              ) do
           {:ok, %Req.Response{status: 200, body: pdf_binary}} ->
             {:ok, pdf_binary}
