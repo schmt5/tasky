@@ -32,21 +32,23 @@ defmodule TaskyWeb.ExamLive.Print do
         <p class="text-sm text-stone-600">
           {@submission.firstname} {@submission.lastname}
         </p>
-        <div class="mt-4 flex items-center gap-6 text-sm">
-          <div>
-            <span class="text-xs uppercase tracking-wide text-stone-500 block">Punkte</span>
-            <span class="font-mono font-semibold text-stone-800">
-              {format_points(@points)}
-              <span class="text-stone-400 font-normal">/ {format_points(@max_points)}</span>
-            </span>
+        <%= if @show_points_and_mark do %>
+          <div class="mt-4 flex items-center gap-6 text-sm">
+            <div>
+              <span class="text-xs uppercase tracking-wide text-stone-500 block">Punkte</span>
+              <span class="font-mono font-semibold text-stone-800">
+                {format_points(@points)}
+                <span class="text-stone-400 font-normal">/ {format_points(@max_points)}</span>
+              </span>
+            </div>
+            <div>
+              <span class="text-xs uppercase tracking-wide text-stone-500 block">Note</span>
+              <span class="font-mono font-semibold text-stone-800">
+                {format_mark(@mark)}
+              </span>
+            </div>
           </div>
-          <div>
-            <span class="text-xs uppercase tracking-wide text-stone-500 block">Note</span>
-            <span class="font-mono font-semibold text-stone-800">
-              {format_mark(@mark)}
-            </span>
-          </div>
-        </div>
+        <% end %>
       </header>
 
       <%= if @sections == [] do %>
@@ -122,6 +124,7 @@ defmodule TaskyWeb.ExamLive.Print do
      |> assign(:points, points)
      |> assign(:max_points, max_points)
      |> assign(:mark, mark)
+     |> assign(:show_points_and_mark, Map.get(opts, :show_points_and_mark, true))
      |> assign(:sections, sections)
      |> assign(:error, nil)}
   end

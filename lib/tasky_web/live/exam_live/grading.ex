@@ -202,6 +202,13 @@ defmodule TaskyWeb.ExamLive.Grading do
               </p>
 
               <.export_checkbox
+                option="show_points_and_mark"
+                checked={@export_options.show_points_and_mark}
+                label="Punkte und Note anzeigen"
+                description="Zeigt die erreichte Punktzahl und die berechnete Note auf der Titelseite des PDFs."
+              />
+
+              <.export_checkbox
                 option="show_content"
                 checked={@export_options.show_content}
                 label="Inhalt anzeigen"
@@ -376,6 +383,7 @@ defmodule TaskyWeb.ExamLive.Grading do
      |> assign(:pdf_enabled, Tasky.PDF.Gotenberg.enabled?())
      |> assign(:show_export_modal, false)
      |> assign(:export_options, %{
+       show_points_and_mark: true,
        show_content: true,
        show_correction: false,
        show_sample_solution: false

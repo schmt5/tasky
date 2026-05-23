@@ -20,7 +20,10 @@ defmodule Tasky.Exams.ExportRunner do
   alias Tasky.PDF.Gotenberg
   alias Tasky.Exams.PrintToken
 
-  @max_concurrency 4
+  # Gotenberg 8's pinning-proxy (used by --chromium-allow-list) is a single
+  # shared instance per Gotenberg process; concurrent renders race to start it
+  # and wedge it in "already started". Serialize.
+  @max_concurrency 1
   @gotenberg_timeout 120_000
   # Best-effort fallback cleanup if the file is never downloaded.
   @cleanup_after_ms 10 * 60 * 1000
@@ -98,7 +101,12 @@ defmodule Tasky.Exams.ExportRunner do
         teacher_user_id,
         to_string(exam.id),
         to_string(submission.id),
-        Map.take(opts, [:show_content, :show_correction, :show_sample_solution])
+        Map.take(opts, [
+          :show_content,
+          :show_correction,
+          :show_sample_solution,
+          :show_points_and_mark
+        ])
       )
 
     url =
