@@ -58,3 +58,29 @@ export function saveExamCorrectionPart(examId, submissionId, partId, nodes) {
     },
   );
 }
+
+// Uploads an image file (multipart) and resolves to `{ url }`. Kept separate
+// from `request` because it sends FormData, not JSON.
+export async function uploadExamImage(examId, file) {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const response = await fetch(`/api/exams/${examId}/images`, {
+    method: "POST",
+    headers: { "x-csrf-token": getCSRFToken() },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    let message;
+    try {
+      message = JSON.parse(errorBody).error || response.statusText;
+    } catch {
+      message = response.statusText;
+    }
+    throw new Error(message || "Bild-Upload fehlgeschlagen");
+  }
+
+  return response.json();
+}

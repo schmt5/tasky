@@ -257,16 +257,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   defp format_max_points(_), do: "—"
 
   defp render_summary(assigns) do
-    needs_check =
-      Enum.sum(Enum.map(assigns.answer_blocks, fn b -> count_needs_check(b) end))
-
-    blocks_with_check = Enum.count(assigns.answer_blocks, &(count_needs_check(&1) > 0))
-
-    assigns =
-      assigns
-      |> assign(:needs_check, needs_check)
-      |> assign(:blocks_with_check, blocks_with_check)
-
     ~H"""
     <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-5">
       <div class="flex items-center justify-between mb-3">
@@ -275,12 +265,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           <h2 class="font-serif text-lg text-stone-800">Antworten</h2>
         </div>
         <div class="text-xs text-stone-500">
-          <%= if @is_multi_input do %>
-            {@blocks_with_check} von {length(@answer_blocks)} Wörtern benötigen Prüfung
-          <% else %>
-            {length(@answer_blocks)}
-            {if length(@answer_blocks) == 1, do: "Antwortfeld", else: "Antwortfelder"} · {@total_submissions} Teilnehmende
-          <% end %>
+          {length(@answer_blocks)}
+          {if length(@answer_blocks) == 1, do: "Antwortfeld", else: "Antwortfelder"} · {@total_submissions} Teilnehmende
         </div>
       </div>
 
@@ -314,14 +300,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   end
 
   defp render_block_accordion(assigns, block) do
-    needs = count_needs_check(block)
-    is_open = MapSet.member?(assigns.open_blocks, block.index)
+    is_open = not MapSet.member?(assigns.closed_blocks, block.index)
     block_totals = block_totals(block)
 
     assigns =
       assigns
       |> assign(:block, block)
-      |> assign(:needs, needs)
       |> assign(:is_open, is_open)
       |> assign(:block_totals, block_totals)
 
@@ -385,18 +369,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
               <span class="text-stone-400">Falsch</span>
             </span>
           </div>
-        </div>
-
-        <div class="shrink-0">
-          <%= if @needs > 0 do %>
-            <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> {@needs} prüfen
-            </span>
-          <% else %>
-            <span class="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
-              <.icon name="hero-check" class="w-3 h-3" /> erledigt
-            </span>
-          <% end %>
         </div>
 
         <.icon
@@ -578,7 +550,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
         submissions = Exams.list_exam_submissions(exam)
         answer_blocks = Exams.list_part_answer_groups(exam, part_id)
-        open_blocks = default_open_blocks(answer_blocks)
 
         part_config = Map.get(exam.ai_correction_config || %{}, part_id, %{})
         max_points = Map.get(exam.sample_solution_points || %{}, part_id)
@@ -595,7 +566,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:prev_part_id, prev_part_id)
          |> assign(:next_part_id, next_part_id)
          |> assign(:answer_blocks, answer_blocks)
-         |> assign(:open_blocks, open_blocks)
+         |> assign(:closed_blocks, MapSet.new())
          |> assign(:is_multi_input, length(answer_blocks) > 1)
          |> assign(:total_submissions, length(submissions))
          |> assign(:part_already_done, count_part_done(submissions, part_id))
@@ -611,12 +582,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   def handle_event("toggle_block", %{"index" => idx_str}, socket) do
     idx = String.to_integer(idx_str)
 
-    open =
-      if MapSet.member?(socket.assigns.open_blocks, idx),
-        do: MapSet.delete(socket.assigns.open_blocks, idx),
-        else: MapSet.put(socket.assigns.open_blocks, idx)
+    closed =
+      if MapSet.member?(socket.assigns.closed_blocks, idx),
+        do: MapSet.delete(socket.assigns.closed_blocks, idx),
+        else: MapSet.put(socket.assigns.closed_blocks, idx)
 
-    {:noreply, assign(socket, :open_blocks, open)}
+    {:noreply, assign(socket, :closed_blocks, closed)}
   end
 
   def handle_event(
@@ -663,10 +634,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         Exams.unmark_part_corrected(sub, part_id)
       end)
 
-      {:noreply,
-       socket
-       |> put_flash(:info, "Erledigt zurückgenommen.")
-       |> refresh_assigns()}
+      {:noreply, refresh_assigns(socket)}
     else
       # Mark every submission. Persist default verdicts for any block that
       # still has no explicit choice for that submission, so points get
@@ -699,10 +667,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         Exams.mark_part_corrected(updated, part_id)
       end)
 
-      {:noreply,
-       socket
-       |> put_flash(:info, "Teil als erledigt markiert.")
-       |> refresh_assigns()}
+      {:noreply, refresh_assigns(socket)}
     end
   end
 
@@ -745,23 +710,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   end
 
   # ----------------------------------------------------------------- helpers
-
-  defp default_open_blocks(answer_blocks) do
-    if length(answer_blocks) <= 1 do
-      MapSet.new(Enum.map(answer_blocks, & &1.index))
-    else
-      answer_blocks
-      |> Enum.filter(&(count_needs_check(&1) > 0))
-      |> Enum.map(& &1.index)
-      |> MapSet.new()
-    end
-  end
-
-  defp count_needs_check(block) do
-    Enum.count(block.groups, fn g ->
-      g.default_verdict == "wrong" and g.current_verdict in [nil, :mixed]
-    end)
-  end
 
   defp effective_verdict(group) do
     case group.current_verdict do

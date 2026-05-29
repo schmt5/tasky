@@ -83,7 +83,13 @@ defmodule Tasky.Correction.StringComparator do
 
   defp verdict_for(_sub, _sample, _opts), do: "incorrect"
 
-  defp text_match?(student, accepted, opts) do
+  @doc """
+  Returns true if a single `student` answer matches a single `accepted`
+  alternative under `opts` (`:ignore_case`, `:ignore_spelling`). Exposed so the
+  bulk-correction grouping in `Tasky.Exams` derives its default verdicts with
+  exactly the same rule as auto-correction.
+  """
+  def text_match?(student, accepted, opts) do
     s = normalize(student, opts)
     a = normalize(accepted, opts)
 

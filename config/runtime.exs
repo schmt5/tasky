@@ -39,6 +39,19 @@ config :tasky,
     System.get_env("GOTENBERG_CALLBACK_URL") ||
       if(config_env() == :dev, do: "http://host.docker.internal:4000", else: nil)
 
+# Directory where uploaded exam images are stored and served from (/uploads).
+# Must NOT live under priv/static — Plug.Static serves that dir and (in dev,
+# with raise_on_missing_only) would raise on files it doesn't whitelist. The
+# UploadController is the single serving path in all envs. Dev writes into
+# priv/uploads; test into a tmp dir; prod is overridden below to the volume.
+config :tasky,
+  uploads_dir:
+    System.get_env("UPLOADS_DIR") ||
+      (case config_env() do
+         :test -> Path.join(System.tmp_dir!(), "tasky_test_uploads")
+         _ -> Path.expand("priv/uploads")
+       end)
+
 if config_env() in [:prod, :demo] do
   database_path =
     System.get_env("DATABASE_PATH") ||
@@ -46,6 +59,11 @@ if config_env() in [:prod, :demo] do
       environment variable DATABASE_PATH is missing.
       For example: /etc/tasky/tasky.db
       """
+
+  # Keep uploads on the same persistent volume as the database.
+  config :tasky,
+    uploads_dir:
+      System.get_env("UPLOADS_DIR") || Path.join(Path.dirname(database_path), "uploads")
 
   config :tasky, Tasky.Repo,
     database: database_path,

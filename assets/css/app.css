@@ -12,6 +12,12 @@
     transition-delay: 500ms;
 }
 
+/* Sticky page header: grow a soft shadow once scrolled (toggled by the
+   StickyShadow JS hook) so it detaches cleanly from the content. */
+#content-page-header.is-scrolled {
+    box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.12);
+}
+
 /* ── Export / Print page ── */
 
 body:has(.page-wrapper) {

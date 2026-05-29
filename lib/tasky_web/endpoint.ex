@@ -46,7 +46,7 @@ defmodule TaskyWeb.Endpoint do
   plug TaskyWeb.RawBodyPlug
 
   plug Plug.Parsers,
-    parsers: [:urlencoded, :multipart, :json],
+    parsers: [:urlencoded, {:multipart, length: 12_000_000}, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library(),
     body_reader: {TaskyWeb.RawBodyPlug, :read_body, []}

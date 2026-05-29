@@ -909,10 +909,18 @@ defmodule Tasky.Exams do
 
   `current_verdict` is `nil` when no submission in the group has an explicit
   teacher verdict, `:mixed` when submissions disagree, otherwise the shared
-  value. `default_verdict` uses the same case-insensitive trimmed-equality rule
-  as `Tasky.Correction.StringComparator`.
+  value. `default_verdict` honors the part's `ignore_case`/`ignore_spelling`
+  options, using the same matcher (`Tasky.Correction.StringComparator.text_match?/3`)
+  as auto-correction.
   """
   def list_part_answer_groups(%Exam{} = exam, part_id) when is_binary(part_id) do
+    part_cfg = Map.get(exam.ai_correction_config || %{}, part_id, %{})
+
+    opts = %{
+      ignore_case: Map.get(part_cfg, "ignore_case", false) == true,
+      ignore_spelling: Map.get(part_cfg, "ignore_spelling", false) == true
+    }
+
     sample_part =
       exam
       |> sample_solution_doc()
@@ -971,7 +979,7 @@ defmodule Tasky.Exams do
         |> Enum.map(&String.trim/1)
         |> Enum.reject(&(&1 == ""))
 
-      groups = build_answer_groups(per_submission_blocks, part_id, index, sample_answers)
+      groups = build_answer_groups(per_submission_blocks, part_id, index, sample_answers, opts)
 
       %{
         index: index,
@@ -982,7 +990,7 @@ defmodule Tasky.Exams do
     end)
   end
 
-  defp build_answer_groups(per_submission_blocks, part_id, index, sample_answers) do
+  defp build_answer_groups(per_submission_blocks, part_id, index, sample_answers, opts) do
     entries =
       Enum.map(per_submission_blocks, fn {sub, blocks} ->
         text =
@@ -998,12 +1006,12 @@ defmodule Tasky.Exams do
     |> Enum.group_by(fn {_sub, text} -> text end)
     |> Enum.map(fn {text, members} ->
       subs = Enum.map(members, fn {sub, _} -> sub end)
-      build_one_group(text, subs, part_id, index, sample_answers)
+      build_one_group(text, subs, part_id, index, sample_answers, opts)
     end)
     |> Enum.sort_by(fn g -> -g.count end)
   end
 
-  defp build_one_group(text, subs, part_id, index, sample_answers) do
+  defp build_one_group(text, subs, part_id, index, sample_answers, opts) do
     verdicts =
       Enum.map(subs, fn s ->
         Map.get(s.block_verdicts || %{}, "#{part_id}:#{index}")
@@ -1015,7 +1023,7 @@ defmodule Tasky.Exams do
         _ -> :mixed
       end
 
-    default_verdict = default_group_verdict(text, sample_answers)
+    default_verdict = default_group_verdict(text, sample_answers, opts)
     nearest = nearest_sample(text, sample_answers)
     diff = diff_against(text, nearest)
 
@@ -1044,15 +1052,16 @@ defmodule Tasky.Exams do
     end
   end
 
-  defp default_group_verdict(nil, _samples), do: "wrong"
-  defp default_group_verdict(_text, []), do: "wrong"
+  defp default_group_verdict(nil, _samples, _opts), do: "wrong"
+  defp default_group_verdict(_text, [], _opts), do: "wrong"
 
-  defp default_group_verdict(text, samples) do
-    normalized = text |> String.trim() |> String.downcase()
+  defp default_group_verdict(text, samples, opts) do
+    trimmed = String.trim(text)
 
-    if Enum.any?(samples, fn s -> String.downcase(String.trim(s)) == normalized end),
-      do: "correct",
-      else: "wrong"
+    if trimmed != "" and
+         Enum.any?(samples, &Tasky.Correction.StringComparator.text_match?(trimmed, &1, opts)),
+       do: "correct",
+       else: "wrong"
   end
 
   defp nearest_sample(nil, _), do: nil

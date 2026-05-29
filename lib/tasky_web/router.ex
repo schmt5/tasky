@@ -69,6 +69,8 @@ defmodule TaskyWeb.Router do
 
     put "/exams/:id/content", ExamContentApiController, :update
 
+    post "/exams/:id/images", ExamImageApiController, :create
+
     put "/exams/:id/sample-solution/parts/:part_id/content",
         ExamSampleSolutionApiController,
         :update_part
@@ -83,6 +85,12 @@ defmodule TaskyWeb.Router do
     pipe_through :guest_api
 
     put "/exam/:token/content", ExamSubmissionContentApiController, :update
+  end
+
+  # Public serving of uploaded exam images (unguessable UUID filenames). Public
+  # so the browser and Gotenberg can load <img> sources without an auth token.
+  scope "/uploads", TaskyWeb do
+    get "/exams/:exam_id/:filename", UploadController, :show
   end
 
   ## Task routes (Teachers and Admins only)

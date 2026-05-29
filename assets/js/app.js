@@ -31,6 +31,7 @@ import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
 import { ExamReadOnlyViewer } from "./hooks/exam_readonly_viewer_hook";
 import { PowerView } from "./hooks/power_view_hook";
 import { BulkPowerKeys } from "./hooks/bulk_power_keys_hook";
+import { StickyShadow } from "./hooks/sticky_shadow_hook";
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
@@ -47,6 +48,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ExamReadOnlyViewer,
     PowerView,
     BulkPowerKeys,
+    StickyShadow,
   },
 });
 

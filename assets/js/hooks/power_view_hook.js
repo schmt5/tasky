@@ -2,18 +2,16 @@
 //
 // Attached to the modal element. Manages:
 //   * Initial focus on the first row
-//   * J/K/L shortcuts → push "set_block_verdict" then advance focus
-//   * After the last row, focus jumps to the "toggle corrected" button
-//   * Spacebar on "toggle corrected" → toggles + moves focus to "next submission"
-//   * Spacebar on "next submission" → navigates to next
+//   * J/K/L shortcuts → push "set_block_verdict" for the focused row (focus
+//     stays put; the teacher advances manually with Tab)
+//   * Tab focus trap inside the modal
 //   * Escape closes the modal (delegated to the existing close handler)
+//
+// The action buttons ("Erledigen" / "Nächster Teilnehmender") are activated
+// natively via Enter — no JS handling needed.
 export const PowerView = {
   mounted() {
     this.rows = () => Array.from(this.el.querySelectorAll("[data-power-row]"));
-    this.toggleCorrected = () =>
-      this.el.querySelector("[data-power-toggle-corrected]");
-    this.nextSubmission = () =>
-      this.el.querySelector("[data-power-next-submission]");
 
     // Defer focus until after LiveView's morphdom settles and the dialog is
     // actually painted. A single rAF isn't always enough on first mount.
@@ -78,28 +76,6 @@ export const PowerView = {
 
       const active = document.activeElement;
 
-      // Spacebar handling for the action buttons
-      if (e.key === " " || e.key === "Spacebar") {
-        const toggle = this.toggleCorrected();
-        const next = this.nextSubmission();
-
-        if (active === toggle) {
-          e.preventDefault();
-          toggle.click();
-          // Move focus to "next submission" button after toggling
-          if (next && !next.disabled) {
-            setTimeout(() => next.focus(), 50);
-          }
-          return;
-        }
-
-        if (active === next && !next.disabled) {
-          e.preventDefault();
-          next.click();
-          return;
-        }
-      }
-
       const onRow = active && active.hasAttribute("data-power-row");
       if (!onRow) return;
 
@@ -108,19 +84,11 @@ export const PowerView = {
       const verdict = verdictMap[key];
       if (!verdict) return;
 
+      // Set the verdict for the focused row only. Focus deliberately stays put
+      // (no auto-advance) so the teacher controls when to move on.
       e.preventDefault();
       const index = parseInt(active.dataset.powerRow, 10);
       this.pushEvent("set_block_verdict", { index, verdict });
-
-      // Advance focus: next row, or "toggle corrected" button if last row.
-      const rows = this.rows();
-      const nextRow = rows[index + 1];
-      if (nextRow) {
-        nextRow.focus();
-      } else {
-        const toggle = this.toggleCorrected();
-        if (toggle) toggle.focus();
-      }
     };
 
     this.el.addEventListener("keydown", this.keyHandler);

@@ -8,6 +8,8 @@ import { TaskItem } from "@tiptap/extension-list/task-item";
 import { TableKit } from "@tiptap/extension-table";
 import { Highlight } from "@tiptap/extension-highlight";
 import { TextStyle, Color } from "@tiptap/extension-text-style";
+import { Placeholder } from "@tiptap/extensions";
+import Image from "@tiptap/extension-image";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -82,11 +84,10 @@ const AnswerBlock = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      "div",
-      { ...HTMLAttributes, class: "answer-block", tabindex: "0" },
-      0,
-    ];
+    // No DOM `tabindex` here: a focusable wrapper steals browser focus on Tab
+    // without moving the ProseMirror selection, desyncing the caret. Tab
+    // navigation between answer fields is handled in PreventNodeDeletion.
+    return ["div", { ...HTMLAttributes, class: "answer-block" }, 0];
   },
 
   addCommands() {
@@ -146,8 +147,8 @@ import {
   ListBulletIcon,
   QuestionMarkCircleIcon,
   NumberedListIcon,
-  ChatBubbleBottomCenterTextIcon,
   ChatBubbleLeftEllipsisIcon,
+  PhotoIcon,
   TableCellsIcon,
   PaintBrushIcon,
   ArrowUturnLeftIcon,
@@ -176,49 +177,94 @@ function handleLueckentextKey(editor, direction) {
 
   const depth = findAncestorDepth($from, "lueckentext");
 
-  // Cursor is outside any lueckentext — block if adjacent to one
-  if (depth === null) {
-    if (empty) {
-      if (
-        direction === "backspace" &&
-        $from.nodeBefore?.type.name === "lueckentext"
-      )
-        return true;
-      if (
-        direction === "delete" &&
-        $from.nodeAfter?.type.name === "lueckentext"
-      )
-        return true;
-    }
-    return false;
-  }
+  // Cursor outside any lueckentext: let the native deletion run. It can never
+  // remove a protected node — the filterTransaction plugin vetoes any edit that
+  // reduces the node count — so there is nothing to block here. Blocking would
+  // only stop legitimate deletion of adjacent external characters.
+  if (depth === null) return false;
 
   const node = $from.node(depth);
   const nodeStart = $from.start(depth);
   const nodeEnd = $from.end(depth);
+  const atStart = $from.parentOffset === 0;
+  const atEnd = $from.parentOffset === node.content.size;
 
   if (empty) {
-    // Cursor at boundary — block so we don't exit / remove the node
-    if (direction === "backspace" && $from.parentOffset === 0) return true;
-    if (direction === "delete" && $from.parentOffset === node.content.size)
+    // Deleting the node's last remaining character. Native deletion would drop
+    // the now-empty inline node, which filterTransaction vetoes — leaving the
+    // character "stuck". So clear the content manually and keep the node.
+    // Only do this when the keystroke actually targets that character:
+    // backspace deletes the char before the cursor, delete the one after.
+    const deletesOnlyChar =
+      node.content.size === 1 &&
+      ((direction === "backspace" && !atStart) ||
+        (direction === "delete" && !atEnd));
+    if (deletesOnlyChar) {
+      editor.view.dispatch(state.tr.delete(nodeStart, nodeEnd));
       return true;
+    }
+    // Everything else (deleting an interior char, or an adjacent external char
+    // at a boundary) is left to native deletion; node removal stays vetoed.
+    return false;
+  }
 
-    // Deleting the last remaining character — clear content, keep node
-    if (node.content.size === 1) {
-      editor.view.dispatch(state.tr.delete(nodeStart, nodeEnd));
-      return true;
-    }
-  } else {
-    // Non-empty selection: if it covers ALL content, clear manually
-    const selFrom = selection.from;
-    const selTo = selection.to;
-    if (selFrom <= nodeStart && selTo >= nodeEnd) {
-      editor.view.dispatch(state.tr.delete(nodeStart, nodeEnd));
-      return true;
-    }
+  // Non-empty selection covering ALL of the node's content: clear manually so
+  // the node survives (native delete would drop it and be vetoed).
+  if (selection.from <= nodeStart && selection.to >= nodeEnd) {
+    editor.view.dispatch(state.tr.delete(nodeStart, nodeEnd));
+    return true;
   }
 
   return false;
+}
+
+// All answer fields (inline gaps and answer blocks) in document order.
+function collectAnswerNodes(doc) {
+  const nodes = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === "lueckentext" || node.type.name === "answerBlock") {
+      nodes.push({ node, pos });
+      return false; // don't descend into an answer field
+    }
+    return true;
+  });
+  return nodes;
+}
+
+// Tab / Shift-Tab navigation between answer fields. Moves the ProseMirror
+// selection (and DOM focus, via .focus()) into the next/previous field so the
+// caret and focus ring stay in sync — unlike a DOM `tabindex`, which moves only
+// the focus ring and leaves the caret behind.
+function focusAdjacentAnswer(editor, direction) {
+  const { state } = editor;
+  const answers = collectAnswerNodes(state.doc);
+  if (answers.length === 0) return false;
+
+  const head = state.selection.head;
+  const inside = (a) => head > a.pos && head < a.pos + a.node.nodeSize;
+  const current = answers.findIndex(inside);
+
+  let target;
+  if (direction === "next") {
+    target =
+      current >= 0 ? answers[current + 1] : answers.find((a) => a.pos >= head);
+  } else {
+    target =
+      current >= 0
+        ? answers[current - 1]
+        : answers
+            .filter((a) => a.pos + a.node.nodeSize <= head)
+            .pop();
+  }
+
+  // No field in that direction: let the default Tab behaviour run.
+  if (!target) return false;
+
+  // Caret just inside the end of the target's content; setTextSelection
+  // resolves to the nearest valid text position.
+  const pos = target.pos + target.node.nodeSize - 1;
+  editor.chain().focus().setTextSelection(pos).scrollIntoView().run();
+  return true;
 }
 
 const PreventNodeDeletion = Extension.create({
@@ -228,6 +274,8 @@ const PreventNodeDeletion = Extension.create({
     return {
       Backspace: ({ editor }) => handleLueckentextKey(editor, "backspace"),
       Delete: ({ editor }) => handleLueckentextKey(editor, "delete"),
+      Tab: ({ editor }) => focusAdjacentAnswer(editor, "next"),
+      "Shift-Tab": ({ editor }) => focusAdjacentAnswer(editor, "prev"),
     };
   },
 
@@ -261,8 +309,9 @@ const HIGHLIGHT_COLORS = [
   { name: "Lila", value: "#e9d5ff" },
 ];
 
+// "Rot" is intentionally omitted — red is reserved for sample-solution model
+// answers (rendered red automatically), so teachers can't pick it for content.
 const TEXT_COLORS = [
-  { name: "Rot", value: "#dc2626" },
   { name: "Orange", value: "#ea580c" },
   { name: "Gelb", value: "#ca8a04" },
   { name: "Grün", value: "#16a34a" },
@@ -616,11 +665,14 @@ export default function ExamContentEditor({
   editable = true,
   containerRef = null,
   solutionMode = false,
+  placeholder = "",
+  uploadImage = null,
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
   const saveTimerRef = useRef(null);
   const pendingDocRef = useRef(null);
+  const rootRef = useRef(null);
 
   const flush = useCallback(async () => {
     const doc = pendingDocRef.current;
@@ -660,6 +712,8 @@ export default function ExamContentEditor({
       Highlight.configure({ multicolor: true }),
       TextStyle,
       Color,
+      Image,
+      ...(placeholder ? [Placeholder.configure({ placeholder })] : []),
       ...(hideAnswers ? [PreventNodeDeletion] : []),
       ...(correctionMode ? [TeacherComment] : []),
     ],
@@ -707,10 +761,40 @@ export default function ExamContentEditor({
     return () => container.removeEventListener("tiptap:setContent", handler);
   }, [editor, containerRef]);
 
+  // Toggle `is-stuck` on the toolbar once it sticks under the page header, so
+  // it grows a shadow that detaches the chrome from the scrolling canvas.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!editable || !editor || !root) return;
+    const toolbar = root.querySelector(".exam-editor__toolbar");
+    if (!toolbar) return;
+
+    const sentinel = document.createElement("div");
+    sentinel.setAttribute("aria-hidden", "true");
+    sentinel.style.height = "1px";
+    sentinel.style.marginBottom = "-1px";
+    sentinel.style.pointerEvents = "none";
+    toolbar.parentNode.insertBefore(sentinel, toolbar);
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        toolbar.classList.toggle("is-stuck", entry.intersectionRatio === 0);
+      },
+      { threshold: [0, 1], rootMargin: "-54px 0px 0px 0px" },
+    );
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+      sentinel.remove();
+    };
+  }, [editable, editor]);
+
   if (!editor) return null;
 
   return (
     <div
+      ref={rootRef}
       className={
         "exam-editor" +
         (notFullWidth ? " exam-editor--not-full-width" : "") +
@@ -725,6 +809,7 @@ export default function ExamContentEditor({
           hideAnswers={hideAnswers}
           correctionMode={correctionMode}
           hideQuestion={hideQuestion}
+          uploadImage={uploadImage}
         />
       )}
       <div className="exam-editor__content">
@@ -743,6 +828,7 @@ function Toolbar({
   hideAnswers = false,
   correctionMode = false,
   hideQuestion = false,
+  uploadImage = null,
 }) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
@@ -757,7 +843,6 @@ function Toolbar({
       bulletList: editor.isActive("bulletList"),
       orderedList: editor.isActive("orderedList"),
       taskList: editor.isActive("taskList"),
-      blockquote: editor.isActive("blockquote"),
       lueckentext: editor.isActive("lueckentext"),
       answerBlock: editor.isActive("answerBlock"),
       table: editor.isActive("table"),
@@ -999,12 +1084,14 @@ function Toolbar({
                   () => editor.chain().focus().setLueckentext().run(),
                   active.lueckentext,
                 ),
-                btn(
-                  "Zitat",
-                  <ChatBubbleBottomCenterTextIcon className={iconCls} />,
-                  () => editor.chain().focus().toggleBlockquote().run(),
-                  active.blockquote,
-                ),
+              ])}
+            {uploadImage &&
+              group("Einfügen", [
+                <ImageButton
+                  key="image"
+                  editor={editor}
+                  uploadImage={uploadImage}
+                />,
               ])}
           </div>
         </Tabs.Content>
@@ -1120,7 +1207,86 @@ function Toolbar({
   );
 }
 
+const IS_MAC =
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+
+// Keyboard shortcuts shown in tooltips. These mirror the Tiptap / StarterKit
+// defaults for the corresponding commands.
+const SHORTCUTS = {
+  Rückgängig: "Mod-Z",
+  Wiederholen: "Mod-Shift-Z",
+  "Überschrift 1": "Mod-Alt-1",
+  "Überschrift 2": "Mod-Alt-2",
+  Fett: "Mod-B",
+  Kursiv: "Mod-I",
+  Markieren: "Mod-Shift-H",
+  Aufzählung: "Mod-Shift-8",
+  "Nummerierte Liste": "Mod-Shift-7",
+  Frage: "Mod-Alt-3",
+  Aufgabenliste: "Mod-Shift-9",
+};
+
+function formatShortcut(combo) {
+  if (!combo) return null;
+  return combo
+    .split("-")
+    .map((part) => {
+      if (part === "Mod") return IS_MAC ? "⌘" : "Ctrl";
+      if (part === "Shift") return IS_MAC ? "⇧" : "Shift";
+      if (part === "Alt") return IS_MAC ? "⌥" : "Alt";
+      return part.toUpperCase();
+    })
+    .join(IS_MAC ? "" : "+");
+}
+
+function ImageButton({ editor, uploadImage }) {
+  const inputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const onPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { url } = await uploadImage(file);
+      editor.chain().focus().setImage({ src: url }).run();
+    } catch (err) {
+      console.error("Bild-Upload fehlgeschlagen", err);
+      window.alert(err.message || "Bild-Upload fehlgeschlagen");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tip label="Bild einfügen">
+        <button
+          type="button"
+          aria-label="Bild einfügen"
+          className="exam-editor__btn"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+        >
+          <PhotoIcon className="exam-editor__icon" />
+        </button>
+      </Tip>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        style={{ display: "none" }}
+        onChange={onPick}
+      />
+    </>
+  );
+}
+
 function Tip({ label, children }) {
+  const shortcut = formatShortcut(SHORTCUTS[label]);
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
@@ -1131,6 +1297,7 @@ function Tip({ label, children }) {
           sideOffset={6}
         >
           {label}
+          {shortcut && <span className="exam-editor__tooltip-kbd">{shortcut}</span>}
           <Tooltip.Arrow className="exam-editor__tooltip-arrow" />
         </Tooltip.Content>
       </Tooltip.Portal>
@@ -1139,34 +1306,12 @@ function Tip({ label, children }) {
 }
 
 function StatusIndicator({ status, errorMsg }) {
-  const isError = status === "error";
-  const dotTitle =
-    status === "saving"
-      ? "Speichert..."
-      : isError
-        ? errorMsg || "Fehler beim Speichern"
-        : "Gespeichert";
-  const dotCls =
-    "exam-editor__status-dot" +
-    (status === "saving" ? " exam-editor__status-dot--saving" : "") +
-    (isError ? " exam-editor__status-dot--error" : "");
+  if (status !== "error") return null;
   return (
-    <div
-      className={
-        "exam-editor__status" + (isError ? " exam-editor__status--error" : "")
-      }
-    >
-      <span
-        className={dotCls}
-        title={dotTitle}
-        aria-label={dotTitle}
-        role="status"
-      />
-      {isError && (
-        <span className="exam-editor__status-label">
-          {errorMsg || "Fehler beim Speichern"}
-        </span>
-      )}
+    <div className="exam-editor__status exam-editor__status--error" role="alert">
+      <span className="exam-editor__status-label">
+        {errorMsg || "Fehler beim Speichern"}
+      </span>
     </div>
   );
 }

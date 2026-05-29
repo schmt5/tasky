@@ -5,7 +5,7 @@ export const ExamContentEditor = {
     const [
       ReactDOMClient,
       { default: ExamContentEditorComponent },
-      { saveExamContent },
+      { saveExamContent, uploadExamImage },
     ] = await Promise.all([
       import("react-dom/client"),
       import("../react/ExamContentEditor"),
@@ -28,6 +28,8 @@ export const ExamContentEditor = {
       <ExamContentEditorComponent
         initialContent={initialContent}
         save={(doc) => saveExamContent(examId, doc)}
+        uploadImage={(file) => uploadExamImage(examId, file)}
+        placeholder="Beginne mit einer Überschrift …"
       />,
     );
   },

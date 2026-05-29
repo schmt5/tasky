@@ -12,7 +12,11 @@ defmodule TaskyWeb.ExamLive.Content do
       current_path={~p"/exams/#{@exam}/content"}
     >
       <%!-- Page Header --%>
-      <div class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 h-[54px] flex items-center">
+      <div
+        id="content-page-header"
+        phx-hook="StickyShadow"
+        class="sticky top-0 z-20 bg-white border-b border-stone-100 px-8 h-[54px] flex items-center transition-shadow duration-200"
+      >
         <div class="max-w-7xl mx-auto w-full flex items-center justify-between gap-4">
           <div class="flex items-center gap-2 min-w-0">
             <.back_button
@@ -22,7 +26,8 @@ defmodule TaskyWeb.ExamLive.Content do
             />
             <.breadcrumbs crumbs={[
               %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"}
+              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+              %{label: "Bearbeiten"}
             ]} />
           </div>
 
@@ -70,13 +75,20 @@ defmodule TaskyWeb.ExamLive.Content do
           </div>
         </div>
 
-        <div class="grid grid-cols-4 gap-6 items-start">
+        <div :if={@current_part == nil} class="flex flex-col items-center justify-center text-center py-24">
+          <div class="flex items-center justify-center w-14 h-14 rounded-2xl bg-stone-100 text-stone-400 mb-4">
+            <.icon name="hero-document-text" class="w-7 h-7" />
+          </div>
+          <h3 class="text-base font-semibold text-stone-700">Noch keine Frage vorhanden</h3>
+          <p class="text-sm text-stone-500 mt-1.5 max-w-md leading-relaxed">
+            Lege zuerst im Tab <span class="font-medium text-stone-600">„Inhalt“</span>
+            eine Frage (Überschrift) an, um hier die Musterlösung zu erfassen.
+          </p>
+        </div>
+
+        <div :if={@current_part} class="grid grid-cols-4 gap-6 items-start">
           <div class="col-span-3 min-w-0">
-            <div :if={@current_part == nil} class="text-sm text-stone-400 italic">
-              Lege zuerst im Tab „Inhalt“ eine Frage (Überschrift) an, um die Musterlösung zu erfassen.
-            </div>
             <div
-              :if={@current_part}
               id={"sample-solution-part-editor-#{@exam.id}-#{@current_part.id}"}
               phx-hook="ExamSampleSolutionPartEditor"
               phx-update="ignore"

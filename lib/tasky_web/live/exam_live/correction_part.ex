@@ -278,7 +278,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 </span>
                 <span class="inline-flex items-center gap-1">
                   <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                    Leertaste
+                    Enter
                   </kbd>
                   Erledigt / Weiter
                 </span>
@@ -365,19 +365,40 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   >
                     {if @is_corrected, do: "Erledigt zurück nehmen", else: "Als erledigt markieren"}
                     <kbd class="px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
-                      Leertaste
+                      Enter
                     </kbd>
                   </button>
                 </div>
               </div>
 
               <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-between gap-4">
-                <div class="text-sm text-stone-500">
-                  <span class="font-semibold text-stone-700">
-                    {format_points(@power_current_total)}
-                  </span>
-                  <%= if @max_points do %>
-                    / {format_points(@max_points)} Punkte
+                <div class="flex items-center gap-3">
+                  <form phx-change="set_points" phx-submit="set_points" class="flex items-center gap-2">
+                    <span class="text-sm text-stone-500">Punkte</span>
+                    <input
+                      id="power-points-input"
+                      type="number"
+                      name="points"
+                      value={@points || ""}
+                      step="0.25"
+                      min="0"
+                      max={@max_points}
+                      inputmode="decimal"
+                      phx-debounce="400"
+                      placeholder="—"
+                      class="w-20 font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400"
+                    />
+                    <%= if @max_points do %>
+                      <span class="text-sm text-stone-500">/ {format_points(@max_points)}</span>
+                    <% end %>
+                  </form>
+                  <%= if format_points(@power_current_total) != format_points(@points) do %>
+                    <span
+                      class="tooltip tooltip-delayed tooltip-top text-xs text-stone-400"
+                      data-tip="Summe aus den Blockbewertungen. Wird übernommen, sobald du eine Bewertung änderst."
+                    >
+                      berechnet: {format_points(@power_current_total)}
+                    </span>
                   <% end %>
                 </div>
 
@@ -391,7 +412,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   >
                     Zum nächsten Teilnehmenden
                     <kbd class="ml-1 px-1.5 py-0.5 bg-white/20 border border-white/30 rounded text-white/80 font-mono text-[10px]">
-                      Leertaste
+                      Enter
                     </kbd>
                     <.icon name="hero-arrow-right" class="w-4 h-4" />
                   </button>

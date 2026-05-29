@@ -131,6 +131,21 @@ defmodule Tasky.Correction.AnswerKeyTest do
     end
   end
 
+  describe "image nodes" do
+    test "pass through ensure_ids and split untouched (not treated as answers)" do
+      image = %{"type" => "image", "attrs" => %{"src" => "/uploads/exams/1/x.png"}}
+      doc = %{"type" => "doc", "content" => [image, %{"type" => "paragraph", "content" => []}]}
+
+      # No answerId is added to the image node.
+      assert AnswerKey.ensure_ids(doc)["content"] |> hd() == image
+
+      # Splitting yields no answers and leaves the image in place.
+      {content, answers} = AnswerKey.split(doc)
+      assert hd(content["content"]) == image
+      assert answers == %{}
+    end
+  end
+
   defp collect_ids(%{"content" => content}) do
     Enum.flat_map(content, fn
       %{"type" => t} = node when t in ["answerBlock", "lueckentext", "taskItem"] ->

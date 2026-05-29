@@ -76,13 +76,25 @@ defmodule TaskyWeb.ExamLive.Print do
       <% end %>
 
       <%!-- Tells Gotenberg we are ready to be printed. Small delay lets the
-           React-based TipTap viewer(s) finish their first render. --%>
+           React-based TipTap viewer(s) finish their first render; then we wait
+           for any images to finish loading so they aren't cut from the PDF. --%>
       <script>
         window.printReady = false;
         setTimeout(function () {
           window.requestAnimationFrame(function () {
             window.requestAnimationFrame(function () {
-              window.printReady = true;
+              var imgs = Array.prototype.slice.call(document.images);
+              Promise.all(
+                imgs.map(function (img) {
+                  if (img.complete) return Promise.resolve();
+                  return new Promise(function (resolve) {
+                    img.addEventListener("load", resolve, { once: true });
+                    img.addEventListener("error", resolve, { once: true });
+                  });
+                })
+              ).then(function () {
+                window.printReady = true;
+              });
             });
           });
         }, 1000);
