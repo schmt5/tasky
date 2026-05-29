@@ -10,6 +10,7 @@ defmodule Tasky.Exams do
   alias Tasky.Exams.ExamSubmission
   alias Tasky.Accounts.Scope
   alias Tasky.AI.NodePatcher
+  alias Tasky.Correction.AnswerKey
 
   @doc """
   Returns the list of exams for a given scope.
@@ -258,6 +259,11 @@ defmodule Tasky.Exams do
             {:submission_submitted, updated}
           )
 
+          Tasky.AI.BulkCorrectionRunner.start_for_exam(
+            submission.exam,
+            submission_id: updated.id
+          )
+
           result
 
         error ->
@@ -267,84 +273,91 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Splits a TipTap document into parts separated by pageBreak nodes.
+  Splits a TipTap document into question-delimited parts.
+
+  Each part begins with a level-3 heading (`h3`) which represents the
+  question. Anything before the first `h3` is *preamble* (intro /
+  instructions) and is NOT returned — use `content_preamble/1` to access it.
 
   Returns a list of `%{id, label, nodes}`:
-    * `id` — the pageBreak's `pageId` (string), or `"start"` for the first part
-    * `label` — the text of the first heading found in the part, or `"Teil N"`
-    * `nodes` — the nodes belonging to this part (pageBreak markers excluded)
+    * `id` — positional, `"q-1"`, `"q-2"`, …
+    * `label` — the heading's inline text content, or fallback `"Frage N"`
+    * `nodes` — the part's nodes, starting with the leading `h3` node
   """
   def split_content_into_parts(doc) when is_map(doc) do
     nodes = Map.get(doc, "content", []) || []
 
-    {parts, last} =
-      Enum.reduce(nodes, {[], %{id: "start", nodes: []}}, fn node, {acc, current} ->
-        case node do
-          %{"type" => "pageBreak"} = pb ->
-            page_id =
-              pb |> Map.get("attrs", %{}) |> Map.get("pageId") |> to_string_or_nil() ||
-                "page-#{length(acc) + 1}"
-
-            {[current | acc], %{id: page_id, nodes: []}}
-
-          other ->
-            {acc, %{current | nodes: current.nodes ++ [other]}}
-        end
+    {parts, current} =
+      Enum.reduce(nodes, {[], nil}, fn
+        node, {parts, current} when is_map(node) ->
+          if question_heading?(node) do
+            part = build_part_from_heading(node, length(parts) + count_if(current))
+            parts = if current, do: [current | parts], else: parts
+            {parts, part}
+          else
+            if current,
+              do: {parts, %{current | nodes: current.nodes ++ [node]}},
+              # pre-first-question content = preamble; ignore here
+              else: {parts, nil}
+          end
       end)
 
-    [last | parts]
-    |> Enum.reverse()
-    |> Enum.with_index(1)
-    |> Enum.map(fn {part, idx} ->
-      %{
-        id: part.id,
-        label: first_heading_text(part.nodes) || "Teil #{idx}",
-        nodes: part.nodes
-      }
-    end)
+    parts = if current, do: [current | parts], else: parts
+    Enum.reverse(parts)
   end
 
   def split_content_into_parts(_), do: []
 
-  defp to_string_or_nil(nil), do: nil
-  defp to_string_or_nil(v), do: to_string(v)
+  defp question_heading?(%{"type" => "heading", "attrs" => %{"level" => 3}}), do: true
+  defp question_heading?(_), do: false
 
-  defp first_heading_text(nodes) do
-    Enum.find_value(nodes, fn
-      %{"type" => "heading", "content" => children} when is_list(children) ->
-        children
-        |> Enum.map_join("", fn
-          %{"text" => text} -> text
-          _ -> ""
-        end)
-        |> case do
-          "" -> nil
-          text -> text
-        end
+  defp count_if(nil), do: 0
+  defp count_if(_), do: 1
 
-      _ ->
-        nil
-    end)
+  defp build_part_from_heading(h, idx) do
+    label = heading_text(h) || "Frage #{idx + 1}"
+    %{id: "q-#{idx + 1}", label: label, nodes: [h]}
   end
 
-  @doc """
-  Reassembles a list of parts (as returned by `split_content_into_parts/1`)
-  back into a TipTap doc, inserting pageBreak nodes between parts.
-  The first part's id (`"start"` by convention) is dropped as a marker.
-  """
-  def assemble_parts_into_content(parts) when is_list(parts) do
-    nodes =
-      parts
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {part, idx} ->
-        if idx == 0 do
-          part.nodes
-        else
-          [%{"type" => "pageBreak", "attrs" => %{"pageId" => part.id}} | part.nodes]
-        end
-      end)
+  defp heading_text(%{"content" => content}) when is_list(content) do
+    content
+    |> Enum.map_join("", fn
+      %{"text" => t} when is_binary(t) -> t
+      _ -> ""
+    end)
+    |> case do
+      "" -> nil
+      t -> t
+    end
+  end
 
-    %{"type" => "doc", "content" => nodes}
+  defp heading_text(_), do: nil
+
+  @doc """
+  Returns the preamble — nodes before the first level-3 heading. Empty list
+  if the document has no preamble (starts with an h3) or no h3 headings.
+  """
+  def content_preamble(doc) when is_map(doc) do
+    (doc |> Map.get("content", []) || [])
+    |> Enum.take_while(fn n -> not question_heading?(n) end)
+  end
+
+  def content_preamble(_), do: []
+
+  @doc """
+  Reassembles a TipTap doc from a preamble (nodes before the first question)
+  and a list of parts (as returned by `split_content_into_parts/1`).
+
+  Each part's `nodes` already includes its leading `question` node, so the
+  reassembly is just concatenation. Inverse of `split_content_into_parts/1`
+  + `content_preamble/1`.
+  """
+  def assemble_parts_into_content(preamble, parts)
+      when is_list(preamble) and is_list(parts) do
+    %{
+      "type" => "doc",
+      "content" => preamble ++ Enum.flat_map(parts, & &1.nodes)
+    }
   end
 
   @doc """
@@ -445,10 +458,9 @@ defmodule Tasky.Exams do
   """
   def update_corrected_part_content(%ExamSubmission{} = submission, part_id, part_nodes)
       when is_binary(part_id) and is_list(part_nodes) do
-    parts =
-      submission
-      |> correction_content()
-      |> split_content_into_parts()
+    doc = correction_content(submission)
+    parts = split_content_into_parts(doc)
+    preamble = content_preamble(doc)
 
     unless Enum.any?(parts, &(&1.id == part_id)) do
       raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
@@ -457,7 +469,7 @@ defmodule Tasky.Exams do
     new_parts =
       Enum.map(parts, fn p -> if p.id == part_id, do: %{p | nodes: part_nodes}, else: p end)
 
-    new_doc = assemble_parts_into_content(new_parts)
+    new_doc = assemble_parts_into_content(preamble, new_parts)
 
     submission
     |> Ecto.Changeset.change(%{corrected_content: new_doc})
@@ -465,23 +477,43 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Persists the teacher's sample solution for a single part.
+  Saves the structure of the exam from the "Inhalt" tab.
 
-  `part_id` identifies the page boundary (the same id returned by
-  `split_content_into_parts/1` over the sample solution); `part_nodes` is the
-  new list of nodes for that part. The function loads the current sample
-  solution, splits it, replaces the matching part, reassembles, and saves
-  back into `sample_solution`. Raises if `part_id` is not present.
+  The document is answer-free (input blocks come back empty from this tab), so
+  we do NOT split — we only `ensure_ids/1` and persist as `content`. Any
+  entries in `sample_solution` whose block id no longer exists in the new
+  content are pruned. Re-runs auto-correction so existing submissions get
+  re-graded against the (possibly restructured) exam.
   """
-  def update_sample_solution_part_content(%Exam{} = exam, part_id, part_nodes)
-      when is_binary(part_id) and is_list(part_nodes) do
-    doc =
-      case exam.sample_solution do
-        s when is_map(s) and map_size(s) > 0 -> s
-        _ -> exam.content || %{}
-      end
+  def save_exam_structure(%Exam{} = exam, doc) when is_map(doc) do
+    new_content = AnswerKey.ensure_ids(doc)
+    pruned_answers = prune_orphan_answers(new_content, exam.sample_solution || %{})
 
-    parts = split_content_into_parts(doc)
+    persist_content_and_answers(exam, new_content, pruned_answers)
+  end
+
+  @doc """
+  Saves one part's worth of edits from the "Musterlösung" tab.
+
+  `part_nodes` is the edited (answer-filled) list of nodes for the given part.
+  We split it into blanked nodes + the part's answer payloads, splice the
+  blanked nodes back into `content`, and merge the new payloads into the
+  existing `sample_solution` answers map. Orphan answers (blocks the teacher
+  removed) are pruned. Re-runs auto-correction.
+
+  Per the unified-view design, incidental edits to question text in this tab
+  are persisted (they ride along with the blanked nodes into `content`).
+  """
+  def save_sample_solution_part(%Exam{} = exam, part_id, part_nodes)
+      when is_binary(part_id) and is_list(part_nodes) do
+    {blanked_doc, partial_answers} =
+      AnswerKey.split(%{"type" => "doc", "content" => part_nodes})
+
+    blanked_part_nodes = Map.get(blanked_doc, "content", [])
+
+    content = exam.content || %{}
+    parts = split_content_into_parts(content)
+    preamble = content_preamble(content)
 
     unless Enum.any?(parts, &(&1.id == part_id)) do
       raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
@@ -489,14 +521,35 @@ defmodule Tasky.Exams do
 
     new_parts =
       Enum.map(parts, fn p ->
-        if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+        if p.id == part_id, do: %{p | nodes: blanked_part_nodes}, else: p
       end)
 
-    new_doc = assemble_parts_into_content(new_parts)
+    new_content = assemble_parts_into_content(preamble, new_parts)
 
-    exam
-    |> Ecto.Changeset.change(%{sample_solution: new_doc})
-    |> Repo.update()
+    merged_answers =
+      (exam.sample_solution || %{})
+      |> Map.merge(partial_answers)
+      |> then(&prune_orphan_answers(new_content, &1))
+
+    persist_content_and_answers(exam, new_content, merged_answers)
+  end
+
+  defp persist_content_and_answers(exam, content, answers) do
+    case exam
+         |> Exam.changeset(%{content: content, sample_solution: answers})
+         |> Repo.update() do
+      {:ok, updated} = result ->
+        Tasky.AI.BulkCorrectionRunner.start_for_exam(updated)
+        result
+
+      error ->
+        error
+    end
+  end
+
+  defp prune_orphan_answers(content, answers) do
+    keep_ids = AnswerKey.block_ids(content)
+    Map.take(answers, MapSet.to_list(keep_ids))
   end
 
   @doc """
@@ -604,10 +657,9 @@ defmodule Tasky.Exams do
     exam = Repo.get!(Exam, submission.exam_id)
     max_points = Map.get(exam.sample_solution_points || %{}, part_id)
 
-    parts =
-      submission
-      |> correction_content()
-      |> split_content_into_parts()
+    doc = correction_content(submission)
+    parts = split_content_into_parts(doc)
+    preamble = content_preamble(doc)
 
     case Enum.find(parts, &(&1.id == part_id)) do
       nil ->
@@ -651,7 +703,7 @@ defmodule Tasky.Exams do
             if p.id == part_id, do: %{p | nodes: rewritten_nodes}, else: p
           end)
 
-        new_doc = assemble_parts_into_content(new_parts)
+        new_doc = assemble_parts_into_content(preamble, new_parts)
 
         case submission
              |> Ecto.Changeset.change(%{
@@ -783,17 +835,19 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Enumerates `(submission, part, ignore_spelling?)` triples eligible for bulk
-  AI correction across all submissions of the exam. Excludes parts without a
+  Enumerates correction job descriptors eligible for bulk AI correction across
+  all submissions of the exam. Each job carries `ignore_spelling` and
+  `ignore_case` flags from the per-part config. Excludes parts without a
   max-points entry or without content for that submission.
 
   Jobs are grouped by `part_id` (all submissions for part A, then all for
   part B, ...) so that consecutive Anthropic calls reuse the same cached
   system prefix (rules + sample solution) within the 5-minute cache TTL.
   """
-  def list_bulk_correction_jobs(%Exam{} = exam) do
+  def list_bulk_correction_jobs(%Exam{} = exam, opts \\ []) do
     config = exam.ai_correction_config || %{}
     max_points_map = exam.sample_solution_points || %{}
+    submission_filter = Keyword.get(opts, :submission_id)
 
     auto_correct_part_ids =
       for {part_id, part_config} <- config,
@@ -808,6 +862,9 @@ defmodule Tasky.Exams do
     else
       exam
       |> list_exam_submissions()
+      |> Enum.filter(fn s ->
+        s.submitted and (is_nil(submission_filter) or s.id == submission_filter)
+      end)
       |> Enum.flat_map(fn submission ->
         parts =
           submission
@@ -818,11 +875,13 @@ defmodule Tasky.Exams do
             MapSet.member?(auto_correct_part_ids, part.id),
             part.nodes != [],
             part.id not in (submission.corrected_parts || []) do
+          part_cfg = Map.get(config, part.id, %{})
+
           %{
             submission_id: submission.id,
             part_id: part.id,
-            ignore_spelling:
-              config |> Map.get(part.id, %{}) |> Map.get("ignore_spelling", false) == true
+            ignore_spelling: Map.get(part_cfg, "ignore_spelling", false) == true,
+            ignore_case: Map.get(part_cfg, "ignore_case", false) == true
           }
         end
       end)
@@ -831,43 +890,297 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Counts how many correction jobs are skipped because the teacher already
-  marked the submission+part as corrected.
+  Groups the answers given by every submission to a single part, one group per
+  unique answer text, paired with the system's pre-judged verdict against the
+  sample solution and the teacher's current verdict (if any).
+
+  Returns a list of `%{index, label, sample_answers, groups}` — one entry per
+  answer-bearing block in the part, in document order. Within `groups`:
+
+      %{
+        text: "fliegen" | nil,            # nil = "no answer"
+        count: 18,
+        students: [%{submission_id, firstname, lastname}, ...],
+        default_verdict: "correct" | "wrong",
+        current_verdict: "correct" | "half" | "wrong" | nil | :mixed,
+        diff: [{:eq | :ins | :del, string}, ...],
+        nearest_sample: "fliegen" | nil
+      }
+
+  `current_verdict` is `nil` when no submission in the group has an explicit
+  teacher verdict, `:mixed` when submissions disagree, otherwise the shared
+  value. `default_verdict` uses the same case-insensitive trimmed-equality rule
+  as `Tasky.Correction.StringComparator`.
   """
-  def count_skipped_correction_jobs(%Exam{} = exam) do
-    config = exam.ai_correction_config || %{}
-    max_points_map = exam.sample_solution_points || %{}
-
-    auto_correct_part_ids =
-      for {part_id, part_config} <- config,
-          is_map(part_config),
-          Map.get(part_config, "auto_correct") == true,
-          Map.get(max_points_map, part_id) not in [nil, 0],
-          into: MapSet.new(),
-          do: part_id
-
-    if MapSet.size(auto_correct_part_ids) == 0 do
-      0
-    else
+  def list_part_answer_groups(%Exam{} = exam, part_id) when is_binary(part_id) do
+    sample_part =
       exam
-      |> list_exam_submissions()
-      |> Enum.reduce(0, fn submission, acc ->
-        parts =
-          submission
+      |> sample_solution_doc()
+      |> split_content_into_parts()
+      |> Enum.find(&(&1.id == part_id))
+
+    sample_blocks =
+      case sample_part do
+        nil -> []
+        p -> NodePatcher.list_answer_blocks(p.nodes)
+      end
+
+    sample_text_by_index =
+      Enum.into(sample_blocks, %{}, fn b -> {b.index, b.text} end)
+
+    exam_part =
+      (exam.content || %{})
+      |> split_content_into_parts()
+      |> Enum.find(&(&1.id == part_id))
+
+    labels_by_index =
+      case exam_part do
+        nil -> %{}
+        p -> answer_block_labels(p.nodes)
+      end
+
+    exam_block_indices =
+      case exam_part do
+        nil -> Enum.map(sample_blocks, & &1.index)
+        p -> p.nodes |> NodePatcher.list_answer_blocks() |> Enum.map(& &1.index)
+      end
+
+    submissions = list_exam_submissions(exam)
+
+    per_submission_blocks =
+      Enum.map(submissions, fn sub ->
+        blocks =
+          sub
           |> correction_content()
           |> split_content_into_parts()
+          |> Enum.find(&(&1.id == part_id))
+          |> case do
+            nil -> []
+            p -> NodePatcher.list_answer_blocks(p.nodes)
+          end
 
-        skipped =
-          Enum.count(parts, fn part ->
-            MapSet.member?(auto_correct_part_ids, part.id) and
-              part.nodes != [] and
-              part.id in (submission.corrected_parts || [])
-          end)
-
-        acc + skipped
+        {sub, blocks}
       end)
+
+    Enum.map(exam_block_indices, fn index ->
+      sample_text = Map.get(sample_text_by_index, index)
+
+      sample_answers =
+        (sample_text || "")
+        |> String.split(";")
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
+
+      groups = build_answer_groups(per_submission_blocks, part_id, index, sample_answers)
+
+      %{
+        index: index,
+        label: Map.get(labels_by_index, index),
+        sample_answers: sample_answers,
+        groups: groups
+      }
+    end)
+  end
+
+  defp build_answer_groups(per_submission_blocks, part_id, index, sample_answers) do
+    entries =
+      Enum.map(per_submission_blocks, fn {sub, blocks} ->
+        text =
+          case Enum.find(blocks, &(&1.index == index)) do
+            nil -> nil
+            %{text: t} -> t
+          end
+
+        {sub, normalize_group_text(text)}
+      end)
+
+    entries
+    |> Enum.group_by(fn {_sub, text} -> text end)
+    |> Enum.map(fn {text, members} ->
+      subs = Enum.map(members, fn {sub, _} -> sub end)
+      build_one_group(text, subs, part_id, index, sample_answers)
+    end)
+    |> Enum.sort_by(fn g -> -g.count end)
+  end
+
+  defp build_one_group(text, subs, part_id, index, sample_answers) do
+    verdicts =
+      Enum.map(subs, fn s ->
+        Map.get(s.block_verdicts || %{}, "#{part_id}:#{index}")
+      end)
+
+    current_verdict =
+      case Enum.uniq(verdicts) do
+        [v] -> v
+        _ -> :mixed
+      end
+
+    default_verdict = default_group_verdict(text, sample_answers)
+    nearest = nearest_sample(text, sample_answers)
+    diff = diff_against(text, nearest)
+
+    students =
+      Enum.map(subs, fn s ->
+        %{submission_id: s.id, firstname: s.firstname, lastname: s.lastname}
+      end)
+
+    %{
+      text: text,
+      count: length(subs),
+      students: students,
+      default_verdict: default_verdict,
+      current_verdict: current_verdict,
+      diff: diff,
+      nearest_sample: nearest
+    }
+  end
+
+  defp normalize_group_text(nil), do: nil
+
+  defp normalize_group_text(text) when is_binary(text) do
+    case String.trim(text) do
+      "" -> nil
+      t -> t
     end
   end
+
+  defp default_group_verdict(nil, _samples), do: "wrong"
+  defp default_group_verdict(_text, []), do: "wrong"
+
+  defp default_group_verdict(text, samples) do
+    normalized = text |> String.trim() |> String.downcase()
+
+    if Enum.any?(samples, fn s -> String.downcase(String.trim(s)) == normalized end),
+      do: "correct",
+      else: "wrong"
+  end
+
+  defp nearest_sample(nil, _), do: nil
+  defp nearest_sample(_text, []), do: nil
+
+  defp nearest_sample(_text, [single]), do: single
+
+  defp nearest_sample(text, samples) do
+    lower = String.downcase(text)
+
+    Enum.max_by(samples, fn s ->
+      String.jaro_distance(lower, String.downcase(s))
+    end)
+  end
+
+  defp diff_against(nil, _), do: []
+  defp diff_against(text, nil), do: [{:eq, text}]
+  defp diff_against(text, sample), do: String.myers_difference(text, sample)
+
+  @doc """
+  Reconstructs the answer-filled "sample solution" document by merging the
+  exam's answer-free `content` with the stored answers map (`sample_solution`).
+  This is the single reconstruction point used by correction and previews.
+  """
+  def sample_solution_doc(%Exam{} = exam) do
+    AnswerKey.merge(exam.content || %{}, exam.sample_solution || %{})
+  end
+
+  defp answer_block_labels(nodes) when is_list(nodes) do
+    {labels, _, _} = walk_labels(nodes, %{}, "", 0)
+    labels
+  end
+
+  defp walk_labels(nodes, labels, buffer, counter) when is_list(nodes) do
+    Enum.reduce(nodes, {labels, buffer, counter}, fn node, {l, b, c} ->
+      visit_label(node, l, b, c)
+    end)
+  end
+
+  @answer_node_types ["answerBlock", "lueckentext", "taskItem"]
+
+  defp visit_label(%{"type" => type}, labels, buffer, counter)
+       when type in @answer_node_types do
+    label =
+      case String.trim(buffer || "") do
+        "" -> nil
+        t -> t
+      end
+
+    {Map.put(labels, counter, label), "", counter + 1}
+  end
+
+  defp visit_label(%{"type" => "text", "text" => t}, labels, buffer, counter)
+       when is_binary(t) do
+    {labels, (buffer || "") <> t, counter}
+  end
+
+  # The leading h3 of a part is the question heading; its inline text is the
+  # question label, not a sub-input label. Reset the buffer and skip its
+  # content so the first answer block doesn't inherit the question text.
+  defp visit_label(
+         %{"type" => "heading", "attrs" => %{"level" => 3}},
+         labels,
+         _buffer,
+         counter
+       ),
+       do: {labels, "", counter}
+
+  # Tables: an answer cell is labelled by the preceding cell in the same row
+  # (the common "Begriff | [Antwort]" layout, often repeated across the row).
+  # We handle the row explicitly because the linear text buffer has no notion
+  # of cell boundaries — without this, the header row and other cells leak
+  # into the first answer's label.
+  defp visit_label(%{"type" => "tableRow", "content" => cells}, labels, _buffer, counter)
+       when is_list(cells) do
+    {labels, _prev, counter} =
+      Enum.reduce(cells, {labels, nil, counter}, fn cell, {l, prev, c} ->
+        if cell_contains_answer?(cell) do
+          {l2, c2} = label_answers(cell, l, prev, c)
+          {l2, nil, c2}
+        else
+          {l, cell_text(cell), c}
+        end
+      end)
+
+    {labels, "", counter}
+  end
+
+  defp visit_label(%{"content" => content}, labels, buffer, counter) when is_list(content) do
+    walk_labels(content, labels, buffer, counter)
+  end
+
+  defp visit_label(_, labels, buffer, counter), do: {labels, buffer, counter}
+
+  defp label_answers(%{"type" => type}, labels, label, counter)
+       when type in @answer_node_types do
+    normalized =
+      case String.trim(label || "") do
+        "" -> nil
+        t -> t
+      end
+
+    {Map.put(labels, counter, normalized), counter + 1}
+  end
+
+  defp label_answers(%{"content" => content}, labels, label, counter) when is_list(content) do
+    Enum.reduce(content, {labels, counter}, fn node, {l, c} ->
+      label_answers(node, l, label, c)
+    end)
+  end
+
+  defp label_answers(_, labels, _label, counter), do: {labels, counter}
+
+  defp cell_contains_answer?(%{"type" => type}) when type in @answer_node_types, do: true
+
+  defp cell_contains_answer?(%{"content" => content}) when is_list(content) do
+    Enum.any?(content, &cell_contains_answer?/1)
+  end
+
+  defp cell_contains_answer?(_), do: false
+
+  defp cell_text(%{"type" => "text", "text" => t}) when is_binary(t), do: t
+
+  defp cell_text(%{"content" => content}) when is_list(content) do
+    Enum.map_join(content, "", &cell_text/1)
+  end
+
+  defp cell_text(_), do: ""
 
   @doc """
   Subscribes to correction-grid events for a given exam ID.

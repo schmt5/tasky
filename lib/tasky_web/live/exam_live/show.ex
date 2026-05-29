@@ -127,6 +127,13 @@ defmodule TaskyWeb.ExamLive.Show do
                     >
                       <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4" /> Zur Korrektur
                     </.link>
+                    <.link
+                      :if={@grading_available}
+                      navigate={~p"/exams/#{@exam}/correction/grading"}
+                      class="inline-flex items-center gap-2 text-white text-sm font-semibold bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 hover:shadow-md px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 active:scale-[0.98]"
+                    >
+                      <.icon name="hero-academic-cap" class="w-4 h-4" /> Zur Benotung
+                    </.link>
                   </div>
                 <% end %>
               </div>
@@ -182,114 +189,7 @@ defmodule TaskyWeb.ExamLive.Show do
           </div>
         </div>
 
-        <%!-- Sample Solution Section --%>
-        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-          <div class="p-6 border-b border-stone-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <h2 class="text-lg font-semibold text-stone-800">Musterlösung</h2>
-                <p class="text-sm text-stone-500 mt-1">
-                  Die Musterlösung dieser Prüfung als JSON-Daten
-                </p>
-              </div>
-              <%= if @has_sample_solution do %>
-                <.link
-                  navigate={~p"/exams/#{@exam}/sample-solution"}
-                  class="inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-[6px] transition-all duration-150 active:scale-[0.98] text-stone-500 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
-                >
-                  <.icon name="hero-pencil" class="w-3.5 h-3.5" /> Bearbeiten
-                </.link>
-              <% else %>
-                <button
-                  id="create-sample-solution-btn"
-                  type="button"
-                  phx-click="show_sample_solution_modal"
-                  class="inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-[6px] transition-all duration-150 active:scale-[0.98] bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600"
-                >
-                  <.icon name="hero-plus" class="w-3.5 h-3.5" /> Erstellen
-                </button>
-              <% end %>
-            </div>
-          </div>
-          <div class="p-6">
-            <%= cond do %>
-              <% not @has_sample_solution -> %>
-                <p class="text-sm text-stone-400">Keine Musterlösung vorhanden</p>
-              <% @sample_solution_parts == [] -> %>
-                <p class="text-sm text-stone-400 italic">
-                  Musterlösung vorhanden, aber keine Teile gefunden.
-                </p>
-              <% true -> %>
-                <ul class="divide-y divide-stone-100 -mx-2">
-                  <li :for={part <- @sample_solution_parts}>
-                    <.link
-                      navigate={~p"/exams/#{@exam}/sample-solution/parts/#{part.id}"}
-                      class="flex items-center justify-between gap-4 px-3 py-2.5 rounded-lg transition-colors duration-150 hover:bg-stone-50 group"
-                    >
-                      <span class="text-sm font-medium text-stone-700 truncate group-hover:text-stone-900">
-                        {part.label}
-                      </span>
-                      <.icon
-                        name="hero-chevron-right"
-                        class="w-4 h-4 text-stone-300 group-hover:text-stone-500 shrink-0"
-                      />
-                    </.link>
-                  </li>
-                </ul>
-            <% end %>
-          </div>
-        </div>
       </div>
-
-      <%!-- Sample Solution Confirmation Modal --%>
-      <%= if @show_sample_solution_modal do %>
-        <dialog
-          id="sample-solution-modal"
-          class="modal modal-open"
-          phx-window-keydown="close_sample_solution_modal"
-          phx-key="escape"
-        >
-          <%!-- Modal backdrop --%>
-          <div class="modal-backdrop bg-stone-900/50" phx-click="close_sample_solution_modal"></div>
-          <%!-- Modal box --%>
-          <div class="modal-box max-w-lg p-0 bg-white rounded-[16px] shadow-2xl flex flex-col">
-            <%!-- Modal Header --%>
-            <div class="px-6 pt-6 pb-4">
-              <div class="flex items-start gap-4">
-                <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
-                  <.icon name="hero-light-bulb" class="w-5 h-5 text-sky-500" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h3 class="text-lg font-semibold text-stone-900">
-                    Musterlösung erstellen
-                  </h3>
-                  <p class="text-sm text-stone-500 leading-relaxed mt-2">
-                    Die Musterlösung wird basierend auf dem jetzigen Stand des Inhaltes generiert. Nachträgliche Änderungen am Inhalt müssen manuell in der Musterlösung übernommen werden.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <%!-- Modal Footer --%>
-            <div class="px-6 pb-6 pt-2 flex items-center justify-end gap-3">
-              <button
-                id="cancel-sample-solution-btn"
-                type="button"
-                phx-click="close_sample_solution_modal"
-                class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-              >
-                Abbrechen
-              </button>
-              <.link
-                id="confirm-sample-solution-btn"
-                navigate={~p"/exams/#{@exam}/sample-solution"}
-                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-[8px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-              >
-                Erstellen
-              </.link>
-            </div>
-          </div>
-        </dialog>
-      <% end %>
     </Layouts.app>
     """
   end
@@ -314,10 +214,6 @@ defmodule TaskyWeb.ExamLive.Show do
 
   defp extract_first_heading(_), do: nil
 
-  defp has_sample_solution?(exam) do
-    exam.sample_solution != nil and exam.sample_solution != %{}
-  end
-
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
@@ -326,12 +222,18 @@ defmodule TaskyWeb.ExamLive.Show do
      socket
      |> assign(:page_title, exam.name)
      |> assign(:exam, exam)
-     |> assign(:has_sample_solution, has_sample_solution?(exam))
-     |> assign(
-       :sample_solution_parts,
-       Exams.split_content_into_parts(exam.sample_solution || %{})
-     )
-     |> assign(:show_sample_solution_modal, false)}
+     |> assign(:grading_available, grading_available?(exam))}
+  end
+
+  defp grading_available?(exam) do
+    parts = Exams.split_content_into_parts(exam.content || %{})
+    submissions = Exams.list_exam_submissions(exam)
+
+    parts != [] and submissions != [] and
+      Enum.all?(submissions, fn s ->
+        done = MapSet.new(s.corrected_parts || [])
+        Enum.all?(parts, fn p -> p.id in done end)
+      end)
   end
 
   @impl true
@@ -367,15 +269,5 @@ defmodule TaskyWeb.ExamLive.Show do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Durchführung konnte nicht geöffnet werden.")}
     end
-  end
-
-  @impl true
-  def handle_event("show_sample_solution_modal", _params, socket) do
-    {:noreply, assign(socket, :show_sample_solution_modal, true)}
-  end
-
-  @impl true
-  def handle_event("close_sample_solution_modal", _params, socket) do
-    {:noreply, assign(socket, :show_sample_solution_modal, false)}
   end
 end

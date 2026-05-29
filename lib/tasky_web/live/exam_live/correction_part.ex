@@ -687,8 +687,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     %{exam: exam, current_part: part} = socket.assigns
 
     nodes =
-      exam.sample_solution
-      |> Kernel.||(%{})
+      exam
+      |> Exams.sample_solution_doc()
       |> Exams.split_content_into_parts()
       |> Enum.find(&(&1.id == part.id))
       |> case do

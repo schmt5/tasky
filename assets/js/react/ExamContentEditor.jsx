@@ -10,12 +10,30 @@ import { Highlight } from "@tiptap/extension-highlight";
 import { TextStyle, Color } from "@tiptap/extension-text-style";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
+import * as Tooltip from "@radix-ui/react-tooltip";
+
+function generateAnswerId() {
+  return Math.floor(Math.random() * 9000) + 1000;
+}
+
+const answerIdAttribute = {
+  answerId: {
+    default: null,
+    parseHTML: (el) => el.getAttribute("data-answer-id"),
+    renderHTML: (attrs) =>
+      attrs.answerId ? { "data-answer-id": attrs.answerId } : {},
+  },
+};
 
 const Lueckentext = Node.create({
   name: "lueckentext",
   inline: true,
   group: "inline",
   content: "inline*",
+
+  addAttributes() {
+    return { ...answerIdAttribute };
+  },
 
   parseHTML() {
     return [{ tag: "span.lueckentext" }];
@@ -32,16 +50,18 @@ const Lueckentext = Node.create({
         ({ chain, state }) => {
           const { from, to } = state.selection;
           const text = state.doc.textBetween(from, to);
+          const attrs = { answerId: generateAnswerId() };
           if (text) {
             return chain()
               .deleteSelection()
               .insertContent({
                 type: this.name,
+                attrs,
                 content: [{ type: "text", text }],
               })
               .run();
           }
-          return chain().insertContent({ type: this.name }).run();
+          return chain().insertContent({ type: this.name, attrs }).run();
         },
     };
   },
@@ -54,14 +74,7 @@ const AnswerBlock = Node.create({
   defining: true,
 
   addAttributes() {
-    return {
-      answerId: {
-        default: null,
-        parseHTML: (el) => el.getAttribute("data-answer-id"),
-        renderHTML: (attrs) =>
-          attrs.answerId ? { "data-answer-id": attrs.answerId } : {},
-      },
-    };
+    return { ...answerIdAttribute };
   },
 
   parseHTML() {
@@ -81,7 +94,7 @@ const AnswerBlock = Node.create({
       setAnswerBlock:
         () =>
         ({ chain }) => {
-          const answerId = Math.floor(Math.random() * 9000) + 1000;
+          const answerId = generateAnswerId();
           return chain()
             .insertContent({
               type: this.name,
@@ -94,46 +107,15 @@ const AnswerBlock = Node.create({
   },
 });
 
-const PageBreak = Node.create({
-  name: "pageBreak",
-  group: "block",
-  atom: true,
-  selectable: true,
-  draggable: false,
-
+const TaskItemWithId = TaskItem.extend({
   addAttributes() {
     return {
-      pageId: {
-        default: null,
-        parseHTML: (el) => el.getAttribute("data-page-id"),
-        renderHTML: (attrs) =>
-          attrs.pageId ? { "data-page-id": attrs.pageId } : {},
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: "div.page-break" }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return ["div", { ...HTMLAttributes, class: "page-break" }];
-  },
-
-  addCommands() {
-    return {
-      setPageBreak:
-        () =>
-        ({ commands }) => {
-          const pageId = Math.floor(Math.random() * 90000000) + 10000000;
-          return commands.insertContent({
-            type: this.name,
-            attrs: { pageId },
-          });
-        },
+      ...this.parent?.(),
+      ...answerIdAttribute,
     };
   },
 });
+
 const TeacherComment = Mark.create({
   name: "teacherComment",
 
@@ -161,12 +143,11 @@ import {
   ItalicIcon,
   H1Icon,
   H2Icon,
-  H3Icon,
   ListBulletIcon,
+  QuestionMarkCircleIcon,
   NumberedListIcon,
   ChatBubbleBottomCenterTextIcon,
   ChatBubbleLeftEllipsisIcon,
-  MinusIcon,
   TableCellsIcon,
   PaintBrushIcon,
   ArrowUturnLeftIcon,
@@ -251,7 +232,7 @@ const PreventNodeDeletion = Extension.create({
   },
 
   addProseMirrorPlugins() {
-    const protectedTypes = ["lueckentext", "answerBlock", "pageBreak"];
+    const protectedTypes = ["lueckentext", "answerBlock"];
     return [
       new Plugin({
         key: new PluginKey("preventNodeDeletion"),
@@ -631,9 +612,10 @@ export default function ExamContentEditor({
   hideAnswers = false,
   correctionMode = false,
   notFullWidth = false,
-  hidePageBreak = false,
+  hideQuestion = false,
   editable = true,
   containerRef = null,
+  solutionMode = false,
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
@@ -670,11 +652,10 @@ export default function ExamContentEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ horizontalRule: false }),
-      PageBreak,
       Lueckentext,
       AnswerBlock,
       TaskList,
-      TaskItem.configure({ nested: true }),
+      TaskItemWithId.configure({ nested: true }),
       TableKit.configure({ table: { resizable: true } }),
       Highlight.configure({ multicolor: true }),
       TextStyle,
@@ -731,7 +712,9 @@ export default function ExamContentEditor({
   return (
     <div
       className={
-        "exam-editor" + (notFullWidth ? " exam-editor--not-full-width" : "")
+        "exam-editor" +
+        (notFullWidth ? " exam-editor--not-full-width" : "") +
+        (solutionMode ? " exam-editor--solution-mode" : "")
       }
     >
       {editable && (
@@ -741,7 +724,7 @@ export default function ExamContentEditor({
           errorMsg={errorMsg}
           hideAnswers={hideAnswers}
           correctionMode={correctionMode}
-          hidePageBreak={hidePageBreak}
+          hideQuestion={hideQuestion}
         />
       )}
       <div className="exam-editor__content">
@@ -759,7 +742,7 @@ function Toolbar({
   errorMsg,
   hideAnswers = false,
   correctionMode = false,
-  hidePageBreak = false,
+  hideQuestion = false,
 }) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
@@ -791,17 +774,18 @@ function Toolbar({
   });
 
   const btn = (title, icon, action, isActive = false, disabled = false) => (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      className={"exam-editor__btn" + (isActive ? " is-active" : "")}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={action}
-      disabled={disabled}
-    >
-      {icon}
-    </button>
+    <Tip label={title}>
+      <button
+        type="button"
+        aria-label={title}
+        className={"exam-editor__btn" + (isActive ? " is-active" : "")}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={action}
+        disabled={disabled}
+      >
+        {icon}
+      </button>
+    </Tip>
   );
 
   const iconCls = "exam-editor__icon";
@@ -816,21 +800,22 @@ function Toolbar({
     clearLabel,
   }) => (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          title={title}
-          aria-label={title}
-          className={"exam-editor__btn" + (activeColor ? " is-active" : "")}
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          {icon}
-          <span
-            className="exam-editor__btn-bar"
-            style={{ backgroundColor: activeColor || "transparent" }}
-          />
-        </button>
-      </DropdownMenu.Trigger>
+      <Tip label={title}>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label={title}
+            className={"exam-editor__btn" + (activeColor ? " is-active" : "")}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {icon}
+            <span
+              className="exam-editor__btn-bar"
+              style={{ backgroundColor: activeColor || "transparent" }}
+            />
+          </button>
+        </DropdownMenu.Trigger>
+      </Tip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           className="exam-editor__menu"
@@ -902,7 +887,8 @@ function Toolbar({
   const [tab, setTab] = useState("start");
 
   return (
-    <div className="exam-editor__toolbar">
+    <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
+      <div className="exam-editor__toolbar">
       <Tabs.Root
         value={tab}
         onValueChange={setTab}
@@ -944,6 +930,18 @@ function Toolbar({
             ])}
             {group("Schriftart", [
               btn(
+                "Überschrift 1",
+                <H1Icon className={iconCls} />,
+                () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+                active.h1,
+              ),
+              btn(
+                "Überschrift 2",
+                <H2Icon className={iconCls} />,
+                () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+                active.h2,
+              ),
+              btn(
                 "Fett",
                 <BoldIcon className={iconCls} />,
                 () => editor.chain().focus().toggleBold().run(),
@@ -957,26 +955,6 @@ function Toolbar({
               ),
               textColorMenu,
               highlightMenu,
-            ])}
-            {group("Überschriften", [
-              btn(
-                "Überschrift 1",
-                <H1Icon className={iconCls} />,
-                () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
-                active.h1,
-              ),
-              btn(
-                "Überschrift 2",
-                <H2Icon className={iconCls} />,
-                () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
-                active.h2,
-              ),
-              btn(
-                "Überschrift 3",
-                <H3Icon className={iconCls} />,
-                () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
-                active.h3,
-              ),
             ])}
             {group("Listen", [
               btn(
@@ -992,6 +970,15 @@ function Toolbar({
                 active.orderedList,
               ),
             ])}
+            {!hideQuestion &&
+              group("Frage", [
+                btn(
+                  "Frage",
+                  <QuestionMarkCircleIcon className={iconCls} />,
+                  () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+                  active.h3,
+                ),
+              ])}
             {!hideAnswers &&
               group("Antworten", [
                 btn(
@@ -1017,13 +1004,6 @@ function Toolbar({
                   <ChatBubbleBottomCenterTextIcon className={iconCls} />,
                   () => editor.chain().focus().toggleBlockquote().run(),
                   active.blockquote,
-                ),
-              ])}
-            {!correctionMode &&
-              !hidePageBreak &&
-              group("Struktur", [
-                btn("Seitenumbruch", <MinusIcon className={iconCls} />, () =>
-                  editor.chain().focus().setPageBreak().run(),
                 ),
               ])}
           </div>
@@ -1135,7 +1115,26 @@ function Toolbar({
           </Tabs.Content>
         )}
       </Tabs.Root>
-    </div>
+      </div>
+    </Tooltip.Provider>
+  );
+}
+
+function Tip({ label, children }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="exam-editor__tooltip"
+          side="bottom"
+          sideOffset={6}
+        >
+          {label}
+          <Tooltip.Arrow className="exam-editor__tooltip-arrow" />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 

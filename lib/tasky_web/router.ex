@@ -119,14 +119,13 @@ defmodule TaskyWeb.Router do
            ExamLive.CorrectionPart,
            :correction_part
 
+      live "/exams/:id/correction/bulk/:part_id",
+           ExamLive.CorrectionPartBulk,
+           :correction_part_bulk
+
       live "/exams/:id/correction/grading", ExamLive.Grading, :grading
 
       live "/exams/:id/content", ExamLive.Content, :content
-      live "/exams/:id/sample-solution", ExamLive.SampleSolution, :sample_solution
-
-      live "/exams/:id/sample-solution/parts/:part_id",
-           ExamLive.SampleSolution,
-           :sample_solution_part
     end
 
     live_session :teacher_settings,

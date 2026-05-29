@@ -6,7 +6,7 @@ defmodule TaskyWeb.ExamContentApiController do
   def update(conn, %{"id" => id, "content" => content}) when is_map(content) do
     exam = Exams.get_exam!(conn.assigns.current_scope, id)
 
-    case Exams.update_exam(exam, %{content: content}) do
+    case Exams.save_exam_structure(exam, content) do
       {:ok, updated} ->
         json(conn, %{ok: true, updated_at: updated.updated_at})
 

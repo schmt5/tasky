@@ -1,45 +1,45 @@
 defmodule Tasky.AI.BulkCorrectionRunner do
   @moduledoc """
-  Runs AI auto-correction for every eligible (submission, part) pair of an
+  Runs auto-correction for every eligible (submission, part) pair of an
   exam, sequentially, under `Tasky.TaskSupervisor`. Broadcasts progress to
   the `exam_correction:<exam_id>` PubSub topic so the LiveView can react.
 
-  The coordinator runs as a Task. It accepts a cooperative `:cancel` message
-  between jobs. In-flight Anthropic calls are not interrupted; cancel takes
-  effect once the current job finishes (or times out via Req).
+  Triggered automatically by `Exams.submit_exam_submission/1` (per-submission)
+  and `Exams.save_exam_structure/2` / `Exams.save_sample_solution_part/3`
+  (across all submitted submissions of the exam, when the teacher edits the
+  exam structure or the model answers).
+
+  Each job currently delegates to `Tasky.Correction.StringComparator` for
+  deterministic, AI-free comparison. The original AI-backed client
+  (`Tasky.AI.CorrectionClient`) is preserved for future reuse.
   """
 
   require Logger
 
   alias Tasky.Exams
   alias Tasky.Exams.ExamSubmission
-  alias Tasky.AI.CorrectionClient
   alias Tasky.AI.NodePatcher
+  alias Tasky.Correction.StringComparator
   alias Tasky.Repo
 
   @doc """
   Starts the bulk-correction coordinator under `Tasky.TaskSupervisor`.
-  Returns `{:ok, pid}` with the coordinator Task's pid (used for cancel).
+
+  Options:
+    * `:submission_id` — restrict the run to a single submission.
+
+  Returns `{:ok, pid}` with the coordinator Task's pid.
   """
-  def start(exam, scope) do
+  def start_for_exam(exam, opts \\ []) do
     Task.Supervisor.start_child(
       Tasky.TaskSupervisor,
-      fn -> run(exam, scope) end,
+      fn -> run(exam, opts) end,
       restart: :temporary
     )
   end
 
-  @doc """
-  Sends a cooperative cancel signal to a running coordinator pid.
-  Takes effect between jobs; the current job (if any) finishes first.
-  """
-  def cancel(pid) when is_pid(pid) do
-    if Process.alive?(pid), do: send(pid, :cancel), else: :noop
-    :ok
-  end
-
-  defp run(exam, _scope) do
-    jobs = Exams.list_bulk_correction_jobs(exam)
+  defp run(exam, opts) do
+    jobs = Exams.list_bulk_correction_jobs(exam, opts)
     total = length(jobs)
 
     Exams.broadcast_bulk_correction(
@@ -59,46 +59,36 @@ defmodule Tasky.AI.BulkCorrectionRunner do
 
   defp do_run(exam, jobs, total) do
     final =
-      Enum.reduce_while(jobs, %{done: 0, errors: [], total: total}, fn job, acc ->
-        receive do
-          :cancel ->
-            {:halt, Map.put(acc, :cancelled, true)}
-        after
-          0 ->
-            errors =
-              case run_job(exam, job) do
-                :ok -> acc.errors
-                {:error, reason} -> [{job, reason} | acc.errors]
-              end
+      Enum.reduce(jobs, %{done: 0, errors: []}, fn job, acc ->
+        errors =
+          case run_job(exam, job) do
+            :ok -> acc.errors
+            {:error, reason} -> [{job, reason} | acc.errors]
+          end
 
-            done = acc.done + 1
-            new_acc = %{acc | done: done, errors: errors}
+        done = acc.done + 1
 
-            Exams.broadcast_bulk_correction(
-              exam.id,
-              {:bulk_correction_progress,
-               %{done: done, total: total, errors: length(errors)}}
-            )
+        Exams.broadcast_bulk_correction(
+          exam.id,
+          {:bulk_correction_progress,
+           %{done: done, total: total, errors: length(errors)}}
+        )
 
-            {:cont, new_acc}
-        end
+        %{done: done, errors: errors}
       end)
 
-    if Map.get(final, :cancelled, false) do
-      Exams.broadcast_bulk_correction(
-        exam.id,
-        {:bulk_correction_cancelled,
-         %{done: final.done, total: total, errors: Enum.reverse(final.errors)}}
-      )
-    else
-      Exams.broadcast_bulk_correction(
-        exam.id,
-        {:bulk_correction_done, %{total: total, errors: Enum.reverse(final.errors)}}
-      )
-    end
+    Exams.broadcast_bulk_correction(
+      exam.id,
+      {:bulk_correction_done, %{total: total, errors: Enum.reverse(final.errors)}}
+    )
   end
 
-  defp run_job(exam, %{submission_id: submission_id, part_id: part_id, ignore_spelling: ignore_spelling}) do
+  defp run_job(exam, %{
+         submission_id: submission_id,
+         part_id: part_id,
+         ignore_spelling: ignore_spelling,
+         ignore_case: ignore_case
+       }) do
     with {:ok, submission} <- fetch_submission(exam.id, submission_id),
          {:ok, submission_nodes} <- fetch_part_nodes(submission, part_id),
          sample_nodes = sample_solution_part_nodes(exam, part_id),
@@ -106,11 +96,11 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          {annotated_nodes, answer_count} = NodePatcher.annotate(submission_nodes),
          :ok <- ensure_has_answers(answer_count),
          {:ok, %{verdicts: verdicts, points: points}} <-
-           CorrectionClient.correct_part(
+           StringComparator.correct_part(
              annotated_nodes,
              sample_nodes,
              max_points,
-             %{ignore_spelling: ignore_spelling}
+             %{ignore_spelling: ignore_spelling, ignore_case: ignore_case}
            ),
          corrected_nodes = NodePatcher.apply_verdicts(annotated_nodes, verdicts),
          clamped = clamp_points(points, max_points),
@@ -154,8 +144,8 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   end
 
   defp sample_solution_part_nodes(exam, part_id) do
-    exam.sample_solution
-    |> Kernel.||(%{})
+    exam
+    |> Exams.sample_solution_doc()
     |> Exams.split_content_into_parts()
     |> Enum.find(&(&1.id == part_id))
     |> case do

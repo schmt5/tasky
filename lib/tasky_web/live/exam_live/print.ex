@@ -161,7 +161,7 @@ defmodule TaskyWeb.ExamLive.Print do
   defp maybe_add_sample_solution_section(sections, exam, opts) do
     if opts[:show_sample_solution] do
       sections ++
-        [build_section(:sample, "Musterlösung", doc_nodes(exam.sample_solution))]
+        [build_section(:sample, "Musterlösung", doc_nodes(Tasky.Exams.sample_solution_doc(exam)))]
     else
       sections
     end

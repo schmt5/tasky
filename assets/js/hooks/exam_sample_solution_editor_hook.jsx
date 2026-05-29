@@ -34,8 +34,9 @@ export const ExamSampleSolutionPartEditor = {
           saveExamSampleSolutionPart(examId, partId, doc?.content ?? [])
         }
         hideAnswers={true}
-        hidePageBreak={true}
+        hideQuestion={true}
         notFullWidth={true}
+        solutionMode={true}
       />,
     );
   },

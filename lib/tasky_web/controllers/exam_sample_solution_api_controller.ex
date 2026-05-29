@@ -7,7 +7,7 @@ defmodule TaskyWeb.ExamSampleSolutionApiController do
       when is_list(nodes) do
     exam = Exams.get_exam!(conn.assigns.current_scope, id)
 
-    case Exams.update_sample_solution_part_content(exam, part_id, nodes) do
+    case Exams.save_sample_solution_part(exam, part_id, nodes) do
       {:ok, updated} ->
         json(conn, %{ok: true, updated_at: updated.updated_at})
 

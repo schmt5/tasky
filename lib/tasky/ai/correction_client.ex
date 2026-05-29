@@ -1,4 +1,5 @@
 defmodule Tasky.AI.CorrectionClient do
+  # Kept for future reuse — currently superseded by Tasky.Correction.StringComparator.
   @moduledoc """
   Calls the Anthropic Claude API to auto-correct one exam-submission part.
 
@@ -205,7 +206,20 @@ defmodule Tasky.AI.CorrectionClient do
         """
       end
 
-    base <> spelling_note
+    case_note =
+      if Map.get(opts, :ignore_case, false) do
+        """
+
+        CASE NOTE: Capitalization (upper- vs. lower-case letters) must be IGNORED when evaluating answers. Treat "berlin" and "Berlin" as equivalent.
+        """
+      else
+        """
+
+        CASE NOTE: Capitalization (upper- vs. lower-case letters) is IMPORTANT and must be considered. Wrong capitalization makes an otherwise correct answer "incorrect" — especially relevant for proper nouns and language exams.
+        """
+      end
+
+    base <> spelling_note <> case_note
   end
 
   defp build_user_message(annotated_submission_nodes) do
