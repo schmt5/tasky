@@ -173,8 +173,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     do: "bg-white border-green-500 text-stone-700 hover:bg-green-50/40"
 
   defp part_chip_classes(false, false),
-    do:
-      "bg-white border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300"
+    do: "bg-white border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300"
 
   defp part_chip_status_classes(true, true), do: "text-green-300"
   defp part_chip_status_classes(true, false), do: "text-stone-400"

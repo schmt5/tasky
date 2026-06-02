@@ -10,7 +10,10 @@ defmodule Tasky.Correction.AnswerKeyTest do
         "content" => [
           %{"type" => "answerBlock", "attrs" => %{"answerId" => 1234}, "content" => []},
           %{"type" => "paragraph", "content" => [%{"type" => "lueckentext"}]},
-          %{"type" => "taskList", "content" => [%{"type" => "taskItem", "attrs" => %{"checked" => false}}]}
+          %{
+            "type" => "taskList",
+            "content" => [%{"type" => "taskItem", "attrs" => %{"checked" => false}}]
+          }
         ]
       }
 
@@ -31,7 +34,9 @@ defmodule Tasky.Correction.AnswerKeyTest do
           %{
             "type" => "answerBlock",
             "attrs" => %{"answerId" => 1111},
-            "content" => [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Paris"}]}]
+            "content" => [
+              %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Paris"}]}
+            ]
           }
         ]
       }
@@ -86,7 +91,9 @@ defmodule Tasky.Correction.AnswerKeyTest do
               %{
                 "type" => "taskItem",
                 "attrs" => %{"answerId" => 3333, "checked" => true},
-                "content" => [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Wahr"}]}]
+                "content" => [
+                  %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Wahr"}]}
+                ]
               }
             ]
           }
@@ -100,7 +107,9 @@ defmodule Tasky.Correction.AnswerKeyTest do
       [%{"content" => [task]}] = content["content"]
       assert task["attrs"]["checked"] == false
       # label text stays in content
-      assert task["content"] == [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Wahr"}]}]
+      assert task["content"] == [
+               %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Wahr"}]}
+             ]
 
       assert AnswerKey.merge(content, answers) == doc
     end
@@ -109,7 +118,12 @@ defmodule Tasky.Correction.AnswerKeyTest do
       doc = %{
         "type" => "doc",
         "content" => [
-          %{"type" => "paragraph", "content" => [%{"type" => "lueckentext", "content" => [%{"type" => "text", "text" => "x"}]}]}
+          %{
+            "type" => "paragraph",
+            "content" => [
+              %{"type" => "lueckentext", "content" => [%{"type" => "text", "text" => "x"}]}
+            ]
+          }
         ]
       }
 

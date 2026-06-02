@@ -235,5 +235,4 @@ defmodule TaskyWeb.ExamLive.Print do
       do: Integer.to_string(trunc(n)),
       else: :erlang.float_to_binary(n, decimals: 1)
   end
-
 end

@@ -373,7 +373,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
               <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
-                  <form phx-change="set_points" phx-submit="set_points" class="flex items-center gap-2">
+                  <form
+                    phx-change="set_points"
+                    phx-submit="set_points"
+                    class="flex items-center gap-2"
+                  >
                     <span class="text-sm text-stone-500">Punkte</span>
                     <input
                       id="power-points-input"

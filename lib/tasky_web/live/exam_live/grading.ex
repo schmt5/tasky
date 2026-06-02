@@ -40,7 +40,10 @@ defmodule TaskyWeb.ExamLive.Grading do
                 <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
               </button>
             <% else %>
-              <div class="tooltip tooltip-bottom tooltip-delayed" data-tip="PDF-Dienst nicht verfügbar">
+              <div
+                class="tooltip tooltip-bottom tooltip-delayed"
+                data-tip="PDF-Dienst nicht verfügbar"
+              >
                 <button
                   type="button"
                   disabled
@@ -63,9 +66,7 @@ defmodule TaskyWeb.ExamLive.Grading do
           <div class="flex-1">
             <h2 class="text-sm font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
             <p class="text-xs text-stone-500 mt-0.5">
-              Standardwert: Summe aller Musterlösungs-Punkte ({format_points(
-                @sample_solution_total
-              )}). Kann hier angepasst werden, z.B. wenn nicht alle Teile gewertet werden.
+              Standardwert: Summe aller Musterlösungs-Punkte ({format_points(@sample_solution_total)}). Kann hier angepasst werden, z.B. wenn nicht alle Teile gewertet werden.
             </p>
           </div>
           <div class="shrink-0 inline-flex items-center gap-2">
@@ -135,9 +136,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                   <td class="px-6 py-3">
                     <div class="flex items-center gap-3">
                       <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0">
-                        {String.first(row.submission.firstname)}{String.first(
-                          row.submission.lastname
-                        )}
+                        {String.first(row.submission.firstname)}{String.first(row.submission.lastname)}
                       </div>
                       <span class="text-sm font-semibold text-stone-800">
                         {row.submission.firstname} {row.submission.lastname}

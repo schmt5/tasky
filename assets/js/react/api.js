@@ -22,7 +22,9 @@ async function request(url, options = {}) {
     } catch {
       message = response.statusText;
     }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();

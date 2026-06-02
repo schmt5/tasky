@@ -178,22 +178,50 @@ defmodule TaskyWeb.Guest.ExamLive do
                     </div>
                   </div>
                   <div class="p-6">
-                    <p class="text-sm text-stone-600 leading-relaxed">
-                      Möchtest du die Prüfung
-                      <span class="font-semibold text-stone-800">{@exam.name}</span>
-                      jetzt abgeben?
-                    </p>
-                    <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
-                      <div class="flex items-start gap-2.5">
-                        <.icon
-                          name="hero-exclamation-triangle"
-                          class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
-                        />
-                        <p class="text-xs text-amber-700 leading-relaxed">
-                          Nach der Abgabe kannst du keine Änderungen mehr vornehmen.
+                    <%= case @submit_check do %>
+                      <% :checking -> %>
+                        <div id="submit-check-pending" class="flex items-center gap-3 py-2">
+                          <span class="loading loading-spinner loading-sm text-sky-500"></span>
+                          <p class="text-sm text-stone-600 leading-relaxed">
+                            Deine Antworten werden gespeichert …
+                          </p>
+                        </div>
+                      <% :ok -> %>
+                        <p class="text-sm text-stone-600 leading-relaxed">
+                          Möchtest du die Prüfung
+                          <span class="font-semibold text-stone-800">{@exam.name}</span>
+                          jetzt abgeben?
                         </p>
-                      </div>
-                    </div>
+                        <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
+                          <div class="flex items-start gap-2.5">
+                            <.icon
+                              name="hero-exclamation-triangle"
+                              class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                            />
+                            <p class="text-xs text-amber-700 leading-relaxed">
+                              Nach der Abgabe kannst du keine Änderungen mehr vornehmen.
+                            </p>
+                          </div>
+                        </div>
+                      <% :error -> %>
+                        <div
+                          id="submit-check-error"
+                          class="bg-red-50 rounded-lg p-3 border border-red-100"
+                        >
+                          <div class="flex items-start gap-2.5">
+                            <.icon
+                              name="hero-exclamation-circle"
+                              class="w-4 h-4 text-red-500 shrink-0 mt-0.5"
+                            />
+                            <p class="text-xs text-red-700 leading-relaxed">
+                              Deine letzten Änderungen konnten nicht gespeichert werden.
+                              Prüfe deine Internetverbindung und versuche es erneut.
+                              Du kannst die Prüfung erst abgeben, wenn alle Antworten
+                              gespeichert sind.
+                            </p>
+                          </div>
+                        </div>
+                    <% end %>
                   </div>
                   <div class="p-6 pt-0 flex items-center justify-end gap-3">
                     <button
@@ -204,11 +232,22 @@ defmodule TaskyWeb.Guest.ExamLive do
                     >
                       Abbrechen
                     </button>
+                    <%= if @submit_check == :error do %>
+                      <button
+                        id="retry-submit-check-btn"
+                        type="button"
+                        phx-click="retry_submit_check"
+                        class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]"
+                      >
+                        <.icon name="hero-arrow-path" class="w-4 h-4" /> Erneut versuchen
+                      </button>
+                    <% end %>
                     <button
                       id="confirm-submit-btn"
                       type="button"
                       phx-click="confirm_submit_exam"
-                      class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                      disabled={@submit_check != :ok}
+                      class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
                     >
                       <.icon name="hero-paper-airplane" class="w-4 h-4" /> Jetzt abgeben
                     </button>
@@ -306,12 +345,31 @@ defmodule TaskyWeb.Guest.ExamLive do
      |> assign(:submission, submission)
      |> assign(:content_json, content_json)
      |> assign(:show_submit_modal, false)
+     |> assign(:submit_check, :checking)
      |> assign(:in_seb, in_seb)}
   end
 
   @impl true
   def handle_event("show_submit_modal", _params, socket) do
-    {:noreply, assign(socket, :show_submit_modal, true)}
+    # Opening the modal freezes the editor behind it, so once the client
+    # reports a successful flush the server provably holds the full document
+    # and the submit itself needs no content payload.
+    {:noreply,
+     socket
+     |> assign(:show_submit_modal, true)
+     |> assign(:submit_check, :checking)
+     |> push_event("flush-before-submit", %{})}
+  end
+
+  def handle_event("submit_check_result", %{"ok" => ok}, socket) do
+    {:noreply, assign(socket, :submit_check, if(ok == true, do: :ok, else: :error))}
+  end
+
+  def handle_event("retry_submit_check", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:submit_check, :checking)
+     |> push_event("flush-before-submit", %{})}
   end
 
   def handle_event("close_submit_modal", _params, socket) do
@@ -319,6 +377,16 @@ defmodule TaskyWeb.Guest.ExamLive do
   end
 
   def handle_event("confirm_submit_exam", _params, socket) do
+    submit_exam(socket)
+  end
+
+  defp submit_exam(%{assigns: %{submit_check: check}} = socket) when check != :ok do
+    # Defense against stale clicks: the button is disabled unless the flush
+    # check passed, but the event could still arrive from a stale DOM.
+    {:noreply, socket}
+  end
+
+  defp submit_exam(socket) do
     case Exams.submit_exam_submission(socket.assigns.submission) do
       {:ok, updated_submission} ->
         {:noreply,

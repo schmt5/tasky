@@ -62,7 +62,9 @@ defmodule Tasky.Correction.AnswerKey do
   nodes in the doc. Used to prune orphan entries from the answers map after a
   content edit removed or replaced blocks.
   """
-  def block_ids(%{"content" => content}) when is_list(content), do: collect_ids(content, MapSet.new())
+  def block_ids(%{"content" => content}) when is_list(content),
+    do: collect_ids(content, MapSet.new())
+
   def block_ids(_), do: MapSet.new()
 
   # --- ensure_ids helpers ---

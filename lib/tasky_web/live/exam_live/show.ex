@@ -188,7 +188,6 @@ defmodule TaskyWeb.ExamLive.Show do
             <% end %>
           </div>
         </div>
-
       </div>
     </Layouts.app>
     """

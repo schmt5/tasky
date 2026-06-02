@@ -300,6 +300,12 @@ const PreventNodeDeletion = Extension.create({
 });
 
 const AUTOSAVE_DELAY_MS = 1000;
+// Backoff schedule for failed saves; the last entry repeats indefinitely so a
+// student with flaky Wi-Fi keeps retrying until the exam ends.
+const RETRY_DELAYS_MS = [2000, 4000, 8000, 15000];
+// HTTP statuses where retrying can never succeed (submitted / exam ended /
+// rejected payload) — give up instead of hammering the server.
+const PERMANENT_SAVE_ERRORS = [400, 404, 409, 422];
 
 const HIGHLIGHT_COLORS = [
   { name: "Rot", value: "#fecaca" },
@@ -670,25 +676,70 @@ export default function ExamContentEditor({
   uploadImage = null,
   externalToolbar = false,
   partId = null,
+  apiRef = null,
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
   const saveTimerRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const retryCountRef = useRef(0);
   const pendingDocRef = useRef(null);
+  const inFlightRef = useRef(null);
   const rootRef = useRef(null);
 
+  // Sends the pending doc to the server. The pending snapshot is only cleared
+  // after a successful save — a failed request keeps it queued so nothing is
+  // silently lost. Retryable failures (network, 5xx) re-flush with backoff;
+  // permanent ones (submitted / exam ended) stop. Saves are serialized via
+  // `inFlightRef` so an older doc can never overwrite a newer one.
+  // Resolves to `true` iff no unsaved changes remain afterwards.
   const flush = useCallback(async () => {
+    while (inFlightRef.current) {
+      try {
+        await inFlightRef.current;
+      } catch {
+        // Failure handling belongs to the flush that started the request.
+      }
+    }
+
     const doc = pendingDocRef.current;
-    if (!doc) return;
-    pendingDocRef.current = null;
+    if (!doc) return true;
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     setStatus("saving");
-    setErrorMsg(null);
+    const attempt = save(doc);
+    inFlightRef.current = attempt;
     try {
-      await save(doc);
+      await attempt;
+      // Keystrokes that arrived while saving stay pending for the next flush.
+      if (pendingDocRef.current === doc) pendingDocRef.current = null;
+      retryCountRef.current = 0;
       setStatus("saved");
+      setErrorMsg(null);
+      return pendingDocRef.current === null;
     } catch (err) {
-      setStatus("error");
-      setErrorMsg(err.message || "Speichern fehlgeschlagen");
+      if (PERMANENT_SAVE_ERRORS.includes(err.status)) {
+        pendingDocRef.current = null;
+        setStatus("error");
+        setErrorMsg(err.message || "Speichern nicht mehr möglich");
+      } else {
+        const delay =
+          RETRY_DELAYS_MS[
+            Math.min(retryCountRef.current, RETRY_DELAYS_MS.length - 1)
+          ];
+        retryCountRef.current += 1;
+        setStatus("error");
+        setErrorMsg("Speichern fehlgeschlagen – versuche erneut …");
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          flush();
+        }, delay);
+      }
+      return false;
+    } finally {
+      if (inFlightRef.current === attempt) inFlightRef.current = null;
     }
   }, [save]);
 
@@ -735,7 +786,9 @@ export default function ExamContentEditor({
     },
   });
 
-  // Flush pending save on unmount and when the tab is hidden.
+  // Flush pending save on unmount and when the tab is hidden. The retry timer
+  // is deliberately left alive on unmount: its closure still holds unsaved
+  // content and the retried request can still succeed after the editor is gone.
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden" && pendingDocRef.current) {
@@ -750,6 +803,27 @@ export default function ExamContentEditor({
       if (pendingDocRef.current) flush();
     };
   }, [flush]);
+
+  // Imperative API for the surrounding LiveView hook (guest exam submit flow):
+  // lets it force-flush before submission and clean up once submitted.
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = {
+      flush,
+      hasUnsavedChanges: () =>
+        pendingDocRef.current !== null || inFlightRef.current !== null,
+      suspendAutosave: () => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        saveTimerRef.current = null;
+        retryTimerRef.current = null;
+        pendingDocRef.current = null;
+      },
+    };
+    return () => {
+      apiRef.current = null;
+    };
+  }, [apiRef, flush]);
 
   // Listen for external "tiptap:setContent" DOM events on the container element
   useEffect(() => {

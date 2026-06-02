@@ -70,8 +70,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
 
         Exams.broadcast_bulk_correction(
           exam.id,
-          {:bulk_correction_progress,
-           %{done: done, total: total, errors: length(errors)}}
+          {:bulk_correction_progress, %{done: done, total: total, errors: length(errors)}}
         )
 
         %{done: done, errors: errors}

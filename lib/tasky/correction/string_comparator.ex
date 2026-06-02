@@ -98,7 +98,7 @@ defmodule Tasky.Correction.StringComparator do
         true
 
       Map.get(opts, :ignore_spelling, false) and
-          String.length(s) >= @fuzzy_min_length and
+        String.length(s) >= @fuzzy_min_length and
           String.length(a) >= @fuzzy_min_length ->
         String.jaro_distance(s, a) >= @fuzzy_threshold
 

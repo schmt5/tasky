@@ -83,7 +83,6 @@ defmodule TaskyWeb.Admin.UserLive do
                 </option>
               </select>
             </div>
-
           </form>
         </div>
 
