@@ -67,7 +67,7 @@ defmodule TaskyWeb.Guest.EnrollLive do
   def mount(%{"enrollment_token" => enrollment_token}, _session, socket) do
     exam = Exams.get_exam_by_enrollment_token!(enrollment_token)
 
-    if exam.status != "open" do
+    if exam.status not in ["open", "running"] do
       {:ok,
        socket
        |> put_flash(:error, "Diese Prüfung ist aktuell nicht zur Anmeldung geöffnet.")

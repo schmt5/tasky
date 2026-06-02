@@ -29,6 +29,27 @@
     border-radius: 12px;
 }
 
+/* Shared toolbar (Musterlösung): the LiveView hook div owns stickiness, so
+   the inner toolbar must not be sticky itself (avoids double-sticky). */
+.exam-editor--shared-toolbar .exam-editor__toolbar {
+    position: static;
+    top: auto;
+}
+
+/* Per-part save error shown inline in the part row, since the shared toolbar
+   only surfaces the active part's status. */
+.exam-editor__inline-error {
+    max-width: 72rem;
+    margin: 0 auto 0.75rem;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+}
+
 .exam-editor__tabs-bar {
     max-width: 64rem;
     margin: 0 auto;
@@ -371,6 +392,29 @@
 .exam-editor:not(.exam-editor--not-full-width)
     .exam-editor__content
     .ProseMirror.ProseMirror-focused {
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.07),
+        0 10px 28px rgba(0, 0, 0, 0.06),
+        0 0 0 1px #d6d3d1;
+}
+
+/* Musterlösung: same paper look as the Inhalt editor — borderless white
+   sheet with a shadow, floating on the gray page background (the gray canvas
+   itself comes from the LiveView container, not the editor). */
+.exam-editor--solution-mode .exam-editor__content {
+    background: transparent;
+    padding-top: 0;
+}
+
+.exam-editor--solution-mode .exam-editor__content .ProseMirror {
+    border: none;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.07),
+        0 10px 28px rgba(0, 0, 0, 0.06);
+}
+
+.exam-editor--solution-mode .exam-editor__content .ProseMirror:focus,
+.exam-editor--solution-mode .exam-editor__content .ProseMirror.ProseMirror-focused {
     box-shadow:
         0 1px 3px rgba(0, 0, 0, 0.07),
         0 10px 28px rgba(0, 0, 0, 0.06),

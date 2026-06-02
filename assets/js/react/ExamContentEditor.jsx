@@ -13,6 +13,7 @@ import Image from "@tiptap/extension-image";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Tooltip from "@radix-ui/react-tooltip";
+import * as solutionEditorStore from "./solutionEditorStore";
 
 function generateAnswerId() {
   return Math.floor(Math.random() * 9000) + 1000;
@@ -667,6 +668,8 @@ export default function ExamContentEditor({
   solutionMode = false,
   placeholder = "",
   uploadImage = null,
+  externalToolbar = false,
+  partId = null,
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
@@ -722,6 +725,9 @@ export default function ExamContentEditor({
     onUpdate: ({ editor }) => {
       if (editable) scheduleSave(editor.getJSON());
     },
+    onFocus: () => {
+      if (externalToolbar && partId) solutionEditorStore.setActive(partId);
+    },
     editorProps: {
       attributes: {
         class: "exam-editor__prose",
@@ -761,11 +767,26 @@ export default function ExamContentEditor({
     return () => container.removeEventListener("tiptap:setContent", handler);
   }, [editor, containerRef]);
 
+  // Shared-toolbar mode: register this editor in the cross-root store so the
+  // single toolbar in the SolutionToolbar hook can bind to it on focus.
+  useEffect(() => {
+    if (!externalToolbar || !editor || !partId) return;
+    solutionEditorStore.registerEditor(partId, editor);
+    return () => solutionEditorStore.unregisterEditor(partId);
+  }, [externalToolbar, editor, partId]);
+
+  // Shared-toolbar mode: publish save status so the toolbar's StatusIndicator
+  // reflects the active part.
+  useEffect(() => {
+    if (!externalToolbar || !partId) return;
+    solutionEditorStore.setStatus(partId, status, errorMsg);
+  }, [externalToolbar, partId, status, errorMsg]);
+
   // Toggle `is-stuck` on the toolbar once it sticks under the page header, so
   // it grows a shadow that detaches the chrome from the scrolling canvas.
   useEffect(() => {
     const root = rootRef.current;
-    if (!editable || !editor || !root) return;
+    if (!editable || externalToolbar || !editor || !root) return;
     const toolbar = root.querySelector(".exam-editor__toolbar");
     if (!toolbar) return;
 
@@ -788,7 +809,7 @@ export default function ExamContentEditor({
       observer.disconnect();
       sentinel.remove();
     };
-  }, [editable, editor]);
+  }, [editable, externalToolbar, editor]);
 
   if (!editor) return null;
 
@@ -801,7 +822,7 @@ export default function ExamContentEditor({
         (solutionMode ? " exam-editor--solution-mode" : "")
       }
     >
-      {editable && (
+      {editable && !externalToolbar && (
         <Toolbar
           editor={editor}
           status={status}
@@ -812,6 +833,11 @@ export default function ExamContentEditor({
           uploadImage={uploadImage}
         />
       )}
+      {externalToolbar && status === "error" && (
+        <div className="exam-editor__inline-error" role="alert">
+          {errorMsg || "Fehler beim Speichern"}
+        </div>
+      )}
       <div className="exam-editor__content">
         <div className="exam-editor__content-inner">
           <EditorContent editor={editor} />
@@ -821,7 +847,7 @@ export default function ExamContentEditor({
   );
 }
 
-function Toolbar({
+export function Toolbar({
   editor,
   status,
   errorMsg,

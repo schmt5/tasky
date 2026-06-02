@@ -40,6 +40,7 @@ defmodule TaskyWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    get "/handbook", PageController, :handbook
   end
 
   ## Guest exam routes (no authentication required)

@@ -186,10 +186,10 @@ defmodule Tasky.Exams do
 
   @doc """
   Creates an exam submission for a guest user.
-  The exam must be in "open" status.
+  The exam must be in "open" or "running" status.
   """
   def create_exam_submission(%Exam{} = exam, attrs) do
-    if exam.status != "open" do
+    if exam.status not in ["open", "running"] do
       {:error, :exam_not_open}
     else
       %ExamSubmission{exam_id: exam.id}
@@ -511,27 +511,50 @@ defmodule Tasky.Exams do
 
     blanked_part_nodes = Map.get(blanked_doc, "content", [])
 
-    content = exam.content || %{}
-    parts = split_content_into_parts(content)
-    preamble = content_preamble(content)
+    # The splice below is a read-modify-write over the whole content. The
+    # stacked Musterlösung view autosaves each part independently, so two
+    # near-simultaneous requests for different parts could otherwise clobber
+    # each other. BEGIN IMMEDIATE takes SQLite's write lock up front, so the
+    # refetch inside the transaction always sees the latest committed state.
+    result =
+      Repo.transaction(
+        fn ->
+          locked_exam = Repo.get!(Exam, exam.id)
 
-    unless Enum.any?(parts, &(&1.id == part_id)) do
-      raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+          content = locked_exam.content || %{}
+          parts = split_content_into_parts(content)
+          preamble = content_preamble(content)
+
+          unless Enum.any?(parts, &(&1.id == part_id)) do
+            raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+          end
+
+          new_parts =
+            Enum.map(parts, fn p ->
+              if p.id == part_id, do: %{p | nodes: blanked_part_nodes}, else: p
+            end)
+
+          new_content = assemble_parts_into_content(preamble, new_parts)
+
+          merged_answers =
+            (locked_exam.sample_solution || %{})
+            |> Map.merge(partial_answers)
+            |> then(&prune_orphan_answers(new_content, &1))
+
+          case locked_exam
+               |> Exam.changeset(%{content: new_content, sample_solution: merged_answers})
+               |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end,
+        mode: :immediate
+      )
+
+    with {:ok, updated} <- result do
+      Tasky.AI.BulkCorrectionRunner.start_for_exam(updated)
+      {:ok, updated}
     end
-
-    new_parts =
-      Enum.map(parts, fn p ->
-        if p.id == part_id, do: %{p | nodes: blanked_part_nodes}, else: p
-      end)
-
-    new_content = assemble_parts_into_content(preamble, new_parts)
-
-    merged_answers =
-      (exam.sample_solution || %{})
-      |> Map.merge(partial_answers)
-      |> then(&prune_orphan_answers(new_content, &1))
-
-    persist_content_and_answers(exam, new_content, merged_answers)
   end
 
   defp persist_content_and_answers(exam, content, answers) do

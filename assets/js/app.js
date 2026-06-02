@@ -27,6 +27,7 @@ import topbar from "../vendor/topbar";
 import { ExamContentEditor } from "./hooks/exam_content_editor_hook";
 import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
 import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
+import { SolutionToolbar } from "./hooks/solution_toolbar_hook";
 import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
 import { ExamReadOnlyViewer } from "./hooks/exam_readonly_viewer_hook";
 import { PowerView } from "./hooks/power_view_hook";
@@ -44,6 +45,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ExamContentEditor,
     ExamSubmissionEditor,
     ExamSampleSolutionPartEditor,
+    SolutionToolbar,
     ExamCorrectionEditor,
     ExamReadOnlyViewer,
     PowerView,
