@@ -300,6 +300,74 @@ const PreventNodeDeletion = Extension.create({
   },
 });
 
+// Participant mode: everything the teacher authored is read-only; only the
+// answer fields accept input. Instead of enumerating every way the exam text
+// could be damaged (select-all delete, paste-over, drag-drop, table commands,
+// …), compare the document's *skeleton* — its full JSON with answer-field
+// contents stripped and checkbox states normalized — before and after each
+// transaction, and veto any transaction that changes it.
+const ANSWER_CONTENT_TYPES = ["lueckentext", "answerBlock"];
+
+function stripAnswers(json) {
+  if (ANSWER_CONTENT_TYPES.includes(json.type)) {
+    const { content, ...skeleton } = json;
+    return skeleton;
+  }
+  // Ticking a multiple-choice box is an answer; the item's label text is not.
+  if (json.type === "taskItem") {
+    return {
+      ...json,
+      attrs: { ...json.attrs, checked: null },
+      content: json.content?.map(stripAnswers),
+    };
+  }
+  if (json.content) {
+    return { ...json, content: json.content.map(stripAnswers) };
+  }
+  return json;
+}
+
+// ProseMirror docs are immutable, so the skeleton can be cached per doc node.
+// An allowed transaction's new doc becomes the next comparison's old doc, so
+// in steady state this is one stringify per keystroke.
+const skeletonCache = new WeakMap();
+
+function docSkeleton(doc) {
+  let skeleton = skeletonCache.get(doc);
+  if (skeleton === undefined) {
+    skeleton = JSON.stringify(stripAnswers(doc.toJSON()));
+    skeletonCache.set(doc, skeleton);
+  }
+  return skeleton;
+}
+
+const LockExamContent = Extension.create({
+  name: "lockExamContent",
+
+  addOptions() {
+    return {
+      // Called when a transaction is vetoed, so the UI can explain why the
+      // edit had no effect instead of leaving the editor feeling broken.
+      onBlocked: null,
+    };
+  },
+
+  addProseMirrorPlugins() {
+    const { onBlocked } = this.options;
+    return [
+      new Plugin({
+        key: new PluginKey("lockExamContent"),
+        filterTransaction(tr, state) {
+          if (!tr.docChanged) return true;
+          if (docSkeleton(tr.doc) === docSkeleton(state.doc)) return true;
+          onBlocked?.();
+          return false;
+        },
+      }),
+    ];
+  },
+});
+
 const AUTOSAVE_DELAY_MS = 1000;
 // Backoff schedule for failed saves; the last entry repeats indefinitely so a
 // student with flaky Wi-Fi keeps retrying until the exam ends.
@@ -667,6 +735,7 @@ export default function ExamContentEditor({
   initialContent,
   save,
   hideAnswers = false,
+  lockContent = false,
   correctionMode = false,
   notFullWidth = false,
   hideQuestion = false,
@@ -681,6 +750,10 @@ export default function ExamContentEditor({
 }) {
   const [status, setStatus] = useState("idle"); // idle | saving | saved | error
   const [errorMsg, setErrorMsg] = useState(null);
+  // Blocked-edit hint (lockContent mode): briefly explains why typing into
+  // the exam text has no effect, and pulses the answer fields.
+  const [lockHintVisible, setLockHintVisible] = useState(false);
+  const lockHintTimerRef = useRef(null);
   const saveTimerRef = useRef(null);
   const retryTimerRef = useRef(null);
   const retryCountRef = useRef(0);
@@ -756,6 +829,24 @@ export default function ExamContentEditor({
     [flush],
   );
 
+  // Stable identity: useEditor builds the extension list once, so this must
+  // not change across renders.
+  const showLockHint = useCallback(() => {
+    setLockHintVisible(true);
+    if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    lockHintTimerRef.current = setTimeout(() => {
+      lockHintTimerRef.current = null;
+      setLockHintVisible(false);
+    }, 2400);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    },
+    [],
+  );
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ horizontalRule: false }),
@@ -770,6 +861,9 @@ export default function ExamContentEditor({
       Image,
       ...(placeholder ? [Placeholder.configure({ placeholder })] : []),
       ...(hideAnswers ? [PreventNodeDeletion] : []),
+      ...(lockContent
+        ? [LockExamContent.configure({ onBlocked: showLockHint })]
+        : []),
       ...(correctionMode ? [TeacherComment] : []),
     ],
     editable: editable,
@@ -894,7 +988,8 @@ export default function ExamContentEditor({
       className={
         "exam-editor" +
         (notFullWidth ? " exam-editor--not-full-width" : "") +
-        (solutionMode ? " exam-editor--solution-mode" : "")
+        (solutionMode ? " exam-editor--solution-mode" : "") +
+        (lockHintVisible ? " exam-editor--lock-flash" : "")
       }
     >
       {editable && !externalToolbar && (
@@ -906,6 +1001,8 @@ export default function ExamContentEditor({
           correctionMode={correctionMode}
           hideQuestion={hideQuestion}
           uploadImage={uploadImage}
+          lockHintVisible={lockContent && lockHintVisible}
+          lockHintEnabled={lockContent}
         />
       )}
       {externalToolbar && status === "error" && (
@@ -930,6 +1027,8 @@ export function Toolbar({
   correctionMode = false,
   hideQuestion = false,
   uploadImage = null,
+  lockHintVisible = false,
+  lockHintEnabled = false,
 }) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
@@ -1310,6 +1409,19 @@ export function Toolbar({
           </Tabs.Content>
         )}
       </Tabs.Root>
+      {lockHintEnabled && (
+        <div
+          className={
+            "exam-editor__lock-hint" + (lockHintVisible ? " is-visible" : "")
+          }
+          role="status"
+          aria-live="polite"
+        >
+          {lockHintVisible
+            ? "Der Aufgabentext kann nicht bearbeitet werden – schreibe deine Antwort in ein Antwortfeld."
+            : ""}
+        </div>
+      )}
       </div>
     </Tooltip.Provider>
   );

@@ -44,6 +44,7 @@ export const ExamSubmissionEditor = {
         initialContent={initialContent}
         save={(doc) => saveExamSubmissionContent(examToken, doc)}
         hideAnswers={true}
+        lockContent={true}
         apiRef={this.editorApi}
       />,
     );
