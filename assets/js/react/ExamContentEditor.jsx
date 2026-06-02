@@ -143,6 +143,7 @@ const TeacherComment = Mark.create({
 import {
   BoldIcon,
   ItalicIcon,
+  UnderlineIcon,
   H1Icon,
   H2Icon,
   ListBulletIcon,
@@ -936,6 +937,7 @@ export function Toolbar({
     editor,
     selector: ({ editor }) => ({
       bold: editor.isActive("bold"),
+      underline: editor.isActive("underline"),
       italic: editor.isActive("italic"),
       h1: editor.isActive("heading", { level: 1 }),
       h2: editor.isActive("heading", { level: 2 }),
@@ -1131,6 +1133,12 @@ export function Toolbar({
                 <BoldIcon className={iconCls} />,
                 () => editor.chain().focus().toggleBold().run(),
                 active.bold,
+              ),
+              btn(
+                "Unterstrichen",
+                <UnderlineIcon className={iconCls} />,
+                () => editor.chain().focus().toggleUnderline().run(),
+                active.underline,
               ),
               btn(
                 "Kursiv",
