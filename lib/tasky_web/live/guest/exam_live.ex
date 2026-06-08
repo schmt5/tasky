@@ -7,19 +7,37 @@ defmodule TaskyWeb.Guest.ExamLive do
   def render(assigns) do
     ~H"""
     <Layouts.guest flash={@flash}>
-      <%!-- Stores this submission's token in the browser so the enroll page can
-            offer a "continue" link after an accidental tab close (same browser). --%>
-      <div
-        id="exam-resume-point"
-        phx-hook=".ResumePoint"
-        data-exam-id={@exam.id}
-        data-token={@submission.exam_token}
-        data-firstname={@submission.firstname}
-        data-lastname={@submission.lastname}
-        data-submitted={to_string(@submission.submitted)}
-        hidden
-      />
-      <%= cond do %>
+      <%= if @not_found do %>
+        <%!-- Invalid / expired exam link (unknown token, e.g. a stale resume
+              link to a deleted submission). --%>
+        <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
+          <div class="w-full max-w-md text-center">
+            <div class="w-16 h-16 rounded-2xl bg-stone-100 flex items-center justify-center mx-auto mb-4">
+              <.icon name="hero-link-slash" class="w-8 h-8 text-stone-400" />
+            </div>
+            <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
+              Link ungültig
+            </h1>
+            <p class="text-stone-500 text-sm leading-relaxed">
+              Dieser Prüfungslink ist ungültig oder abgelaufen. Bitte melde dich
+              erneut über den Einschreibelink an oder wende dich an deine Lehrperson.
+            </p>
+          </div>
+        </div>
+      <% else %>
+        <%!-- Stores this submission's token in the browser so the enroll page can
+              offer a "continue" link after an accidental tab close (same browser). --%>
+        <div
+          id="exam-resume-point"
+          phx-hook=".ResumePoint"
+          data-exam-id={@exam.id}
+          data-token={@submission.exam_token}
+          data-firstname={@submission.firstname}
+          data-lastname={@submission.lastname}
+          data-submitted={to_string(@submission.submitted)}
+          hidden
+        />
+        <%= cond do %>
         <% @exam.seb_enabled and not @in_seb and @exam.status in ["open", "running"] -> %>
           <%!-- SEB Required Gate --%>
           <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
@@ -123,6 +141,9 @@ defmodule TaskyWeb.Guest.ExamLive do
               <p class="text-stone-500 text-sm">
                 Du hast deine Prüfung <span class="font-semibold text-stone-700">{@exam.name}</span>
                 erfolgreich abgegeben.
+              </p>
+              <p class="text-stone-500 text-sm mt-1">
+                Abgegeben am {Calendar.strftime(@submission.updated_at, "%d.%m.%Y um %H:%M")} Uhr.
               </p>
               <p class="text-stone-400 text-xs mt-2">
                 Du kannst diese Seite jetzt schliessen.
@@ -308,6 +329,7 @@ defmodule TaskyWeb.Guest.ExamLive do
               </p>
             </div>
           </div>
+        <% end %>
       <% end %>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ResumePoint">
@@ -343,7 +365,20 @@ defmodule TaskyWeb.Guest.ExamLive do
 
   @impl true
   def mount(%{"exam_token" => exam_token}, _session, socket) do
-    submission = Exams.get_exam_submission_by_token!(exam_token)
+    case Exams.get_exam_submission_by_token(exam_token) do
+      nil -> mount_not_found(socket)
+      submission -> mount_submission(submission, socket)
+    end
+  end
+
+  defp mount_not_found(socket) do
+    {:ok,
+     socket
+     |> assign(:page_title, "Link ungültig")
+     |> assign(:not_found, true)}
+  end
+
+  defp mount_submission(submission, socket) do
     exam = submission.exam
 
     if connected?(socket) do
@@ -380,6 +415,7 @@ defmodule TaskyWeb.Guest.ExamLive do
 
     {:ok,
      socket
+     |> assign(:not_found, false)
      |> assign(:page_title, exam.name)
      |> assign(:exam, exam)
      |> assign(:submission, submission)

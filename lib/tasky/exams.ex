@@ -175,6 +175,18 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Gets an exam by its enrollment token, or `nil` if the token is unknown.
+  Lets the enrollment page render a friendly "invalid link" state instead
+  of raising a generic 404.
+  """
+  def get_exam_by_enrollment_token(token) when is_binary(token) do
+    case Repo.get_by(Exam, enrollment_token: token) do
+      nil -> nil
+      exam -> Repo.preload(exam, [:teacher])
+    end
+  end
+
+  @doc """
   Returns all exam submissions for a given exam, ordered by enrollment time.
   """
   def list_exam_submissions(%Exam{} = exam) do
@@ -207,6 +219,18 @@ defmodule Tasky.Exams do
     ExamSubmission
     |> Repo.get_by!(exam_token: token)
     |> Repo.preload(exam: [:teacher])
+  end
+
+  @doc """
+  Gets an exam submission by its exam_token, or `nil` if the token is unknown.
+  Lets the exam page render a friendly "invalid/expired link" state (e.g. a
+  stale resume link to a deleted submission) instead of raising a 404.
+  """
+  def get_exam_submission_by_token(token) when is_binary(token) do
+    case Repo.get_by(ExamSubmission, exam_token: token) do
+      nil -> nil
+      submission -> Repo.preload(submission, exam: [:teacher])
+    end
   end
 
   @doc """

@@ -246,12 +246,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                       <button
                         id={"resume-copy-#{submission.exam_token}"}
                         type="button"
-                        phx-hook=".CopyButton"
+                        phx-hook=".CopyMenuItem"
                         data-target={"resume-link-#{submission.exam_token}"}
                         class="flex items-center gap-2 text-sm text-stone-700"
                       >
-                        <.icon name="hero-link" class="w-4 h-4 text-stone-400" />
-                        <span>Teilnehmerlink kopieren</span>
+                        <.icon name="hero-link" class="copy-icon w-4 h-4 text-stone-400" />
+                        <span class="copy-label">Teilnehmerlink kopieren</span>
                       </button>
                     </li>
                   </ul>
@@ -421,6 +421,32 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               });
             });
           }
+        }
+      </script>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".CopyMenuItem">
+        export default {
+          mounted() {
+            const label = this.el.querySelector(".copy-label");
+            this._orig = label ? label.textContent : "";
+            this.el.addEventListener("click", () => {
+              const input = document.getElementById(this.el.getAttribute("data-target"));
+              if (!input || !label) return;
+              navigator.clipboard.writeText(input.value).then(() => {
+                label.textContent = "Kopiert!";
+                label.classList.add("text-sky-600", "font-medium");
+                if (this._t) clearTimeout(this._t);
+                this._t = setTimeout(() => {
+                  label.textContent = this._orig;
+                  label.classList.remove("text-sky-600", "font-medium");
+                  this._t = null;
+                }, 1500);
+              });
+            });
+          },
+          destroyed() {
+            if (this._t) clearTimeout(this._t);
+          },
         }
       </script>
     </Layouts.app>
