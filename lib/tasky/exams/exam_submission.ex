@@ -5,6 +5,7 @@ defmodule Tasky.Exams.ExamSubmission do
   schema "exam_submissions" do
     field :firstname, :string
     field :lastname, :string
+    field :email, :string
     field :exam_token, :string
     field :submitted, :boolean, default: false
     field :content, :map, default: %{}
@@ -32,10 +33,25 @@ defmodule Tasky.Exams.ExamSubmission do
   @doc false
   def changeset(exam_submission, attrs) do
     exam_submission
-    |> cast(attrs, [:firstname, :lastname])
-    |> validate_required([:firstname, :lastname])
-    |> validate_length(:firstname, min: 1, max: 100)
-    |> validate_length(:lastname, min: 1, max: 100)
+    |> cast(attrs, [:firstname, :lastname, :email])
+    |> validate_required([:firstname, :lastname, :email],
+      message: "darf nicht leer sein"
+    )
+    |> validate_length(:firstname,
+      max: 100,
+      message: "darf höchstens 100 Zeichen lang sein"
+    )
+    |> validate_length(:lastname,
+      max: 100,
+      message: "darf höchstens 100 Zeichen lang sein"
+    )
+    |> validate_format(:email, ~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/,
+      message: "muss eine gültige E-Mail-Adresse sein"
+    )
+    |> validate_length(:email,
+      max: 160,
+      message: "darf höchstens 160 Zeichen lang sein"
+    )
     |> put_exam_token()
     |> unique_constraint(:exam_token)
   end

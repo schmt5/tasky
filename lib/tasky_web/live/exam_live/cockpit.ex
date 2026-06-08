@@ -150,8 +150,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           </div>
         <% end %>
 
-        <%!-- Submissions Card --%>
-        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+        <%!-- Submissions Card (no overflow-hidden: lets the per-row actions
+              dropdown extend past the card edge without being clipped). --%>
+        <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6 border-b border-stone-100">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
@@ -220,10 +221,40 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     </span>
                   </p>
                 </div>
-                <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                  <span class="text-xs text-stone-400 font-mono bg-stone-100 px-2 py-1 rounded">
-                    {submission.exam_token}
-                  </span>
+                <div class="dropdown dropdown-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
+                  <label
+                    tabindex="0"
+                    aria-label="Aktionen"
+                    class="cursor-pointer flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 transition-colors duration-150 hover:bg-stone-100 hover:text-stone-700"
+                  >
+                    <.icon name="hero-ellipsis-vertical" class="w-5 h-5" />
+                  </label>
+                  <input
+                    id={"resume-link-#{submission.exam_token}"}
+                    type="text"
+                    value={url(~p"/guest/exam/#{submission.exam_token}")}
+                    readonly
+                    aria-hidden="true"
+                    tabindex="-1"
+                    class="sr-only"
+                  />
+                  <ul
+                    tabindex="0"
+                    class="dropdown-content z-[60] menu p-2 shadow-lg bg-white rounded-[10px] w-60 mt-2 border border-stone-100"
+                  >
+                    <li>
+                      <button
+                        id={"resume-copy-#{submission.exam_token}"}
+                        type="button"
+                        phx-hook=".CopyButton"
+                        data-target={"resume-link-#{submission.exam_token}"}
+                        class="flex items-center gap-2 text-sm text-stone-700"
+                      >
+                        <.icon name="hero-link" class="w-4 h-4 text-stone-400" />
+                        <span>Teilnehmerlink kopieren</span>
+                      </button>
+                    </li>
+                  </ul>
                 </div>
                 <%= if submission.submitted do %>
                   <span class="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full">
@@ -464,8 +495,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
             {:noreply,
              socket
              |> assign(:exam, exam)
-             |> assign(:confirm_action, nil)
-             |> put_flash(:info, "Prüfung gestartet")}
+             |> assign(:confirm_action, nil)}
 
           {:error, _changeset} ->
             {:noreply,
@@ -480,8 +510,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
             {:noreply,
              socket
              |> assign(:exam, exam)
-             |> assign(:confirm_action, nil)
-             |> put_flash(:info, "Prüfung beendet")}
+             |> assign(:confirm_action, nil)}
 
           {:error, _changeset} ->
             {:noreply,

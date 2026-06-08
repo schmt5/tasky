@@ -7,6 +7,18 @@ defmodule TaskyWeb.Guest.ExamLive do
   def render(assigns) do
     ~H"""
     <Layouts.guest flash={@flash}>
+      <%!-- Stores this submission's token in the browser so the enroll page can
+            offer a "continue" link after an accidental tab close (same browser). --%>
+      <div
+        id="exam-resume-point"
+        phx-hook=".ResumePoint"
+        data-exam-id={@exam.id}
+        data-token={@submission.exam_token}
+        data-firstname={@submission.firstname}
+        data-lastname={@submission.lastname}
+        data-submitted={to_string(@submission.submitted)}
+        hidden
+      />
       <%= cond do %>
         <% @exam.seb_enabled and not @in_seb and @exam.status in ["open", "running"] -> %>
           <%!-- SEB Required Gate --%>
@@ -297,6 +309,34 @@ defmodule TaskyWeb.Guest.ExamLive do
             </div>
           </div>
       <% end %>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ResumePoint">
+        export default {
+          sync() {
+            const examId = this.el.dataset.examId;
+            if (!examId) return;
+            const key = "tasky:resume:" + examId;
+            if (this.el.dataset.submitted === "true") {
+              localStorage.removeItem(key);
+              return;
+            }
+            localStorage.setItem(
+              key,
+              JSON.stringify({
+                token: this.el.dataset.token,
+                firstname: this.el.dataset.firstname,
+                lastname: this.el.dataset.lastname,
+              }),
+            );
+          },
+          mounted() {
+            this.sync();
+          },
+          updated() {
+            this.sync();
+          },
+        }
+      </script>
     </Layouts.guest>
     """
   end

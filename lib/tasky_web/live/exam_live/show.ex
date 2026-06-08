@@ -260,10 +260,7 @@ defmodule TaskyWeb.ExamLive.Show do
   def handle_event("open_session", _params, socket) do
     case Exams.open_exam_session(socket.assigns.exam) do
       {:ok, exam} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Durchführung geöffnet")
-         |> push_navigate(to: ~p"/exams/#{exam}/cockpit")}
+        {:noreply, push_navigate(socket, to: ~p"/exams/#{exam}/cockpit")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Durchführung konnte nicht geöffnet werden.")}

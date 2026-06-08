@@ -22,6 +22,40 @@ defmodule TaskyWeb.Guest.EnrollLive do
             </p>
           </div>
 
+          <%!-- Resume card: shown by the hook only if this browser has a saved
+                submission for this exam (e.g. after an accidental tab close). --%>
+          <div
+            id="resume-offer"
+            phx-hook=".ResumeOffer"
+            data-exam-id={@exam.id}
+            hidden
+            class="mb-6"
+          >
+            <a
+              id="resume-offer-link"
+              href="#"
+              class="block bg-sky-50 border border-sky-200 rounded-2xl p-5 transition-all duration-150 hover:bg-sky-100 active:scale-[0.99]"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center shrink-0">
+                  <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-white" />
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-sky-900">Prüfung fortsetzen</p>
+                  <p class="text-xs text-sky-700 mt-0.5">
+                    Als <span id="resume-offer-name" class="font-medium"></span>
+                  </p>
+                </div>
+                <.icon name="hero-chevron-right" class="w-5 h-5 text-sky-400 ml-auto shrink-0" />
+              </div>
+            </a>
+            <div class="flex items-center gap-3 my-5">
+              <div class="flex-1 h-px bg-stone-200" />
+              <span class="text-xs text-stone-400">oder neu anmelden</span>
+              <div class="flex-1 h-px bg-stone-200" />
+            </div>
+          </div>
+
           <%!-- Enrollment Form --%>
           <div class="bg-white rounded-2xl border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-6">
             <.form for={@form} id="enrollment-form" phx-change="validate" phx-submit="enroll">
@@ -38,6 +72,13 @@ defmodule TaskyWeb.Guest.EnrollLive do
                   type="text"
                   label="Nachname"
                   placeholder="Dein Nachname"
+                  required
+                />
+                <.input
+                  field={@form[:email]}
+                  type="email"
+                  label="E-Mail"
+                  placeholder="deine@email.ch"
                   required
                 />
               </div>
@@ -59,6 +100,32 @@ defmodule TaskyWeb.Guest.EnrollLive do
           </p>
         </div>
       </div>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ResumeOffer">
+        export default {
+          mounted() {
+            const examId = this.el.dataset.examId;
+            if (!examId) return;
+            let saved;
+            try {
+              saved = JSON.parse(localStorage.getItem("tasky:resume:" + examId));
+            } catch (_e) {
+              saved = null;
+            }
+            if (!saved || !saved.token) return;
+
+            const link = this.el.querySelector("#resume-offer-link");
+            const name = this.el.querySelector("#resume-offer-name");
+            if (link) link.setAttribute("href", "/guest/exam/" + saved.token);
+            if (name) {
+              name.textContent = [saved.firstname, saved.lastname]
+                .filter(Boolean)
+                .join(" ");
+            }
+            this.el.hidden = false;
+          },
+        }
+      </script>
     </Layouts.guest>
     """
   end
@@ -73,7 +140,8 @@ defmodule TaskyWeb.Guest.EnrollLive do
        |> put_flash(:error, "Diese Prüfung ist aktuell nicht zur Anmeldung geöffnet.")
        |> push_navigate(to: ~p"/")}
     else
-      form = to_form(%{"firstname" => "", "lastname" => ""}, as: :enrollment)
+      form =
+        to_form(%{"firstname" => "", "lastname" => "", "email" => ""}, as: :enrollment)
 
       {:ok,
        socket
