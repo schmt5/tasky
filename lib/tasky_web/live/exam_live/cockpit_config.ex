@@ -50,18 +50,27 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
             <.form for={@form} id="seb-config-form" phx-change="validate" phx-submit="save">
               <div class="p-6 space-y-6">
                 <%!-- Checkbox --%>
-                <div>
-                  <.input
-                    field={@form[:seb_enabled]}
+                <label class="flex items-start gap-3 cursor-pointer">
+                  <input type="hidden" name={@form[:seb_enabled].name} value="false" />
+                  <input
                     type="checkbox"
-                    label="Safe Exam Browser aktivieren"
+                    id={@form[:seb_enabled].id}
+                    name={@form[:seb_enabled].name}
+                    value="true"
+                    checked={Phoenix.HTML.Form.normalize_value("checkbox", @form[:seb_enabled].value)}
+                    class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
                   />
-                  <p class="text-sm text-stone-500 mt-1 ml-6">
-                    Wenn aktiviert, können Teilnehmende die Prüfung nur im Safe Exam Browser (SEB) ablegen.
-                    SEB sperrt den Computer in einen Kiosk-Modus und verhindert den Zugriff auf andere
-                    Anwendungen, Screenshots und Copy-Paste.
-                  </p>
-                </div>
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium text-stone-700">
+                      Safe Exam Browser aktivieren
+                    </span>
+                    <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
+                      Wenn aktiviert, können Teilnehmende die Prüfung nur im Safe Exam Browser (SEB)
+                      ablegen. SEB sperrt den Computer in einen Kiosk-Modus und verhindert den Zugriff
+                      auf andere Anwendungen, Screenshots und Copy-Paste.
+                    </span>
+                  </span>
+                </label>
 
                 <%!-- Quit Password (shown when SEB is enabled) --%>
                 <%= if @exam.seb_enabled and @exam.seb_quit_password do %>
@@ -94,7 +103,8 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
                 <button
                   type="submit"
                   id="save-seb-config-btn"
-                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                  disabled={not @changed?}
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
                 >
                   <.icon name="hero-check" class="w-4 h-4" /> Speichern
                 </button>
@@ -117,13 +127,18 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
      socket
      |> assign(:page_title, exam.name <> " – Konfiguration")
      |> assign(:exam, exam)
-     |> assign(:form, form)}
+     |> assign(:form, form)
+     |> assign(:changed?, false)}
   end
 
   @impl true
   def handle_event("validate", %{"config" => params}, socket) do
     changeset = Exam.changeset(socket.assigns.exam, params)
-    {:noreply, assign(socket, :form, to_form(changeset, as: :config, action: :validate))}
+
+    {:noreply,
+     socket
+     |> assign(:form, to_form(changeset, as: :config, action: :validate))
+     |> assign(:changed?, changeset.changes != %{})}
   end
 
   def handle_event("save", %{"config" => params}, socket) do
@@ -139,6 +154,7 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
          socket
          |> assign(:exam, updated_exam)
          |> assign(:form, to_form(changeset, as: :config))
+         |> assign(:changed?, false)
          |> put_flash(:info, "Konfiguration gespeichert.")}
 
       {:error, changeset} ->
