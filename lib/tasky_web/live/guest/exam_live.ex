@@ -38,7 +38,7 @@ defmodule TaskyWeb.Guest.ExamLive do
           hidden
         />
         <%= cond do %>
-        <% @exam.seb_enabled and not @in_seb and @exam.status in ["open", "running"] -> %>
+        <% @exam.seb_enabled and not @in_seb and not @submission.submitted and @exam.status in ["open", "running"] -> %>
           <%!-- SEB Required Gate --%>
           <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
             <div class="w-full max-w-lg">
@@ -62,17 +62,46 @@ defmodule TaskyWeb.Guest.ExamLive do
                       class="w-5 h-5 text-sky-500 shrink-0 mt-0.5"
                     />
                     <div class="text-sm text-sky-800 leading-relaxed">
-                      <p class="mb-2">
-                        Der Safe Exam Browser sperrt deinen Computer in einen sicheren Kiosk-Modus
-                        während der Prüfung.
+                      <p class="mb-1">
+                        Der Safe Exam Browser sperrt deinen Computer während der Prüfung
+                        in einen sicheren Kiosk-Modus.
                       </p>
                       <p>
-                        Klicke auf den Button unten, um die Prüfung im Safe Exam Browser zu öffnen.
-                        Falls SEB noch nicht installiert ist, installiere ihn zuerst.
+                        Der Safe Exam Browser muss bereits installiert sein. Falls nicht,
+                        installiere ihn zuerst.
                       </p>
                     </div>
                   </div>
                 </div>
+
+                <ol class="space-y-3">
+                  <li class="flex items-start gap-3">
+                    <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
+                      1
+                    </span>
+                    <p class="text-sm text-stone-600 leading-relaxed">
+                      Klicke auf den Button <span class="font-semibold text-stone-800">«Im Safe Exam Browser öffnen»</span>.
+                    </p>
+                  </li>
+                  <li class="flex items-start gap-3">
+                    <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
+                      2
+                    </span>
+                    <p class="text-sm text-stone-600 leading-relaxed">
+                      Es wird eine Konfigurationsdatei
+                      (<span class="font-semibold text-stone-800">exam.seb</span>) heruntergeladen.
+                    </p>
+                  </li>
+                  <li class="flex items-start gap-3">
+                    <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
+                      3
+                    </span>
+                    <p class="text-sm text-stone-600 leading-relaxed">
+                      Öffne die heruntergeladene Datei mit einem Klick und warte einige Sekunden –
+                      der Safe Exam Browser startet automatisch.
+                    </p>
+                  </li>
+                </ol>
 
                 <a
                   href={~p"/guest/exam/#{@submission.exam_token}/seb-config"}
@@ -381,6 +410,16 @@ defmodule TaskyWeb.Guest.ExamLive do
   defp mount_submission(submission, socket) do
     exam = submission.exam
 
+    in_seb =
+      if connected?(socket) do
+        case get_connect_info(socket, :user_agent) do
+          ua when is_binary(ua) -> String.contains?(ua, "SEB")
+          _ -> false
+        end
+      else
+        false
+      end
+
     if connected?(socket) do
       Exams.subscribe_exam(exam.id)
 
@@ -390,7 +429,11 @@ defmodule TaskyWeb.Guest.ExamLive do
             self(),
             "exam_waiting:#{exam.id}",
             submission.exam_token,
-            %{firstname: submission.firstname, lastname: submission.lastname}
+            %{
+              firstname: submission.firstname,
+              lastname: submission.lastname,
+              in_seb: in_seb
+            }
           )
       end
     end
@@ -402,16 +445,6 @@ defmodule TaskyWeb.Guest.ExamLive do
       end
 
     content_json = Jason.encode!(initial_content)
-
-    in_seb =
-      if connected?(socket) do
-        case get_connect_info(socket, :user_agent) do
-          ua when is_binary(ua) -> String.contains?(ua, "SEB")
-          _ -> false
-        end
-      else
-        false
-      end
 
     {:ok,
      socket

@@ -98,7 +98,7 @@ defmodule TaskyWeb.ExamLive.Index do
                 navigate={~p"/exams/#{exam}/edit"}
                 class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-700"
               >
-                <.icon name="hero-pencil-square" class="w-4 h-4" /> Bearbeiten
+                <.icon name="hero-pencil-square" class="w-4 h-4" /> Umbenennen
               </.link>
             </div>
           </li>

@@ -21,7 +21,7 @@ defmodule TaskyWeb.ExamLive.Form do
               <.breadcrumbs crumbs={[
                 %{label: "Prüfungen", navigate: ~p"/exams"},
                 %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-                %{label: "Bearbeiten"}
+                %{label: "Umbenennen"}
               ]} />
             <% end %>
           </div>
@@ -43,7 +43,7 @@ defmodule TaskyWeb.ExamLive.Form do
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
               do: "Gib deiner neuen Prüfung einen Namen.",
-              else: "Bearbeite die Prüfungsinformationen."}
+              else: "Ändere den Namen der Prüfung."}
           </p>
         </div>
       </div>
@@ -59,44 +59,6 @@ defmodule TaskyWeb.ExamLive.Form do
               class="space-y-6"
             >
               <.input field={@form[:name]} type="text" label="Prüfungsname" required />
-
-              <%= if @live_action == :edit do %>
-                <.input
-                  field={@form[:status]}
-                  type="select"
-                  label="Status"
-                  options={[
-                    {"Entwurf", "draft"},
-                    {"Offen", "open"},
-                    {"Laufend", "running"},
-                    {"Beendet", "finished"},
-                    {"Archiviert", "archived"}
-                  ]}
-                />
-
-                <.input
-                  field={@form[:enrollment_token]}
-                  type="text"
-                  label="Einschreibeschlüssel"
-                  placeholder="Optionaler Token für die Einschreibung..."
-                />
-
-                <.input
-                  field={@form[:content_json]}
-                  type="textarea"
-                  label="Inhalt (JSON)"
-                  placeholder="z.B. {&quot;fragen&quot;: [...]}"
-                  rows="6"
-                />
-
-                <.input
-                  field={@form[:sample_solution_json]}
-                  type="textarea"
-                  label="Musterlösung (JSON)"
-                  placeholder="z.B. {&quot;antworten&quot;: [...]}"
-                  rows="6"
-                />
-              <% end %>
 
               <div class="flex items-center gap-3 pt-4 border-t border-stone-100">
                 <.button
@@ -136,11 +98,9 @@ defmodule TaskyWeb.ExamLive.Form do
     changeset = Exams.change_exam(exam)
 
     socket
-    |> assign(:page_title, "Prüfung bearbeiten")
+    |> assign(:page_title, "Prüfung umbenennen")
     |> assign(:exam, exam)
     |> assign(:form, to_form(changeset, as: :exam))
-    |> assign(:content_json, json_encode(exam.content))
-    |> assign(:sample_solution_json, json_encode(exam.sample_solution))
   end
 
   defp apply_action(socket, :new, _params) do
@@ -150,19 +110,15 @@ defmodule TaskyWeb.ExamLive.Form do
     |> assign(:page_title, "Neue Prüfung")
     |> assign(:exam, exam)
     |> assign(:form, to_form(Exams.change_exam(exam), as: :exam))
-    |> assign(:content_json, "")
-    |> assign(:sample_solution_json, "")
   end
 
   @impl true
   def handle_event("validate", %{"exam" => exam_params}, socket) do
-    exam_params = process_json_fields(exam_params)
     changeset = Exams.change_exam(socket.assigns.exam, exam_params)
     {:noreply, assign(socket, form: to_form(changeset, action: :validate, as: :exam))}
   end
 
   def handle_event("save", %{"exam" => exam_params}, socket) do
-    exam_params = process_json_fields(exam_params)
     save_exam(socket, socket.assigns.live_action, exam_params)
   end
 
@@ -191,33 +147,6 @@ defmodule TaskyWeb.ExamLive.Form do
         {:noreply, assign(socket, form: to_form(changeset, as: :exam))}
     end
   end
-
-  defp process_json_fields(params) do
-    params
-    |> maybe_parse_json("content_json", "content")
-    |> maybe_parse_json("sample_solution_json", "sample_solution")
-    |> Map.drop(["content_json", "sample_solution_json"])
-  end
-
-  defp maybe_parse_json(params, json_key, target_key) do
-    case Map.get(params, json_key) do
-      nil ->
-        params
-
-      "" ->
-        Map.put(params, target_key, %{})
-
-      json_string ->
-        case Jason.decode(json_string) do
-          {:ok, decoded} -> Map.put(params, target_key, decoded)
-          {:error, _} -> params
-        end
-    end
-  end
-
-  defp json_encode(nil), do: ""
-  defp json_encode(map) when map == %{}, do: ""
-  defp json_encode(map), do: Jason.encode!(map, pretty: true)
 
   defp return_path("index", _exam), do: ~p"/exams"
   defp return_path("show", exam), do: ~p"/exams/#{exam}"

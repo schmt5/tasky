@@ -19,25 +19,48 @@ defmodule TaskyWeb.ExamLive.Show do
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                phx-click="delete"
-                data-confirm="Bist du sicher, dass du diese Prüfung löschen möchtest?"
-                class="inline-flex items-center gap-2 text-stone-400 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:text-red-600 hover:bg-red-50"
+                popovertarget="exam-actions-menu"
+                style="anchor-name:--exam-actions-anchor"
+                aria-label="Aktionen"
+                class="inline-flex items-center justify-center w-9 h-9 rounded-[6px] text-stone-500 border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
               >
-                <.icon name="hero-trash" class="w-4 h-4" /> Löschen
+                <.icon name="hero-ellipsis-vertical" class="w-5 h-5" />
               </button>
-              <button
-                type="button"
-                phx-click="duplicate_exam"
-                class="inline-flex items-center gap-2 text-stone-400 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:text-sky-600 hover:bg-sky-50"
+              <ul
+                popover
+                id="exam-actions-menu"
+                style="position-anchor:--exam-actions-anchor"
+                class="dropdown dropdown-end menu z-[60] p-2 shadow-lg bg-white rounded-[10px] w-56 border border-stone-100"
               >
-                <.icon name="hero-document-duplicate" class="w-4 h-4" /> Duplizieren
-              </button>
-              <.link
-                navigate={~p"/exams/#{@exam}/edit?return_to=show"}
-                class="inline-flex items-center gap-2 text-stone-700 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-              >
-                <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
-              </.link>
+                <li>
+                  <.link
+                    navigate={~p"/exams/#{@exam}/edit?return_to=show"}
+                    class="flex items-center gap-2 text-sm text-stone-700"
+                  >
+                    <.icon name="hero-pencil" class="w-4 h-4 text-stone-400" /> Umbenennen
+                  </.link>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    phx-click="duplicate_exam"
+                    class="flex items-center gap-2 text-sm text-stone-700"
+                  >
+                    <.icon name="hero-document-duplicate" class="w-4 h-4 text-stone-400" />
+                    Duplizieren
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    phx-click="delete"
+                    data-confirm="Bist du sicher, dass du diese Prüfung löschen möchtest?"
+                    class="flex items-center gap-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <.icon name="hero-trash" class="w-4 h-4" /> Löschen
+                  </button>
+                </li>
+              </ul>
               <%= if @exam.status in ["open", "running"] do %>
                 <.link
                   navigate={~p"/exams/#{@exam}/cockpit"}

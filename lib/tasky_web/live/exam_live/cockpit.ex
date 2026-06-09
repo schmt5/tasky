@@ -169,8 +169,14 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               <div class="flex items-center gap-2">
                 <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full">
                   <span class="w-2 h-2 rounded-full bg-emerald-400" />
-                  {MapSet.size(@present_tokens)} online
+                  {map_size(@present)} online
                 </span>
+                <%= if @exam.seb_enabled do %>
+                  <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full">
+                    <.icon name="hero-shield-check-mini" class="w-4 h-4" />
+                    {@present |> Map.values() |> Enum.count(& &1.in_seb)} im SEB
+                  </span>
+                <% end %>
                 <span class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-sm font-semibold px-3 py-1.5 rounded-full">
                   <.icon name="hero-user-group-mini" class="w-4 h-4" />
                   {@submissions_count}
@@ -193,12 +199,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                     {String.first(submission.firstname)}{String.first(submission.lastname)}
                   </div>
+                  <% {dot_class, label_class, label} =
+                    presence_label(@present, submission.exam_token, @exam.seb_enabled) %>
                   <div class={[
                     "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white",
-                    if(MapSet.member?(@present_tokens, submission.exam_token),
-                      do: "bg-emerald-400",
-                      else: "bg-amber-300"
-                    )
+                    dot_class
                   ]} />
                 </div>
                 <div class="flex-1 min-w-0">
@@ -206,13 +211,8 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     {submission.firstname} {submission.lastname}
                   </p>
                   <p class="text-xs mt-0.5">
-                    <%= if MapSet.member?(@present_tokens, submission.exam_token) do %>
-                      <span class="text-emerald-500 font-medium">Online</span>
-                      <span class="text-stone-300 mx-1">·</span>
-                    <% else %>
-                      <span class="text-amber-500 font-medium">Abwesend</span>
-                      <span class="text-stone-300 mx-1">·</span>
-                    <% end %>
+                    <span class={["font-medium", label_class]}>{label}</span>
+                    <span class="text-stone-300 mx-1">·</span>
                     <span class="text-stone-400">
                       Eingeschrieben am {Calendar.strftime(
                         submission.inserted_at,
@@ -464,39 +464,46 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
     submissions = Exams.list_exam_submissions(exam)
 
-    # Build a MapSet of currently present exam_tokens
-    present_tokens =
-      TaskyWeb.Presence.list("exam_waiting:#{exam.id}")
-      |> Map.keys()
-      |> MapSet.new()
-
     {:ok,
      socket
      |> assign(:page_title, exam.name <> " – Cockpit")
      |> assign(:exam, exam)
      |> assign(:submissions_count, length(submissions))
-     |> assign(:present_tokens, present_tokens)
+     |> assign(:present, presence_state(exam.id))
      |> assign(:confirm_action, nil)
      |> stream(:submissions, submissions)}
   end
 
-  @impl true
-  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff", payload: diff}, socket) do
-    present_tokens =
-      socket.assigns.present_tokens
-      |> then(fn tokens ->
-        Enum.reduce(diff.joins, tokens, fn {key, _}, acc -> MapSet.put(acc, key) end)
-      end)
-      |> then(fn tokens ->
-        Enum.reduce(diff.leaves, tokens, fn {key, _}, acc -> MapSet.delete(acc, key) end)
-      end)
+  # Map of present exam_token => %{in_seb: bool}. A participant counts as in SEB
+  # if any of their tracked sessions reports it (e.g. the SEB window alongside a
+  # still-open gate tab).
+  defp presence_state(exam_id) do
+    TaskyWeb.Presence.list("exam_waiting:#{exam_id}")
+    |> Map.new(fn {token, %{metas: metas}} ->
+      {token, %{in_seb: Enum.any?(metas, & &1[:in_seb])}}
+    end)
+  end
 
+  # Returns {dot_class, label_class, label} for a participant's presence state.
+  # gray = absent, yellow = online but SEB not yet started, green = in SEB /
+  # waiting room (or simply online when SEB is not required).
+  defp presence_label(present, token, seb_enabled) do
+    case Map.get(present, token) do
+      nil -> {"bg-stone-300", "text-stone-400", "Abwesend"}
+      %{in_seb: true} -> {"bg-emerald-400", "text-emerald-500", "Im Warteraum"}
+      %{in_seb: false} when seb_enabled -> {"bg-yellow-400", "text-yellow-600", "SEB noch nicht gestartet"}
+      _ -> {"bg-emerald-400", "text-emerald-500", "Online"}
+    end
+  end
+
+  @impl true
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
     # Re-stream all submissions so the presence indicator updates
     submissions = Exams.list_exam_submissions(socket.assigns.exam)
 
     {:noreply,
      socket
-     |> assign(:present_tokens, present_tokens)
+     |> assign(:present, presence_state(socket.assigns.exam.id))
      |> stream(:submissions, submissions, reset: true)}
   end
 
