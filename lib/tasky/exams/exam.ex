@@ -7,6 +7,10 @@ defmodule Tasky.Exams.Exam do
     field :content, :map, default: %{}
     field :sample_solution, :map, default: %{}
     field :sample_solution_points, :map, default: %{}
+    # %{part_id => %{answer_id => points}} — a part uses custom (unequal)
+    # point distribution iff its inner map is non-empty; otherwise the part's
+    # sample_solution_points value is split equally across its answer blocks.
+    field :sample_solution_block_points, :map, default: %{}
     field :enrollment_token, :string
     field :status, :string, default: "draft"
     field :seb_enabled, :boolean, default: false
@@ -28,6 +32,7 @@ defmodule Tasky.Exams.Exam do
       :content,
       :sample_solution,
       :sample_solution_points,
+      :sample_solution_block_points,
       :enrollment_token,
       :status,
       :seb_enabled,

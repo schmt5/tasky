@@ -252,9 +252,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   defp format_max_points(n) when is_integer(n), do: Integer.to_string(n)
 
   defp format_max_points(n) when is_float(n) do
-    if n == trunc(n),
-      do: Integer.to_string(trunc(n)),
-      else: :erlang.float_to_binary(n, decimals: 2)
+    if n == trunc(n) do
+      Integer.to_string(trunc(n))
+    else
+      n
+      |> :erlang.float_to_binary(decimals: 2)
+      |> String.trim_trailing("0")
+      |> String.trim_trailing(".")
+    end
   end
 
   defp format_max_points(_), do: "—"
@@ -285,17 +290,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         <span class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-green-500"></span>
           <span class="font-serif text-xl text-stone-800 tabular-nums">{@totals.correct}</span>
-          <span class="text-stone-500">Richtig</span>
+          <span class="text-stone-500">Volle Punkte</span>
         </span>
         <span class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
           <span class="font-serif text-xl text-stone-800 tabular-nums">{@totals.half}</span>
-          <span class="text-stone-500">Teilweise</span>
+          <span class="text-stone-500">Manuell</span>
         </span>
         <span class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-red-500"></span>
           <span class="font-serif text-xl text-stone-800 tabular-nums">{@totals.wrong}</span>
-          <span class="text-stone-500">Falsch</span>
+          <span class="text-stone-500">0 Punkte</span>
         </span>
       </div>
     </div>
@@ -313,6 +318,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         </span>
         <span class="text-base font-semibold text-stone-800">
           {@block.label || "Antwort #{@block.index + 1}"}
+        </span>
+        <span
+          :if={@block.max_points}
+          class="inline-flex items-center text-xs font-semibold text-stone-600 bg-stone-100 border border-stone-200 rounded-full px-2.5 py-0.5"
+        >
+          max. {format_max_points(@block.max_points)} P.
         </span>
         <%= if @block.sample_answers != [] do %>
           <.icon name="hero-arrow-right" class="w-3.5 h-3.5 text-stone-300 shrink-0" />
@@ -335,9 +346,18 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
     ~H"""
     <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-5 space-y-2">
-      <%= if @block.sample_answers != [] do %>
+      <%= if @block.sample_answers != [] or @block.max_points do %>
         <div class="flex items-center gap-2 pb-3 mb-2 border-b border-stone-100">
-          <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+          <span
+            :if={@block.max_points}
+            class="inline-flex items-center text-xs font-semibold text-stone-600 bg-stone-100 border border-stone-200 rounded-full px-2.5 py-0.5"
+          >
+            max. {format_max_points(@block.max_points)} P.
+          </span>
+          <span
+            :if={@block.sample_answers != []}
+            class="text-xs font-semibold text-stone-500 uppercase tracking-wide"
+          >
             Musterlösung:
           </span>
           <%= for sample <- @block.sample_answers do %>
@@ -362,6 +382,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       |> assign(:block, block)
       |> assign(:group, group)
       |> assign(:effective, effective)
+      |> assign(:awarded, awarded_points(effective, block.max_points))
+      |> assign(
+        :manual_open,
+        match?(
+          %{block_index: bi, group_text: gt} when bi == block.index and gt == group.text,
+          assigns.manual_input
+        )
+      )
 
     ~H"""
     <div
@@ -379,13 +407,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
             <span class="text-stone-400 italic">— keine Antwort —</span>
           <% end %>
         </div>
-        <div class="text-xs text-stone-500 mt-0.5">{@group.count}× abgegeben</div>
+        <div class="text-xs text-stone-500 mt-0.5">
+          {@group.count}× abgegeben<span :if={@awarded != nil and @block.max_points}> · {format_max_points(@awarded)} / {format_max_points(@block.max_points)} P.</span>
+        </div>
         <div class="text-xs text-stone-500 mt-2 pt-2 border-t border-dashed border-stone-200">
           {Enum.map_join(@group.students, " · ", &student_name/1)}
         </div>
       </div>
       <div class="shrink-0">
-        {render_verdict_pill(assigns)}
+        <%= if @manual_open do %>
+          {render_manual_input(assigns)}
+        <% else %>
+          {render_verdict_pill(assigns)}
+        <% end %>
       </div>
     </div>
     """
@@ -399,27 +433,43 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         group_text={@group.text}
         verdict="correct"
         active={@effective == "correct"}
-        label="Richtig"
+        label={full_points_label(@block.max_points)}
         icon="hero-check"
         kbd_label="J"
         active_class="bg-green-500 text-white shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
       />
-      <.verdict_button
-        block_index={@block.index}
-        group_text={@group.text}
-        verdict="half"
-        active={@effective == "half"}
-        label="Teilweise"
-        icon="hero-minus"
-        kbd_label="K"
-        active_class="bg-yellow-400 text-white shadow-[0_2px_8px_rgba(250,204,21,0.3)]"
-      />
+      <button
+        type="button"
+        tabindex="-1"
+        phx-click="open_manual_input"
+        phx-value-index={@block.index}
+        phx-value-text={@group.text || ""}
+        class={[
+          "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-100",
+          if(manual_active?(@effective),
+            do: "bg-yellow-400 text-white shadow-[0_2px_8px_rgba(250,204,21,0.3)]",
+            else: "text-stone-500 hover:bg-stone-50 hover:text-stone-700"
+          )
+        ]}
+      >
+        <.icon name="hero-pencil" class="w-3.5 h-3.5" />
+        <span>{manual_label(@effective, @block.max_points)}</span>
+        <kbd class={[
+          "px-1.5 py-0.5 rounded font-mono text-[10px] border",
+          if(manual_active?(@effective),
+            do: "bg-white/25 border-white/40 text-white",
+            else: "bg-stone-100 border-stone-200 text-stone-700"
+          )
+        ]}>
+          K
+        </kbd>
+      </button>
       <.verdict_button
         block_index={@block.index}
         group_text={@group.text}
         verdict="wrong"
         active={@effective == "wrong"}
-        label="Falsch"
+        label="0 Punkte"
         icon="hero-x-mark"
         kbd_label="L"
         active_class="bg-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
@@ -427,6 +477,76 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     </div>
     """
   end
+
+  defp render_manual_input(assigns) do
+    ~H"""
+    <form
+      phx-submit="set_group_verdict_manual"
+      class="inline-flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1.5"
+    >
+      <input type="hidden" name="index" value={@block.index} />
+      <input type="hidden" name="text" value={@group.text || ""} />
+      <input
+        id={manual_input_id(@block.index, @group.text)}
+        type="number"
+        name="points"
+        value={@manual_input.value}
+        step="0.25"
+        min="0"
+        max={@block.max_points}
+        inputmode="decimal"
+        phx-keydown="cancel_manual_input"
+        phx-key="Escape"
+        class="w-20 font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 focus:border-yellow-400"
+      />
+      <span :if={@block.max_points} class="text-xs text-stone-500 whitespace-nowrap">
+        / {format_max_points(@block.max_points)} P.
+      </span>
+      <button
+        type="submit"
+        class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-yellow-400 text-white hover:bg-yellow-500 transition-colors duration-100"
+      >
+        OK
+        <kbd class="px-1 py-0.5 rounded font-mono text-[10px] border bg-white/25 border-white/40 text-white">
+          Enter
+        </kbd>
+      </button>
+      <button
+        type="button"
+        phx-click="cancel_manual_input"
+        aria-label="Abbrechen"
+        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-100"
+      >
+        <.icon name="hero-x-mark" class="w-4 h-4" />
+      </button>
+    </form>
+    """
+  end
+
+  defp manual_input_id(index, text) do
+    "manual-points-#{index}-#{:erlang.phash2(text || "")}"
+  end
+
+  defp full_points_label(nil), do: "Volle Punkte"
+  defp full_points_label(max), do: "Volle Punkte (#{format_max_points(max)})"
+
+  defp manual_active?(v), do: is_number(v) or v == "half"
+
+  defp manual_label(v, _max) when is_number(v), do: "Manuell (#{format_max_points(v)})"
+
+  defp manual_label("half", max) when is_number(max),
+    do: "Manuell (#{format_max_points(max * 0.5)})"
+
+  defp manual_label(_v, _max), do: "Manuell"
+
+  # Points a group's members receive for this block under the effective
+  # verdict — nil when nothing is configured/decided yet.
+  defp awarded_points(_v, nil), do: nil
+  defp awarded_points("correct", max), do: max
+  defp awarded_points("half", max), do: max * 0.5
+  defp awarded_points("wrong", _max), do: 0
+  defp awarded_points(v, _max) when is_number(v), do: v
+  defp awarded_points(_, _), do: nil
 
   attr :block_index, :integer, required: true
   attr :group_text, :string, default: nil
@@ -508,6 +628,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:prev_part_id, prev_part_id)
          |> assign(:next_part_id, next_part_id)
          |> assign(:answer_blocks, answer_blocks)
+         |> assign(:manual_input, nil)
          |> assign(:is_multi_input, length(answer_blocks) > 1)
          |> assign(:total_submissions, length(submissions))
          |> assign(:part_already_done, count_part_done(submissions, part_id))
@@ -549,6 +670,59 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       {:noreply, refresh_assigns(socket)}
     else
       _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("open_manual_input", %{"index" => idx_str, "text" => text}, socket) do
+    idx = String.to_integer(to_string(idx_str))
+    group_text = if text == "", do: nil, else: text
+
+    with %{} = block <- Enum.find(socket.assigns.answer_blocks, &(&1.index == idx)),
+         %{} = group <- Enum.find(block.groups, &(&1.text == group_text)) do
+      prefill =
+        case effective_verdict(group) do
+          v when is_number(v) -> v
+          _ -> half_of(block.max_points)
+        end
+
+      {:noreply,
+       socket
+       |> assign(:manual_input, %{block_index: idx, group_text: group_text, value: prefill})
+       |> push_event("focus-manual-input", %{id: manual_input_id(idx, group_text)})}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_manual_input", _params, socket) do
+    {:noreply, assign(socket, :manual_input, nil)}
+  end
+
+  def handle_event(
+        "set_group_verdict_manual",
+        %{"index" => idx_str, "text" => text, "points" => raw},
+        socket
+      ) do
+    idx = String.to_integer(idx_str)
+    part_id = socket.assigns.current_part.id
+    group_text = if text == "", do: nil, else: text
+
+    with {points, ""} <- Float.parse(String.trim(raw)),
+         %{} = block <- Enum.find(socket.assigns.answer_blocks, &(&1.index == idx)),
+         %{} = group <- Enum.find(block.groups, &(&1.text == group_text)) do
+      ids = Enum.map(group.students, & &1.submission_id)
+      subs = Repo.all(from(s in ExamSubmission, where: s.id in ^ids))
+
+      Enum.each(subs, fn sub ->
+        Exams.set_block_verdict(sub, part_id, idx, points)
+      end)
+
+      {:noreply,
+       socket
+       |> assign(:manual_input, nil)
+       |> refresh_assigns()}
+    else
+      _ -> {:noreply, assign(socket, :manual_input, nil)}
     end
   end
 
@@ -644,9 +818,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   defp effective_verdict(group) do
     case group.current_verdict do
       v when v in ["correct", "half", "wrong"] -> v
+      v when is_number(v) -> v
       _ -> group.default_verdict
     end
   end
+
+  defp half_of(max) when is_number(max), do: Float.round(max * 0.5 * 4) / 4
+  defp half_of(_), do: 0
 
   defp block_totals(block) do
     Enum.reduce(block.groups, %{correct: 0, half: 0, wrong: 0, total: 0}, fn g, acc ->
@@ -673,6 +851,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
   defp verdict_atom("correct"), do: :correct
   defp verdict_atom("half"), do: :half
+  # manual points land in the middle ("Manuell") bucket of the summary bar
+  defp verdict_atom(v) when is_number(v), do: :half
   defp verdict_atom(_), do: :wrong
 
   defp percent(_n, 0), do: 0

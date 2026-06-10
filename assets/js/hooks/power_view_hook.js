@@ -2,8 +2,12 @@
 //
 // Attached to the modal element. Manages:
 //   * Initial focus on the first row
-//   * J/K/L shortcuts → push "set_block_verdict" for the focused row (focus
-//     stays put; the teacher advances manually with Tab)
+//   * J/L shortcuts → push "set_block_verdict" (full points / zero) for the
+//     focused row (focus stays put; the teacher advances manually with Tab)
+//   * K → opens the manual points input ("open_block_manual_input"); the
+//     server answers with "focus-manual-input" so the input receives focus.
+//     Enter submits the form natively; Escape inside the form cancels it
+//     (stopPropagation keeps the modal's window-level Escape from closing).
 //   * Tab focus trap inside the modal
 //   * Escape closes the modal (delegated to the existing close handler)
 //
@@ -40,12 +44,40 @@ export const PowerView = {
     this.focusables = () =>
       Array.from(
         this.el.querySelectorAll(
-          '[data-power-row], button:not([tabindex="-1"]):not([disabled]), [href]:not([tabindex="-1"])',
+          '[data-power-row], input:not([tabindex="-1"]):not([type="hidden"]), button:not([tabindex="-1"]):not([disabled]), [href]:not([tabindex="-1"])',
         ),
       ).filter((el) => !el.disabled);
 
+    // Server-pushed after open_block_manual_input: focus + select the points
+    // input once the patched DOM is in place.
+    this.handleEvent("focus-manual-input", ({ id }) => {
+      const focusInput = () => {
+        const input = document.getElementById(id);
+        if (input) {
+          input.focus({ preventScroll: false });
+          input.select();
+        }
+      };
+      setTimeout(focusInput, 0);
+      setTimeout(focusInput, 80);
+    });
+
     this.keyHandler = (e) => {
       if (e.defaultPrevented) return;
+
+      // Escape inside the manual points form cancels just the form — keep it
+      // from bubbling to the window-level handler that closes the modal.
+      if (e.key === "Escape") {
+        const form =
+          document.activeElement &&
+          document.activeElement.closest("[data-power-manual-form]");
+        if (form) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.pushEvent("cancel_block_manual_input", {});
+        }
+        return;
+      }
 
       // Focus trap: keep Tab navigation inside the modal.
       if (e.key === "Tab") {
@@ -80,14 +112,21 @@ export const PowerView = {
       if (!onRow) return;
 
       const key = e.key.toLowerCase();
-      const verdictMap = { j: "correct", k: "half", l: "wrong" };
+      const index = parseInt(active.dataset.powerRow, 10);
+
+      if (key === "k") {
+        e.preventDefault();
+        this.pushEvent("open_block_manual_input", { index });
+        return;
+      }
+
+      const verdictMap = { j: "correct", l: "wrong" };
       const verdict = verdictMap[key];
       if (!verdict) return;
 
       // Set the verdict for the focused row only. Focus deliberately stays put
       // (no auto-advance) so the teacher controls when to move on.
       e.preventDefault();
-      const index = parseInt(active.dataset.powerRow, 10);
       this.pushEvent("set_block_verdict", { index, verdict });
     };
 

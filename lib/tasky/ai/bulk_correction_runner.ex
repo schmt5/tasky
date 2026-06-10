@@ -94,12 +94,22 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          max_points = Map.get(exam.sample_solution_points || %{}, part_id),
          {annotated_nodes, answer_count} = NodePatcher.annotate(submission_nodes),
          :ok <- ensure_has_answers(answer_count),
+         block_points =
+           Exams.resolve_block_points(
+             exam,
+             part_id,
+             NodePatcher.list_answer_blocks(submission_nodes)
+           ),
          {:ok, %{verdicts: verdicts, points: points}} <-
            StringComparator.correct_part(
              annotated_nodes,
              sample_nodes,
              max_points,
-             %{ignore_spelling: ignore_spelling, ignore_case: ignore_case}
+             %{
+               ignore_spelling: ignore_spelling,
+               ignore_case: ignore_case,
+               block_points: block_points
+             }
            ),
          corrected_nodes = NodePatcher.apply_verdicts(annotated_nodes, verdicts),
          clamped = clamp_points(points, max_points),

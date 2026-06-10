@@ -26,10 +26,12 @@ defmodule Tasky.AI.NodePatcher do
   nodes list, paired with their zero-based positional index. Used by
   the power-view to enumerate blocks for keyboard correction.
 
-  Each entry is `%{index: i, type: t, text: plain_text, inferred_verdict: v}`
-  where `inferred_verdict` reflects the trailing ✅/🟡/❌ marker on the
-  node (or `nil` if absent). Useful as a default verdict when the teacher
-  has not yet explicitly overridden the AI's call.
+  Each entry is `%{index: i, answer_id: id, type: t, text: plain_text,
+  inferred_verdict: v}` where `answer_id` is the node's stable `answerId`
+  attribute as a string (or `nil`), and `inferred_verdict` reflects the
+  trailing ✅/🟡/❌ marker on the node (or `nil` if absent). Useful as a
+  default verdict when the teacher has not yet explicitly overridden the
+  AI's call.
   """
   def list_answer_blocks(nodes) when is_list(nodes) do
     {entries, _} = collect_blocks(nodes, [], 0)
@@ -44,7 +46,19 @@ defmodule Tasky.AI.NodePatcher do
     text = raw_text |> strip_marker_text()
     inferred = infer_verdict_from_text(raw_text)
 
-    entry = %{index: counter, type: type, text: text, inferred_verdict: inferred}
+    answer_id =
+      case node |> Map.get("attrs", %{}) |> Map.get("answerId") do
+        nil -> nil
+        id -> to_string(id)
+      end
+
+    entry = %{
+      index: counter,
+      answer_id: answer_id,
+      type: type,
+      text: text,
+      inferred_verdict: inferred
+    }
     collect_blocks(rest, [entry | acc], counter + 1)
   end
 

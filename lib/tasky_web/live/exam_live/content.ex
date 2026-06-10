@@ -111,15 +111,15 @@ defmodule TaskyWeb.ExamLive.Content do
                   <label class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
                     Max. Punkte
                   </label>
-                  <div class="flex items-center gap-1.5">
+                  <div :if={!pv.custom_points} class="flex items-center gap-1.5">
                     <button
                       type="button"
                       phx-click="adjust_max_points"
                       phx-value-direction="down"
                       phx-value-part-id={pv.id}
                       disabled={is_nil(pv.max_points) or pv.max_points <= 0}
+                      aria-label="−0.25"
                       class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
-                      title="−0.25"
                     >
                       <.icon name="hero-minus" class="w-4 h-4" />
                     </button>
@@ -142,11 +142,92 @@ defmodule TaskyWeb.ExamLive.Content do
                       phx-click="adjust_max_points"
                       phx-value-direction="up"
                       phx-value-part-id={pv.id}
+                      aria-label="+0.25"
                       class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 shrink-0"
-                      title="+0.25"
                     >
                       <.icon name="hero-plus" class="w-4 h-4" />
                     </button>
+                  </div>
+                  <div
+                    :if={pv.custom_points}
+                    class="font-mono text-base text-center text-stone-800 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"
+                  >
+                    {format_block_points(pv.max_points)}
+                  </div>
+                  <p :if={pv.custom_points} class="text-xs text-stone-500 mt-1.5 leading-relaxed">
+                    Summe der Punkte pro Antwortfeld.
+                  </p>
+
+                  <label class="flex items-start gap-3 cursor-pointer mt-4">
+                    <input
+                      type="checkbox"
+                      checked={pv.custom_points}
+                      phx-click="toggle_custom_block_points"
+                      phx-value-part-id={pv.id}
+                      class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
+                    />
+                    <span class="min-w-0">
+                      <span class="block text-sm font-medium text-stone-700">
+                        Punkte pro Antwortfeld
+                      </span>
+                      <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
+                        Punkte ungleich auf die Antwortfelder dieser Aufgabe verteilen.
+                      </span>
+                    </span>
+                  </label>
+
+                  <div :if={pv.custom_points} class="mt-3 space-y-2">
+                    <div
+                      :for={block <- pv.blocks}
+                      :if={block.answer_id}
+                      class="rounded-lg border border-stone-200 bg-stone-50/60 px-2.5 py-2"
+                    >
+                      <p class="text-xs text-stone-500 truncate mb-1.5">{block.snippet}</p>
+                      <div class="flex items-center gap-1">
+                        <button
+                          type="button"
+                          phx-click="adjust_block_points"
+                          phx-value-direction="down"
+                          phx-value-part-id={pv.id}
+                          phx-value-answer-id={block.answer_id}
+                          disabled={(block.points || 0) <= 0}
+                          aria-label="−0.25"
+                          class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
+                        >
+                          <.icon name="hero-minus" class="w-3.5 h-3.5" />
+                        </button>
+                        <form
+                          phx-change="set_block_points"
+                          phx-submit="set_block_points"
+                          class="flex-1"
+                        >
+                          <input type="hidden" name="part_id" value={pv.id} />
+                          <input type="hidden" name="answer_id" value={block.answer_id} />
+                          <input
+                            type="number"
+                            name="points"
+                            value={block.points || ""}
+                            step="0.25"
+                            min="0"
+                            inputmode="decimal"
+                            phx-debounce="500"
+                            placeholder="0"
+                            class="w-full font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                          />
+                        </form>
+                        <button
+                          type="button"
+                          phx-click="adjust_block_points"
+                          phx-value-direction="up"
+                          phx-value-part-id={pv.id}
+                          phx-value-answer-id={block.answer_id}
+                          aria-label="+0.25"
+                          class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150 shrink-0"
+                        >
+                          <.icon name="hero-plus" class="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -288,11 +369,32 @@ defmodule TaskyWeb.ExamLive.Content do
           sample -> sample.nodes
         end
 
+      custom = Map.get(exam.sample_solution_block_points || %{}, part.id) || %{}
+
+      blocks =
+        nodes
+        |> Tasky.AI.NodePatcher.list_answer_blocks()
+        |> Enum.map(fn entry ->
+          snippet =
+            case String.slice(entry.text || "", 0, 40) do
+              "" -> "Antwort #{entry.index + 1}"
+              s -> s
+            end
+
+          %{
+            answer_id: entry.answer_id,
+            snippet: snippet,
+            points: Map.get(custom, entry.answer_id)
+          }
+        end)
+
       %{
         id: part.id,
         label: part.label,
         doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
         max_points: Map.get(exam.sample_solution_points || %{}, part.id),
+        blocks: blocks,
+        custom_points: map_size(custom) > 0,
         auto_correct: part_config_flag(exam, part.id, "auto_correct"),
         ignore_case: part_config_flag(exam, part.id, "ignore_case"),
         ignore_spelling: part_config_flag(exam, part.id, "ignore_spelling")
@@ -314,6 +416,62 @@ defmodule TaskyWeb.ExamLive.Content do
         delta = if dir == "up", do: 0.25, else: -0.25
         new_value = max((pv.max_points || 0) + delta, 0)
         save_max_points(socket, part_id, new_value)
+    end
+  end
+
+  def handle_event("toggle_custom_block_points", %{"part-id" => part_id}, socket) do
+    case part_view(socket, part_id) do
+      nil ->
+        {:noreply, socket}
+
+      pv ->
+        result =
+          if pv.custom_points do
+            Exams.clear_custom_block_points(socket.assigns.exam, part_id)
+          else
+            Exams.enable_custom_block_points(socket.assigns.exam, part_id)
+          end
+
+        apply_block_points_result(socket, part_id, result)
+    end
+  end
+
+  def handle_event("set_block_points", params, socket) do
+    %{"points" => raw, "part_id" => part_id, "answer_id" => answer_id} = params
+    points = parse_points(raw) || 0
+
+    result =
+      Exams.set_sample_solution_block_point(socket.assigns.exam, part_id, answer_id, points)
+
+    apply_block_points_result(socket, part_id, result)
+  end
+
+  def handle_event("adjust_block_points", params, socket) do
+    %{"direction" => dir, "part-id" => part_id, "answer-id" => answer_id} = params
+
+    case part_view(socket, part_id) do
+      nil ->
+        {:noreply, socket}
+
+      pv ->
+        current =
+          case Enum.find(pv.blocks, &(&1.answer_id == answer_id)) do
+            %{points: p} when is_number(p) -> p
+            _ -> 0
+          end
+
+        delta = if dir == "up", do: 0.25, else: -0.25
+        new_value = max(current + delta, 0)
+
+        result =
+          Exams.set_sample_solution_block_point(
+            socket.assigns.exam,
+            part_id,
+            answer_id,
+            new_value
+          )
+
+        apply_block_points_result(socket, part_id, result)
     end
   end
 
@@ -386,9 +544,39 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
+  # Refreshes the part view's block points, custom flag and (derived) total
+  # from the freshly updated exam.
+  defp apply_block_points_result(socket, part_id, result) do
+    case result do
+      {:ok, updated_exam} ->
+        custom = Map.get(updated_exam.sample_solution_block_points || %{}, part_id) || %{}
+        pv = part_view(socket, part_id)
+
+        blocks =
+          Enum.map(pv.blocks, fn b -> %{b | points: Map.get(custom, b.answer_id)} end)
+
+        {:noreply,
+         socket
+         |> assign(:exam, updated_exam)
+         |> update_part_view(part_id, %{
+           blocks: blocks,
+           custom_points: map_size(custom) > 0,
+           max_points: Map.get(updated_exam.sample_solution_points || %{}, part_id)
+         })}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Punkte konnten nicht gespeichert werden.")}
+    end
+  end
+
   defp save_max_points(socket, part_id, points) do
     case part_view(socket, part_id) do
       nil ->
+        {:noreply, socket}
+
+      # The total is derived from the per-block sum while custom distribution
+      # is active — ignore direct edits (the input is read-only anyway).
+      %{custom_points: true} ->
         {:noreply, socket}
 
       _pv ->
@@ -426,6 +614,17 @@ defmodule TaskyWeb.ExamLive.Content do
     (exam.ai_correction_config || %{})
     |> Map.get(part_id, %{})
     |> Map.get(key, false)
+  end
+
+  defp format_block_points(nil), do: "—"
+  defp format_block_points(n) when is_integer(n), do: Integer.to_string(n)
+
+  defp format_block_points(n) when is_float(n) do
+    if n == trunc(n) do
+      Integer.to_string(trunc(n))
+    else
+      n |> :erlang.float_to_binary(decimals: 2) |> String.trim_trailing("0")
+    end
   end
 
   defp parse_points(value) when is_binary(value) do

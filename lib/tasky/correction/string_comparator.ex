@@ -18,8 +18,13 @@ defmodule Tasky.Correction.StringComparator do
   * `:ignore_case`     — lowercase both sides before comparing.
   * `:ignore_spelling` — fuzzy match via `String.jaro_distance/2 >= 0.85`
                          (fallback to exact match for very short strings).
+  * `:block_points`    — optional `%{index => points}` map (zero-based block
+                         index, as from `Tasky.Exams.resolve_block_points/3`).
+                         When present, each correct block contributes its own
+                         points (supports unequal distributions).
 
-  Points: `correct_count / total_count * max_points`, rounded to 0.25.
+  Points: sum of correct blocks' points (or, without `:block_points`,
+  `correct_count / total_count * max_points`), rounded to 0.25.
   """
 
   @answer_types ["answerBlock", "lueckentext", "taskItem"]
@@ -51,7 +56,7 @@ defmodule Tasky.Correction.StringComparator do
         end
       end)
 
-    points = calculate_points(verdicts, max_points)
+    points = calculate_points(verdicts, max_points, opts)
 
     {:ok, %{verdicts: verdicts, points: points}}
   end
@@ -111,6 +116,21 @@ defmodule Tasky.Correction.StringComparator do
     text = String.trim(text)
     if Map.get(opts, :ignore_case, false), do: String.downcase(text), else: text
   end
+
+  # The `__ai_id` assigned by NodePatcher.annotate/1 is always `index + 1`,
+  # so a block's points are looked up at `id - 1` in the :block_points map.
+  defp calculate_points(verdicts, _max_points, %{block_points: bp})
+       when is_map(bp) and map_size(bp) > 0 do
+    raw =
+      Enum.reduce(verdicts, 0.0, fn
+        {id, "correct"}, acc -> acc + (Map.get(bp, String.to_integer(id) - 1) || 0)
+        _, acc -> acc
+      end)
+
+    Float.round(raw * 4) / 4
+  end
+
+  defp calculate_points(verdicts, max_points, _opts), do: calculate_points(verdicts, max_points)
 
   defp calculate_points(_verdicts, nil), do: 0
   defp calculate_points(_verdicts, 0), do: 0

@@ -121,7 +121,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                       type="number"
                       name="points"
                       value={@points || ""}
-                      step="0.5"
+                      step="0.25"
                       inputmode="decimal"
                       phx-debounce="500"
                       placeholder="—"
@@ -235,7 +235,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     <%= if @max_points do %>
                       · Max. Punkte:
                       <span class="font-semibold text-stone-700">{format_points(@max_points)}</span>
-                      · {format_points(@power_per_block)} pro Block
+                      <%= if @power_per_block do %>
+                        · {format_points(@power_per_block)} pro Block
+                      <% else %>
+                        · Punkte pro Antwortfeld
+                      <% end %>
                     <% end %>
                   </p>
                 </div>
@@ -256,19 +260,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
                     J
                   </kbd>
-                  Richtig
+                  Volle Punkte
                 </span>
                 <span class="inline-flex items-center gap-1">
                   <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
                     K
                   </kbd>
-                  Halb-richtig
+                  Manuell
                 </span>
                 <span class="inline-flex items-center gap-1">
                   <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
                     L
                   </kbd>
-                  Falsch
+                  0 Punkte
                 </span>
                 <span class="inline-flex items-center gap-1">
                   <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
@@ -296,7 +300,10 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                         "inline-flex items-center justify-center min-w-[36px] h-8 px-2 rounded-lg font-mono text-base font-semibold",
                         power_points_class(block.verdict)
                       ]}>
-                        {power_row_points(block.verdict, @power_per_block)}
+                        {power_row_points(block.verdict, block.max_points)}
+                      </span>
+                      <span :if={block.max_points} class="block text-[10px] text-stone-400 mt-0.5">
+                        max {format_points(block.max_points)}
                       </span>
                     </div>
 
@@ -308,32 +315,85 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                       <% end %>
                     </div>
 
-                    <div class="flex items-center gap-1.5">
-                      <.power_verdict_button
-                        verdict="correct"
-                        active={block.verdict == "correct"}
-                        index={block.index}
-                        label="J"
-                        icon="hero-check"
-                        active_class="bg-green-500 text-white border-green-500 shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
-                      />
-                      <.power_verdict_button
-                        verdict="half"
-                        active={block.verdict == "half"}
-                        index={block.index}
-                        label="K"
-                        icon="hero-minus"
-                        active_class="bg-yellow-400 text-white border-yellow-400 shadow-[0_2px_8px_rgba(250,204,21,0.3)]"
-                      />
-                      <.power_verdict_button
-                        verdict="wrong"
-                        active={block.verdict == "wrong"}
-                        index={block.index}
-                        label="L"
-                        icon="hero-x-mark"
-                        active_class="bg-red-500 text-white border-red-500 shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
-                      />
-                    </div>
+                    <%= if @power_manual_index == block.index do %>
+                      <form
+                        phx-submit="set_block_verdict_manual"
+                        data-power-manual-form
+                        class="flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
+                      >
+                        <input type="hidden" name="index" value={block.index} />
+                        <input
+                          id={"power-manual-input-#{block.index}"}
+                          type="number"
+                          name="points"
+                          value={@power_manual_value}
+                          step="0.25"
+                          min="0"
+                          max={block.max_points}
+                          inputmode="decimal"
+                          class="w-20 font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 focus:border-yellow-400"
+                        />
+                        <button
+                          type="submit"
+                          class="inline-flex items-center text-xs font-semibold px-2.5 py-1.5 rounded-md bg-yellow-400 text-white hover:bg-yellow-500 transition-colors duration-100"
+                        >
+                          OK
+                        </button>
+                        <button
+                          type="button"
+                          phx-click="cancel_block_manual_input"
+                          aria-label="Abbrechen"
+                          class="inline-flex items-center justify-center w-7 h-7 rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-100"
+                        >
+                          <.icon name="hero-x-mark" class="w-4 h-4" />
+                        </button>
+                      </form>
+                    <% else %>
+                      <div class="flex items-center gap-1.5">
+                        <.power_verdict_button
+                          verdict="correct"
+                          active={block.verdict == "correct"}
+                          index={block.index}
+                          label="J"
+                          icon="hero-check"
+                          active_class="bg-green-500 text-white border-green-500 shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
+                        />
+                        <button
+                          type="button"
+                          tabindex="-1"
+                          phx-click="open_block_manual_input"
+                          phx-value-index={block.index}
+                          class={[
+                            "inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all duration-100 focus:outline-none",
+                            if(is_number(block.verdict) or block.verdict == "half",
+                              do:
+                                "bg-yellow-400 text-white border-yellow-400 shadow-[0_2px_8px_rgba(250,204,21,0.3)]",
+                              else:
+                                "bg-white text-stone-500 border-stone-200 hover:bg-stone-50 hover:border-stone-300"
+                            )
+                          ]}
+                        >
+                          <.icon name="hero-pencil" class="w-3.5 h-3.5" />
+                          <kbd class={[
+                            "px-1.5 py-0.5 rounded font-mono text-[10px] border",
+                            if(is_number(block.verdict) or block.verdict == "half",
+                              do: "bg-white/25 border-white/40 text-white",
+                              else: "bg-stone-100 border-stone-200 text-stone-700"
+                            )
+                          ]}>
+                            K
+                          </kbd>
+                        </button>
+                        <.power_verdict_button
+                          verdict="wrong"
+                          active={block.verdict == "wrong"}
+                          index={block.index}
+                          label="L"
+                          icon="hero-x-mark"
+                          active_class="bg-red-500 text-white border-red-500 shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
+                        />
+                      </div>
+                    <% end %>
                   </div>
                 <% end %>
 
@@ -623,7 +683,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       max_points = Map.get(exam.sample_solution_points || %{}, current_part.id)
       open_power = Map.get(params, "power") == "1"
 
-      power_data = build_power_view(submission, current_part.id, max_points)
+      power_data = build_power_view(exam, submission, current_part.id)
 
       {:noreply,
        socket
@@ -655,20 +715,44 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        |> assign(:power_blocks_count, power_data.count)
        |> assign(:power_per_block, power_data.per_block)
        |> assign(:power_current_total, power_data.current_total)
+       |> assign(:power_manual_index, nil)
+       |> assign(:power_manual_value, 0)
        |> assign(:show_power_view, open_power and power_data.count > 0)}
     end
   end
 
-  defp build_power_view(submission, part_id, max_points) do
+  defp build_power_view(exam, submission, part_id) do
     blocks = Exams.list_part_answer_blocks(submission, part_id)
     count = length(blocks)
-    per_block = if count > 0 and is_number(max_points), do: max_points / count, else: nil
+    points_by_index = Exams.resolve_block_points(exam, part_id, blocks)
+
+    blocks =
+      Enum.map(blocks, fn b ->
+        Map.put(b, :max_points, points_by_index && Map.get(points_by_index, b.index))
+      end)
+
+    # Single shared per-block value for the header line — nil when the part
+    # uses an unequal (custom) distribution; rows show their own max then.
+    per_block =
+      case points_by_index do
+        nil ->
+          nil
+
+        m ->
+          case m |> Map.values() |> Enum.uniq() do
+            [v] -> v
+            _ -> nil
+          end
+      end
 
     current_total =
       Enum.reduce(blocks, 0.0, fn b, acc ->
+        bp = b.max_points || 0
+
         case b.verdict do
-          "correct" -> acc + (per_block || 0)
-          "half" -> acc + (per_block || 0) / 2
+          "correct" -> acc + bp
+          "half" -> acc + bp / 2
+          v when is_number(v) -> acc + v
           _ -> acc
         end
       end)
@@ -678,8 +762,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   defp refresh_power_view(socket) do
-    %{submission: submission, current_part: part, max_points: max_points} = socket.assigns
-    data = build_power_view(submission, part.id, max_points)
+    %{exam: exam, submission: submission, current_part: part} = socket.assigns
+    data = build_power_view(exam, submission, part.id)
 
     socket
     |> assign(:power_blocks, data.blocks)
@@ -690,7 +774,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   defp normalize_points(n) when is_float(n) do
-    rounded = Float.round(n * 2) / 2
+    rounded = Float.round(n * 4) / 4
     if rounded == trunc(rounded), do: trunc(rounded), else: rounded
   end
 
@@ -756,36 +840,51 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         "#{part.id}:#{index_int}"
       )
 
+    # Toggle-off only applies to the string verdicts; a stored manual number
+    # never equals the clicked "correct"/"wrong".
     new_verdict = if current == verdict, do: nil, else: verdict
 
-    case Exams.set_block_verdict(submission, part.id, index_int, new_verdict) do
-      {:ok, updated} ->
-        updated_part =
-          updated
-          |> Exams.correction_content()
-          |> Exams.split_content_into_parts()
-          |> Enum.find(&(&1.id == part.id))
+    apply_block_verdict(socket, index_int, new_verdict)
+  end
 
-        part_doc_json =
-          case updated_part do
-            nil -> nil
-            p -> Jason.encode!(%{"type" => "doc", "content" => p.nodes})
-          end
+  def handle_event("open_block_manual_input", %{"index" => index}, socket) do
+    index_int = parse_index(index)
 
-        socket =
-          socket
-          |> assign(:submission, updated)
-          |> refresh_power_view()
-
-        socket =
-          if part_doc_json,
-            do: push_event(socket, "reload-content", %{content: part_doc_json}),
-            else: socket
-
+    case Enum.find(socket.assigns.power_blocks, &(&1.index == index_int)) do
+      nil ->
         {:noreply, socket}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Bewertung konnte nicht gespeichert werden.")}
+      block ->
+        prefill =
+          case block.verdict do
+            v when is_number(v) -> v
+            _ -> half_of(block.max_points)
+          end
+
+        {:noreply,
+         socket
+         |> assign(:power_manual_index, index_int)
+         |> assign(:power_manual_value, prefill)
+         |> push_event("focus-manual-input", %{id: "power-manual-input-#{index_int}"})}
+    end
+  end
+
+  def handle_event("cancel_block_manual_input", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:power_manual_index, nil)
+     |> push_event("power-view-refocus", %{})}
+  end
+
+  def handle_event("set_block_verdict_manual", %{"index" => index, "points" => raw}, socket) do
+    socket = assign(socket, :power_manual_index, nil)
+
+    case Float.parse(String.trim(raw)) do
+      {points, ""} ->
+        apply_block_verdict(socket, parse_index(index), points)
+
+      _ ->
+        {:noreply, socket}
     end
   end
 
@@ -824,6 +923,43 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     end
   end
 
+  defp apply_block_verdict(socket, index_int, new_verdict) do
+    %{submission: submission, current_part: part} = socket.assigns
+
+    case Exams.set_block_verdict(submission, part.id, index_int, new_verdict) do
+      {:ok, updated} ->
+        updated_part =
+          updated
+          |> Exams.correction_content()
+          |> Exams.split_content_into_parts()
+          |> Enum.find(&(&1.id == part.id))
+
+        part_doc_json =
+          case updated_part do
+            nil -> nil
+            p -> Jason.encode!(%{"type" => "doc", "content" => p.nodes})
+          end
+
+        socket =
+          socket
+          |> assign(:submission, updated)
+          |> refresh_power_view()
+
+        socket =
+          if part_doc_json,
+            do: push_event(socket, "reload-content", %{content: part_doc_json}),
+            else: socket
+
+        {:noreply, socket}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Bewertung konnte nicht gespeichert werden.")}
+    end
+  end
+
+  defp half_of(max) when is_number(max), do: Float.round(max * 0.5 * 4) / 4
+  defp half_of(_), do: 0
+
   defp parse_index(i) when is_integer(i), do: i
 
   defp parse_index(i) when is_binary(i) do
@@ -851,22 +987,29 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   defp format_points(n) when is_integer(n), do: Integer.to_string(n)
 
   defp format_points(n) when is_float(n) do
-    if n == trunc(n),
-      do: Integer.to_string(trunc(n)),
-      else: :erlang.float_to_binary(n, decimals: 1)
+    if n == trunc(n) do
+      Integer.to_string(trunc(n))
+    else
+      n
+      |> :erlang.float_to_binary(decimals: 2)
+      |> String.trim_trailing("0")
+      |> String.trim_trailing(".")
+    end
   end
 
   defp format_points(_), do: "—"
 
+  defp power_row_points(v, _max) when is_number(v), do: format_points(normalize_points(v * 1.0))
   defp power_row_points(_verdict, nil), do: "—"
-  defp power_row_points("correct", per), do: format_points(normalize_points(per * 1.0))
-  defp power_row_points("half", per), do: format_points(normalize_points(per * 0.5))
-  defp power_row_points("wrong", _per), do: "0"
+  defp power_row_points("correct", max), do: format_points(normalize_points(max * 1.0))
+  defp power_row_points("half", max), do: format_points(normalize_points(max * 0.5))
+  defp power_row_points("wrong", _max), do: "0"
   defp power_row_points(_, _), do: "—"
 
   defp power_points_class("correct"), do: "bg-green-50 text-green-700"
   defp power_points_class("half"), do: "bg-yellow-50 text-yellow-700"
   defp power_points_class("wrong"), do: "bg-red-50 text-red-600"
+  defp power_points_class(v) when is_number(v), do: "bg-yellow-50 text-yellow-700"
   defp power_points_class(_), do: "bg-stone-50 text-stone-400"
 
   defp parse_points(value) when is_binary(value) do

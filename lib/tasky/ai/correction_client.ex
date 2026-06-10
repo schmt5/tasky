@@ -45,7 +45,7 @@ defmodule Tasky.AI.CorrectionClient do
         "points" => %{
           "type" => "number",
           "description" =>
-            "Awarded points in the range [0, max_points]. Integer or decimal with 0.5 steps."
+            "Awarded points in the range [0, max_points]. Integer or decimal with 0.25 steps."
         }
       },
       "required" => ["verdicts", "points"]
@@ -148,7 +148,7 @@ defmodule Tasky.AI.CorrectionClient do
     Rules:
     - The `verdicts` array MUST contain exactly one entry per `__ai_id` present in the submission. Do not invent ids that are not in the submission. Do not skip ids.
     - `verdict` must be the literal string "correct" or "incorrect".
-    - Points may be integers or decimals with 0.5 steps (0, 0.5, 1, 1.5, 2, ...).
+    - Points may be integers or decimals with 0.25 steps (0, 0.25, 0.5, 0.75, 1, ...).
     - Do NOT return the document content. Only verdicts and points.
 
     EXAMPLES
@@ -268,7 +268,7 @@ defmodule Tasky.AI.CorrectionClient do
   end
 
   defp normalize_points(points) when is_float(points) do
-    rounded = Float.round(points * 2) / 2
+    rounded = Float.round(points * 4) / 4
     if rounded == trunc(rounded), do: trunc(rounded), else: rounded
   end
 

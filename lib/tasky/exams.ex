@@ -77,6 +77,7 @@ defmodule Tasky.Exams do
       "content" => source.content || %{},
       "sample_solution" => source.sample_solution || %{},
       "sample_solution_points" => source.sample_solution_points || %{},
+      "sample_solution_block_points" => source.sample_solution_block_points || %{},
       "seb_enabled" => source.seb_enabled,
       "seb_quit_password" =>
         if(source.seb_enabled,
@@ -565,8 +566,20 @@ defmodule Tasky.Exams do
             |> Map.merge(partial_answers)
             |> then(&prune_orphan_answers(new_content, &1))
 
+          {pruned_block_points, synced_points} =
+            prune_orphan_block_points(
+              new_content,
+              locked_exam.sample_solution_block_points || %{},
+              locked_exam.sample_solution_points || %{}
+            )
+
           case locked_exam
-               |> Exam.changeset(%{content: new_content, sample_solution: merged_answers})
+               |> Exam.changeset(%{
+                 content: new_content,
+                 sample_solution: merged_answers,
+                 sample_solution_block_points: pruned_block_points,
+                 sample_solution_points: synced_points
+               })
                |> Repo.update() do
             {:ok, updated} -> updated
             {:error, changeset} -> Repo.rollback(changeset)
@@ -582,8 +595,20 @@ defmodule Tasky.Exams do
   end
 
   defp persist_content_and_answers(exam, content, answers) do
+    {pruned_block_points, synced_points} =
+      prune_orphan_block_points(
+        content,
+        exam.sample_solution_block_points || %{},
+        exam.sample_solution_points || %{}
+      )
+
     case exam
-         |> Exam.changeset(%{content: content, sample_solution: answers})
+         |> Exam.changeset(%{
+           content: content,
+           sample_solution: answers,
+           sample_solution_block_points: pruned_block_points,
+           sample_solution_points: synced_points
+         })
          |> Repo.update() do
       {:ok, updated} = result ->
         Tasky.AI.BulkCorrectionRunner.start_for_exam(updated)
@@ -597,6 +622,29 @@ defmodule Tasky.Exams do
   defp prune_orphan_answers(content, answers) do
     keep_ids = AnswerKey.block_ids(content)
     Map.take(answers, MapSet.to_list(keep_ids))
+  end
+
+  # Drops custom block-point entries whose part or answer block no longer
+  # exists in `content`, and re-syncs each surviving custom part's total in
+  # `points` to the (possibly shrunk) sum. A part whose custom map becomes
+  # empty falls back to equal split, keeping its previous total.
+  defp prune_orphan_block_points(content, block_points, points) do
+    keep_ids = AnswerKey.block_ids(content)
+    part_ids = content |> split_content_into_parts() |> MapSet.new(& &1.id)
+
+    pruned =
+      block_points
+      |> Enum.filter(fn {pid, _} -> MapSet.member?(part_ids, pid) end)
+      |> Enum.map(fn {pid, m} -> {pid, Map.take(m, MapSet.to_list(keep_ids))} end)
+      |> Enum.reject(fn {_pid, m} -> m == %{} end)
+      |> Map.new()
+
+    synced_points =
+      Enum.reduce(pruned, points, fn {pid, m}, acc ->
+        Map.put(acc, pid, normalize_block_points(Enum.sum(Map.values(m))))
+      end)
+
+    {pruned, synced_points}
   end
 
   @doc """
@@ -617,6 +665,128 @@ defmodule Tasky.Exams do
     exam
     |> Ecto.Changeset.change(%{sample_solution_points: new_map})
     |> Repo.update()
+  end
+
+  @doc """
+  Returns whether the part uses a custom (unequal) per-block point
+  distribution.
+  """
+  def custom_block_points?(%Exam{} = exam, part_id) when is_binary(part_id) do
+    map_size(Map.get(exam.sample_solution_block_points || %{}, part_id) || %{}) > 0
+  end
+
+  @doc """
+  Resolves the maximum points of every answer block in a part, keyed by the
+  block's positional index.
+
+  `blocks` are entries from `NodePatcher.list_answer_blocks/1`, each carrying
+  `:index` and `:answer_id`. With a custom distribution
+  (`sample_solution_block_points[part_id]` non-empty) each block's points are
+  looked up by its `answer_id` — unknown ids count 0. Otherwise the part's
+  max points are split equally. Returns `nil` when the part has no points
+  configured at all (or has no blocks).
+  """
+  def resolve_block_points(%Exam{} = exam, part_id, blocks)
+      when is_binary(part_id) and is_list(blocks) do
+    custom = Map.get(exam.sample_solution_block_points || %{}, part_id) || %{}
+    max_points = Map.get(exam.sample_solution_points || %{}, part_id)
+
+    cond do
+      blocks == [] ->
+        nil
+
+      map_size(custom) > 0 ->
+        Map.new(blocks, fn b -> {b.index, block_points_value(Map.get(custom, b.answer_id))} end)
+
+      is_number(max_points) ->
+        per = max_points / length(blocks)
+        Map.new(blocks, fn b -> {b.index, per} end)
+
+      true ->
+        nil
+    end
+  end
+
+  defp block_points_value(n) when is_number(n), do: n
+  defp block_points_value(_), do: 0
+
+  @doc """
+  Sets the points for a single answer block of a part (custom distribution).
+  The part's total in `sample_solution_points` is kept in sync as the sum of
+  all block values.
+  """
+  def set_sample_solution_block_point(%Exam{} = exam, part_id, answer_id, points)
+      when is_binary(part_id) and is_binary(answer_id) and is_number(points) do
+    part_map =
+      (exam.sample_solution_block_points || %{})
+      |> Map.get(part_id, %{})
+      |> Map.put(answer_id, normalize_block_points(points))
+
+    put_custom_block_points(exam, part_id, part_map)
+  end
+
+  @doc """
+  Enables custom per-block point distribution for a part by seeding every
+  answer block with an equal share (rounded to 0.25) of the part's current
+  max points. The part total becomes the sum of the seeded shares.
+  """
+  def enable_custom_block_points(%Exam{} = exam, part_id) when is_binary(part_id) do
+    blocks = exam_part_blocks(exam, part_id)
+    max_points = Map.get(exam.sample_solution_points || %{}, part_id)
+
+    share =
+      if is_number(max_points) and blocks != [] do
+        normalize_block_points(max_points / length(blocks))
+      else
+        0
+      end
+
+    part_map =
+      blocks
+      |> Enum.filter(& &1.answer_id)
+      |> Map.new(fn b -> {b.answer_id, share} end)
+
+    put_custom_block_points(exam, part_id, part_map)
+  end
+
+  @doc """
+  Disables custom distribution for a part. The part keeps its current total
+  in `sample_solution_points` and falls back to the equal split.
+  """
+  def clear_custom_block_points(%Exam{} = exam, part_id) when is_binary(part_id) do
+    block_points = Map.delete(exam.sample_solution_block_points || %{}, part_id)
+
+    exam
+    |> Ecto.Changeset.change(%{sample_solution_block_points: block_points})
+    |> Repo.update()
+  end
+
+  defp put_custom_block_points(%Exam{} = exam, part_id, part_map) do
+    block_points = Map.put(exam.sample_solution_block_points || %{}, part_id, part_map)
+    total = part_map |> Map.values() |> Enum.sum() |> normalize_block_points()
+    points = Map.put(exam.sample_solution_points || %{}, part_id, total)
+
+    exam
+    |> Ecto.Changeset.change(%{
+      sample_solution_block_points: block_points,
+      sample_solution_points: points
+    })
+    |> Repo.update()
+  end
+
+  defp normalize_block_points(n) when is_number(n) do
+    rounded = Float.round(max(n, 0) * 4.0) / 4
+    if rounded == trunc(rounded), do: trunc(rounded), else: rounded
+  end
+
+  defp exam_part_blocks(%Exam{} = exam, part_id) do
+    (exam.content || %{})
+    |> split_content_into_parts()
+    |> Enum.find(&(&1.id == part_id))
+    |> case do
+      nil -> []
+      part -> NodePatcher.list_answer_blocks(part.nodes)
+    end
   end
 
   @doc """
@@ -656,7 +826,8 @@ defmodule Tasky.Exams do
   Lists the answer-bearing blocks in a single part of a submission, paired
   with the teacher's current verdict for each (if any).
 
-  Each entry is `%{index: i, text: t, verdict: "correct" | "half" | "wrong" | nil}`.
+  Each entry is `%{index: i, text: t, verdict: v}` where `v` is `"correct"`,
+  `"half"` (legacy), `"wrong"`, a number (manual points) or `nil`.
   Verdicts are keyed by `"<part_id>:<index>"` in `submission.block_verdicts`.
   """
   def list_part_answer_blocks(%ExamSubmission{} = submission, part_id)
@@ -687,22 +858,26 @@ defmodule Tasky.Exams do
   Sets (or clears, when `verdict` is `nil`) the teacher's verdict for a
   single answer block in a single part of a submission.
 
+  The verdict is either `"correct"` (full block points), `"wrong"` (0),
+  a number (manual points for the block, clamped to `[0, block_max]` and
+  rounded to 0.25 steps), or `nil` to clear. Legacy `"half"` values remain
+  readable (0.5 × block points) but are no longer written by the UI.
+
   Persists three things atomically:
     * `block_verdicts` — keyed by `"<part_id>:<index>"`
     * `corrected_content` — the trailing ✅/🟡/❌ marker on the affected
       node is rewritten to match the new verdict
-    * `points_per_part[part_id]` — recomputed as
-      `(correct + 0.5 * half) * (max_points / block_count)`, rounded to
-      0.5 increments. If the part has no `max_points` configured or no
+    * `points_per_part[part_id]` — recomputed as the sum of each block's
+      awarded points (per-block max from `resolve_block_points/3`), rounded
+      to 0.25 increments. If the part has no points configured or no
       answer blocks, the entry is removed.
 
   Broadcasts the updated submission so the correction grid stays in sync.
   """
   def set_block_verdict(%ExamSubmission{} = submission, part_id, index, verdict)
       when is_binary(part_id) and is_integer(index) and
-             verdict in ["correct", "half", "wrong", nil] do
+             (verdict in ["correct", "half", "wrong", nil] or is_number(verdict)) do
     exam = Repo.get!(Exam, submission.exam_id)
-    max_points = Map.get(exam.sample_solution_points || %{}, part_id)
 
     doc = correction_content(submission)
     parts = split_content_into_parts(doc)
@@ -713,6 +888,11 @@ defmodule Tasky.Exams do
         {:error, :unknown_part}
 
       part ->
+        blocks = NodePatcher.list_answer_blocks(part.nodes)
+        points_by_index = resolve_block_points(exam, part_id, blocks)
+
+        verdict = normalize_verdict(verdict, points_by_index && points_by_index[index])
+
         key = block_verdict_key(part_id, index)
         current_verdicts = submission.block_verdicts || %{}
 
@@ -728,13 +908,9 @@ defmodule Tasky.Exams do
         # ✅/🟡/❌ marker on the node (e.g. left by AI auto-correction).
         # This ensures untouched blocks keep their markers and contribute
         # their points when the teacher only edits a single block.
-        blocks = NodePatcher.list_answer_blocks(part.nodes)
         effective_indexed = effective_verdicts_for_part(blocks, new_verdicts, part_id)
 
-        block_count = length(blocks)
-
-        new_part_points =
-          compute_part_points_from_indexed(effective_indexed, block_count, max_points)
+        new_part_points = compute_part_points(effective_indexed, points_by_index)
 
         new_points_per_part =
           if is_nil(new_part_points) do
@@ -743,7 +919,8 @@ defmodule Tasky.Exams do
             Map.put(submission.points_per_part || %{}, part_id, new_part_points)
           end
 
-        rewritten_nodes = NodePatcher.rewrite_markers(part.nodes, effective_indexed)
+        marker_verdicts = marker_verdicts(effective_indexed, points_by_index)
+        rewritten_nodes = NodePatcher.rewrite_markers(part.nodes, marker_verdicts)
 
         new_parts =
           Enum.map(parts, fn p ->
@@ -793,26 +970,49 @@ defmodule Tasky.Exams do
     end)
   end
 
-  defp compute_part_points_from_indexed(_indexed, 0, _max_points), do: nil
-  defp compute_part_points_from_indexed(_indexed, _count, nil), do: nil
+  # Manual numeric verdicts are rounded to 0.25 steps and clamped to the
+  # block's max points (when known). String verdicts pass through.
+  defp normalize_verdict(v, block_max) when is_number(v) do
+    v = max(v, 0)
+    v = if is_number(block_max), do: min(v, block_max), else: v
+    Float.round(v * 4.0) / 4
+  end
 
-  defp compute_part_points_from_indexed(indexed, block_count, max_points)
-       when is_number(max_points) and block_count > 0 do
-    per_block = max_points / block_count
+  defp normalize_verdict(v, _block_max), do: v
 
-    weighted_sum =
+  defp compute_part_points(_indexed, nil), do: nil
+
+  defp compute_part_points(indexed, points_by_index) when is_map(points_by_index) do
+    total =
       Enum.reduce(indexed, 0.0, fn
-        {_idx, "correct"}, acc -> acc + 1.0
-        {_idx, "half"}, acc -> acc + 0.5
-        {_idx, "wrong"}, acc -> acc + 0.0
+        {idx, "correct"}, acc -> acc + block_points_value(points_by_index[idx])
+        {idx, "half"}, acc -> acc + block_points_value(points_by_index[idx]) * 0.5
+        {_idx, "wrong"}, acc -> acc
+        {_idx, v}, acc when is_number(v) -> acc + v
         _, acc -> acc
       end)
 
-    total = weighted_sum * per_block
-
-    rounded = Float.round(total * 2) / 2
+    rounded = Float.round(total * 4) / 4
 
     if rounded == trunc(rounded), do: trunc(rounded), else: rounded
+  end
+
+  # Maps numeric (manual) verdicts to the marker vocabulary understood by
+  # NodePatcher.rewrite_markers: full block points → ✅, zero → ❌, else 🟡.
+  defp marker_verdicts(indexed, points_by_index) do
+    Map.new(indexed, fn
+      {idx, v} when is_number(v) ->
+        block_max = points_by_index && points_by_index[idx]
+
+        cond do
+          v == 0 -> {idx, "wrong"}
+          is_number(block_max) and v >= block_max -> {idx, "correct"}
+          true -> {idx, "half"}
+        end
+
+      {idx, v} ->
+        {idx, v}
+    end)
   end
 
   @doc """
@@ -941,15 +1141,17 @@ defmodule Tasky.Exams do
   unique answer text, paired with the system's pre-judged verdict against the
   sample solution and the teacher's current verdict (if any).
 
-  Returns a list of `%{index, label, sample_answers, groups}` — one entry per
-  answer-bearing block in the part, in document order. Within `groups`:
+  Returns a list of `%{index, label, max_points, sample_answers, groups}` —
+  one entry per answer-bearing block in the part, in document order.
+  `max_points` is the block's share resolved via `resolve_block_points/3`
+  (`nil` when the part has no points configured). Within `groups`:
 
       %{
         text: "fliegen" | nil,            # nil = "no answer"
         count: 18,
         students: [%{submission_id, firstname, lastname}, ...],
         default_verdict: "correct" | "wrong",
-        current_verdict: "correct" | "half" | "wrong" | nil | :mixed,
+        current_verdict: "correct" | "half" | "wrong" | number | nil | :mixed,
         diff: [{:eq | :ins | :del, string}, ...],
         nearest_sample: "fliegen" | nil
       }
@@ -994,11 +1196,14 @@ defmodule Tasky.Exams do
         p -> answer_block_labels(p.nodes)
       end
 
-    exam_block_indices =
+    exam_blocks =
       case exam_part do
-        nil -> Enum.map(sample_blocks, & &1.index)
-        p -> p.nodes |> NodePatcher.list_answer_blocks() |> Enum.map(& &1.index)
+        nil -> sample_blocks
+        p -> NodePatcher.list_answer_blocks(p.nodes)
       end
+
+    exam_block_indices = Enum.map(exam_blocks, & &1.index)
+    points_by_index = resolve_block_points(exam, part_id, exam_blocks)
 
     submissions = list_exam_submissions(exam)
 
@@ -1031,6 +1236,7 @@ defmodule Tasky.Exams do
       %{
         index: index,
         label: Map.get(labels_by_index, index),
+        max_points: points_by_index && Map.get(points_by_index, index),
         sample_answers: sample_answers,
         groups: groups
       }
