@@ -2,6 +2,7 @@ import { Children, useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
 import { Node, Mark, Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "prosemirror-state";
+import { Slice } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskList } from "@tiptap/extension-list/task-list";
 import { TaskItem } from "@tiptap/extension-list/task-item";
@@ -325,6 +326,29 @@ function stripAnswers(json) {
     return { ...json, content: json.content.map(stripAnswers) };
   }
   return json;
+}
+
+// A selection made *inside* an answer field yields a slice whose outermost
+// node is the open answerBlock/lueckentext wrapper, so pasting it would insert
+// a whole new answer field (with a duplicate answerId). Strip those open
+// wrappers so only the inner content travels via the clipboard. A fully
+// selected answer field copied along with surrounding content appears as a
+// *closed* node in the slice and is left untouched, so deliberately
+// duplicating one in the content editor still works.
+function unwrapAnswerSlice(slice) {
+  let { content, openStart, openEnd } = slice;
+  while (
+    content.childCount === 1 &&
+    openStart > 0 &&
+    openEnd > 0 &&
+    ANSWER_CONTENT_TYPES.includes(content.firstChild.type.name)
+  ) {
+    content = content.firstChild.content;
+    openStart--;
+    openEnd--;
+  }
+  if (content === slice.content) return slice;
+  return new Slice(content, openStart, openEnd);
 }
 
 // ProseMirror docs are immutable, so the skeleton can be cached per doc node.
@@ -838,7 +862,11 @@ export default function ExamContentEditor({
       lockHintTimerRef.current = null;
       setLockHintVisible(false);
     }, 2400);
-  }, []);
+    // Shared-toolbar mode: the pill lives in the toolbar's React root, so the
+    // flash is relayed through the store. The local state above still drives
+    // the answer-field pulse on this part editor.
+    if (externalToolbar) solutionEditorStore.flashLockHint();
+  }, [externalToolbar]);
 
   useEffect(
     () => () => {
@@ -877,7 +905,12 @@ export default function ExamContentEditor({
     editorProps: {
       attributes: {
         class: "exam-editor__prose",
+        spellcheck: "false",
       },
+      transformCopied: unwrapAnswerSlice,
+      // Safety net for clipboard content produced before transformCopied
+      // existed or by other views (open depths survive via data-pm-slice).
+      transformPasted: unwrapAnswerSlice,
     },
   });
 
@@ -1029,6 +1062,7 @@ export function Toolbar({
   uploadImage = null,
   lockHintVisible = false,
   lockHintEnabled = false,
+  lockHintText = "Der Aufgabentext kann nicht bearbeitet werden – schreibe deine Antwort in ein Antwortfeld.",
 }) {
   // Subscribe directly to editor transactions so the active-state reflects
   // selection/format changes instantly, independent of the autosave cadence.
@@ -1417,9 +1451,7 @@ export function Toolbar({
           role="status"
           aria-live="polite"
         >
-          {lockHintVisible
-            ? "Der Aufgabentext kann nicht bearbeitet werden – schreibe deine Antwort in ein Antwortfeld."
-            : ""}
+          {lockHintVisible ? lockHintText : ""}
         </div>
       )}
       </div>

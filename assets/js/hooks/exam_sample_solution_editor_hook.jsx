@@ -64,6 +64,7 @@ export const ExamSampleSolutionPartEditor = {
         }
         hideAnswers={true}
         hideQuestion={true}
+        lockContent={true}
         notFullWidth={true}
         solutionMode={true}
         externalToolbar={true}

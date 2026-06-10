@@ -10,6 +10,8 @@ const statusByPart = {};
 const listeners = new Set();
 
 let activePartId = null;
+let lockHintVisible = false;
+let lockHintTimer = null;
 let snapshot = buildSnapshot();
 
 function buildSnapshot() {
@@ -22,6 +24,7 @@ function buildSnapshot() {
     activePartId,
     activeEditor: editorsByPart.get(activePartId) || null,
     activeStatus,
+    lockHintVisible,
   };
 }
 
@@ -63,6 +66,23 @@ export function setActive(partId) {
   if (activePartId === partId || !editorsByPart.has(partId)) return;
   activePartId = partId;
   notify();
+}
+
+// Blocked-edit hint for the shared toolbar: the veto happens inside a part
+// editor's React root, but the pill is rendered by the toolbar root, so the
+// flash state crosses roots through this store. Mirrors the 2400 ms timing of
+// the per-editor hint in ExamContentEditor.
+export function flashLockHint() {
+  if (lockHintTimer) clearTimeout(lockHintTimer);
+  lockHintTimer = setTimeout(() => {
+    lockHintTimer = null;
+    lockHintVisible = false;
+    notify();
+  }, 2400);
+  if (!lockHintVisible) {
+    lockHintVisible = true;
+    notify();
+  }
 }
 
 export function setStatus(partId, status, errorMsg = null) {

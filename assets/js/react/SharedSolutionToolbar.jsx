@@ -58,6 +58,9 @@ export default function SharedSolutionToolbar() {
           errorMsg={snap.activeStatus.errorMsg}
           hideAnswers={true}
           hideQuestion={true}
+          lockHintEnabled={true}
+          lockHintVisible={snap.lockHintVisible}
+          lockHintText="Der Aufgabentext kann hier nicht bearbeitet werden – erfasse die Musterlösung in den Antwortfeldern."
         />
       )}
     </div>

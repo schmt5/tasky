@@ -38,7 +38,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         </div>
       </div>
 
-      <div class="max-w-7xl mx-auto px-8 pb-24">
+      <div class="max-w-7xl mx-auto px-8 pb-12">
         <%= if @answer_blocks == [] do %>
           <div class="bg-white rounded-[14px] border border-stone-100 p-12 text-center text-stone-400 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
             <.icon name="hero-document" class="w-10 h-10 mx-auto mb-3 text-stone-300" />
@@ -53,20 +53,24 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           </div>
 
           <div id="bulk-power-keys" phx-hook="BulkPowerKeys">
-            <div class="space-y-4 mt-4">
+            <div class="mt-4">
               <%= if @is_multi_input do %>
-                <%= for block <- @answer_blocks do %>
-                  {render_block_accordion(assigns, block)}
-                <% end %>
+                <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] divide-y divide-stone-200">
+                  <%= for block <- @answer_blocks do %>
+                    {render_block_section(assigns, block)}
+                  <% end %>
+                </div>
               <% else %>
-                <%= for block <- @answer_blocks do %>
-                  {render_groups_card(assigns, block)}
-                <% end %>
+                <div class="space-y-4">
+                  <%= for block <- @answer_blocks do %>
+                    {render_groups_card(assigns, block)}
+                  <% end %>
+                </div>
               <% end %>
             </div>
 
-            <div class="fixed bottom-6 inset-x-0 z-20 px-8 pointer-events-none">
-              <div class="max-w-7xl mx-auto pointer-events-auto bg-white/90 backdrop-blur border border-stone-200 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] px-5 py-3 flex items-center justify-end gap-3">
+            <div class="mt-6">
+              <div class="bg-white border border-stone-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] px-5 py-3 flex items-center justify-end gap-3">
                 <.icon
                   name="hero-check-badge"
                   class={[
@@ -298,90 +302,29 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     """
   end
 
-  defp render_block_accordion(assigns, block) do
-    is_open = not MapSet.member?(assigns.closed_blocks, block.index)
-    block_totals = block_totals(block)
-
-    assigns =
-      assigns
-      |> assign(:block, block)
-      |> assign(:is_open, is_open)
-      |> assign(:block_totals, block_totals)
+  defp render_block_section(assigns, block) do
+    assigns = assign(assigns, :block, block)
 
     ~H"""
-    <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
-      <button
-        type="button"
-        phx-click="toggle_block"
-        phx-value-index={@block.index}
-        class="w-full flex items-center gap-4 px-5 py-4 hover:bg-stone-50/50 transition-colors duration-150"
-      >
-        <span class="text-xs font-mono text-stone-400 w-6 shrink-0 text-left">
+    <div class="px-5 py-4 space-y-2">
+      <div class="flex items-center gap-2 flex-wrap pb-1">
+        <span class="text-xs font-mono text-stone-400">
           {roman(@block.index + 1)}.
         </span>
-        <div class="flex items-center gap-2 min-w-0 shrink-0">
-          <span class="text-base font-semibold text-stone-800 truncate max-w-[160px]">
-            {@block.label || "Antwort #{@block.index + 1}"}
-          </span>
-          <%= if @block.sample_answers != [] do %>
-            <.icon name="hero-arrow-right" class="w-3.5 h-3.5 text-stone-300 shrink-0" />
-            <%= for sample <- @block.sample_answers do %>
-              <span class="inline-flex items-center text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5">
-                {sample}
-              </span>
-            <% end %>
+        <span class="text-base font-semibold text-stone-800">
+          {@block.label || "Antwort #{@block.index + 1}"}
+        </span>
+        <%= if @block.sample_answers != [] do %>
+          <.icon name="hero-arrow-right" class="w-3.5 h-3.5 text-stone-300 shrink-0" />
+          <%= for sample <- @block.sample_answers do %>
+            <span class="inline-flex items-center text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5">
+              {sample}
+            </span>
           <% end %>
-        </div>
-
-        <div class="flex-1 min-w-0 px-4">
-          <div class="h-1.5 bg-stone-100 rounded-full overflow-hidden flex">
-            <div
-              class="h-full bg-green-500"
-              style={"width: #{percent(@block_totals.correct, @block_totals.total)}%"}
-            >
-            </div>
-            <div
-              class="h-full bg-yellow-400"
-              style={"width: #{percent(@block_totals.half, @block_totals.total)}%"}
-            >
-            </div>
-            <div
-              class="h-full bg-red-500"
-              style={"width: #{percent(@block_totals.wrong, @block_totals.total)}%"}
-            >
-            </div>
-          </div>
-          <div class="flex items-center gap-4 mt-1 text-xs">
-            <span class="inline-flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-              <span class="font-semibold tabular-nums text-stone-700">{@block_totals.correct}</span>
-              <span class="text-stone-400">Richtig</span>
-            </span>
-            <span class="inline-flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-yellow-400"></span>
-              <span class="font-semibold tabular-nums text-stone-700">{@block_totals.half}</span>
-              <span class="text-stone-400">Teilw.</span>
-            </span>
-            <span class="inline-flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-              <span class="font-semibold tabular-nums text-stone-700">{@block_totals.wrong}</span>
-              <span class="text-stone-400">Falsch</span>
-            </span>
-          </div>
-        </div>
-
-        <.icon
-          name={if @is_open, do: "hero-chevron-up", else: "hero-chevron-down"}
-          class="w-4 h-4 text-stone-400 shrink-0"
-        />
-      </button>
-
-      <%= if @is_open do %>
-        <div class="border-t border-stone-100 bg-stone-50/30 px-5 py-4 space-y-2">
-          <%= for group <- @block.groups do %>
-            {render_group_card(assigns, @block, group)}
-          <% end %>
-        </div>
+        <% end %>
+      </div>
+      <%= for group <- @block.groups do %>
+        {render_group_card(assigns, @block, group)}
       <% end %>
     </div>
     """
@@ -565,7 +508,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:prev_part_id, prev_part_id)
          |> assign(:next_part_id, next_part_id)
          |> assign(:answer_blocks, answer_blocks)
-         |> assign(:closed_blocks, MapSet.new())
          |> assign(:is_multi_input, length(answer_blocks) > 1)
          |> assign(:total_submissions, length(submissions))
          |> assign(:part_already_done, count_part_done(submissions, part_id))
@@ -578,17 +520,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   end
 
   @impl true
-  def handle_event("toggle_block", %{"index" => idx_str}, socket) do
-    idx = String.to_integer(idx_str)
-
-    closed =
-      if MapSet.member?(socket.assigns.closed_blocks, idx),
-        do: MapSet.delete(socket.assigns.closed_blocks, idx),
-        else: MapSet.put(socket.assigns.closed_blocks, idx)
-
-    {:noreply, assign(socket, :closed_blocks, closed)}
-  end
-
   def handle_event(
         "set_group_verdict",
         %{"index" => idx_str, "text" => text, "verdict" => verdict},
