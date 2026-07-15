@@ -50,6 +50,7 @@ defmodule TaskyWeb.Router do
 
     get "/exam/:exam_token/seb-config", SebController, :config
     get "/exam/:exam_token/seb-quit", SebController, :quit
+    get "/exam/:exam_token/files/:field_id", FileController, :download
 
     live_session :guest do
       live "/enroll/:enrollment_token", EnrollLive, :enroll
@@ -91,6 +92,7 @@ defmodule TaskyWeb.Router do
   # Public serving of uploaded exam images (unguessable UUID filenames). Public
   # so the browser and Gotenberg can load <img> sources without an auth token.
   scope "/uploads", TaskyWeb do
+    get "/exams/:exam_id/attachments/:filename", UploadController, :attachment
     get "/exams/:exam_id/:filename", UploadController, :show
   end
 
@@ -98,6 +100,10 @@ defmodule TaskyWeb.Router do
 
   scope "/", TaskyWeb do
     pipe_through [:browser, :require_authenticated_user, :require_admin_or_teacher]
+
+    get "/exams/:id/submissions/:submission_id/files/:file_id",
+        SubmissionFileController,
+        :download
 
     live_session :tasks,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do

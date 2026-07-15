@@ -1,6 +1,8 @@
 defmodule TaskyWeb.ExamLive.Correction do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.FileComponents
+
   alias Tasky.Exams
 
   @impl true
@@ -96,6 +98,12 @@ defmodule TaskyWeb.ExamLive.Correction do
                       Punkte
                     </th>
                     <th
+                      :if={@has_upload_fields}
+                      class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide"
+                    >
+                      Dateien
+                    </th>
+                    <th
                       :for={part <- @parts}
                       scope="col"
                       class="px-3 py-3 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide min-w-[100px] max-w-[160px]"
@@ -138,6 +146,38 @@ defmodule TaskyWeb.ExamLive.Correction do
                           / {format_points(@total_max_points)}
                         </span>
                       </span>
+                    </td>
+                    <td :if={@has_upload_fields} class="px-4 py-3">
+                      <%= case Map.get(@submission_files, submission.id, []) do %>
+                        <% [] -> %>
+                          <span class="text-xs text-stone-300">—</span>
+                        <% files -> %>
+                          <div class="flex flex-col gap-1">
+                            <div
+                              :for={file <- files}
+                              class="tooltip tooltip-right tooltip-delayed w-fit max-w-56"
+                              data-tip={"#{file.original_name} herunterladen"}
+                            >
+                              <a
+                                href={
+                                  ~p"/exams/#{@exam.id}/submissions/#{submission.id}/files/#{file.id}"
+                                }
+                                target="_blank"
+                                rel="noopener"
+                                class="group flex items-center gap-1.5 min-w-0"
+                              >
+                                <.file_badge filename={file.stored_filename} size="sm" />
+                                <span class="text-xs font-medium text-stone-600 truncate group-hover:text-sky-700 transition-colors duration-150">
+                                  {file.upload_field.label}
+                                </span>
+                                <.icon
+                                  name="hero-arrow-down-tray"
+                                  class="w-3.5 h-3.5 text-stone-300 group-hover:text-sky-600 shrink-0 transition-colors duration-150"
+                                />
+                              </a>
+                            </div>
+                          </div>
+                      <% end %>
                     </td>
                     <td :for={part <- @parts} class="px-3 py-3">
                       <div class="flex items-center justify-center gap-2">
@@ -230,6 +270,11 @@ defmodule TaskyWeb.ExamLive.Correction do
     parts = Exams.split_content_into_parts(exam.content || %{})
     submissions = load_sorted_submissions(exam)
 
+    submission_files =
+      exam
+      |> Exams.list_exam_submission_files()
+      |> Enum.group_by(& &1.exam_submission_id)
+
     {:ok,
      socket
      |> assign(:page_title, exam.name <> " – Korrektur")
@@ -238,6 +283,8 @@ defmodule TaskyWeb.ExamLive.Correction do
      |> assign(:submissions, submissions)
      |> assign(:summary, correction_summary(parts, submissions))
      |> assign(:bulk_status, :idle)
+     |> assign(:has_upload_fields, Exams.list_upload_fields(exam) != [])
+     |> assign(:submission_files, submission_files)
      |> assign(:total_max_points, total_max_points(exam))}
   end
 

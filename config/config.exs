@@ -24,6 +24,12 @@ config :tasky,
   ecto_repos: [Tasky.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# .m4a (voice recordings for exam file submissions) is unknown to the MIME
+# library by default; LiveView's allow_upload accept filter requires it.
+config :mime, :types, %{
+  "audio/mp4" => ["m4a"]
+}
+
 # Configure the endpoint
 config :tasky, TaskyWeb.Endpoint,
   url: [host: "localhost"],

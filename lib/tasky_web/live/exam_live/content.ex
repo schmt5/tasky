@@ -1,7 +1,10 @@
 defmodule TaskyWeb.ExamLive.Content do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.FileComponents
+
   alias Tasky.Exams
+  alias Tasky.Uploads
 
   @impl true
   def render(assigns) do
@@ -31,7 +34,7 @@ defmodule TaskyWeb.ExamLive.Content do
             ]} />
           </div>
 
-          <div class="inline-flex items-center gap-0.5 bg-stone-100 rounded-lg p-0.5">
+          <div class="inline-flex items-center gap-0.5 bg-sky-100/70 rounded-lg p-0.5">
             <.tab_link
               label="Inhalt"
               active={@tab == "inhalt"}
@@ -41,6 +44,11 @@ defmodule TaskyWeb.ExamLive.Content do
               label="Musterlösung"
               active={@tab == "musterloesung"}
               patch={~p"/exams/#{@exam}/content?tab=musterloesung"}
+            />
+            <.tab_link
+              label="Dateien"
+              active={@tab == "dateien"}
+              patch={~p"/exams/#{@exam}/content?tab=dateien"}
             />
           </div>
         </div>
@@ -297,7 +305,314 @@ defmodule TaskyWeb.ExamLive.Content do
           </div>
         </div>
       </div>
+
+      <%!-- Dateien tab --%>
+      <div :if={@tab == "dateien"} class="bg-stone-100 min-h-[calc(100vh-54px)]">
+        <div class="max-w-4xl mx-auto px-8 py-8 space-y-8">
+          <%!-- Anhänge --%>
+          <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <div class="p-6 flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2.5">
+                  <.icon name="hero-paper-clip" class="w-5 h-5 text-sky-500" />
+                  <h2 class="text-lg font-semibold text-stone-800">Anhänge</h2>
+                </div>
+                <p class="text-sm text-stone-500 mt-1">
+                  Dateien, welche die Schüler während der Prüfung herunterladen können.
+                </p>
+              </div>
+              <form id="attachment-upload-form" phx-change="validate_attachment" class="shrink-0">
+                <label class="inline-flex items-center gap-2 border border-stone-200 text-stone-700 text-sm font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]">
+                  <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Datei hochladen
+                  <.live_file_input upload={@uploads.attachment} class="hidden" />
+                </label>
+              </form>
+            </div>
+
+            <div class="px-6 pb-6 space-y-2.5">
+              <%!-- In-flight uploads + per-entry errors --%>
+              <div
+                :for={entry <- @uploads.attachment.entries}
+                class="rounded-xl border border-stone-200 px-4 py-3"
+              >
+                <div class="flex items-center gap-3">
+                  <p class="flex-1 min-w-0 text-sm font-medium text-stone-700 truncate">
+                    {entry.client_name}
+                  </p>
+                  <%= if upload_errors(@uploads.attachment, entry) == [] do %>
+                    <progress
+                      class="progress progress-info w-32"
+                      value={entry.progress}
+                      max="100"
+                    >
+                    </progress>
+                  <% end %>
+                  <button
+                    type="button"
+                    phx-click="cancel_attachment_upload"
+                    phx-value-ref={entry.ref}
+                    aria-label="Upload abbrechen"
+                    class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-150 shrink-0"
+                  >
+                    <.icon name="hero-x-mark" class="w-4 h-4" />
+                  </button>
+                </div>
+                <p
+                  :for={err <- upload_errors(@uploads.attachment, entry)}
+                  class="text-xs text-red-600 mt-1.5"
+                >
+                  {upload_error_message(err)}
+                </p>
+              </div>
+              <p
+                :for={err <- upload_errors(@uploads.attachment)}
+                class="text-xs text-red-600"
+              >
+                {upload_error_message(err)}
+              </p>
+
+              <div
+                :if={@attachments == [] and @uploads.attachment.entries == []}
+                class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center"
+              >
+                <p class="text-sm text-stone-400">
+                  Noch keine Anhänge. Lade z.&nbsp;B. einen Lesetext (PDF) oder eine Audio-Datei hoch.
+                </p>
+              </div>
+
+              <div
+                :for={attachment <- @attachments}
+                class="flex items-center gap-4 rounded-xl border border-stone-200 px-4 py-3"
+              >
+                <.file_badge filename={attachment.stored_filename} />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-stone-800 truncate">
+                    {attachment.original_name}
+                  </p>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    {file_type_label(attachment.stored_filename)} · {Uploads.format_size(
+                      attachment.size
+                    )}
+                  </p>
+                </div>
+                <a
+                  href={~p"/uploads/exams/#{@exam.id}/attachments/#{attachment.stored_filename}"}
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-3.5 py-2 rounded-lg transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 shrink-0"
+                >
+                  <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Herunterladen
+                </a>
+                <button
+                  type="button"
+                  phx-click="delete_attachment"
+                  phx-value-id={attachment.id}
+                  data-confirm={"Anhang «#{attachment.original_name}» wirklich löschen?"}
+                  aria-label="Anhang löschen"
+                  class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors duration-150 shrink-0"
+                >
+                  <.icon name="hero-trash" class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <%!-- Datei-Abgaben --%>
+          <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <div class="p-6 flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2.5">
+                  <.icon name="hero-arrow-up-tray" class="w-5 h-5 text-sky-500" />
+                  <h2 class="text-lg font-semibold text-stone-800">Datei-Abgaben</h2>
+                </div>
+                <p class="text-sm text-stone-500 mt-1">
+                  Felder, in die Schüler ihre Antwort als Datei hochladen. Eine Datei pro Feld.
+                </p>
+              </div>
+              <button
+                :if={@editing_field_id == nil}
+                type="button"
+                phx-click="add_upload_field"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] shrink-0"
+              >
+                <.icon name="hero-plus" class="w-4 h-4" /> Upload-Feld hinzufügen
+              </button>
+            </div>
+
+            <div class="px-6 pb-6 space-y-3">
+              <div
+                :if={@upload_fields == [] and @editing_field_id != :new}
+                class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center"
+              >
+                <p class="text-sm text-stone-400">
+                  Noch keine Upload-Felder. Füge ein Feld hinzu, damit Schüler Dateien abgeben können.
+                </p>
+              </div>
+
+              <div
+                :for={field <- @upload_fields}
+                class="rounded-xl border border-stone-200 px-5 py-4"
+              >
+                <%= if @editing_field_id == field.id do %>
+                  <.upload_field_form draft={@field_draft} />
+                <% else %>
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2.5 flex-wrap">
+                        <h3 class="text-base font-semibold text-stone-800 truncate">
+                          {field.label}
+                        </h3>
+                        <span
+                          :if={field.required}
+                          class="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5"
+                        >
+                          Pflicht
+                        </span>
+                        <span
+                          :if={!field.required}
+                          class="text-[11px] font-semibold text-stone-500 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5"
+                        >
+                          Optional
+                        </span>
+                      </div>
+                      <p :if={field.instruction} class="text-sm text-stone-500 mt-1">
+                        {field.instruction}
+                      </p>
+                      <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                        <span class="text-xs text-stone-400 mr-1">Erlaubte Dateitypen:</span>
+                        <span
+                          :for={type <- field.allowed_types}
+                          class="text-[11px] font-semibold text-stone-600 bg-stone-100 rounded-md px-2 py-0.5"
+                        >
+                          {type_chip_label(type)}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        phx-click="edit_upload_field"
+                        phx-value-id={field.id}
+                        aria-label="Feld bearbeiten"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-150"
+                      >
+                        <.icon name="hero-pencil" class="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="delete_upload_field"
+                        phx-value-id={field.id}
+                        data-confirm={"Upload-Feld «#{field.label}» wirklich löschen? Bereits hochgeladene Abgaben der Schüler werden ebenfalls gelöscht."}
+                        aria-label="Feld löschen"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors duration-150"
+                      >
+                        <.icon name="hero-trash" class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                <% end %>
+              </div>
+
+              <div
+                :if={@editing_field_id == :new}
+                class="rounded-xl border border-sky-200 bg-sky-50/40 px-5 py-4"
+              >
+                <.upload_field_form draft={@field_draft} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </Layouts.app>
+    """
+  end
+
+  attr :draft, :map, required: true
+
+  defp upload_field_form(assigns) do
+    ~H"""
+    <form phx-change="field_draft_changed" phx-submit="save_upload_field" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-stone-600 mb-1.5">Bezeichnung</label>
+        <input
+          type="text"
+          name="label"
+          value={@draft["label"]}
+          placeholder="z. B. Aufsatz, Sprachaufnahme, …"
+          maxlength="255"
+          class="w-full text-sm text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400"
+        />
+        <p :if={@draft["label_error"]} class="text-xs text-red-600 mt-1">
+          {@draft["label_error"]}
+        </p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-stone-600 mb-1.5">
+          Anweisung (optional)
+        </label>
+        <input
+          type="text"
+          name="instruction"
+          value={@draft["instruction"]}
+          placeholder="z. B. Lade deinen Aufsatz als PDF hoch."
+          maxlength="1000"
+          class="w-full text-sm text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-stone-600 mb-1.5">Erlaubte Dateitypen</label>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button
+            :for={type <- Uploads.answer_type_keys()}
+            type="button"
+            phx-click="toggle_field_type"
+            phx-value-type={type}
+            class={[
+              "text-sm font-semibold px-3.5 py-2 rounded-lg border transition-all duration-150",
+              if(type in @draft["allowed_types"],
+                do: "bg-sky-50 border-sky-300 text-sky-700",
+                else: "bg-white border-stone-200 text-stone-500 hover:border-stone-300"
+              )
+            ]}
+          >
+            {type_chip_label(type)}
+          </button>
+        </div>
+        <p :if={@draft["types_error"]} class="text-xs text-red-600 mt-1">
+          {@draft["types_error"]}
+        </p>
+      </div>
+
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="hidden" name="required" value="false" />
+        <input
+          type="checkbox"
+          name="required"
+          value="true"
+          checked={@draft["required"] == "true"}
+          class="w-[18px] h-[18px] rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150"
+        />
+        <span class="text-sm font-medium text-stone-700">Pflichtfeld – Abgabe erforderlich</span>
+      </label>
+
+      <div class="flex items-center justify-end gap-3 pt-1">
+        <button
+          type="button"
+          phx-click="cancel_field_edit"
+          class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="submit"
+          class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+        >
+          Speichern
+        </button>
+      </div>
+    </form>
     """
   end
 
@@ -312,8 +627,8 @@ defmodule TaskyWeb.ExamLive.Content do
       class={[
         "px-3 py-1 rounded-md text-sm font-medium transition-colors",
         if(@active,
-          do: "bg-white text-stone-900 shadow-sm",
-          else: "text-stone-500 hover:text-stone-700"
+          do: "bg-white text-sky-700 shadow-sm",
+          else: "text-sky-600/70 hover:text-sky-800"
         )
       ]}
     >
@@ -325,7 +640,17 @@ defmodule TaskyWeb.ExamLive.Content do
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
-    {:ok, assign(socket, :exam, exam)}
+
+    {:ok,
+     socket
+     |> assign(:exam, exam)
+     |> allow_upload(:attachment,
+       accept: Uploads.attachment_accept_exts(),
+       max_entries: 3,
+       max_file_size: Uploads.max_file_bytes(),
+       auto_upload: true,
+       progress: &handle_attachment_progress/3
+     )}
   end
 
   @impl true
@@ -333,7 +658,13 @@ defmodule TaskyWeb.ExamLive.Content do
     # Reload exam each time params change so structure edits made in the
     # Inhalt tab are reflected when the teacher switches to Musterlösung.
     exam = Exams.get_exam!(socket.assigns.current_scope, socket.assigns.exam.id)
-    tab = if params["tab"] == "musterloesung", do: "musterloesung", else: "inhalt"
+
+    tab =
+      case params["tab"] do
+        "musterloesung" -> "musterloesung"
+        "dateien" -> "dateien"
+        _ -> "inhalt"
+      end
 
     socket =
       socket
@@ -347,6 +678,14 @@ defmodule TaskyWeb.ExamLive.Content do
 
       "musterloesung" ->
         {:noreply, assign(socket, :part_views, build_part_views(exam))}
+
+      "dateien" ->
+        {:noreply,
+         socket
+         |> assign(:attachments, Exams.list_exam_attachments(exam))
+         |> assign(:upload_fields, Exams.list_upload_fields(exam))
+         |> assign(:editing_field_id, nil)
+         |> assign(:field_draft, nil)}
     end
   end
 
@@ -520,6 +859,148 @@ defmodule TaskyWeb.ExamLive.Content do
     toggle_flag_if_auto(socket, part_id, "ignore_spelling", :ignore_spelling)
   end
 
+  ## Dateien tab: attachments
+
+  def handle_event("validate_attachment", _params, socket) do
+    # auto_upload does the work; this handler just accepts the phx-change.
+    {:noreply, socket}
+  end
+
+  def handle_event("cancel_attachment_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :attachment, ref)}
+  end
+
+  def handle_event("delete_attachment", %{"id" => id}, socket) do
+    with attachment when not is_nil(attachment) <-
+           Exams.get_exam_attachment(socket.assigns.exam, id),
+         {:ok, _} <- Exams.delete_exam_attachment(attachment) do
+      {:noreply, assign(socket, :attachments, Exams.list_exam_attachments(socket.assigns.exam))}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Anhang konnte nicht gelöscht werden.")}
+    end
+  end
+
+  ## Dateien tab: upload fields
+
+  def handle_event("add_upload_field", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:editing_field_id, :new)
+     |> assign(:field_draft, new_field_draft())}
+  end
+
+  def handle_event("edit_upload_field", %{"id" => id}, socket) do
+    case Exams.get_upload_field(socket.assigns.exam, id) do
+      nil ->
+        {:noreply, socket}
+
+      field ->
+        {:noreply,
+         socket
+         |> assign(:editing_field_id, field.id)
+         |> assign(:field_draft, %{
+           "label" => field.label,
+           "instruction" => field.instruction || "",
+           "required" => to_string(field.required),
+           "allowed_types" => field.allowed_types
+         })}
+    end
+  end
+
+  def handle_event("cancel_field_edit", _params, socket) do
+    {:noreply, socket |> assign(:editing_field_id, nil) |> assign(:field_draft, nil)}
+  end
+
+  def handle_event("field_draft_changed", params, socket) do
+    draft =
+      socket.assigns.field_draft
+      |> Map.merge(Map.take(params, ["label", "instruction", "required"]))
+      |> Map.delete("label_error")
+
+    {:noreply, assign(socket, :field_draft, draft)}
+  end
+
+  def handle_event("toggle_field_type", %{"type" => type}, socket) do
+    draft = socket.assigns.field_draft
+    types = draft["allowed_types"]
+
+    types =
+      if type in types,
+        do: List.delete(types, type),
+        else: types ++ [type]
+
+    {:noreply,
+     assign(
+       socket,
+       :field_draft,
+       draft |> Map.put("allowed_types", types) |> Map.delete("types_error")
+     )}
+  end
+
+  def handle_event("save_upload_field", params, socket) do
+    draft =
+      socket.assigns.field_draft
+      |> Map.merge(Map.take(params, ["label", "instruction", "required"]))
+
+    attrs = %{
+      "label" => String.trim(draft["label"] || ""),
+      "instruction" => presence(String.trim(draft["instruction"] || "")),
+      "required" => draft["required"] == "true",
+      "allowed_types" => draft["allowed_types"]
+    }
+
+    result =
+      case socket.assigns.editing_field_id do
+        :new ->
+          Exams.create_upload_field(socket.assigns.exam, attrs)
+
+        id ->
+          case Exams.get_upload_field(socket.assigns.exam, id) do
+            nil -> {:error, :not_found}
+            field -> Exams.update_upload_field(field, attrs)
+          end
+      end
+
+    case result do
+      {:ok, _field} ->
+        {:noreply,
+         socket
+         |> assign(:upload_fields, Exams.list_upload_fields(socket.assigns.exam))
+         |> assign(:editing_field_id, nil)
+         |> assign(:field_draft, nil)}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        draft =
+          draft
+          |> put_draft_error(
+            changeset,
+            :label,
+            "label_error",
+            "Bezeichnung darf nicht leer sein."
+          )
+          |> put_draft_error(
+            changeset,
+            :allowed_types,
+            "types_error",
+            "Mindestens einen Dateityp wählen."
+          )
+
+        {:noreply, assign(socket, :field_draft, draft)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Upload-Feld konnte nicht gespeichert werden.")}
+    end
+  end
+
+  def handle_event("delete_upload_field", %{"id" => id}, socket) do
+    with field when not is_nil(field) <- Exams.get_upload_field(socket.assigns.exam, id),
+         {:ok, _} <- Exams.delete_upload_field(field) do
+      {:noreply, assign(socket, :upload_fields, Exams.list_upload_fields(socket.assigns.exam))}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Upload-Feld konnte nicht gelöscht werden.")}
+    end
+  end
+
   defp toggle_flag_if_auto(socket, part_id, config_key, view_key) do
     pv = part_view(socket, part_id)
 
@@ -593,6 +1074,55 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
+  defp handle_attachment_progress(:attachment, entry, socket) do
+    if entry.done? do
+      exam = socket.assigns.exam
+
+      result =
+        consume_uploaded_entry(socket, entry, fn %{path: path} ->
+          case Uploads.save_exam_attachment(exam.id, path, entry.client_name) do
+            {:ok, meta} ->
+              {:ok,
+               Exams.create_exam_attachment(
+                 exam,
+                 Map.put(meta, :original_name, entry.client_name)
+               )}
+
+            {:error, reason} ->
+              {:ok, {:error, reason}}
+          end
+        end)
+
+      case result do
+        {:ok, _attachment} ->
+          {:noreply, assign(socket, :attachments, Exams.list_exam_attachments(exam))}
+
+        {:error, _reason} ->
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  defp new_field_draft do
+    %{"label" => "", "instruction" => "", "required" => "false", "allowed_types" => ["pdf"]}
+  end
+
+  defp presence(""), do: nil
+  defp presence(value), do: value
+
+  defp put_draft_error(draft, changeset, field, key, message) do
+    if Keyword.has_key?(changeset.errors, field),
+      do: Map.put(draft, key, message),
+      else: draft
+  end
+
   defp part_view(socket, part_id),
     do: Enum.find(socket.assigns.part_views, &(&1.id == part_id))
 
@@ -609,6 +1139,7 @@ defmodule TaskyWeb.ExamLive.Content do
 
   defp tab_label("inhalt"), do: "Inhalt"
   defp tab_label("musterloesung"), do: "Musterlösung"
+  defp tab_label("dateien"), do: "Dateien"
 
   defp part_config_flag(exam, part_id, key) do
     (exam.ai_correction_config || %{})

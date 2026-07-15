@@ -7,7 +7,10 @@ defmodule Tasky.Exams do
   alias Tasky.Repo
 
   alias Tasky.Exams.Exam
+  alias Tasky.Exams.ExamAttachment
   alias Tasky.Exams.ExamSubmission
+  alias Tasky.Exams.ExamSubmissionFile
+  alias Tasky.Exams.ExamUploadField
   alias Tasky.Accounts.Scope
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
@@ -271,29 +274,38 @@ defmodule Tasky.Exams do
   def submit_exam_submission(%ExamSubmission{} = submission) do
     submission = Repo.preload(submission, :exam, force: true)
 
-    if submission.exam.status != "running" do
-      {:error, :exam_not_running}
-    else
-      case submission
-           |> Ecto.Changeset.change(%{submitted: true})
-           |> Repo.update() do
-        {:ok, updated} = result ->
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "exam_cockpit:#{submission.exam.id}",
-            {:submission_submitted, updated}
-          )
+    cond do
+      submission.exam.status != "running" ->
+        {:error, :exam_not_running}
 
-          Tasky.AI.BulkCorrectionRunner.start_for_exam(
-            submission.exam,
-            submission_id: updated.id
-          )
+      missing_required_uploads(submission) != [] ->
+        {:error, :missing_required_uploads}
 
-          result
+      true ->
+        do_submit_exam_submission(submission)
+    end
+  end
 
-        error ->
-          error
-      end
+  defp do_submit_exam_submission(submission) do
+    case submission
+         |> Ecto.Changeset.change(%{submitted: true})
+         |> Repo.update() do
+      {:ok, updated} = result ->
+        Phoenix.PubSub.broadcast(
+          Tasky.PubSub,
+          "exam_cockpit:#{submission.exam.id}",
+          {:submission_submitted, updated}
+        )
+
+        Tasky.AI.BulkCorrectionRunner.start_for_exam(
+          submission.exam,
+          submission_id: updated.id
+        )
+
+        result
+
+      error ->
+        error
     end
   end
 
@@ -1476,5 +1488,213 @@ defmodule Tasky.Exams do
   """
   def broadcast_exam_update(%Exam{} = exam) do
     Phoenix.PubSub.broadcast(Tasky.PubSub, "exam:#{exam.id}", {:exam_status_changed, exam})
+  end
+
+  # --- Attachments (Anhänge) ---
+
+  @doc "Lists an exam's attachments in display order."
+  def list_exam_attachments(%Exam{} = exam) do
+    Repo.all(
+      from a in ExamAttachment,
+        where: a.exam_id == ^exam.id,
+        order_by: [asc: a.position, asc: a.id]
+    )
+  end
+
+  @doc "Gets an attachment of the given exam, or nil."
+  def get_exam_attachment(%Exam{} = exam, id) do
+    Repo.get_by(ExamAttachment, id: id, exam_id: exam.id)
+  end
+
+  @doc "Gets an attachment by its stored (UUID) filename, or nil."
+  def get_exam_attachment_by_stored_filename(exam_id, stored_filename) do
+    Repo.get_by(ExamAttachment, exam_id: exam_id, stored_filename: stored_filename)
+  end
+
+  @doc """
+  Creates an attachment record for a file already stored on disk (see
+  `Tasky.Uploads.save_exam_attachment/3`).
+  """
+  def create_exam_attachment(%Exam{} = exam, attrs) do
+    position =
+      Repo.one(
+        from a in ExamAttachment,
+          where: a.exam_id == ^exam.id,
+          select: coalesce(max(a.position), -1)
+      ) + 1
+
+    %ExamAttachment{exam_id: exam.id}
+    |> ExamAttachment.changeset(Map.put(attrs, :position, position))
+    |> Repo.insert()
+  end
+
+  @doc "Deletes an attachment record and its file on disk."
+  def delete_exam_attachment(%ExamAttachment{} = attachment) do
+    with {:ok, deleted} <- Repo.delete(attachment) do
+      Tasky.Uploads.delete_exam_attachment_file(deleted.exam_id, deleted.stored_filename)
+      {:ok, deleted}
+    end
+  end
+
+  # --- Upload fields (Datei-Abgaben) ---
+
+  @doc "Lists an exam's upload fields in display order."
+  def list_upload_fields(%Exam{} = exam), do: list_upload_fields_by_exam_id(exam.id)
+
+  defp list_upload_fields_by_exam_id(exam_id) do
+    Repo.all(
+      from f in ExamUploadField,
+        where: f.exam_id == ^exam_id,
+        order_by: [asc: f.position, asc: f.id]
+    )
+  end
+
+  @doc "Gets an upload field of the given exam, or nil."
+  def get_upload_field(%Exam{} = exam, id) do
+    Repo.get_by(ExamUploadField, id: id, exam_id: exam.id)
+  end
+
+  @doc "Creates an upload field, appended at the end."
+  def create_upload_field(%Exam{} = exam, attrs) do
+    position =
+      Repo.one(
+        from f in ExamUploadField,
+          where: f.exam_id == ^exam.id,
+          select: coalesce(max(f.position), -1)
+      ) + 1
+
+    %ExamUploadField{exam_id: exam.id}
+    |> ExamUploadField.changeset(Map.put(attrs, "position", position))
+    |> Repo.insert()
+  end
+
+  @doc "Updates an upload field."
+  def update_upload_field(%ExamUploadField{} = field, attrs) do
+    field
+    |> ExamUploadField.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes an upload field including all student files uploaded into it
+  (records via FK cascade, bytes on disk explicitly).
+  """
+  def delete_upload_field(%ExamUploadField{} = field) do
+    files =
+      Repo.all(
+        from sf in ExamSubmissionFile,
+          where: sf.upload_field_id == ^field.id,
+          join: s in assoc(sf, :exam_submission),
+          select: {s.exam_id, sf.exam_submission_id, sf.stored_filename}
+      )
+
+    with {:ok, deleted} <- Repo.delete(field) do
+      Enum.each(files, fn {exam_id, submission_id, stored} ->
+        Tasky.Uploads.delete_submission_file_from_disk(exam_id, submission_id, stored)
+      end)
+
+      {:ok, deleted}
+    end
+  end
+
+  @doc "True when the exam has attachments or upload fields (student tab visibility)."
+  def exam_has_files?(%Exam{} = exam) do
+    Repo.exists?(from a in ExamAttachment, where: a.exam_id == ^exam.id) or
+      Repo.exists?(from f in ExamUploadField, where: f.exam_id == ^exam.id)
+  end
+
+  # --- Student answer files ---
+
+  @doc """
+  Lists all answer files uploaded for an exam (upload field preloaded),
+  for the teacher's correction overview.
+  """
+  def list_exam_submission_files(%Exam{} = exam) do
+    Repo.all(
+      from sf in ExamSubmissionFile,
+        join: s in assoc(sf, :exam_submission),
+        where: s.exam_id == ^exam.id,
+        join: f in assoc(sf, :upload_field),
+        order_by: [asc: f.position, asc: f.id],
+        preload: [upload_field: f]
+    )
+  end
+
+  @doc "Lists a submission's uploaded files."
+  def list_submission_files(%ExamSubmission{} = submission) do
+    Repo.all(from sf in ExamSubmissionFile, where: sf.exam_submission_id == ^submission.id)
+  end
+
+  @doc "Gets a submission's file for one upload field, or nil."
+  def get_submission_file(%ExamSubmission{} = submission, field_id) do
+    Repo.get_by(ExamSubmissionFile,
+      exam_submission_id: submission.id,
+      upload_field_id: field_id
+    )
+  end
+
+  @doc "Gets a file of the given submission by its id, or nil."
+  def get_submission_file_by_id(%ExamSubmission{} = submission, file_id) do
+    Repo.get_by(ExamSubmissionFile, id: file_id, exam_submission_id: submission.id)
+  end
+
+  @doc """
+  Stores/replaces the answer file of one upload field for a submission whose
+  bytes are already on disk. A previously uploaded file for the same field is
+  replaced and its bytes removed.
+  """
+  def put_submission_file(%ExamSubmission{} = submission, %ExamUploadField{} = field, attrs) do
+    old = get_submission_file(submission, field.id)
+
+    result =
+      case old do
+        nil ->
+          %ExamSubmissionFile{exam_submission_id: submission.id, upload_field_id: field.id}
+          |> ExamSubmissionFile.changeset(attrs)
+          |> Repo.insert()
+
+        existing ->
+          existing
+          |> ExamSubmissionFile.changeset(attrs)
+          |> Repo.update()
+      end
+
+    with {:ok, _file} <- result do
+      if old, do: delete_submission_file_bytes(submission, old.stored_filename)
+      result
+    end
+  end
+
+  @doc "Deletes a submission's answer file (record + bytes)."
+  def delete_submission_file(%ExamSubmission{} = submission, %ExamSubmissionFile{} = file) do
+    with {:ok, deleted} <- Repo.delete(file) do
+      delete_submission_file_bytes(submission, deleted.stored_filename)
+      {:ok, deleted}
+    end
+  end
+
+  defp delete_submission_file_bytes(submission, stored_filename) do
+    Tasky.Uploads.delete_submission_file_from_disk(
+      submission.exam_id,
+      submission.id,
+      stored_filename
+    )
+  end
+
+  @doc """
+  Required upload fields of the submission's exam that have no file yet.
+  Used to gate the exam submit.
+  """
+  def missing_required_uploads(%ExamSubmission{} = submission) do
+    uploaded_ids =
+      Repo.all(
+        from sf in ExamSubmissionFile,
+          where: sf.exam_submission_id == ^submission.id,
+          select: sf.upload_field_id
+      )
+
+    submission.exam_id
+    |> list_upload_fields_by_exam_id()
+    |> Enum.filter(&(&1.required and &1.id not in uploaded_ids))
   end
 end

@@ -1,9 +1,12 @@
 defmodule TaskyWeb.ExamLive.CorrectionPart do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.FileComponents
+
   alias Tasky.Exams
   alias Tasky.Repo
   alias Tasky.Exams.ExamSubmission
+  alias Tasky.Uploads
 
   @impl true
   def render(assigns) do
@@ -153,6 +156,56 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     >
                       <.icon name="hero-x-mark" class="w-3.5 h-3.5" /> 0
                     </button>
+                  </div>
+                </div>
+
+                <div :if={@upload_fields != []} class="p-5 border-b border-stone-100">
+                  <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">
+                    Datei-Abgaben
+                  </h3>
+                  <div class="space-y-2">
+                    <%= for field <- @upload_fields do %>
+                      <%= case @submission_files[field.id] do %>
+                        <% nil -> %>
+                          <div class="flex items-center gap-2.5 rounded-lg border border-dashed border-stone-200 px-3 py-2.5">
+                            <.icon name="hero-document" class="w-4 h-4 text-stone-300 shrink-0" />
+                            <div class="flex-1 min-w-0">
+                              <p class="text-xs font-semibold text-stone-500 truncate">
+                                {field.label}
+                              </p>
+                              <p class="text-xs text-stone-400">
+                                Keine Datei
+                                <span :if={field.required} class="text-amber-600 font-semibold">
+                                  · Pflicht
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        <% file -> %>
+                          <a
+                            href={
+                              ~p"/exams/#{@exam.id}/submissions/#{@submission.id}/files/#{file.id}"
+                            }
+                            target="_blank"
+                            rel="noopener"
+                            class="flex items-center gap-2.5 rounded-lg border border-stone-200 px-3 py-2.5 hover:bg-stone-50 hover:border-stone-300 transition-all duration-150 group"
+                          >
+                            <.file_badge filename={file.stored_filename} />
+                            <div class="flex-1 min-w-0">
+                              <p class="text-xs font-semibold text-stone-700 truncate">
+                                {field.label}
+                              </p>
+                              <p class="text-xs text-stone-400 truncate">
+                                {file.original_name} · {Uploads.format_size(file.size)}
+                              </p>
+                            </div>
+                            <.icon
+                              name="hero-arrow-down-tray"
+                              class="w-4 h-4 text-stone-300 group-hover:text-stone-500 shrink-0 transition-colors duration-150"
+                            />
+                          </a>
+                      <% end %>
+                    <% end %>
                   </div>
                 </div>
 
@@ -644,6 +697,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
      socket
      |> assign(:exam, exam)
      |> assign(:submissions, submissions)
+     |> assign(:upload_fields, Exams.list_upload_fields(exam))
      |> assign(:show_sample_solution_modal, false)
      |> assign(:sample_solution_json, nil)
      |> assign(:show_power_view, false)}
@@ -685,10 +739,16 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
       power_data = build_power_view(exam, submission, current_part.id)
 
+      submission_files =
+        submission
+        |> Exams.list_submission_files()
+        |> Map.new(&{&1.upload_field_id, &1})
+
       {:noreply,
        socket
        |> assign(:page_title, "#{exam.name} – #{current_part.label}")
        |> assign(:submission, submission)
+       |> assign(:submission_files, submission_files)
        |> assign(:parts, parts)
        |> assign(:current_part, current_part)
        |> assign(:part_doc_json, part_doc_json)
