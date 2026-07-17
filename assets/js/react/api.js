@@ -37,6 +37,20 @@ export function saveExamContent(examId, content) {
   });
 }
 
+export function saveTaskContent(taskId, content) {
+  return request(`/api/tasks/${taskId}/content`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function saveTaskAnswers(taskId, content) {
+  return request(`/api/student/tasks/${taskId}/answers`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
 export function saveExamSubmissionContent(token, content) {
   return request(`/api/guest/exam/${token}/content`, {
     method: "PUT",
@@ -64,10 +78,18 @@ export function saveExamCorrectionPart(examId, submissionId, partId, nodes) {
 // Uploads an image file (multipart) and resolves to `{ url }`. Kept separate
 // from `request` because it sends FormData, not JSON.
 export async function uploadExamImage(examId, file) {
+  return uploadImage(`/api/exams/${examId}/images`, file);
+}
+
+export async function uploadTaskImage(taskId, file) {
+  return uploadImage(`/api/tasks/${taskId}/images`, file);
+}
+
+async function uploadImage(url, file) {
   const formData = new FormData();
   formData.append("image", file);
 
-  const response = await fetch(`/api/exams/${examId}/images`, {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "x-csrf-token": getCSRFToken() },
     body: formData,

@@ -110,12 +110,26 @@ defmodule TaskyWeb.CourseLive.Progress do
                       <td :for={task <- @tasks} class="px-4 py-4">
                         <div class="flex justify-center">
                           <%= case get_submission_status(@progress_map, student.id, task.id) do %>
-                            <% :completed -> %>
+                            <% :review_approved -> %>
                               <div
                                 class="w-10 h-10 rounded-[8px] bg-emerald-500 flex items-center justify-center shadow-sm"
-                                title="Abgeschlossen"
+                                title="Genehmigt"
                               >
-                                <.icon name="hero-check" class="w-5 h-5 text-white" />
+                                <.icon name="hero-check-badge" class="w-5 h-5 text-white" />
+                              </div>
+                            <% :completed -> %>
+                              <div
+                                class="w-10 h-10 rounded-[8px] bg-amber-400 flex items-center justify-center shadow-sm"
+                                title="Wartet auf Review"
+                              >
+                                <.icon name="hero-inbox-arrow-down" class="w-5 h-5 text-white" />
+                              </div>
+                            <% :review_denied -> %>
+                              <div
+                                class="w-10 h-10 rounded-[8px] bg-rose-400 flex items-center justify-center shadow-sm"
+                                title="Zurückgegeben"
+                              >
+                                <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-white" />
                               </div>
                             <% :in_progress -> %>
                               <div
@@ -141,12 +155,12 @@ defmodule TaskyWeb.CourseLive.Progress do
             </div>
             <%!-- Legend --%>
             <div class="border-t border-stone-200 bg-stone-50 px-6 py-4">
-              <div class="flex items-center justify-center gap-8">
+              <div class="flex items-center justify-center gap-8 flex-wrap">
                 <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-[6px] bg-emerald-500 flex items-center justify-center">
-                    <.icon name="hero-check" class="w-4 h-4 text-white" />
+                  <div class="w-6 h-6 rounded-[6px] bg-stone-200 flex items-center justify-center">
+                    <.icon name="hero-minus" class="w-4 h-4 text-stone-400" />
                   </div>
-                  <span class="text-[13px] text-stone-600">Abgeschlossen</span>
+                  <span class="text-[13px] text-stone-600">Nicht begonnen</span>
                 </div>
 
                 <div class="flex items-center gap-2">
@@ -157,10 +171,24 @@ defmodule TaskyWeb.CourseLive.Progress do
                 </div>
 
                 <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-[6px] bg-stone-200 flex items-center justify-center">
-                    <.icon name="hero-minus" class="w-4 h-4 text-stone-400" />
+                  <div class="w-6 h-6 rounded-[6px] bg-amber-400 flex items-center justify-center">
+                    <.icon name="hero-inbox-arrow-down" class="w-4 h-4 text-white" />
                   </div>
-                  <span class="text-[13px] text-stone-600">Nicht begonnen</span>
+                  <span class="text-[13px] text-stone-600">Wartet auf Review</span>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 rounded-[6px] bg-rose-400 flex items-center justify-center">
+                    <.icon name="hero-arrow-uturn-left" class="w-4 h-4 text-white" />
+                  </div>
+                  <span class="text-[13px] text-stone-600">Zurückgegeben</span>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 rounded-[6px] bg-emerald-500 flex items-center justify-center">
+                    <.icon name="hero-check-badge" class="w-4 h-4 text-white" />
+                  </div>
+                  <span class="text-[13px] text-stone-600">Genehmigt</span>
                 </div>
               </div>
             </div>
@@ -235,6 +263,8 @@ defmodule TaskyWeb.CourseLive.Progress do
   defp get_submission_status(progress_map, student_id, task_id) do
     case Map.get(progress_map, {student_id, task_id}) do
       "completed" -> :completed
+      "review_approved" -> :review_approved
+      "review_denied" -> :review_denied
       "in_progress" -> :in_progress
       "open" -> :in_progress
       nil -> :not_started

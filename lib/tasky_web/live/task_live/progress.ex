@@ -1,9 +1,16 @@
 defmodule TaskyWeb.TaskLive.Progress do
+  @moduledoc """
+  Teacher view of one learning unit's progress: a per-student status grid and
+  a review modal showing the student's answer doc (read-only), their uploaded
+  files, the feedback field and the approve / send-back verdict actions.
+  """
   use TaskyWeb, :live_view
 
-  alias Tasky.Tasks
+  import TaskyWeb.FileComponents
+
   alias Tasky.Courses
-  alias Tasky.Tally.Client, as: TallyApi
+  alias Tasky.Tasks
+  alias Tasky.Uploads
 
   @impl true
   def render(assigns) do
@@ -110,29 +117,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
                       <td class="px-4 py-4">
                         <div class="flex justify-center">
-                          <%= case get_submission_status(@progress_map, student.id) do %>
-                            <% :completed -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-emerald-500 flex items-center justify-center shadow-sm"
-                                title="Abgeschlossen"
-                              >
-                                <.icon name="hero-check" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :in_progress -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-sky-500 flex items-center justify-center shadow-sm"
-                                title="In Bearbeitung"
-                              >
-                                <.icon name="hero-ellipsis-horizontal" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :not_started -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-stone-200 flex items-center justify-center"
-                                title="Nicht begonnen"
-                              >
-                                <.icon name="hero-minus" class="w-5 h-5 text-stone-400" />
-                              </div>
-                          <% end %>
+                          <.status_cell status={submission_status(@progress_map, student.id)} />
                         </div>
                       </td>
 
@@ -159,27 +144,12 @@ defmodule TaskyWeb.TaskLive.Progress do
             </div>
             <%!-- Legend --%>
             <div class="border-t border-stone-200 bg-stone-50 px-6 py-4">
-              <div class="flex items-center justify-center gap-8">
-                <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-[6px] bg-emerald-500 flex items-center justify-center">
-                    <.icon name="hero-check" class="w-4 h-4 text-white" />
-                  </div>
-                  <span class="text-[13px] text-stone-600">Abgeschlossen</span>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-[6px] bg-sky-500 flex items-center justify-center">
-                    <.icon name="hero-ellipsis-horizontal" class="w-4 h-4 text-white" />
-                  </div>
-                  <span class="text-[13px] text-stone-600">In Bearbeitung</span>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <div class="w-6 h-6 rounded-[6px] bg-stone-200 flex items-center justify-center">
-                    <.icon name="hero-minus" class="w-4 h-4 text-stone-400" />
-                  </div>
-                  <span class="text-[13px] text-stone-600">Nicht begonnen</span>
-                </div>
+              <div class="flex items-center justify-center gap-8 flex-wrap">
+                <.legend_item status={:not_started} />
+                <.legend_item status={:in_progress} />
+                <.legend_item status={:completed} />
+                <.legend_item status={:review_denied} />
+                <.legend_item status={:review_approved} />
               </div>
             </div>
           <% else %>
@@ -217,15 +187,21 @@ defmodule TaskyWeb.TaskLive.Progress do
                   </div>
                   <%!-- Student info --%>
                   <div class="flex-1 min-w-0">
-                    <h3 class="text-[18px] font-semibold text-stone-900 truncate leading-tight">
-                      {@selected_student_name}
-                    </h3>
+                    <div class="flex items-center gap-2.5">
+                      <h3 class="text-[18px] font-semibold text-stone-900 truncate leading-tight">
+                        {@selected_student_name}
+                      </h3>
+                      <.status_badge
+                        :if={@selected_submission_record}
+                        status={@selected_submission_record.status}
+                      />
+                    </div>
                     <%= if @selected_student_email do %>
                       <p class="text-[12px] text-stone-500 truncate">{@selected_student_email}</p>
                     <% end %>
-                    <%= if @submission_data do %>
+                    <%= if @selected_submission_record && @selected_submission_record.completed_at do %>
                       <p class="text-[11px] text-stone-400 mt-0.5">
-                        Eingereicht am: {format_datetime(@submission_data.submitted_at)}
+                        Eingereicht am: {format_datetime(@selected_submission_record.completed_at)}
                       </p>
                     <% end %>
                   </div>
@@ -280,183 +256,140 @@ defmodule TaskyWeb.TaskLive.Progress do
                 </div>
               </div>
               <%!-- Modal Body --%>
-              <div class="px-8 py-6 flex-1 overflow-y-auto">
-                <%= if @loading_submission do %>
-                  <div class="flex flex-col items-center justify-center py-12">
-                    <div class="w-12 h-12 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mb-4">
-                    </div>
-
-                    <p class="text-[14px] text-stone-500">Lade Einreichung...</p>
-                  </div>
-                <% else %>
-                  <%= if @submission_error do %>
-                    <div class="bg-red-50 border border-red-200 rounded-[12px] p-6 text-center">
-                      <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
-                        <.icon name="hero-exclamation-triangle" class="w-6 h-6 text-red-600" />
+              <div class="px-8 py-6 flex-1 overflow-y-auto bg-stone-50">
+                <%= if @selected_submission_record do %>
+                  <div class="max-w-4xl mx-auto space-y-6">
+                    <%!-- Answer doc (read-only) --%>
+                    <%= if @answers_json do %>
+                      <div class="bg-white rounded-[14px] border border-stone-200">
+                        <div
+                          id={"submission-viewer-#{@selected_submission_record.id}"}
+                          phx-hook="ExamReadOnlyViewer"
+                          phx-update="ignore"
+                          data-content={@answers_json}
+                        >
+                        </div>
                       </div>
-
-                      <h4 class="text-[16px] font-semibold text-red-900 mb-2">Fehler beim Laden</h4>
-
-                      <p class="text-[14px] text-red-700">{@submission_error}</p>
-                    </div>
-                  <% else %>
-                    <%= if @submission_data && @all_responses do %>
-                      <%= if length(@all_responses) > 0 do %>
-                        <div class="space-y-6">
-                          <div :for={response <- @all_responses} class="space-y-2">
-                            <%!-- Question Title --%>
-                            <div class="text-[13px] font-semibold text-stone-700 uppercase tracking-wide">
-                              {response.question_title}
-                            </div>
-                            <%!-- Answer based on type --%>
-                            <%= cond do %>
-                              <%!-- File Upload --%>
-                              <% response.question_type == "FILE_UPLOAD" and is_list(response.answer) -> %>
-                                <div class="space-y-3">
-                                  <div
-                                    :for={file <- response.answer}
-                                    class="bg-white border border-stone-200 rounded-[10px] p-4 hover:border-stone-300 transition-colors"
-                                  >
-                                    <div class="flex items-center justify-between gap-4">
-                                      <div class="flex items-center gap-3 flex-1 min-w-0">
-                                        <div class="w-10 h-10 rounded-[8px] bg-stone-100 flex items-center justify-center shrink-0">
-                                          <%= if String.starts_with?(file["mimeType"] || "", "image/") do %>
-                                            <.icon name="hero-photo" class="w-5 h-5 text-stone-600" />
-                                          <% else %>
-                                            <.icon
-                                              name="hero-document-text"
-                                              class="w-5 h-5 text-stone-600"
-                                            />
-                                          <% end %>
-                                        </div>
-
-                                        <div class="flex-1 min-w-0">
-                                          <p class="text-[14px] font-medium text-stone-900 truncate">
-                                            {file["name"]}
-                                          </p>
-
-                                          <p class="text-[12px] text-stone-500">
-                                            {format_file_size(file["size"])}
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      <a
-                                        href={file["url"]}
-                                        target="_blank"
-                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white text-[12px] font-medium rounded-[6px] hover:bg-stone-800 transition-colors shrink-0"
-                                      >
-                                        <.icon name="hero-arrow-down-tray" class="w-3.5 h-3.5" />
-                                        Download
-                                      </a>
-                                    </div>
-                                    <%!-- Image Preview --%>
-                                    <%= if String.starts_with?(file["mimeType"] || "", "image/") do %>
-                                      <div class="mt-3 rounded-[8px] overflow-hidden border border-stone-200 bg-stone-50">
-                                        <img
-                                          src={file["url"]}
-                                          alt={file["name"]}
-                                          class="w-full h-auto"
-                                        />
-                                      </div>
-                                    <% end %>
-                                  </div>
-                                </div>
-                                <%!-- Multiple Choice / Select --%>
-                              <% response.question_type in ["MULTIPLE_CHOICE", "CHECKBOXES"] and is_list(response.answer) -> %>
-                                <div class="bg-emerald-50 border border-emerald-200 rounded-[10px] px-4 py-3">
-                                  <div class="flex flex-wrap gap-2">
-                                    <span
-                                      :for={item <- response.answer}
-                                      class="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-300 rounded-full text-[13px] font-medium text-emerald-800"
-                                    >
-                                      <.icon name="hero-check-circle" class="w-4 h-4" /> {item}
-                                    </span>
-                                  </div>
-                                </div>
-                                <%!-- Text / Input answers --%>
-                              <% is_binary(response.answer) -> %>
-                                <div class="bg-stone-50 border border-stone-200 rounded-[10px] px-4 py-3">
-                                  <p class="text-[14px] text-stone-800 whitespace-pre-wrap">
-                                    {response.answer}
-                                  </p>
-                                </div>
-                                <%!-- List of strings --%>
-                              <% is_list(response.answer) -> %>
-                                <div class="bg-stone-50 border border-stone-200 rounded-[10px] px-4 py-3">
-                                  <ul class="list-disc list-inside space-y-1">
-                                    <li
-                                      :for={item <- response.answer}
-                                      class="text-[14px] text-stone-800"
-                                    >
-                                      {inspect(item)}
-                                    </li>
-                                  </ul>
-                                </div>
-                                <%!-- Fallback for other types --%>
-                              <% true -> %>
-                                <div class="bg-stone-50 border border-stone-200 rounded-[10px] px-4 py-3">
-                                  <p class="text-[14px] text-stone-800 font-mono">
-                                    {inspect(response.answer)}
-                                  </p>
-                                </div>
-                            <% end %>
-                          </div>
+                    <% else %>
+                      <div class="bg-white border border-stone-200 rounded-[12px] p-8 text-center">
+                        <div class="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mx-auto mb-3">
+                          <.icon name="hero-document" class="w-6 h-6 text-stone-400" />
                         </div>
-                      <% else %>
-                        <div class="bg-stone-50 border border-stone-200 rounded-[12px] p-8 text-center">
-                          <div class="w-12 h-12 rounded-full bg-stone-200 flex items-center justify-center mx-auto mb-3">
-                            <.icon name="hero-document" class="w-6 h-6 text-stone-400" />
-                          </div>
-
-                          <p class="text-[14px] text-stone-600">
-                            Keine Antworten in dieser Einreichung
-                          </p>
-                        </div>
-                      <% end %>
+                        <p class="text-[14px] text-stone-600">
+                          Noch keine Antworten erfasst
+                        </p>
+                      </div>
                     <% end %>
-                  <% end %>
+
+                    <%!-- Uploaded files --%>
+                    <div
+                      :if={@submission_files != []}
+                      class="bg-white rounded-[14px] border border-stone-200 p-6"
+                    >
+                      <div class="flex items-center gap-2.5 mb-4">
+                        <.icon name="hero-arrow-up-tray" class="w-5 h-5 text-sky-500" />
+                        <h4 class="text-base font-semibold text-stone-800">Datei-Abgaben</h4>
+                      </div>
+                      <div class="space-y-2.5">
+                        <div
+                          :for={%{field: field, file: file} <- @submission_files}
+                          class="flex items-center gap-4 rounded-xl border border-stone-200 px-4 py-3"
+                        >
+                          <.file_badge :if={file} filename={file.stored_filename} />
+                          <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-stone-800 truncate">
+                              {(file && file.original_name) || "—"}
+                            </p>
+                            <p class="text-xs text-stone-400 mt-0.5">
+                              {field.label}
+                              <span :if={field.required} class="text-amber-600">· Pflicht</span>
+                              <span :if={file}> · {Uploads.format_size(file.size)}</span>
+                            </p>
+                          </div>
+                          <a
+                            :if={file}
+                            href={
+                              ~p"/tasks/#{@task.id}/submissions/#{@selected_submission_record.id}/files/#{file.id}"
+                            }
+                            target="_blank"
+                            rel="noopener"
+                            class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-3.5 py-2 rounded-lg transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 shrink-0"
+                          >
+                            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Herunterladen
+                          </a>
+                          <span :if={!file} class="text-[12px] text-stone-400 italic shrink-0">
+                            Nicht hochgeladen
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 <% end %>
               </div>
-              <%!-- Modal Footer: Feedback --%>
+              <%!-- Modal Footer: Feedback + Verdict --%>
               <div class="bg-stone-50 px-8 py-5 border-t border-stone-200">
-                <div class="flex items-center gap-2 mb-3">
-                  <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4 text-stone-500" />
-                  <span class="text-[13px] font-semibold text-stone-700">Feedback an Lernende</span>
-                  <%= if @feedback_saved do %>
-                    <span class="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-600 ml-1">
-                      <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> Gespeichert
+                <div class="max-w-4xl mx-auto">
+                  <div class="flex items-center gap-2 mb-3">
+                    <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4 text-stone-500" />
+                    <span class="text-[13px] font-semibold text-stone-700">
+                      Feedback an Lernende
                     </span>
-                  <% end %>
-                </div>
-                <.form
-                  for={@feedback_form}
-                  id={"feedback-form-#{@selected_student_id}"}
-                  phx-submit="save_feedback"
-                >
-                  <.input
-                    type="textarea"
-                    field={@feedback_form[:feedback]}
-                    placeholder="Schreibe hier dein Feedback für die/den Lernende/n..."
-                    rows="3"
-                    class="w-full text-[13px] text-stone-800 bg-white border border-stone-200 rounded-[8px] px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent placeholder:text-stone-300 transition"
-                  />
-                  <div class="flex items-center justify-end gap-3 mt-3">
-                    <button
-                      type="button"
-                      phx-click="close_modal"
-                      class="px-4 py-2 text-[13px] font-medium text-stone-600 hover:text-stone-900 transition-colors"
-                    >
-                      Schließen
-                    </button>
-                    <button
-                      type="submit"
-                      class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white text-[13px] font-semibold rounded-[8px] hover:bg-emerald-600 transition-colors shadow-sm"
-                    >
-                      <.icon name="hero-paper-airplane" class="w-3.5 h-3.5" /> Feedback speichern
-                    </button>
+                    <%= if @feedback_saved do %>
+                      <span class="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-600 ml-1">
+                        <.icon name="hero-check-circle" class="w-3.5 h-3.5" /> Gespeichert
+                      </span>
+                    <% end %>
                   </div>
-                </.form>
+                  <.form
+                    for={@feedback_form}
+                    id={"feedback-form-#{@selected_student_id}"}
+                    phx-submit="save_feedback"
+                  >
+                    <.input
+                      type="textarea"
+                      field={@feedback_form[:feedback]}
+                      placeholder="Schreibe hier dein Feedback für die/den Lernende/n..."
+                      rows="3"
+                      class="w-full text-[13px] text-stone-800 bg-white border border-stone-200 rounded-[8px] px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent placeholder:text-stone-300 transition"
+                    />
+                    <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
+                      <div class="flex items-center gap-2">
+                        <button
+                          type="submit"
+                          name="verdict"
+                          value="review_denied"
+                          data-confirm="Aufgabe zur Überarbeitung an die/den Lernende/n zurückgeben?"
+                          class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-rose-200 text-rose-600 text-[13px] font-semibold rounded-[8px] hover:bg-rose-50 transition-colors"
+                        >
+                          <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5" /> Zurückgeben
+                        </button>
+                        <button
+                          type="submit"
+                          name="verdict"
+                          value="review_approved"
+                          class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-emerald-300 text-emerald-700 text-[13px] font-semibold rounded-[8px] hover:bg-emerald-50 transition-colors"
+                        >
+                          <.icon name="hero-check-badge" class="w-3.5 h-3.5" /> Genehmigen
+                        </button>
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <button
+                          type="button"
+                          phx-click="close_modal"
+                          class="px-4 py-2 text-[13px] font-medium text-stone-600 hover:text-stone-900 transition-colors"
+                        >
+                          Schließen
+                        </button>
+                        <button
+                          type="submit"
+                          class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white text-[13px] font-semibold rounded-[8px] hover:bg-emerald-600 transition-colors shadow-sm"
+                        >
+                          <.icon name="hero-paper-airplane" class="w-3.5 h-3.5" /> Feedback speichern
+                        </button>
+                      </div>
+                    </div>
+                  </.form>
+                </div>
               </div>
             </div>
           </dialog>
@@ -465,6 +398,102 @@ defmodule TaskyWeb.TaskLive.Progress do
     </Layouts.app>
     """
   end
+
+  attr :status, :atom, required: true
+
+  defp status_cell(assigns) do
+    assigns = assign(assigns, :meta, status_meta(assigns.status))
+
+    ~H"""
+    <div
+      class={["w-10 h-10 rounded-[8px] flex items-center justify-center shadow-sm", @meta.bg]}
+      title={@meta.label}
+    >
+      <.icon name={@meta.icon} class={["w-5 h-5", @meta.fg]} />
+    </div>
+    """
+  end
+
+  attr :status, :atom, required: true
+
+  defp legend_item(assigns) do
+    assigns = assign(assigns, :meta, status_meta(assigns.status))
+
+    ~H"""
+    <div class="flex items-center gap-2">
+      <div class={["w-6 h-6 rounded-[6px] flex items-center justify-center", @meta.bg]}>
+        <.icon name={@meta.icon} class={["w-4 h-4", @meta.fg]} />
+      </div>
+      <span class="text-[13px] text-stone-600">{@meta.label}</span>
+    </div>
+    """
+  end
+
+  attr :status, :string, required: true
+
+  defp status_badge(assigns) do
+    assigns = assign(assigns, :meta, status_meta(status_atom(assigns.status)))
+
+    ~H"""
+    <span class={[
+      "inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap",
+      @meta.badge
+    ]}>
+      {@meta.label}
+    </span>
+    """
+  end
+
+  defp status_meta(:review_approved),
+    do: %{
+      label: "Genehmigt",
+      icon: "hero-check-badge",
+      bg: "bg-emerald-500",
+      fg: "text-white",
+      badge: "bg-emerald-100 text-emerald-700"
+    }
+
+  defp status_meta(:completed),
+    do: %{
+      label: "Wartet auf Review",
+      icon: "hero-inbox-arrow-down",
+      bg: "bg-amber-400",
+      fg: "text-white",
+      badge: "bg-amber-100 text-amber-700"
+    }
+
+  defp status_meta(:review_denied),
+    do: %{
+      label: "Zurückgegeben",
+      icon: "hero-arrow-uturn-left",
+      bg: "bg-rose-400",
+      fg: "text-white",
+      badge: "bg-rose-100 text-rose-700"
+    }
+
+  defp status_meta(:in_progress),
+    do: %{
+      label: "In Bearbeitung",
+      icon: "hero-ellipsis-horizontal",
+      bg: "bg-sky-500",
+      fg: "text-white",
+      badge: "bg-sky-100 text-sky-700"
+    }
+
+  defp status_meta(:not_started),
+    do: %{
+      label: "Nicht begonnen",
+      icon: "hero-minus",
+      bg: "bg-stone-200",
+      fg: "text-stone-400",
+      badge: "bg-stone-100 text-stone-500"
+    }
+
+  defp status_atom("completed"), do: :completed
+  defp status_atom("review_approved"), do: :review_approved
+  defp status_atom("review_denied"), do: :review_denied
+  defp status_atom(status) when status in ["in_progress", "open", "draft"], do: :in_progress
+  defp status_atom(_), do: :not_started
 
   @impl true
   def mount(%{"task_id" => task_id}, _session, socket) do
@@ -485,23 +514,12 @@ defmodule TaskyWeb.TaskLive.Progress do
      socket
      |> assign(:page_title, "Fortschritt - #{task.name}")
      |> assign(:task, task)
+     |> assign(:upload_fields, Tasks.list_task_upload_fields(task))
      |> assign(:students, students)
      |> assign(:progress_map, progress_map)
      |> assign(:has_data, has_data)
-     |> assign(:show_modal, false)
-     |> assign(:loading_submission, false)
-     |> assign(:submission_data, nil)
-     |> assign(:submission_error, nil)
-     |> assign(:file_uploads, [])
-     |> assign(:all_responses, [])
-     |> assign(:selected_student_id, nil)
-     |> assign(:selected_student_name, nil)
-     |> assign(:selected_student_email, nil)
-     |> assign(:students_with_submissions, [])
-     |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
-     |> assign(:feedback_saved, false)
-     |> assign(:selected_submission_record, nil)
-     |> assign(:anonymized, false)}
+     |> assign(:anonymized, false)
+     |> reset_modal_assigns()}
   end
 
   @impl true
@@ -513,99 +531,6 @@ defmodule TaskyWeb.TaskLive.Progress do
     else
       {:noreply, socket}
     end
-  end
-
-  def handle_info({:fetch_submission, student_id}, socket) do
-    task = socket.assigns.task
-
-    # Find the submission record to get tally_response_id
-    submission = Tasks.get_submission_for_student(task.id, student_id)
-
-    socket =
-      case submission do
-        %{tally_response_id: tally_response_id} when not is_nil(tally_response_id) ->
-          # Check if task has tally_form_id
-          case task.tally_form_id do
-            nil ->
-              assign(socket,
-                loading_submission: false,
-                submission_error: "Kein Tally-Formular für diese Aufgabe konfiguriert"
-              )
-
-            form_id ->
-              # Fetch from Tally API
-              case TallyApi.fetch_submission(
-                     socket.assigns.current_scope,
-                     form_id,
-                     tally_response_id
-                   ) do
-                {:ok, data} ->
-                  metadata = TallyApi.extract_metadata(data)
-                  files = TallyApi.extract_file_uploads(data)
-                  all_responses = TallyApi.extract_all_responses(data)
-
-                  # Load existing feedback from DB record
-                  submission_record =
-                    Tasks.get_submission_for_student(task.id, student_id)
-
-                  existing_feedback =
-                    (submission_record && submission_record.feedback) || ""
-
-                  assign(socket,
-                    loading_submission: false,
-                    submission_data: metadata,
-                    file_uploads: files,
-                    all_responses: all_responses,
-                    submission_error: nil,
-                    selected_submission_record: submission_record,
-                    feedback_form: to_form(%{"feedback" => existing_feedback}, as: :submission),
-                    feedback_saved: false
-                  )
-
-                {:error, :not_found} ->
-                  assign(socket,
-                    loading_submission: false,
-                    submission_error: "Einreichung wurde in Tally nicht gefunden"
-                  )
-
-                {:error, :unauthorized} ->
-                  assign(socket,
-                    loading_submission: false,
-                    submission_error:
-                      "Nicht autorisiert. Bitte überprüfen Sie Ihren Tally API-Schlüssel"
-                  )
-
-                {:error, :api_key_not_configured} ->
-                  assign(socket,
-                    loading_submission: false,
-                    submission_error: "Tally API-Schlüssel ist nicht konfiguriert"
-                  )
-
-                {:error, _reason} ->
-                  assign(socket,
-                    loading_submission: false,
-                    submission_error: "Fehler beim Laden der Einreichung von Tally"
-                  )
-              end
-          end
-
-        _ ->
-          # Still load any existing feedback even without a Tally submission
-          submission_record =
-            Tasks.get_submission_for_student(task.id, student_id)
-
-          existing_feedback = (submission_record && submission_record.feedback) || ""
-
-          assign(socket,
-            loading_submission: false,
-            submission_error: "Keine Tally-Einreichung für diese/n Lernende/n gefunden",
-            selected_submission_record: submission_record,
-            feedback_form: to_form(%{"feedback" => existing_feedback}, as: :submission),
-            feedback_saved: false
-          )
-      end
-
-    {:noreply, socket}
   end
 
   @impl true
@@ -623,52 +548,37 @@ defmodule TaskyWeb.TaskLive.Progress do
           has_submission?(socket.assigns.progress_map, s.id)
         end)
 
-      socket =
-        socket
-        |> assign(:show_modal, true)
-        |> assign(:loading_submission, true)
-        |> assign(:selected_student_id, student_id)
-        |> assign(:selected_student_name, get_student_full_name(student))
-        |> assign(:selected_student_email, student.email)
-        |> assign(:students_with_submissions, students_with_submissions)
-        |> assign(:submission_error, nil)
-
-      send(self(), {:fetch_submission, student_id})
-
-      {:noreply, socket}
+      {:noreply,
+       socket
+       |> assign(:show_modal, true)
+       |> assign(:students_with_submissions, students_with_submissions)
+       |> select_student(student)}
     else
       {:noreply, socket}
     end
   end
 
-  @impl true
-  def handle_event("save_feedback", %{"submission" => %{"feedback" => feedback_text}}, socket) do
-    submission_record = socket.assigns.selected_submission_record
-
-    case submission_record do
+  def handle_event("save_feedback", %{"submission" => %{"feedback" => feedback_text}} = params, socket) do
+    case socket.assigns.selected_submission_record do
       nil ->
         {:noreply, put_flash(socket, :error, "Keine Einreichung gefunden")}
 
       record ->
-        attrs = %{feedback: feedback_text}
+        result =
+          case params["verdict"] do
+            verdict when verdict in ["review_approved", "review_denied"] ->
+              Tasks.review_submission(socket.assigns.current_scope, record.id, verdict, %{
+                feedback: feedback_text
+              })
 
-        case Tasks.grade_submission(socket.assigns.current_scope, record.id, attrs) do
+            _ ->
+              Tasks.grade_submission(socket.assigns.current_scope, record.id, %{
+                feedback: feedback_text
+              })
+          end
+
+        case result do
           {:ok, updated} ->
-            # Broadcast to student so they see feedback live
-            task = socket.assigns.task
-
-            Phoenix.PubSub.broadcast(
-              Tasky.PubSub,
-              "student:#{record.student_id}:submissions",
-              {:submission_updated, updated}
-            )
-
-            Phoenix.PubSub.broadcast(
-              Tasky.PubSub,
-              "course:#{task.course_id}:progress",
-              {:submission_updated, updated}
-            )
-
             {:noreply,
              socket
              |> assign(:selected_submission_record, updated)
@@ -676,7 +586,11 @@ defmodule TaskyWeb.TaskLive.Progress do
                :feedback_form,
                to_form(%{"feedback" => updated.feedback || ""}, as: :submission)
              )
-             |> assign(:feedback_saved, true)}
+             |> assign(:feedback_saved, true)
+             |> assign(
+               :progress_map,
+               build_progress_map(socket.assigns.task.id, socket.assigns.students)
+             )}
 
           {:error, _} ->
             {:noreply, put_flash(socket, :error, "Feedback konnte nicht gespeichert werden")}
@@ -684,7 +598,6 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
-  @impl true
   def handle_event("navigate_submission", %{"direction" => direction}, socket) do
     students = socket.assigns.students_with_submissions
     current_id = socket.assigns.selected_student_id
@@ -698,74 +611,88 @@ defmodule TaskyWeb.TaskLive.Progress do
         _ -> current_index
       end
 
-    next_student = Enum.at(students, next_index)
-
-    if next_student do
-      socket =
-        socket
-        |> assign(:loading_submission, true)
-        |> assign(:selected_student_id, next_student.id)
-        |> assign(:selected_student_name, get_student_full_name(next_student))
-        |> assign(:selected_student_email, next_student.email)
-        |> assign(:submission_data, nil)
-        |> assign(:submission_error, nil)
-        |> assign(:file_uploads, [])
-        |> assign(:all_responses, [])
-        |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
-        |> assign(:feedback_saved, false)
-        |> assign(:selected_submission_record, nil)
-
-      send(self(), {:fetch_submission, next_student.id})
-
-      {:noreply, socket}
-    else
-      {:noreply, socket}
+    case Enum.at(students, next_index) do
+      nil -> {:noreply, socket}
+      next_student when next_index >= 0 -> {:noreply, select_student(socket, next_student)}
+      _ -> {:noreply, socket}
     end
   end
 
-  @impl true
   def handle_event("close_modal", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_modal, false)
-     |> assign(:submission_data, nil)
-     |> assign(:submission_error, nil)
-     |> assign(:file_uploads, [])
-     |> assign(:all_responses, [])
-     |> assign(:loading_submission, false)
-     |> assign(:selected_student_id, nil)
-     |> assign(:selected_student_email, nil)
-     |> assign(:students_with_submissions, [])
-     |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
-     |> assign(:feedback_saved, false)
-     |> assign(:selected_submission_record, nil)}
-  end
-
-  @impl true
-  def handle_event("stop_propagation", _params, socket) do
-    {:noreply, socket}
+    {:noreply, reset_modal_assigns(socket)}
   end
 
   # Private Functions
+
+  # Loads the selected student's submission incl. answer doc and files into
+  # the modal assigns.
+  defp select_student(socket, student) do
+    task = socket.assigns.task
+    submission = Tasks.get_submission_for_student(task.id, student.id)
+
+    answers_json =
+      case submission && submission.content do
+        content when is_map(content) and map_size(content) > 0 -> Jason.encode!(content)
+        _ -> nil
+      end
+
+    files_by_field =
+      case submission do
+        nil -> %{}
+        submission -> submission |> Tasks.list_submission_files() |> Map.new(&{&1.upload_field_id, &1})
+      end
+
+    submission_files =
+      Enum.map(socket.assigns.upload_fields, fn field ->
+        %{field: field, file: Map.get(files_by_field, field.id)}
+      end)
+
+    socket
+    |> assign(:selected_student_id, student.id)
+    |> assign(:selected_student_name, get_student_full_name(student))
+    |> assign(:selected_student_email, student.email)
+    |> assign(:selected_submission_record, submission)
+    |> assign(:answers_json, answers_json)
+    |> assign(:submission_files, submission_files)
+    |> assign(
+      :feedback_form,
+      to_form(%{"feedback" => (submission && submission.feedback) || ""}, as: :submission)
+    )
+    |> assign(:feedback_saved, false)
+  end
+
+  defp reset_modal_assigns(socket) do
+    socket
+    |> assign(:show_modal, false)
+    |> assign(:selected_student_id, nil)
+    |> assign(:selected_student_name, nil)
+    |> assign(:selected_student_email, nil)
+    |> assign(:selected_submission_record, nil)
+    |> assign(:answers_json, nil)
+    |> assign(:submission_files, [])
+    |> assign(:students_with_submissions, [])
+    |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
+    |> assign(:feedback_saved, false)
+  end
 
   defp build_progress_map(task_id, students) do
     student_ids = Enum.map(students, & &1.id)
     Tasks.get_progress_map_for_task(task_id, student_ids)
   end
 
-  defp get_submission_status(progress_map, student_id) do
+  defp submission_status(progress_map, student_id) do
     case Map.get(progress_map, student_id) do
-      %{status: "completed"} -> :completed
-      %{status: "in_progress"} -> :in_progress
-      %{status: "open"} -> :in_progress
+      %{status: status} -> status_atom(status)
       nil -> :not_started
-      _ -> :not_started
     end
   end
 
+  # A submission is worth opening once the student has typed answers,
+  # uploaded files (implies a record) or completed the unit.
   defp has_submission?(progress_map, student_id) do
     case Map.get(progress_map, student_id) do
-      %{tally_response_id: tally_response_id} when not is_nil(tally_response_id) -> true
+      %{has_content: true} -> true
+      %{status: status} when status in ["completed", "review_approved", "review_denied"] -> true
       _ -> false
     end
   end
@@ -806,30 +733,9 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
-  defp format_datetime(nil), do: "Unbekannt"
-
-  defp format_datetime(datetime_string) when is_binary(datetime_string) do
-    case DateTime.from_iso8601(datetime_string) do
-      {:ok, datetime, _offset} ->
-        Calendar.strftime(datetime, "%d.%m.%Y um %H:%M Uhr")
-
-      _ ->
-        datetime_string
-    end
+  defp format_datetime(%DateTime{} = datetime) do
+    Calendar.strftime(datetime, "%d.%m.%Y um %H:%M Uhr")
   end
 
   defp format_datetime(_), do: "Unbekannt"
-
-  defp format_file_size(nil), do: "Unbekannt"
-
-  defp format_file_size(size) when is_integer(size) do
-    cond do
-      size < 1024 -> "#{size} B"
-      size < 1024 * 1024 -> "#{Float.round(size / 1024, 1)} KB"
-      size < 1024 * 1024 * 1024 -> "#{Float.round(size / (1024 * 1024), 1)} MB"
-      true -> "#{Float.round(size / (1024 * 1024 * 1024), 1)} GB"
-    end
-  end
-
-  defp format_file_size(_), do: "Unbekannt"
 end

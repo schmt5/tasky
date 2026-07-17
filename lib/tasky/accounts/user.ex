@@ -9,7 +9,6 @@ defmodule Tasky.Accounts.User do
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
     field :role, :string, default: "student"
-    field :tally_api_key, :string
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
 
@@ -132,15 +131,6 @@ defmodule Tasky.Accounts.User do
     )
     |> validate_email(opts)
     |> foreign_key_constraint(:class_id)
-  end
-
-  @doc """
-  A user changeset for changing the Tally API key.
-  """
-  def tally_api_key_changeset(user, attrs) do
-    user
-    |> cast(attrs, [:tally_api_key])
-    |> validate_required([:tally_api_key], message: "darf nicht leer sein")
   end
 
   @doc """

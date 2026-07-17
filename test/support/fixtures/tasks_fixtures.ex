@@ -18,7 +18,6 @@ defmodule Tasky.TasksFixtures do
   def task_fixture(%Scope{} = scope, attrs) do
     attrs =
       Enum.into(attrs, %{
-        link: "some link",
         name: "some name",
         position: 42,
         status: "some status"

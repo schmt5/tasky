@@ -25,6 +25,8 @@ import { LiveSocket } from "phoenix_live_view";
 import { hooks as colocatedHooks } from "phoenix-colocated/tasky";
 import topbar from "../vendor/topbar";
 import { ExamContentEditor } from "./hooks/exam_content_editor_hook";
+import { TaskContentEditor } from "./hooks/task_content_editor_hook";
+import { TaskAnswersEditor } from "./hooks/task_answers_editor_hook";
 import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
 import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
 import { SolutionToolbar } from "./hooks/solution_toolbar_hook";
@@ -43,6 +45,8 @@ const liveSocket = new LiveSocket("/live", Socket, {
   hooks: {
     ...colocatedHooks,
     ExamContentEditor,
+    TaskContentEditor,
+    TaskAnswersEditor,
     ExamSubmissionEditor,
     ExamSampleSolutionPartEditor,
     SolutionToolbar,

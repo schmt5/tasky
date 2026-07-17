@@ -105,18 +105,21 @@ GET /student/courses/:id     # View course and its tasks
 4. Enter course description (optional)
 5. Click "Save Course"
 
-### Adding Tasks to a Course (Teacher)
+### Adding Learning Units to a Course (Teacher)
 
 1. Navigate to the course detail page (`/courses/:id`)
-2. Click "Add Task" in the Tasks section
-3. Fill in task details:
-   - Name (required)
-   - Link (required)
-   - Position (required)
-   - Status (draft/published/archived)
-4. Click "Save Task"
+2. Click "Lerneinheit hinzufügen" in the Tasks section
+3. Enter the unit's name — it is created as a **draft** (invisible to students)
+4. Author the content in the Tiptap editor (`/tasks/:id/content`), including
+   interactive answer fields (answer blocks, Lückentext, checkboxes)
+5. Optionally add teacher attachments and student upload fields in the
+   "Dateien" tab
+6. Publish the unit via the "Veröffentlichen" toggle on the course page
 
-**Note:** Tasks are automatically associated with the course.
+**Note:** Tasks are automatically associated with the course. Students fill
+in their answers directly in the unit, upload required files, and mark the
+unit complete; the teacher then reviews it and either approves it or sends
+it back for revision with feedback.
 
 ### Enrolling Students (Teacher)
 

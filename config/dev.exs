@@ -97,14 +97,4 @@ config :phoenix_live_view,
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
 
-# Tally webhook configuration
-# Set to nil or empty string to skip signature verification in development
-# In production, set this to your actual Tally signing secret
-config :tasky, :tally_signing_secret, nil
-
-# Tally API configuration
-# Set your Tally API key to fetch submission data
-# Get your API key from: https://tally.so/account/api
-config :tasky, :tally_api_key, System.get_env("TALLY_API_KEY")
-
 config :tasky, :anthropic_api_key, System.get_env("ANTHROPIC_API_KEY")

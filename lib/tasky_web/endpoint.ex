@@ -43,13 +43,10 @@ defmodule TaskyWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
-  plug TaskyWeb.RawBodyPlug
-
   plug Plug.Parsers,
     parsers: [:urlencoded, {:multipart, length: 12_000_000}, :json],
     pass: ["*/*"],
-    json_decoder: Phoenix.json_library(),
-    body_reader: {TaskyWeb.RawBodyPlug, :read_body, []}
+    json_decoder: Phoenix.json_library()
 
   plug Plug.MethodOverride
   plug Plug.Head

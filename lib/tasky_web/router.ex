@@ -32,10 +32,6 @@ defmodule TaskyWeb.Router do
     plug :protect_from_forgery
   end
 
-  pipeline :webhook do
-    plug :accepts, ["json"]
-  end
-
   scope "/", TaskyWeb do
     pipe_through :browser
 
@@ -58,13 +54,6 @@ defmodule TaskyWeb.Router do
     end
   end
 
-  # Webhook endpoints (no authentication required)
-  scope "/api", TaskyWeb do
-    pipe_through :webhook
-
-    post "/webhooks/tally", TallyWebhookController, :receive
-  end
-
   # Session-authenticated JSON API (teachers/admins only)
   scope "/api", TaskyWeb do
     pipe_through [:authenticated_api, :require_authenticated_user, :require_admin_or_teacher]
@@ -72,6 +61,10 @@ defmodule TaskyWeb.Router do
     put "/exams/:id/content", ExamContentApiController, :update
 
     post "/exams/:id/images", ExamImageApiController, :create
+
+    put "/tasks/:id/content", TaskContentApiController, :update
+
+    post "/tasks/:id/images", TaskImageApiController, :create
 
     put "/exams/:id/sample-solution/parts/:part_id/content",
         ExamSampleSolutionApiController,
@@ -89,11 +82,20 @@ defmodule TaskyWeb.Router do
     put "/exam/:token/content", ExamSubmissionContentApiController, :update
   end
 
+  # Session-authenticated JSON API for students (course learning units)
+  scope "/api/student", TaskyWeb.Student do
+    pipe_through [:authenticated_api, :require_authenticated_user, :require_student]
+
+    put "/tasks/:id/answers", TaskAnswersApiController, :update
+  end
+
   # Public serving of uploaded exam images (unguessable UUID filenames). Public
   # so the browser and Gotenberg can load <img> sources without an auth token.
   scope "/uploads", TaskyWeb do
     get "/exams/:exam_id/attachments/:filename", UploadController, :attachment
     get "/exams/:exam_id/:filename", UploadController, :show
+    get "/tasks/:task_id/attachments/:filename", UploadController, :task_attachment
+    get "/tasks/:task_id/:filename", UploadController, :task_image
   end
 
   ## Task routes (Teachers and Admins only)
@@ -103,6 +105,10 @@ defmodule TaskyWeb.Router do
 
     get "/exams/:id/submissions/:submission_id/files/:file_id",
         SubmissionFileController,
+        :download
+
+    get "/tasks/:id/submissions/:submission_id/files/:file_id",
+        TaskSubmissionFileController,
         :download
 
     live_session :tasks,
@@ -115,8 +121,8 @@ defmodule TaskyWeb.Router do
       live "/courses/:id/progress", CourseLive.Progress, :progress
       live "/courses/:id/students", CourseLive.Students, :students
       live "/courses/:id/reorder", CourseLive.Reorder, :reorder
-      live "/courses/:id/export", CourseLive.Export, :export
       live "/progress/:task_id", TaskLive.Progress, :task_progress
+      live "/tasks/:id/content", TaskLive.Content, :content
 
       live "/classes", ClassLive.Index, :index
       live "/classes/new", ClassLive.Form, :new
@@ -143,16 +149,14 @@ defmodule TaskyWeb.Router do
       live "/exams/:id/content", ExamLive.Content, :content
     end
 
-    live_session :teacher_settings,
-      on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
-      live "/settings/tally", UserLive.TallySettings, :edit
-    end
   end
 
   ## Student routes
 
   scope "/student", TaskyWeb.Student, as: :student do
     pipe_through [:browser, :require_authenticated_user, :require_student]
+
+    get "/tasks/:task_id/files/:field_id", FileController, :download
 
     live_session :student,
       on_mount: [{TaskyWeb.UserAuth, :require_student}] do

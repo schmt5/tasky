@@ -9,7 +9,7 @@ defmodule Tasky.TasksTest do
     import Tasky.AccountsFixtures, only: [user_scope_fixture: 0]
     import Tasky.TasksFixtures
 
-    @invalid_attrs %{name: nil, position: nil, status: nil, link: nil}
+    @invalid_attrs %{name: nil, position: nil, status: nil}
 
     test "list_tasks/1 returns all scoped tasks" do
       scope = user_scope_fixture()
@@ -29,14 +29,13 @@ defmodule Tasky.TasksTest do
     end
 
     test "create_task/2 with valid data creates a task" do
-      valid_attrs = %{name: "some name", position: 42, status: "some status", link: "some link"}
+      valid_attrs = %{name: "some name", position: 42, status: "some status"}
       scope = user_scope_fixture()
 
       assert {:ok, %Task{} = task} = Tasks.create_task(scope, valid_attrs)
       assert task.name == "some name"
       assert task.position == 42
       assert task.status == "some status"
-      assert task.link == "some link"
       assert task.user_id == scope.user.id
     end
 
@@ -52,15 +51,13 @@ defmodule Tasky.TasksTest do
       update_attrs = %{
         name: "some updated name",
         position: 43,
-        status: "some updated status",
-        link: "some updated link"
+        status: "some updated status"
       }
 
       assert {:ok, %Task{} = task} = Tasks.update_task(scope, task, update_attrs)
       assert task.name == "some updated name"
       assert task.position == 43
       assert task.status == "some updated status"
-      assert task.link == "some updated link"
     end
 
     test "update_task/3 with invalid scope raises" do

@@ -91,6 +91,41 @@ defmodule Tasky.Uploads do
     end
   end
 
+  @doc """
+  Saves an uploaded content image for the given learning unit (task) and
+  returns `{:ok, url}` with the public `/uploads/...` path, or `{:error, reason}`.
+  """
+  def save_task_image(task_id, %Plug.Upload{} = upload) do
+    with {:ok, ext} <- allowed_extension(upload.content_type),
+         :ok <- validate_size(upload.path) do
+      filename = Ecto.UUID.generate() <> ext
+      dest_dir = Path.join([dir(), "tasks", to_string(task_id)])
+      File.mkdir_p!(dest_dir)
+      File.cp!(upload.path, Path.join(dest_dir, filename))
+      {:ok, "/uploads/tasks/#{task_id}/#{filename}"}
+    end
+  end
+
+  @doc """
+  Resolves a stored task image to `{:ok, {absolute_path, content_type}}` for
+  serving, guarding against path traversal and unknown extensions.
+  """
+  def fetch_task_image(task_id, filename) do
+    ext = filename |> Path.extname() |> String.downcase()
+
+    with :ok <- validate_segment(to_string(task_id)),
+         :ok <- validate_segment(filename),
+         {:ok, content_type} <- extension_content_type(ext) do
+      path = Path.join([dir(), "tasks", to_string(task_id), filename])
+
+      if File.regular?(path) do
+        {:ok, {path, content_type}}
+      else
+        {:error, :not_found}
+      end
+    end
+  end
+
   ## File-type registry (attachments + answer uploads)
 
   @doc "Ordered type keys selectable for student answer upload fields."
@@ -143,6 +178,28 @@ defmodule Tasky.Uploads do
     :ok
   end
 
+  @doc """
+  Stores a teacher attachment for a learning unit (task). Same validation as
+  `save_exam_attachment/3`.
+  """
+  def save_task_attachment(task_id, src_path, original_name) do
+    save_file(src_path, original_name, attachment_accept_exts(), [
+      "tasks",
+      to_string(task_id),
+      "attachments"
+    ])
+  end
+
+  @doc "Absolute path of a stored task attachment, or an error tuple."
+  def task_attachment_path(task_id, stored_filename),
+    do: stored_path(["tasks", to_string(task_id), "attachments"], stored_filename)
+
+  @doc "Removes a stored task attachment from disk (idempotent)."
+  def delete_task_attachment_file(task_id, stored_filename) do
+    with {:ok, path} <- task_attachment_path(task_id, stored_filename), do: File.rm(path)
+    :ok
+  end
+
   ## Student answer files
 
   @doc """
@@ -169,6 +226,35 @@ defmodule Tasky.Uploads do
   @doc "Removes a stored submission file from disk (idempotent)."
   def delete_submission_file_from_disk(exam_id, submission_id, stored_filename) do
     with {:ok, path} <- submission_file_path(exam_id, submission_id, stored_filename),
+         do: File.rm(path)
+
+    :ok
+  end
+
+  @doc """
+  Stores a student's answer file for one upload field of a learning unit
+  (task) submission. `allowed_type_keys` are the field's allowed registry keys.
+  """
+  def save_task_submission_file(task_id, submission_id, src_path, original_name, allowed_type_keys) do
+    save_file(src_path, original_name, accept_exts(allowed_type_keys), [
+      "tasks",
+      to_string(task_id),
+      "submissions",
+      to_string(submission_id)
+    ])
+  end
+
+  @doc "Absolute path of a stored task submission file, or an error tuple."
+  def task_submission_file_path(task_id, submission_id, stored_filename) do
+    stored_path(
+      ["tasks", to_string(task_id), "submissions", to_string(submission_id)],
+      stored_filename
+    )
+  end
+
+  @doc "Removes a stored task submission file from disk (idempotent)."
+  def delete_task_submission_file_from_disk(task_id, submission_id, stored_filename) do
+    with {:ok, path} <- task_submission_file_path(task_id, submission_id, stored_filename),
          do: File.rm(path)
 
     :ok

@@ -410,9 +410,9 @@ defmodule TaskyWeb.Student.CourseLive do
       "not_started" -> "Nicht begonnen"
       "open" -> "Offen"
       "in_progress" -> "In Bearbeitung"
-      "completed" -> "Erledigt"
+      "completed" -> "Eingereicht"
       "review_approved" -> "Genehmigt"
-      "review_denied" -> "Abgelehnt"
+      "review_denied" -> "Zur Überarbeitung"
       _ -> status |> String.replace("_", " ") |> String.capitalize()
     end
   end
@@ -420,7 +420,7 @@ defmodule TaskyWeb.Student.CourseLive do
   defp calculate_stats(submissions) do
     %{
       total: length(submissions),
-      completed: Enum.count(submissions, &(&1.status == "completed")),
+      completed: Enum.count(submissions, &(&1.status in ["completed", "review_approved"])),
       graded: Enum.count(submissions, &(&1.status == "review_approved"))
     }
   end

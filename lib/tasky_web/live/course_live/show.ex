@@ -101,12 +101,6 @@ defmodule TaskyWeb.CourseLive.Show do
 
             <div class="flex items-center gap-2">
               <.link
-                navigate={~p"/courses/#{@course}/export"}
-                class="inline-flex items-center gap-2 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-amber-300 hover:text-amber-700"
-              >
-                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
-              </.link>
-              <.link
                 navigate={~p"/courses/#{@course}/add"}
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
@@ -127,11 +121,20 @@ defmodule TaskyWeb.CourseLive.Show do
 
               <div class="flex-1 min-w-0 flex flex-col gap-1.5">
                 <div class="flex items-center gap-2.5 flex-wrap">
-                  <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{task.name}</h3>
+                  <.link
+                    navigate={~p"/tasks/#{task.id}/content"}
+                    class="text-[15px] font-semibold text-stone-800 leading-[1.4] hover:text-sky-600 transition-colors"
+                  >
+                    {task.name}
+                  </.link>
 
                   <%= if task.status == "draft" do %>
                     <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-amber-100 text-amber-700">
-                      Tally Form nicht veröffentlicht
+                      Entwurf
+                    </span>
+                  <% else %>
+                    <span class="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-emerald-100 text-emerald-700">
+                      Veröffentlicht
                     </span>
                   <% end %>
 
@@ -149,21 +152,37 @@ defmodule TaskyWeb.CourseLive.Show do
                 <% end %>
 
                 <div class="flex items-center gap-2">
-                  <%= if task.link do %>
-                    <a
-                      href={task.link}
-                      target="_blank"
-                      class="text-[13px] text-sky-500 hover:text-sky-600 flex items-center gap-1 transition-colors"
-                    >
-                      <.icon name="hero-link" class="w-3.5 h-3.5" /> Link öffnen
-                    </a>
-                    <span class="text-xs text-stone-300">·</span>
-                  <% end %>
                   <span class="text-[13px] text-stone-400">Position: {task.position}</span>
                 </div>
               </div>
 
               <div class="flex items-center gap-2 shrink-0 pt-0.5">
+                <.link
+                  navigate={~p"/tasks/#{task.id}/content"}
+                  class="inline-flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+                >
+                  <.icon name="hero-pencil" class="w-4 h-4" />
+                  <span class="hidden sm:inline">Bearbeiten</span>
+                </.link>
+                <button
+                  type="button"
+                  phx-click="toggle_status"
+                  phx-value-id={task.id}
+                  title={
+                    if task.status == "draft",
+                      do: "Für Lernende veröffentlichen",
+                      else: "Zurück in den Entwurf"
+                  }
+                  class="inline-flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+                >
+                  <%= if task.status == "draft" do %>
+                    <.icon name="hero-eye" class="w-4 h-4" />
+                    <span class="hidden sm:inline">Veröffentlichen</span>
+                  <% else %>
+                    <.icon name="hero-eye-slash" class="w-4 h-4" />
+                    <span class="hidden sm:inline">Verbergen</span>
+                  <% end %>
+                </button>
                 <button
                   type="button"
                   phx-click="toggle_locked"
@@ -244,6 +263,17 @@ defmodule TaskyWeb.CourseLive.Show do
   def handle_event("toggle_locked", %{"id" => id}, socket) do
     task = Tasks.get_task!(socket.assigns.current_scope, id)
     {:ok, updated_task} = Tasks.toggle_locked(socket.assigns.current_scope, task)
+
+    {:noreply, stream_insert(socket, :tasks, updated_task)}
+  end
+
+  @impl true
+  def handle_event("toggle_status", %{"id" => id}, socket) do
+    task = Tasks.get_task!(socket.assigns.current_scope, id)
+    new_status = if task.status == "draft", do: "published", else: "draft"
+
+    {:ok, updated_task} =
+      Tasks.update_task(socket.assigns.current_scope, task, %{status: new_status})
 
     {:noreply, stream_insert(socket, :tasks, updated_task)}
   end

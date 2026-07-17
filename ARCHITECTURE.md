@@ -74,7 +74,7 @@
 │  │             │   │ submissions  │   │              │       │
 │  │ • id        │───│ • id         │───│ • id         │       │
 │  │ • name      │   │ • task_id    │   │ • email      │       │
-│  │ • link      │   │ • student_id │───│ • role       │       │
+│  │ • content   │   │ • student_id │───│ • role       │       │
 │  │ • status    │   │ • status     │   │ • ...        │       │
 │  │ • position  │   │ • completed_at│   └──────────────┘       │
 │  │ • user_id   │   │ • points     │         ▲                 │
@@ -262,17 +262,16 @@ Student.TaskLive
 ├── Layouts.app
 │   ├── Header (with navigation)
 │   └── Main content
-│       ├── Task details section
+│       ├── Task content section
 │       │   ├── Task name
-│       │   ├── Status badge
-│       │   └── Task link (if exists)
+│       │   ├── Tiptap editor (teacher content locked,
+│       │   │   answer fields editable, autosaved)
+│       │   └── Dateien tab (attachments + upload slots)
 │       └── Action section
-│           ├── "Start Task" button (if not_started)
-│           ├── "Mark as Complete" button (if in_progress)
-│           └── Grade display (if completed & graded)
-│               ├── Points
+│           ├── "Abschliessen" button (flush-check + required uploads)
+│           └── Review states (completed / approved / sent back)
 │               ├── Feedback
-│               └── Graded date
+│               └── Reviewed date
 
 Student.MyTasksLive
 ├── Layouts.app
@@ -283,7 +282,7 @@ Student.MyTasksLive
 │       │   └── Graded
 │       └── Submissions table
 │           └── For each submission:
-│               ├── Task name & link
+│               ├── Task name
 │               ├── Status badge
 │               ├── Completed date
 │               ├── Grade (if graded)

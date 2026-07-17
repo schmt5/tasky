@@ -14,11 +14,13 @@ defmodule Tasky.Tasks.TaskSubmission do
     field :feedback, :string
 
     field :graded_at, :utc_datetime
-    field :tally_response_id, :string
+    field :content, :map
 
     belongs_to :task, Tasky.Tasks.Task
     belongs_to :student, Tasky.Accounts.User
     belongs_to :graded_by, Tasky.Accounts.User
+
+    has_many :files, Tasky.Tasks.TaskSubmissionFile, foreign_key: :task_submission_id
 
     timestamps(type: :utc_datetime)
   end
@@ -62,6 +64,13 @@ defmodule Tasky.Tasks.TaskSubmission do
   def complete_changeset(submission) do
     submission
     |> change(status: "completed", completed_at: DateTime.utc_now(:second))
+  end
+
+  @doc """
+  Changeset for saving the student's answer doc (Tiptap JSON).
+  """
+  def answers_changeset(submission, content) when is_map(content) do
+    change(submission, content: content)
   end
 
   @doc """

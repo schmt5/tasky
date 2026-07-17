@@ -8,8 +8,16 @@ defmodule Tasky.Tasks do
 
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskSubmission
+  alias Tasky.Tasks.TaskAttachment
+  alias Tasky.Tasks.TaskUploadField
+  alias Tasky.Tasks.TaskSubmissionFile
+  alias Tasky.Correction.AnswerKey
   alias Tasky.Accounts.Scope
   alias Tasky.Accounts.User
+
+  # Submission statuses in which the student may still edit answers,
+  # upload files and mark the unit as complete.
+  @editable_statuses ~w(draft open in_progress not_started review_denied)
 
   @doc """
   Subscribes to scoped notifications about any task changes.
@@ -400,32 +408,27 @@ defmodule Tasky.Tasks do
   def complete_task(%Scope{user: user} = _scope, submission_id) when user.role == "student" do
     submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
-    if submission.student_id == user.id do
-      case submission
-           |> TaskSubmission.complete_changeset()
-           |> Repo.update() do
-        {:ok, updated_submission} = result ->
-          # Broadcast to student's own subscription
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "student:#{user.id}:submissions",
-            {:submission_updated, updated_submission}
-          )
+    cond do
+      submission.student_id != user.id ->
+        {:error, :unauthorized}
 
-          # Broadcast to course progress view for teachers
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "course:#{submission.task.course_id}:progress",
-            {:submission_updated, updated_submission}
-          )
+      submission.status not in @editable_statuses ->
+        {:error, :not_editable}
 
-          result
+      missing_required_uploads(submission) != [] ->
+        {:error, :missing_uploads}
 
-        error ->
-          error
-      end
-    else
-      {:error, :unauthorized}
+      true ->
+        case submission
+             |> TaskSubmission.complete_changeset()
+             |> Repo.update() do
+          {:ok, updated_submission} = result ->
+            broadcast_submission_updated(updated_submission, submission.task.course_id)
+            result
+
+          error ->
+            error
+        end
     end
   end
 
@@ -625,7 +628,7 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Returns a map of %{student_id => %{status, tally_response_id}} for all
+  Returns a map of %{student_id => %{status, has_content}} for all
   given students on a single task. Used by the task progress LiveView.
   """
   def get_progress_map_for_task(task_id, student_ids) do
@@ -636,14 +639,14 @@ defmodule Tasky.Tasks do
           select: %{
             student_id: s.student_id,
             status: s.status,
-            tally_response_id: s.tally_response_id
+            has_content: not is_nil(s.content)
           }
       )
 
     Enum.reduce(submissions, %{}, fn submission, acc ->
       Map.put(acc, submission.student_id, %{
         status: submission.status,
-        tally_response_id: submission.tally_response_id
+        has_content: submission.has_content
       })
     end)
   end
@@ -684,5 +687,292 @@ defmodule Tasky.Tasks do
   """
   def get_submission_for_student(task_id, student_id) do
     Repo.get_by(TaskSubmission, task_id: task_id, student_id: student_id)
+  end
+
+  @doc """
+  Gets a task by id without owner scoping, for student-facing views and
+  endpoints (visibility is decided by the caller via enrollment + status).
+  """
+  def get_task_for_student(task_id) do
+    Repo.get(Task, task_id)
+  end
+
+  @doc "True while the student may still edit answers / upload files / complete."
+  def editable_submission?(%TaskSubmission{status: status}),
+    do: status in @editable_statuses
+
+  ## Learning-unit content (Tiptap)
+
+  @doc """
+  Saves the learning unit's Tiptap content doc from the authoring editor.
+  Assigns stable `answerId`s to all answer-bearing nodes (see
+  `Tasky.Correction.AnswerKey`). Only the owning teacher may save.
+  """
+  def save_task_content(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
+    true = task.user_id == scope.user.id
+
+    with {:ok, task = %Task{}} <-
+           task
+           |> Task.content_changeset(AnswerKey.ensure_ids(doc))
+           |> Repo.update() do
+      broadcast_task(scope, {:updated, task})
+      {:ok, task}
+    end
+  end
+
+  @doc """
+  Saves the student's answer doc for their own submission. Rejected once the
+  submission is completed or approved; allowed again after a teacher sends it
+  back (`review_denied`).
+  """
+  def save_student_answers(%Scope{user: user} = _scope, %TaskSubmission{} = submission, doc)
+      when user.role == "student" and is_map(doc) do
+    cond do
+      submission.student_id != user.id ->
+        {:error, :unauthorized}
+
+      submission.status not in @editable_statuses ->
+        {:error, :not_editable}
+
+      true ->
+        submission
+        |> TaskSubmission.answers_changeset(doc)
+        |> Repo.update()
+    end
+  end
+
+  @doc """
+  Sets a teacher's review verdict on a completed submission and saves the
+  feedback in one go. `verdict` is `"review_approved"` or `"review_denied"`;
+  a denied submission becomes editable for the student again.
+  """
+  def review_submission(%Scope{user: user} = scope, submission_id, verdict, attrs \\ %{})
+      when verdict in ["review_approved", "review_denied"] do
+    if Scope.admin_or_teacher?(scope) do
+      submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+
+      case submission
+           |> TaskSubmission.grade_changeset(attrs, user.id)
+           |> Ecto.Changeset.put_change(:status, verdict)
+           |> Repo.update() do
+        {:ok, updated_submission} = result ->
+          broadcast_submission_updated(updated_submission, submission.task.course_id)
+          result
+
+        error ->
+          error
+      end
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  ## Attachments (teacher-provided files)
+
+  @doc "Lists a task's attachments in display order."
+  def list_task_attachments(%Task{} = task) do
+    Repo.all(
+      from a in TaskAttachment,
+        where: a.task_id == ^task.id,
+        order_by: [asc: a.position, asc: a.id]
+    )
+  end
+
+  @doc "Gets an attachment of the given task, or nil."
+  def get_task_attachment(%Task{} = task, id) do
+    Repo.get_by(TaskAttachment, id: id, task_id: task.id)
+  end
+
+  @doc "Gets an attachment by its stored (UUID) filename, or nil."
+  def get_task_attachment_by_stored_filename(task_id, stored_filename) do
+    Repo.get_by(TaskAttachment, task_id: task_id, stored_filename: stored_filename)
+  end
+
+  @doc """
+  Creates an attachment record for a file already stored on disk (see
+  `Tasky.Uploads.save_task_attachment/3`).
+  """
+  def create_task_attachment(%Task{} = task, attrs) do
+    position =
+      Repo.one(
+        from a in TaskAttachment,
+          where: a.task_id == ^task.id,
+          select: coalesce(max(a.position), -1)
+      ) + 1
+
+    %TaskAttachment{task_id: task.id}
+    |> TaskAttachment.changeset(Map.put(attrs, :position, position))
+    |> Repo.insert()
+  end
+
+  @doc "Deletes an attachment record and its file on disk."
+  def delete_task_attachment(%TaskAttachment{} = attachment) do
+    with {:ok, deleted} <- Repo.delete(attachment) do
+      Tasky.Uploads.delete_task_attachment_file(deleted.task_id, deleted.stored_filename)
+      {:ok, deleted}
+    end
+  end
+
+  ## Upload fields (student file-answer slots)
+
+  @doc "Lists a task's upload fields in display order."
+  def list_task_upload_fields(%Task{} = task), do: list_upload_fields_by_task_id(task.id)
+
+  defp list_upload_fields_by_task_id(task_id) do
+    Repo.all(
+      from f in TaskUploadField,
+        where: f.task_id == ^task_id,
+        order_by: [asc: f.position, asc: f.id]
+    )
+  end
+
+  @doc "Gets an upload field of the given task, or nil."
+  def get_task_upload_field(%Task{} = task, id) do
+    Repo.get_by(TaskUploadField, id: id, task_id: task.id)
+  end
+
+  @doc "Creates an upload field, appended at the end."
+  def create_task_upload_field(%Task{} = task, attrs) do
+    position =
+      Repo.one(
+        from f in TaskUploadField,
+          where: f.task_id == ^task.id,
+          select: coalesce(max(f.position), -1)
+      ) + 1
+
+    %TaskUploadField{task_id: task.id}
+    |> TaskUploadField.changeset(Map.put(attrs, "position", position))
+    |> Repo.insert()
+  end
+
+  @doc "Updates an upload field."
+  def update_task_upload_field(%TaskUploadField{} = field, attrs) do
+    field
+    |> TaskUploadField.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes an upload field including all student files uploaded into it
+  (records via FK cascade, bytes on disk explicitly).
+  """
+  def delete_task_upload_field(%TaskUploadField{} = field) do
+    files =
+      Repo.all(
+        from sf in TaskSubmissionFile,
+          where: sf.upload_field_id == ^field.id,
+          join: s in assoc(sf, :task_submission),
+          select: {s.task_id, sf.task_submission_id, sf.stored_filename}
+      )
+
+    with {:ok, deleted} <- Repo.delete(field) do
+      Enum.each(files, fn {task_id, submission_id, stored} ->
+        Tasky.Uploads.delete_task_submission_file_from_disk(task_id, submission_id, stored)
+      end)
+
+      {:ok, deleted}
+    end
+  end
+
+  @doc "True when the task has attachments or upload fields (student files section visibility)."
+  def task_has_files?(%Task{} = task) do
+    Repo.exists?(from a in TaskAttachment, where: a.task_id == ^task.id) or
+      Repo.exists?(from f in TaskUploadField, where: f.task_id == ^task.id)
+  end
+
+  ## Student answer files
+
+  @doc "Lists a submission's uploaded files."
+  def list_submission_files(%TaskSubmission{} = submission) do
+    Repo.all(from sf in TaskSubmissionFile, where: sf.task_submission_id == ^submission.id)
+  end
+
+  @doc "Gets a submission's file for one upload field, or nil."
+  def get_submission_file(%TaskSubmission{} = submission, field_id) do
+    Repo.get_by(TaskSubmissionFile,
+      task_submission_id: submission.id,
+      upload_field_id: field_id
+    )
+  end
+
+  @doc "Gets a file of the given submission by its id, or nil."
+  def get_submission_file_by_id(%TaskSubmission{} = submission, file_id) do
+    Repo.get_by(TaskSubmissionFile, id: file_id, task_submission_id: submission.id)
+  end
+
+  @doc """
+  Stores/replaces the answer file of one upload field for a submission whose
+  bytes are already on disk. A previously uploaded file for the same field is
+  replaced and its bytes removed.
+  """
+  def put_submission_file(%TaskSubmission{} = submission, %TaskUploadField{} = field, attrs) do
+    old = get_submission_file(submission, field.id)
+
+    result =
+      case old do
+        nil ->
+          %TaskSubmissionFile{task_submission_id: submission.id, upload_field_id: field.id}
+          |> TaskSubmissionFile.changeset(attrs)
+          |> Repo.insert()
+
+        existing ->
+          existing
+          |> TaskSubmissionFile.changeset(attrs)
+          |> Repo.update()
+      end
+
+    with {:ok, _file} <- result do
+      if old, do: delete_submission_file_bytes(submission, old.stored_filename)
+      result
+    end
+  end
+
+  @doc "Deletes a submission's answer file (record + bytes)."
+  def delete_submission_file(%TaskSubmission{} = submission, %TaskSubmissionFile{} = file) do
+    with {:ok, deleted} <- Repo.delete(file) do
+      delete_submission_file_bytes(submission, deleted.stored_filename)
+      {:ok, deleted}
+    end
+  end
+
+  defp delete_submission_file_bytes(submission, stored_filename) do
+    Tasky.Uploads.delete_task_submission_file_from_disk(
+      submission.task_id,
+      submission.id,
+      stored_filename
+    )
+  end
+
+  @doc """
+  Required upload fields of the submission's task that have no file yet.
+  Used to gate the "mark as complete" action.
+  """
+  def missing_required_uploads(%TaskSubmission{} = submission) do
+    uploaded_ids =
+      Repo.all(
+        from sf in TaskSubmissionFile,
+          where: sf.task_submission_id == ^submission.id,
+          select: sf.upload_field_id
+      )
+
+    submission.task_id
+    |> list_upload_fields_by_task_id()
+    |> Enum.filter(&(&1.required and &1.id not in uploaded_ids))
+  end
+
+  # Broadcasts a submission change to the student's own view and the
+  # teacher-facing course progress views.
+  defp broadcast_submission_updated(%TaskSubmission{} = submission, course_id) do
+    Phoenix.PubSub.broadcast(
+      Tasky.PubSub,
+      "student:#{submission.student_id}:submissions",
+      {:submission_updated, submission}
+    )
+
+    Phoenix.PubSub.broadcast(
+      Tasky.PubSub,
+      "course:#{course_id}:progress",
+      {:submission_updated, submission}
+    )
   end
 end
