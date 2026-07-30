@@ -699,6 +699,32 @@ defmodule TaskyWeb.CoreComponents do
     for {^field, {msg, opts}} <- errors, do: translate_error({msg, opts})
   end
 
+  @doc """
+  Status chip for a learning unit (`draft`, `published` or `archived`).
+
+  Shared so the course overview and the reorder page cannot drift apart.
+  """
+  attr :status, :string, required: true
+
+  def task_status_chip(assigns) do
+    ~H"""
+    <span class={[
+      "inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em]",
+      case @status do
+        "published" -> "bg-emerald-100 text-emerald-700"
+        "archived" -> "bg-stone-100 text-stone-600"
+        _ -> "bg-amber-100 text-amber-700"
+      end
+    ]}>
+      {case @status do
+        "published" -> "Veröffentlicht"
+        "archived" -> "Archiviert"
+        _ -> "Entwurf"
+      end}
+    </span>
+    """
+  end
+
   attr :status, :string, required: true
 
   def exam_status_chip(assigns) do

@@ -120,6 +120,7 @@ defmodule TaskyWeb.CourseLive.Add do
         course.id
         |> Tasks.list_tasks_by_course()
         |> Enum.map(& &1.position)
+        |> Enum.reject(&is_nil/1)
         |> Enum.max(fn -> 0 end)
         |> Kernel.+(1)
 

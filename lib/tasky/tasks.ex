@@ -206,37 +206,50 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Reorders tasks by updating their positions.
+  Reorders a course's tasks to match `ordered_ids`.
+
+  `ordered_ids` must list *every* task of the course exactly once — a partial
+  list is rejected, because the dense positions written here would otherwise
+  collide with the positions of the tasks left out. Positions are always
+  rewritten as `0..n-1`, which also heals the `nil` and duplicate values the
+  schema still permits.
 
   ## Examples
 
-      iex> reorder_tasks(scope, [%{id: 1, position: 0}, %{id: 2, position: 1}])
+      iex> reorder_tasks(scope, course.id, [3, 1, 2])
       {:ok, :reordered}
 
   """
-  def reorder_tasks(%Scope{} = scope, task_positions) when is_list(task_positions) do
-    ids = Enum.map(task_positions, & &1.id)
+  def reorder_tasks(%Scope{} = scope, course_id, ordered_ids) when is_list(ordered_ids) do
+    tasks = Repo.all(from t in Task, where: t.course_id == ^course_id)
 
-    # Fetch all tasks in one query and verify the scope may manage every one
-    owned_tasks =
-      Repo.all(from t in Task, where: t.id in ^ids)
-      |> Enum.filter(&Policy.can_manage?(scope, &1.user_id))
+    cond do
+      # Length *and* set equality together also rule out duplicate ids, which
+      # set equality alone would happily accept.
+      length(ordered_ids) != length(tasks) ->
+        {:error, :invalid_order}
 
-    if length(owned_tasks) != length(ids) do
-      {:error, :unauthorized}
-    else
-      position_map =
-        Map.new(task_positions, fn %{id: id, position: position} -> {id, position} end)
+      MapSet.new(ordered_ids) != MapSet.new(tasks, & &1.id) ->
+        {:error, :invalid_order}
 
-      Repo.transaction(fn ->
-        Enum.each(owned_tasks, fn task ->
-          task
-          |> Ecto.Changeset.change(%{position: Map.fetch!(position_map, task.id)})
-          |> Repo.update!()
+      not Enum.all?(tasks, &Policy.can_manage?(scope, &1.user_id)) ->
+        {:error, :unauthorized}
+
+      true ->
+        tasks_by_id = Map.new(tasks, &{&1.id, &1})
+
+        Repo.transaction(fn ->
+          ordered_ids
+          |> Enum.with_index()
+          |> Enum.each(fn {id, position} ->
+            tasks_by_id
+            |> Map.fetch!(id)
+            |> Ecto.Changeset.change(%{position: position})
+            |> Repo.update!()
+          end)
+
+          :reordered
         end)
-
-        :reordered
-      end)
     end
   end
 
