@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [be-med, main]
+    branches: [main]
   pull_request:
 
 permissions:
@@ -18,6 +18,25 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MIX_ENV: test
+      # postgres:18 matches the Neon major version used in production. PGPORT is
+      # explicit because config/test.exs defaults to 5433 (the local cluster).
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: "5432"
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 

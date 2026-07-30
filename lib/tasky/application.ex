@@ -45,7 +45,8 @@ defmodule Tasky.Application do
   end
 
   defp skip_migrations? do
-    # By default, sqlite migrations are run when using a release
+    # Migrations run automatically on boot in a release (Fly deploys); locally
+    # they are driven by `mix ecto.migrate` instead.
     System.get_env("RELEASE_NAME") == nil
   end
 end

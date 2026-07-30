@@ -4,20 +4,35 @@ A learning platform for schools: teachers author tasks and exams with a rich-tex
 (Tiptap) editor, students and guests work on them in the browser, and teachers
 correct, grade, and export the results as PDFs.
 
-Built with Phoenix LiveView and SQLite. The content editors are React/Tiptap
+Built with Phoenix LiveView and PostgreSQL. The content editors are React/Tiptap
 islands mounted via LiveView hooks; exam documents are stored as Tiptap JSON and
 rendered client-side everywhere, including for PDF export (via Gotenberg).
 
 ## Getting started
 
-Requirements: Elixir ~> 1.18 / OTP 28, Node.js 22.
+Requirements: Elixir ~> 1.18 / OTP 28, Node.js 22, PostgreSQL 18.
+
+The dev and test configs expect Postgres on **port 5433** with trust auth for
+your OS user (a Homebrew `postgresql@18` cluster kept off the default port, so
+it can coexist with other local clusters). Override with the usual
+`PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD` if your setup differs.
+
+```sh
+brew install postgresql@18
+echo "port = 5433" >> "$(brew --prefix)/var/postgresql@18/postgresql.conf"
+brew services start postgresql@18
+```
 
 ```sh
 mix setup        # deps, database, assets (incl. npm install)
 mix phx.server   # http://localhost:4000
 ```
 
-Seeds create initial users — see `priv/repo/seeds.exs`.
+For demo data (a teacher, students, an exam with submissions):
+
+```sh
+mix run priv/repo/demo_submissions.exs
+```
 
 ## Development
 
@@ -29,7 +44,7 @@ mix dialyzer     # type analysis (first run builds the PLT, takes a while)
 ```
 
 CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same checks on every
-push to `be-med`/`main` and on pull requests.
+push to `main` and on pull requests.
 
 ## Architecture & docs
 
@@ -42,40 +57,53 @@ push to `be-med`/`main` and on pull requests.
 
 ## Deployment
 
-Deployed on Fly.io. The live app is `tasky-be-med` (`fly.be-med.toml`), deployed
-from the `be-med` branch; `fly.toml`/`tasky-learn` is a secondary target. The
-release runs with `MIX_ENV=demo` (see `config/demo.exs`) and stores the SQLite
-database on a Fly volume.
+Deployed on Fly.io as **`learningline`** (`fly.toml`, region `fra` to match the
+Neon project's `eu-central-1`). The release runs with `MIX_ENV=demo` (see
+`config/demo.exs`). The machines are stateless: the database is **Neon**
+Postgres and uploads live in **R2**, so there is no Fly volume. Migrations run
+automatically on boot via the `Ecto.Migrator` child in `Tasky.Application`.
 
 ```sh
-fly deploy -c fly.be-med.toml
+fly deploy
 ```
+
+First-time setup for a fresh app:
+
+```sh
+fly apps create learningline
+fly secrets set \
+  DATABASE_URL='postgres://neondb_owner:<password>@ep-polished-sunset-a2gyeh2t.eu-central-1.aws.neon.tech/neondb' \
+  SECRET_KEY_BASE="$(mix phx.gen.secret)" \
+  R2_ACCOUNT_ID=... R2_BUCKET=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=...
+fly deploy
+```
+
+Boot fails fast with a named error if any of `DATABASE_URL`, `SECRET_KEY_BASE`,
+`PHX_HOST` or the `R2_*` credentials is missing — a misconfigured deploy never
+reaches the first request.
+
+### Database (Neon)
+
+`DATABASE_URL` points at the Neon project's **direct** (unpooled) endpoint —
+not the `-pooler` host: Ecto already pools connections, and PgBouncer's
+transaction mode would additionally require `prepare: :unnamed`. TLS is
+mandatory and is verified against the OS certificate store, so the runtime
+image must keep `ca-certificates` installed.
+
+Backups and point-in-time restore are Neon's (dashboard → Backup & restore);
+there is nothing to run in the app.
 
 ### File storage (R2)
 
-Set `STORAGE_ADAPTER=r2` plus `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`
-and `R2_SECRET_ACCESS_KEY` to store uploads in a **private Cloudflare R2
-bucket** served via presigned URLs (the default `local` keeps files on the
-volume). Credentials are validated at boot. Cutover, not migration: existing
-volume files are not copied over (beta rule).
+`STORAGE_ADAPTER=r2` plus `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and
+`R2_SECRET_ACCESS_KEY` stores uploads in a **private Cloudflare R2 bucket**
+served via short-lived presigned URLs. Credentials are validated at boot. Keep
+the bucket private — the adapter's whole design is the expiring redirect, and a
+public `r2.dev` URL would turn every upload link into a permanent one.
 
-### Database backups (Litestream)
-
-Set `LITESTREAM_ENABLED=true` plus `LITESTREAM_R2_ACCOUNT_ID`,
-`LITESTREAM_R2_BUCKET` (a **separate** bucket from uploads),
-`LITESTREAM_R2_ACCESS_KEY_ID` and `LITESTREAM_R2_SECRET_ACCESS_KEY` to
-continuously replicate the SQLite database to R2. On boot with an empty
-volume the entrypoint restores the latest replica automatically.
-
-Manual restore (e.g. onto a fresh machine):
-
-```sh
-fly ssh console -c fly.be-med.toml
-litestream restore -config /app/litestream.yml -o "$DATABASE_PATH" "$DATABASE_PATH"
-```
-
-Test the restore path once after enabling — a backup that was never restored
-is not a backup.
+The `local` adapter (dev/test default) keeps files on disk under `UPLOADS_DIR`;
+in prod it requires `UPLOADS_DIR` to be set explicitly, since there is no volume
+to derive a path from.
 
 Note: transactional email is currently **disabled** — the mailer uses the local
 in-memory adapter in all environments, so no email ever leaves the app

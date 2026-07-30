@@ -8,9 +8,18 @@ config :esbuild, :tasky,
   env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
 
 # Configure your database
+#
+# Defaults target a local Homebrew Postgres cluster: the superuser is your OS
+# user with trust auth on localhost, hence `$USER` and an empty password. Port
+# 5433 (not the usual 5432) is the PG 18 cluster that matches the Neon major
+# version used in production; override with PGPORT/PGUSER/PGHOST/PGPASSWORD.
 config :tasky, Tasky.Repo,
-  database: Path.expand("../tasky_dev.db", __DIR__),
-  pool_size: 5,
+  username: System.get_env("PGUSER") || System.get_env("USER"),
+  password: System.get_env("PGPASSWORD") || "",
+  hostname: System.get_env("PGHOST") || "localhost",
+  port: String.to_integer(System.get_env("PGPORT") || "5433"),
+  database: "tasky_dev",
+  pool_size: 10,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true
 

@@ -9,11 +9,16 @@ IO.puts("\n🚀 Setting up Task Submission Demo...\n")
 # Create users
 IO.puts("Creating users...")
 
+# `registration_changeset/3` requires firstname/lastname and does NOT cast
+# `:role` — it derives it from `is_teacher`. "admin" therefore has to be set
+# afterwards via `update_user_role/2`.
 {:ok, teacher} =
   Accounts.register_user(%{
     email: "teacher@demo.com",
     password: "password123456",
-    role: "teacher"
+    firstname: "Tina",
+    lastname: "Lehrer",
+    is_teacher: true
   })
 
 IO.puts("✅ Created teacher: teacher@demo.com")
@@ -24,7 +29,9 @@ students =
       Accounts.register_user(%{
         email: "student#{i}@demo.com",
         password: "password123456",
-        role: "student"
+        firstname: "Sam#{i}",
+        lastname: "Schüler",
+        is_teacher: false
       })
 
     IO.puts("✅ Created student: student#{i}@demo.com")
@@ -35,8 +42,12 @@ students =
   Accounts.register_user(%{
     email: "admin@demo.com",
     password: "password123456",
-    role: "admin"
+    firstname: "Alex",
+    lastname: "Admin",
+    is_teacher: false
   })
+
+{:ok, admin} = Accounts.update_user_role(admin, %{role: "admin"})
 
 IO.puts("✅ Created admin: admin@demo.com")
 

@@ -815,6 +815,17 @@ defmodule TaskyWeb.Guest.ExamLive do
          |> put_flash(:error, "Die Prüfung kann nicht mehr abgegeben werden.")
          |> assign(:show_submit_modal, false)}
 
+      # A second submit (double click, stale DOM) reaches the desired end state,
+      # so show it as done rather than as a failure.
+      {:error, :already_submitted} ->
+        {:noreply,
+         socket
+         |> assign(
+           :submission,
+           Exams.get_submission!(socket.assigns.exam, socket.assigns.submission.id)
+         )
+         |> assign(:show_submit_modal, false)}
+
       {:error, :missing_required_uploads} ->
         {:noreply,
          assign(

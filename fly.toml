@@ -1,26 +1,30 @@
-# fly.toml app configuration file generated for tasky-learn on 2026-03-26T09:30:46Z
+# Fly.io configuration for the LearningLine app.
 #
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+# See https://fly.io/docs/reference/configuration/ for information about how to
+# use this file.
 #
+# The machines are stateless — there is no [[mounts]] section on purpose: the
+# database is Neon Postgres (DATABASE_URL) and uploads go to a private R2
+# bucket (STORAGE_ADAPTER=r2). Migrations run on boot via the Ecto.Migrator
+# child in Tasky.Application.
+#
+# Secrets that must be set before the first deploy (fly secrets set):
+#   DATABASE_URL, R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID,
+#   R2_SECRET_ACCESS_KEY, SECRET_KEY_BASE
 
-app = 'tasky-learn'
+app = 'learningline'
+# fra is deliberate: it keeps the app in the same region as the Neon project
+# (eu-central-1), so every query avoids a cross-region round trip.
 primary_region = 'fra'
 kill_signal = 'SIGTERM'
 
 [build]
 
 [env]
-  DATABASE_PATH = '/mnt/name/name.db'
   MIX_ENV = 'demo'
-  PHX_HOST = 'tasky-learn.fly.dev'
+  PHX_HOST = 'learningline.fly.dev'
   PORT = '8080'
-
-[[mounts]]
-  source = 'name'
-  destination = '/mnt/name'
-  auto_extend_size_threshold = 80
-  auto_extend_size_increment = '1GB'
-  auto_extend_size_limit = '10GB'
+  STORAGE_ADAPTER = 'r2'
 
 [http_service]
   internal_port = 8080

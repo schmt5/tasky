@@ -75,15 +75,10 @@ RUN mix release
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
-# Litestream: continuous SQLite replication to R2 (enabled via
-# LITESTREAM_ENABLED=true; see rel/overlays/start.sh).
-ARG LITESTREAM_VERSION=0.3.13
-ADD https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-v${LITESTREAM_VERSION}-linux-amd64.deb /tmp/litestream.deb
-
+# ca-certificates is required: the repo connects to Neon over TLS and verifies
+# the server against the OS certificate store (see config/runtime.exs).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates \
-  && dpkg -i /tmp/litestream.deb \
-  && rm /tmp/litestream.deb \
   && rm -rf /var/lib/apt/lists/*
 
 # Set the locale
@@ -102,8 +97,6 @@ ENV MIX_ENV="demo"
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/tasky ./
-COPY --chown=nobody:root rel/overlays/litestream.yml /app/litestream.yml
-COPY --chown=nobody:root --chmod=755 rel/overlays/start.sh /app/start.sh
 
 USER nobody
 
@@ -112,5 +105,5 @@ USER nobody
 # above and adding an entrypoint. See https://github.com/krallin/tini for details
 # ENTRYPOINT ["/tini", "--"]
 
-# Starts /app/bin/server, wrapped in Litestream replication when enabled.
-CMD ["/app/start.sh"]
+# Migrations run on boot via the Ecto.Migrator child in Tasky.Application.
+CMD ["/app/bin/server"]

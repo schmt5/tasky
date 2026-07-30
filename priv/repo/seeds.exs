@@ -1,11 +1,11 @@
-# Script for populating the database. You can run it as:
+# Script for populating the database. Run via `mix ecto.setup` / `mix setup`,
+# or on its own:
 #
 #     mix run priv/repo/seeds.exs
 #
-# Inside the script, you can read and write to any of your
-# repositories directly:
+# This file is intentionally empty: a fresh database needs no baseline rows.
+# For a working demo dataset (teacher, students, an exam with submissions) run
 #
-#     Tasky.Repo.insert!(%Tasky.SomeSchema{})
+#     mix run priv/repo/demo_submissions.exs
 #
-# We recommend using the bang functions (`insert!`, `update!`
-# and so on) as they will fail if something goes wrong.
+# which is not wired into `mix setup` so that a plain setup stays empty.

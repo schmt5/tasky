@@ -261,6 +261,33 @@ defmodule Tasky.Exams do
     Repo.all(from s in ExamSubmission, where: s.id in ^ids and s.exam_id == ^exam.id)
   end
 
+  # Transaction-only variants of the two functions above: they take a row lock on
+  # every submission they return, for the bulk operations that read-modify-write
+  # each row. Deliberately private — the public listings feed LiveView renders
+  # and must not lock.
+  #
+  # `order_by: [asc: s.id]` is load-bearing, not cosmetic: LockRows sits above
+  # Sort, so rows are locked in id order and two bulk operations over
+  # overlapping sets cannot deadlock against each other. (Ordering by
+  # inserted_at would not do — it is not unique.)
+  defp lock_exam_submissions!(%Exam{} = exam) do
+    Repo.all(
+      from s in ExamSubmission,
+        where: s.exam_id == ^exam.id,
+        order_by: [asc: s.id],
+        lock: "FOR UPDATE"
+    )
+  end
+
+  defp lock_submissions_by_ids!(%Exam{} = exam, ids) when is_list(ids) do
+    Repo.all(
+      from s in ExamSubmission,
+        where: s.id in ^ids and s.exam_id == ^exam.id,
+        order_by: [asc: s.id],
+        lock: "FOR UPDATE"
+    )
+  end
+
   @doc """
   Creates an exam submission for a guest user.
   The exam must be in "open" or "running" status.
@@ -333,31 +360,34 @@ defmodule Tasky.Exams do
   Only allowed when the associated exam is still running.
   """
   def submit_exam_submission(%ExamSubmission{} = submission) do
-    # Gate checks and the write run in one BEGIN IMMEDIATE transaction (fresh
-    # refetch inside), so the submit can't slip past a concurrently-changed
-    # exam status or upload state (TOCTOU).
+    # Gate checks and the write run in one transaction against freshly locked
+    # rows, so the submit can't slip past a concurrently-changed exam status or
+    # upload state (TOCTOU). The exam is locked FOR SHARE because its status is
+    # only read here — that still excludes `update_exam_status/3`, without
+    # blocking concurrent submission inserts. Exam before submission: parent
+    # first, per the lock-order rule in ARCHITECTURE.md.
     result =
-      Repo.transaction(
-        fn ->
-          locked =
-            ExamSubmission |> Repo.get!(submission.id) |> Repo.preload(:exam, force: true)
+      Repo.transaction(fn ->
+        exam = Repo.lock_one!(Exam, submission.exam_id, :share)
+        locked = ExamSubmission |> Repo.lock_one!(submission.id) |> Map.put(:exam, exam)
 
-          cond do
-            locked.exam.status != "running" ->
-              Repo.rollback(:exam_not_running)
+        cond do
+          exam.status != "running" ->
+            Repo.rollback(:exam_not_running)
 
-            missing_required_uploads(locked) != [] ->
-              Repo.rollback(:missing_required_uploads)
+          locked.submitted ->
+            Repo.rollback(:already_submitted)
 
-            true ->
-              case locked |> Ecto.Changeset.change(%{submitted: true}) |> Repo.update() do
-                {:ok, updated} -> %{updated | exam: locked.exam}
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
-          end
-        end,
-        mode: :immediate
-      )
+          missing_required_uploads(locked) != [] ->
+            Repo.rollback(:missing_required_uploads)
+
+          true ->
+            case locked |> Ecto.Changeset.change(%{submitted: true}) |> Repo.update() do
+              {:ok, updated} -> %{updated | exam: exam}
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+        end
+      end)
 
     with {:ok, updated} <- result do
       Phoenix.PubSub.broadcast(
@@ -498,35 +528,32 @@ defmodule Tasky.Exams do
   def update_corrected_part_content(scope, %ExamSubmission{} = submission, part_id, part_nodes)
       when is_binary(part_id) and is_list(part_nodes) do
     with :ok <- authorize_submission(scope, submission) do
-      # Splice runs against a refetched row inside BEGIN IMMEDIATE so two
-      # near-simultaneous part saves can't clobber each other's parts.
-      Repo.transaction(
-        fn ->
-          locked = Repo.get!(ExamSubmission, submission.id)
-          doc = correction_content(locked)
-          parts = split_content_into_parts(doc)
-          preamble = content_preamble(doc)
+      # Splice runs against a row locked FOR UPDATE so two near-simultaneous
+      # part saves can't clobber each other's parts.
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(ExamSubmission, submission.id)
+        doc = correction_content(locked)
+        parts = split_content_into_parts(doc)
+        preamble = content_preamble(doc)
 
-          unless Enum.any?(parts, &(&1.id == part_id)) do
-            raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
-          end
+        unless Enum.any?(parts, &(&1.id == part_id)) do
+          raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+        end
 
-          new_parts =
-            Enum.map(parts, fn p ->
-              if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
-            end)
+        new_parts =
+          Enum.map(parts, fn p ->
+            if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+          end)
 
-          new_doc = assemble_parts_into_content(preamble, new_parts)
+        new_doc = assemble_parts_into_content(preamble, new_parts)
 
-          case locked
-               |> Ecto.Changeset.change(%{corrected_content: new_doc})
-               |> Repo.update() do
-            {:ok, updated} -> updated
-            {:error, changeset} -> Repo.rollback(changeset)
-          end
-        end,
-        mode: :immediate
-      )
+        case locked
+             |> Ecto.Changeset.change(%{corrected_content: new_doc})
+             |> Repo.update() do
+          {:ok, updated} -> updated
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
     end
   end
 
@@ -576,54 +603,51 @@ defmodule Tasky.Exams do
     # The splice below is a read-modify-write over the whole content. The
     # stacked Musterlösung view autosaves each part independently, so two
     # near-simultaneous requests for different parts could otherwise clobber
-    # each other. BEGIN IMMEDIATE takes SQLite's write lock up front, so the
-    # refetch inside the transaction always sees the latest committed state.
+    # each other. Locking the exam row FOR UPDATE serializes them, so the read
+    # inside the transaction always sees the latest committed state.
     result =
-      Repo.transaction(
-        fn ->
-          locked_exam = Repo.get!(Exam, exam.id)
+      Repo.transaction(fn ->
+        locked_exam = Repo.lock_one!(Exam, exam.id)
 
-          content = locked_exam.content || %{}
-          parts = split_content_into_parts(content)
-          preamble = content_preamble(content)
+        content = locked_exam.content || %{}
+        parts = split_content_into_parts(content)
+        preamble = content_preamble(content)
 
-          unless Enum.any?(parts, &(&1.id == part_id)) do
-            raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
-          end
+        unless Enum.any?(parts, &(&1.id == part_id)) do
+          raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+        end
 
-          new_parts =
-            Enum.map(parts, fn p ->
-              if p.id == part_id, do: %{p | nodes: blanked_part_nodes}, else: p
-            end)
+        new_parts =
+          Enum.map(parts, fn p ->
+            if p.id == part_id, do: %{p | nodes: blanked_part_nodes}, else: p
+          end)
 
-          new_content = assemble_parts_into_content(preamble, new_parts)
+        new_content = assemble_parts_into_content(preamble, new_parts)
 
-          merged_answers =
-            (locked_exam.sample_solution || %{})
-            |> Map.merge(partial_answers)
-            |> then(&prune_orphan_answers(new_content, &1))
+        merged_answers =
+          (locked_exam.sample_solution || %{})
+          |> Map.merge(partial_answers)
+          |> then(&prune_orphan_answers(new_content, &1))
 
-          {pruned_block_points, synced_points} =
-            prune_orphan_block_points(
-              new_content,
-              locked_exam.sample_solution_block_points || %{},
-              locked_exam.sample_solution_points || %{}
-            )
+        {pruned_block_points, synced_points} =
+          prune_orphan_block_points(
+            new_content,
+            locked_exam.sample_solution_block_points || %{},
+            locked_exam.sample_solution_points || %{}
+          )
 
-          case locked_exam
-               |> Exam.changeset(%{
-                 content: new_content,
-                 sample_solution: merged_answers,
-                 sample_solution_block_points: pruned_block_points,
-                 sample_solution_points: synced_points
-               })
-               |> Repo.update() do
-            {:ok, updated} -> updated
-            {:error, changeset} -> Repo.rollback(changeset)
-          end
-        end,
-        mode: :immediate
-      )
+        case locked_exam
+             |> Exam.changeset(%{
+               content: new_content,
+               sample_solution: merged_answers,
+               sample_solution_block_points: pruned_block_points,
+               sample_solution_points: synced_points
+             })
+             |> Repo.update() do
+          {:ok, updated} -> updated
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
 
     with {:ok, updated} <- result do
       broadcast_exam_event({:exam_answers_changed, updated})
@@ -853,27 +877,24 @@ defmodule Tasky.Exams do
 
   defp do_set_part_points(submission, part_id, points) do
     result =
-      Repo.transaction(
-        fn ->
-          locked = Repo.get!(ExamSubmission, submission.id)
-          current = locked.points_per_part || %{}
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(ExamSubmission, submission.id)
+        current = locked.points_per_part || %{}
 
-          new_map =
-            if is_nil(points) do
-              Map.delete(current, part_id)
-            else
-              Map.put(current, part_id, points)
-            end
-
-          case locked
-               |> Ecto.Changeset.change(%{points_per_part: new_map})
-               |> Repo.update() do
-            {:ok, updated} -> updated
-            {:error, changeset} -> Repo.rollback(changeset)
+        new_map =
+          if is_nil(points) do
+            Map.delete(current, part_id)
+          else
+            Map.put(current, part_id, points)
           end
-        end,
-        mode: :immediate
-      )
+
+        case locked
+             |> Ecto.Changeset.change(%{points_per_part: new_map})
+             |> Repo.update() do
+          {:ok, updated} -> updated
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
 
     with {:ok, updated} <- result do
       broadcast_submission_change(updated)
@@ -943,29 +964,28 @@ defmodule Tasky.Exams do
     end
   end
 
-  # The read-modify-write over the three JSON columns runs in a BEGIN
-  # IMMEDIATE transaction with an in-transaction refetch, so a concurrent
-  # write (teacher click during a bulk-correction run) can never be lost.
+  # The read-modify-write over the three JSON columns runs against locked rows,
+  # so a concurrent write (teacher click during a bulk-correction run) can never
+  # be lost. Exam first (FOR SHARE — its block points are only read), then the
+  # submission (FOR UPDATE): the bulk variants below take the same order, and
+  # reversing it here would let the two deadlock against each other.
   defp do_set_block_verdict(submission, part_id, index, verdict) do
     result =
-      Repo.transaction(
-        fn ->
-          locked = Repo.get!(ExamSubmission, submission.id)
-          exam = Repo.get!(Exam, locked.exam_id)
+      Repo.transaction(fn ->
+        exam = Repo.lock_one!(Exam, submission.exam_id, :share)
+        locked = Repo.lock_one!(ExamSubmission, submission.id)
 
-          case block_verdict_changes(locked, exam, part_id, index, verdict) do
-            {:ok, changes} ->
-              case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
-                {:ok, updated} -> updated
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
+        case block_verdict_changes(locked, exam, part_id, index, verdict) do
+          {:ok, changes} ->
+            case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
+              {:ok, updated} -> updated
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
 
-            {:error, reason} ->
-              Repo.rollback(reason)
-          end
-        end,
-        mode: :immediate
-      )
+          {:error, reason} ->
+            Repo.rollback(reason)
+        end
+      end)
 
     with {:ok, updated} <- result do
       broadcast_submission_change(updated)
@@ -1090,43 +1110,40 @@ defmodule Tasky.Exams do
 
     with :ok <- authorize_submission(scope, submission) do
       result =
-        Repo.transaction(
-          fn ->
-            locked = Repo.get!(ExamSubmission, submission.id)
-            doc = correction_content(locked)
-            parts = split_content_into_parts(doc)
-            preamble = content_preamble(doc)
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(ExamSubmission, submission.id)
+          doc = correction_content(locked)
+          parts = split_content_into_parts(doc)
+          preamble = content_preamble(doc)
 
-            unless Enum.any?(parts, &(&1.id == part_id)) do
-              Repo.rollback(:unknown_part)
+          unless Enum.any?(parts, &(&1.id == part_id)) do
+            Repo.rollback(:unknown_part)
+          end
+
+          new_parts =
+            Enum.map(parts, fn p ->
+              if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+            end)
+
+          new_points =
+            if is_nil(points) do
+              Map.delete(locked.points_per_part || %{}, part_id)
+            else
+              Map.put(locked.points_per_part || %{}, part_id, points)
             end
 
-            new_parts =
-              Enum.map(parts, fn p ->
-                if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
-              end)
+          changes = %{
+            corrected_content: assemble_parts_into_content(preamble, new_parts),
+            block_verdicts: Map.merge(locked.block_verdicts || %{}, verdicts),
+            points_per_part: new_points,
+            auto_corrected_parts: Enum.uniq([part_id | locked.auto_corrected_parts || []])
+          }
 
-            new_points =
-              if is_nil(points) do
-                Map.delete(locked.points_per_part || %{}, part_id)
-              else
-                Map.put(locked.points_per_part || %{}, part_id, points)
-              end
-
-            changes = %{
-              corrected_content: assemble_parts_into_content(preamble, new_parts),
-              block_verdicts: Map.merge(locked.block_verdicts || %{}, verdicts),
-              points_per_part: new_points,
-              auto_corrected_parts: Enum.uniq([part_id | locked.auto_corrected_parts || []])
-            }
-
-            case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
-              {:ok, updated} -> updated
-              {:error, changeset} -> Repo.rollback(changeset)
-            end
-          end,
-          mode: :immediate
-        )
+          case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end)
 
       with {:ok, updated} <- result do
         broadcast_submission_change(updated)
@@ -1143,21 +1160,18 @@ defmodule Tasky.Exams do
   def unmark_part_corrected_bulk(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
       result =
-        Repo.transaction(
-          fn ->
-            for submission <- list_exam_submissions(exam) do
-              parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
+        Repo.transaction(fn ->
+          for submission <- lock_exam_submissions!(exam) do
+            parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
 
-              case submission
-                   |> Ecto.Changeset.change(%{corrected_parts: parts})
-                   |> Repo.update() do
-                {:ok, updated} -> updated
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
+            case submission
+                 |> Ecto.Changeset.change(%{corrected_parts: parts})
+                 |> Repo.update() do
+              {:ok, updated} -> updated
+              {:error, changeset} -> Repo.rollback(changeset)
             end
-          end,
-          mode: :immediate
-        )
+          end
+        end)
 
       with {:ok, updated} <- result do
         Enum.each(updated, &broadcast_submission_change/1)
@@ -1177,30 +1191,27 @@ defmodule Tasky.Exams do
       when is_binary(part_id) and is_map(defaults) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
       result =
-        Repo.transaction(
-          fn ->
-            exam = Repo.get!(Exam, exam.id)
+        Repo.transaction(fn ->
+          exam = Repo.lock_one!(Exam, exam.id, :share)
 
-            for submission <- list_exam_submissions(exam) do
-              submission =
-                defaults
-                |> Map.get(submission.id, %{})
-                |> Enum.reduce(submission, fn {index, verdict}, acc ->
-                  apply_default_verdict(acc, exam, part_id, index, verdict)
-                end)
+          for submission <- lock_exam_submissions!(exam) do
+            submission =
+              defaults
+              |> Map.get(submission.id, %{})
+              |> Enum.reduce(submission, fn {index, verdict}, acc ->
+                apply_default_verdict(acc, exam, part_id, index, verdict)
+              end)
 
-              parts = Enum.uniq([part_id | submission.corrected_parts || []])
+            parts = Enum.uniq([part_id | submission.corrected_parts || []])
 
-              case submission
-                   |> Ecto.Changeset.change(%{corrected_parts: parts})
-                   |> Repo.update() do
-                {:ok, updated} -> updated
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
+            case submission
+                 |> Ecto.Changeset.change(%{corrected_parts: parts})
+                 |> Repo.update() do
+              {:ok, updated} -> updated
+              {:error, changeset} -> Repo.rollback(changeset)
             end
-          end,
-          mode: :immediate
-        )
+          end
+        end)
 
       with {:ok, updated} <- result do
         Enum.each(updated, &broadcast_submission_change/1)
@@ -1236,25 +1247,22 @@ defmodule Tasky.Exams do
       when is_binary(part_id) and is_integer(index) and is_list(submission_ids) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
       result =
-        Repo.transaction(
-          fn ->
-            exam = Repo.get!(Exam, exam.id)
+        Repo.transaction(fn ->
+          exam = Repo.lock_one!(Exam, exam.id, :share)
 
-            for submission <- list_submissions_by_ids(exam, submission_ids) do
-              case block_verdict_changes(submission, exam, part_id, index, verdict) do
-                {:ok, changes} ->
-                  case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
-                    {:ok, updated} -> updated
-                    {:error, changeset} -> Repo.rollback(changeset)
-                  end
+          for submission <- lock_submissions_by_ids!(exam, submission_ids) do
+            case block_verdict_changes(submission, exam, part_id, index, verdict) do
+              {:ok, changes} ->
+                case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
+                  {:ok, updated} -> updated
+                  {:error, changeset} -> Repo.rollback(changeset)
+                end
 
-                {:error, reason} ->
-                  Repo.rollback(reason)
-              end
+              {:error, reason} ->
+                Repo.rollback(reason)
             end
-          end,
-          mode: :immediate
-        )
+          end
+        end)
 
       with {:ok, updated_submissions} <- result do
         Enum.each(updated_submissions, &broadcast_submission_change/1)
@@ -1841,33 +1849,60 @@ defmodule Tasky.Exams do
   replaced and its bytes removed.
   """
   def put_submission_file(%ExamSubmission{} = submission, %ExamUploadField{} = field, attrs) do
-    old = get_submission_file(submission, field.id)
-
     result =
-      case old do
-        nil ->
-          %ExamSubmissionFile{exam_submission_id: submission.id, upload_field_id: field.id}
-          |> ExamSubmissionFile.changeset(attrs)
-          |> Repo.insert()
+      Repo.transaction(fn ->
+        lock_for_file_change!(submission)
+        old = get_submission_file(submission, field.id)
 
-        existing ->
-          existing
-          |> ExamSubmissionFile.changeset(attrs)
-          |> Repo.update()
-      end
+        changeset =
+          case old do
+            nil ->
+              %ExamSubmissionFile{exam_submission_id: submission.id, upload_field_id: field.id}
+              |> ExamSubmissionFile.changeset(attrs)
 
-    with {:ok, _file} <- result do
+            existing ->
+              ExamSubmissionFile.changeset(existing, attrs)
+          end
+
+        case Repo.insert_or_update(changeset) do
+          {:ok, file} -> {file, old}
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    # Bytes are removed only once the record change has committed, so a rolled
+    # back transaction can't leave the DB pointing at a file that is gone.
+    with {:ok, {file, old}} <- result do
       if old, do: delete_submission_file_bytes(submission, old.stored_filename)
-      result
+      {:ok, file}
     end
   end
 
   @doc "Deletes a submission's answer file (record + bytes)."
   def delete_submission_file(%ExamSubmission{} = submission, %ExamSubmissionFile{} = file) do
-    with {:ok, deleted} <- Repo.delete(file) do
+    result =
+      Repo.transaction(fn ->
+        lock_for_file_change!(submission)
+
+        case Repo.delete(file) do
+          {:ok, deleted} -> deleted
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    with {:ok, deleted} <- result do
       delete_submission_file_bytes(submission, deleted.stored_filename)
       {:ok, deleted}
     end
+  end
+
+  # `submit_exam_submission/1` locks the submission row and then counts this
+  # submission's files to gate the submit. Locking the same row before every file
+  # change makes the two mutually exclusive; without it a required file could be
+  # replaced or deleted between that count and the submit write, since a row lock
+  # on the submission does not pin rows in exam_submission_files.
+  defp lock_for_file_change!(%ExamSubmission{} = submission) do
+    Repo.lock_one!(ExamSubmission, submission.id)
   end
 
   defp delete_submission_file_bytes(submission, stored_filename) do

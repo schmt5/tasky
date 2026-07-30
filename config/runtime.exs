@@ -43,7 +43,7 @@ config :tasky,
 # Must NOT live under priv/static — Plug.Static serves that dir and (in dev,
 # with raise_on_missing_only) would raise on files it doesn't whitelist. The
 # UploadController is the single serving path in all envs. Dev writes into
-# priv/uploads; test into a tmp dir; prod is overridden below to the volume.
+# priv/uploads; test into a tmp dir; prod uses R2 and never reads this.
 config :tasky,
   uploads_dir:
     System.get_env("UPLOADS_DIR") ||
@@ -52,7 +52,7 @@ config :tasky,
          _ -> Path.expand("priv/uploads")
        end)
 
-# File storage: "local" (default — files on the volume next to the DB) or
+# File storage: "local" (default — files on disk under UPLOADS_DIR) or
 # "r2" (private Cloudflare R2 bucket served via presigned URLs; see
 # docs/ROBUSTNESS_PLAN.md Phase 6). R2 credentials are validated here at
 # boot so a misconfigured deployment fails fast instead of 500ing on the
@@ -75,21 +75,38 @@ case System.get_env("STORAGE_ADAPTER", "local") do
 end
 
 if config_env() in [:prod, :demo] do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
+  database_url =
+    System.get_env("DATABASE_URL") ||
       raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/tasky/tasky.db
+      environment variable DATABASE_URL is missing.
+      For example: postgres://user:pass@ep-xxx.eu-central-1.aws.neon.tech/neondb
       """
 
-  # Keep uploads on the same persistent volume as the database.
-  config :tasky,
-    uploads_dir:
-      System.get_env("UPLOADS_DIR") || Path.join(Path.dirname(database_path), "uploads")
-
+  # The `:ssl` option is what actually enables TLS — an `?sslmode=require` in
+  # DATABASE_URL is merged into the repo options and then ignored by Postgrex,
+  # so do not drop this because the URL "already says require". Neon requires
+  # TLS; `cacerts_get/0` verifies against the OS certificate store, which is why
+  # the runtime image installs ca-certificates.
   config :tasky, Tasky.Repo,
-    database: database_path,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "1")
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    ssl: [cacerts: :public_key.cacerts_get()],
+    socket_options: if(System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: [])
+
+  # Uploads belong in R2 (STORAGE_ADAPTER=r2). With the local adapter there is
+  # no longer a persistent volume to derive a path from, so UPLOADS_DIR has to
+  # be explicit — the dev/test default above would otherwise put files inside
+  # the release directory, where they vanish on the next deploy.
+  if System.get_env("STORAGE_ADAPTER", "local") == "local" do
+    config :tasky,
+      uploads_dir:
+        System.get_env("UPLOADS_DIR") ||
+          raise("""
+          environment variable UPLOADS_DIR is missing.
+          It is required when STORAGE_ADAPTER=local (the default): point it at a
+          persistent path, or set STORAGE_ADAPTER=r2 to store uploads in R2.
+          """)
+  end
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -107,7 +124,7 @@ if config_env() in [:prod, :demo] do
     System.get_env("PHX_HOST") ||
       raise """
       environment variable PHX_HOST is missing.
-      Set it to the public hostname of this deployment (e.g. tasky-be-med.fly.dev) —
+      Set it to the public hostname of this deployment (e.g. learningline.fly.dev) —
       URLs in the app would otherwise silently point at a wrong host.
       """
 

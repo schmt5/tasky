@@ -419,33 +419,31 @@ defmodule Tasky.Tasks do
 
   """
   def complete_task(%Scope{user: user} = _scope, submission_id) when user.role == "student" do
-    # Gate checks and the write run in one BEGIN IMMEDIATE transaction (fresh
-    # refetch inside) so the completion can't slip past concurrently-changed
-    # state (TOCTOU on the upload check).
+    # Gate checks and the write run in one transaction against a row locked FOR
+    # UPDATE, so the completion can't slip past concurrently-changed state
+    # (TOCTOU on the upload check). The `:task` preload stays unlocked — no
+    # guard below reads a `tasks` column.
     result =
-      Repo.transaction(
-        fn ->
-          submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+      Repo.transaction(fn ->
+        submission = Repo.lock_one!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
-          cond do
-            submission.student_id != user.id ->
-              Repo.rollback(:unauthorized)
+        cond do
+          submission.student_id != user.id ->
+            Repo.rollback(:unauthorized)
 
-            submission.status not in @editable_statuses ->
-              Repo.rollback(:not_editable)
+          submission.status not in @editable_statuses ->
+            Repo.rollback(:not_editable)
 
-            missing_required_uploads(submission) != [] ->
-              Repo.rollback(:missing_uploads)
+          missing_required_uploads(submission) != [] ->
+            Repo.rollback(:missing_uploads)
 
-            true ->
-              case submission |> TaskSubmission.complete_changeset() |> Repo.update() do
-                {:ok, updated} -> %{updated | task: submission.task}
-                {:error, changeset} -> Repo.rollback(changeset)
-              end
-          end
-        end,
-        mode: :immediate
-      )
+          true ->
+            case submission |> TaskSubmission.complete_changeset() |> Repo.update() do
+              {:ok, updated} -> %{updated | task: submission.task}
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+        end
+      end)
 
     with {:ok, updated} <- result do
       broadcast_submission_updated(updated, updated.task.course_id)
@@ -921,33 +919,60 @@ defmodule Tasky.Tasks do
   replaced and its bytes removed.
   """
   def put_submission_file(%TaskSubmission{} = submission, %TaskUploadField{} = field, attrs) do
-    old = get_submission_file(submission, field.id)
-
     result =
-      case old do
-        nil ->
-          %TaskSubmissionFile{task_submission_id: submission.id, upload_field_id: field.id}
-          |> TaskSubmissionFile.changeset(attrs)
-          |> Repo.insert()
+      Repo.transaction(fn ->
+        lock_for_file_change!(submission)
+        old = get_submission_file(submission, field.id)
 
-        existing ->
-          existing
-          |> TaskSubmissionFile.changeset(attrs)
-          |> Repo.update()
-      end
+        changeset =
+          case old do
+            nil ->
+              %TaskSubmissionFile{task_submission_id: submission.id, upload_field_id: field.id}
+              |> TaskSubmissionFile.changeset(attrs)
 
-    with {:ok, _file} <- result do
+            existing ->
+              TaskSubmissionFile.changeset(existing, attrs)
+          end
+
+        case Repo.insert_or_update(changeset) do
+          {:ok, file} -> {file, old}
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    # Bytes are removed only once the record change has committed, so a rolled
+    # back transaction can't leave the DB pointing at a file that is gone.
+    with {:ok, {file, old}} <- result do
       if old, do: delete_submission_file_bytes(submission, old.stored_filename)
-      result
+      {:ok, file}
     end
   end
 
   @doc "Deletes a submission's answer file (record + bytes)."
   def delete_submission_file(%TaskSubmission{} = submission, %TaskSubmissionFile{} = file) do
-    with {:ok, deleted} <- Repo.delete(file) do
+    result =
+      Repo.transaction(fn ->
+        lock_for_file_change!(submission)
+
+        case Repo.delete(file) do
+          {:ok, deleted} -> deleted
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    with {:ok, deleted} <- result do
       delete_submission_file_bytes(submission, deleted.stored_filename)
       {:ok, deleted}
     end
+  end
+
+  # `complete_task/2` locks the submission row and then counts this submission's
+  # files to gate completion. Locking the same row before every file change makes
+  # the two mutually exclusive; without it a required file could be replaced or
+  # deleted between that count and the completion write, since a row lock on the
+  # submission does not pin rows in task_submission_files.
+  defp lock_for_file_change!(%TaskSubmission{} = submission) do
+    Repo.lock_one!(TaskSubmission, submission.id)
   end
 
   defp delete_submission_file_bytes(submission, stored_filename) do
