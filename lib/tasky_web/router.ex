@@ -3,28 +3,22 @@ defmodule TaskyWeb.Router do
 
   import TaskyWeb.UserAuth
 
-  # Everything is served same-origin (bundled assets, local fonts, uploaded
-  # images); LiveView needs the websocket, Tiptap/React need inline style
-  # attributes, and content images are embedded as data:/blob: while uploading.
-  @content_security_policy "default-src 'self'; " <>
-                             "script-src 'self'; " <>
-                             "style-src 'self' 'unsafe-inline'; " <>
-                             "img-src 'self' data: blob:; " <>
-                             "font-src 'self' data:; " <>
-                             "connect-src 'self' ws: wss:; " <>
-                             "object-src 'none'; " <>
-                             "base-uri 'self'; " <>
-                             "frame-ancestors 'self'; " <>
-                             "form-action 'self'"
-
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {TaskyWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers, %{"content-security-policy" => @content_security_policy}
+    plug :put_csp_secure_browser_headers
     plug :fetch_current_scope_for_user
+  end
+
+  # The CSP depends on the storage adapter configured at boot, so it cannot be
+  # a compile-time attribute — see `TaskyWeb.ContentSecurityPolicy`.
+  defp put_csp_secure_browser_headers(conn, _opts) do
+    put_secure_browser_headers(conn, %{
+      "content-security-policy" => TaskyWeb.ContentSecurityPolicy.page()
+    })
   end
 
   # Served user uploads: never render as HTML/scripts, never leak referers.

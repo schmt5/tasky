@@ -152,7 +152,13 @@ defmodule Tasky.Storage.R2 do
     )
   end
 
-  defp endpoint_url, do: "https://#{config()[:account_id]}.r2.cloudflarestorage.com"
+  @doc """
+  Origin the presigned URLs point at. Public because the page CSP has to allow
+  it in `img-src` — `/uploads/...` answers with a 302 onto this origin, and the
+  browser re-checks the redirect target against the source list.
+  """
+  def endpoint_url, do: "https://#{config()[:account_id]}.r2.cloudflarestorage.com"
+
   defp bucket, do: config()[:bucket]
   defp config, do: Application.fetch_env!(:tasky, __MODULE__)
 end
