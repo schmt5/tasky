@@ -2,6 +2,7 @@ defmodule TaskyWeb.ExamLive.Grading do
   use TaskyWeb, :live_view
 
   alias Tasky.Exams
+  alias Tasky.Grading
 
   @impl true
   def render(assigns) do
@@ -417,7 +418,7 @@ defmodule TaskyWeb.ExamLive.Grading do
     else
       delta = if dir == "up", do: 0.25, else: -0.25
       new_mark = row.effective_mark + delta
-      save_mark(socket, sub_id, new_mark |> round_to_quarter() |> clamp_mark())
+      save_mark(socket, sub_id, Grading.normalize_mark(new_mark))
     end
   end
 
@@ -430,31 +431,63 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   def handle_event("toggle_export_option", %{"option" => option}, socket) do
-    key = String.to_existing_atom(option)
-    current = socket.assigns.export_options
-    updated = Map.put(current, key, not Map.fetch!(current, key))
+    # Explicit whitelist: client params must never mint or crash on atoms.
+    key =
+      case option do
+        "show_points_and_mark" -> :show_points_and_mark
+        "show_content" -> :show_content
+        "show_correction" -> :show_correction
+        "show_sample_solution" -> :show_sample_solution
+        _ -> nil
+      end
 
-    # show_correction requires show_content; clear it if content is turned off.
-    updated =
-      if updated.show_content,
-        do: updated,
-        else: Map.put(updated, :show_correction, false)
-
-    {:noreply, assign(socket, :export_options, updated)}
+    if is_nil(key) do
+      {:noreply, socket}
+    else
+      toggle_export_option(socket, key)
+    end
   end
 
   def handle_event("start_export", _params, socket) do
     opts = socket.assigns.export_options
     user_id = socket.assigns.current_scope.user.id
     endpoint = socket.endpoint
+    exam = socket.assigns.exam
+
+    print_opts =
+      Map.take(opts, [
+        :show_content,
+        :show_correction,
+        :show_sample_solution,
+        :show_points_and_mark
+      ])
+
+    # URL building and token signing are web concerns — the runner only gets
+    # ready-made functions.
+    web = %{
+      print_url: fn submission ->
+        token =
+          Tasky.Exams.PrintToken.sign(
+            endpoint,
+            user_id,
+            to_string(exam.id),
+            to_string(submission.id),
+            print_opts
+          )
+
+        base = Tasky.Exams.ExportRunner.callback_base_url()
+        "#{base}/print/exam-submission/#{exam.id}/#{submission.id}?token=#{URI.encode(token)}"
+      end,
+      sign_download: fn export_id, filename ->
+        Tasky.Exams.ExportDownloadToken.sign(endpoint, export_id, filename)
+      end
+    }
 
     case Tasky.Exams.ExportRunner.start(
-           socket.assigns.exam,
+           exam,
            socket.assigns.submissions,
-           opts,
            self(),
-           user_id,
-           endpoint
+           web
          ) do
       {:ok, _pid} ->
         {:noreply,
@@ -509,7 +542,7 @@ defmodule TaskyWeb.ExamLive.Grading do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   defp save_max_points(socket, value) do
-    case Exams.update_grading_max_points(socket.assigns.exam, value) do
+    case Exams.update_grading_max_points(socket.assigns.current_scope, socket.assigns.exam, value) do
       {:ok, updated_exam} ->
         effective = value || socket.assigns.sample_solution_total
 
@@ -530,7 +563,7 @@ defmodule TaskyWeb.ExamLive.Grading do
     if is_nil(submission) do
       {:noreply, socket}
     else
-      case Exams.set_submission_mark(submission, mark) do
+      case Exams.set_submission_mark(socket.assigns.current_scope, submission, mark) do
         {:ok, updated} ->
           submissions =
             Enum.map(socket.assigns.submissions, fn s ->
@@ -563,61 +596,15 @@ defmodule TaskyWeb.ExamLive.Grading do
     end)
   end
 
-  defp total_points(submission) do
-    (submission.points_per_part || %{})
-    |> Map.values()
-    |> Enum.reduce(0, fn
-      v, acc when is_number(v) -> acc + v
-      _, acc -> acc
-    end)
-  end
+  defp total_points(submission), do: Grading.sum_points(submission.points_per_part)
 
-  defp sum_sample_solution_points(exam) do
-    (exam.sample_solution_points || %{})
-    |> Map.values()
-    |> Enum.reduce(0, fn
-      v, acc when is_number(v) -> acc + v
-      _, acc -> acc
-    end)
-  end
+  defp sum_sample_solution_points(exam), do: Grading.sum_points(exam.sample_solution_points)
 
-  # Swiss 1–6 scale: 0 points → 1, max points → 6.
-  # Result is rounded to the nearest 0.25 and clamped to [1.0, 6.0].
-  defp calculate_mark(_points, max) when max in [nil, 0, 0.0], do: nil
+  defp calculate_mark(points, max), do: Grading.mark(points, max)
 
-  defp calculate_mark(points, max) when is_number(points) and is_number(max) do
-    raw = points / max * 5 + 1
-    raw |> round_to_quarter() |> clamp_mark()
-  end
+  defp format_mark(mark), do: Grading.format_mark(mark, "")
 
-  defp calculate_mark(_, _), do: nil
-
-  defp round_to_quarter(n), do: Float.round(n * 4) / 4
-
-  defp clamp_mark(n) when n < 1.0, do: 1.0
-  defp clamp_mark(n) when n > 6.0, do: 6.0
-  defp clamp_mark(n), do: n
-
-  defp format_mark(nil), do: ""
-
-  defp format_mark(n) when is_number(n) do
-    n = n * 1.0
-
-    cond do
-      n == trunc(n) -> :erlang.float_to_binary(n, decimals: 1)
-      true -> :erlang.float_to_binary(n, decimals: 2)
-    end
-  end
-
-  defp format_points(nil), do: "—"
-  defp format_points(0), do: "0"
-  defp format_points(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_points(n) when is_float(n) do
-    if n == trunc(n),
-      do: Integer.to_string(trunc(n)),
-      else: :erlang.float_to_binary(n, decimals: 1)
-  end
+  defp format_points(n), do: Grading.format_points(n)
 
   defp export_percent(%{total: 0}), do: 0
   defp export_percent(%{done: done, total: total}), do: round(done * 100 / total)
@@ -627,20 +614,7 @@ defmodule TaskyWeb.ExamLive.Grading do
   defp mark_color_class(n) when n >= 4.0, do: "text-stone-700"
   defp mark_color_class(_), do: "text-red-600"
 
-  defp parse_points(value) when is_binary(value) do
-    case String.trim(value) do
-      "" ->
-        nil
-
-      trimmed ->
-        case Float.parse(trimmed) do
-          {n, ""} -> n
-          _ -> nil
-        end
-    end
-  end
-
-  defp parse_points(_), do: nil
+  defp parse_points(value), do: Grading.parse_points(value)
 
   defp parse_mark(value) when is_binary(value) do
     case String.trim(value) do
@@ -649,13 +623,26 @@ defmodule TaskyWeb.ExamLive.Grading do
 
       trimmed ->
         case Float.parse(trimmed) do
-          {n, ""} -> n |> round_to_quarter() |> clamp_mark()
+          {n, ""} -> Grading.normalize_mark(n)
           _ -> nil
         end
     end
   end
 
   defp parse_mark(_), do: nil
+
+  defp toggle_export_option(socket, key) do
+    current = socket.assigns.export_options
+    updated = Map.put(current, key, not Map.fetch!(current, key))
+
+    # show_correction requires show_content; clear it if content is turned off.
+    updated =
+      if updated.show_content,
+        do: updated,
+        else: Map.put(updated, :show_correction, false)
+
+    {:noreply, assign(socket, :export_options, updated)}
+  end
 
   defp load_sorted_submissions(exam) do
     exam

@@ -52,6 +52,28 @@ config :tasky,
          _ -> Path.expand("priv/uploads")
        end)
 
+# File storage: "local" (default — files on the volume next to the DB) or
+# "r2" (private Cloudflare R2 bucket served via presigned URLs; see
+# docs/ROBUSTNESS_PLAN.md Phase 6). R2 credentials are validated here at
+# boot so a misconfigured deployment fails fast instead of 500ing on the
+# first upload.
+case System.get_env("STORAGE_ADAPTER", "local") do
+  "local" ->
+    config :tasky, storage_adapter: Tasky.Storage.Local
+
+  "r2" ->
+    config :tasky, storage_adapter: Tasky.Storage.R2
+
+    config :tasky, Tasky.Storage.R2,
+      account_id: System.fetch_env!("R2_ACCOUNT_ID"),
+      bucket: System.fetch_env!("R2_BUCKET"),
+      access_key_id: System.fetch_env!("R2_ACCESS_KEY_ID"),
+      secret_access_key: System.fetch_env!("R2_SECRET_ACCESS_KEY")
+
+  other ->
+    raise "STORAGE_ADAPTER must be \"local\" or \"r2\", got: #{inspect(other)}"
+end
+
 if config_env() in [:prod, :demo] do
   database_path =
     System.get_env("DATABASE_PATH") ||
@@ -81,7 +103,13 @@ if config_env() in [:prod, :demo] do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host =
+    System.get_env("PHX_HOST") ||
+      raise """
+      environment variable PHX_HOST is missing.
+      Set it to the public hostname of this deployment (e.g. tasky-be-med.fly.dev) —
+      URLs in the app would otherwise silently point at a wrong host.
+      """
 
   config :tasky, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
@@ -145,6 +173,4 @@ if config_env() in [:prod, :demo] do
   #     config :swoosh, :api_client, Swoosh.ApiClient.Req
   #
   # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
-
-  config :tasky, :anthropic_api_key, System.get_env("ANTHROPIC_API_KEY")
 end

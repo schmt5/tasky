@@ -4,8 +4,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   import TaskyWeb.FileComponents
 
   alias Tasky.Exams
-  alias Tasky.Repo
-  alias Tasky.Exams.ExamSubmission
+  alias Tasky.Grading
   alias Tasky.Uploads
 
   @impl true
@@ -711,8 +710,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       ) do
     %{exam: exam, submissions: submissions} = socket.assigns
 
-    submission =
-      Repo.get_by!(ExamSubmission, id: submission_id, exam_id: exam.id)
+    submission = Exams.get_submission!(exam, submission_id)
 
     parts =
       submission
@@ -833,11 +831,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     |> assign(:points, Map.get(submission.points_per_part || %{}, part.id))
   end
 
-  defp normalize_points(n) when is_float(n) do
-    rounded = Float.round(n * 4) / 4
-    if rounded == trunc(rounded), do: trunc(rounded), else: rounded
-  end
-
+  defp normalize_points(n) when is_number(n), do: Grading.normalize_points(n)
   defp normalize_points(n), do: n
 
   @impl true
@@ -894,11 +888,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     %{submission: submission, current_part: part} = socket.assigns
     index_int = parse_index(index)
 
-    current =
-      Map.get(
-        submission.block_verdicts || %{},
-        "#{part.id}:#{index_int}"
-      )
+    current = Exams.explicit_block_verdict(submission, part.id, index_int)
 
     # Toggle-off only applies to the string verdicts; a stored manual number
     # never equals the clicked "correct"/"wrong".
@@ -964,11 +954,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   def handle_event("toggle_corrected", _params, socket) do
     %{submission: submission, current_part: part} = socket.assigns
 
+    scope = socket.assigns.current_scope
+
     result =
       if part.id in (submission.corrected_parts || []) do
-        Exams.unmark_part_corrected(submission, part.id)
+        Exams.unmark_part_corrected(scope, submission, part.id)
       else
-        Exams.mark_part_corrected(submission, part.id)
+        Exams.mark_part_corrected(scope, submission, part.id)
       end
 
     case result do
@@ -986,7 +978,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   defp apply_block_verdict(socket, index_int, new_verdict) do
     %{submission: submission, current_part: part} = socket.assigns
 
-    case Exams.set_block_verdict(submission, part.id, index_int, new_verdict) do
+    case Exams.set_block_verdict(
+           socket.assigns.current_scope,
+           submission,
+           part.id,
+           index_int,
+           new_verdict
+         ) do
       {:ok, updated} ->
         updated_part =
           updated
@@ -1017,8 +1015,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     end
   end
 
-  defp half_of(max) when is_number(max), do: Float.round(max * 0.5 * 4) / 4
-  defp half_of(_), do: 0
+  defp half_of(max), do: Grading.half_of(max)
 
   defp parse_index(i) when is_integer(i), do: i
 
@@ -1032,7 +1029,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   defp save_points(socket, points) do
     %{submission: submission, current_part: part} = socket.assigns
 
-    case Exams.set_part_points(submission, part.id, points) do
+    case Exams.set_part_points(socket.assigns.current_scope, submission, part.id, points) do
       {:ok, updated} ->
         {:noreply,
          socket
@@ -1044,20 +1041,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     end
   end
 
-  defp format_points(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_points(n) when is_float(n) do
-    if n == trunc(n) do
-      Integer.to_string(trunc(n))
-    else
-      n
-      |> :erlang.float_to_binary(decimals: 2)
-      |> String.trim_trailing("0")
-      |> String.trim_trailing(".")
-    end
-  end
-
-  defp format_points(_), do: "—"
+  defp format_points(n), do: Grading.format_points(n)
 
   defp power_row_points(v, _max) when is_number(v), do: format_points(normalize_points(v * 1.0))
   defp power_row_points(_verdict, nil), do: "—"
@@ -1072,20 +1056,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   defp power_points_class(v) when is_number(v), do: "bg-yellow-50 text-yellow-700"
   defp power_points_class(_), do: "bg-stone-50 text-stone-400"
 
-  defp parse_points(value) when is_binary(value) do
-    case String.trim(value) do
-      "" ->
-        nil
-
-      trimmed ->
-        case Float.parse(trimmed) do
-          {n, ""} -> if n == trunc(n), do: trunc(n), else: n
-          _ -> nil
-        end
-    end
-  end
-
-  defp parse_points(_), do: nil
+  defp parse_points(value), do: Grading.parse_points(value)
 
   defp sibling_part_path(_exam, _submission, _parts, nil, _delta), do: nil
 

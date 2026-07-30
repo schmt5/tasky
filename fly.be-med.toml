@@ -9,6 +9,9 @@ kill_signal = 'SIGTERM'
 
 [build]
 
+# NOTE: the volume (and db file) are unfortunately literally named 'name' —
+# renaming requires forking the volume on Fly and moving the SQLite file, so
+# it stays until an operator does that on purpose (ROBUSTNESS_PLAN 8.5).
 [env]
   DATABASE_PATH = '/mnt/name/name.db'
   MIX_ENV = 'demo'

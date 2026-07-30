@@ -1,463 +1,113 @@
-# Task Submission System - Architecture Overview
+# Architecture
 
-## 🏗️ System Architecture
+Tasky is a Phoenix LiveView app (SQLite via `ecto_sqlite3`) with React/Tiptap
+editor islands. Teachers author **exams** (guest access via tokens) and
+**learning units/tasks** (course-enrolled students); students answer in the
+browser; teachers correct, grade and export PDFs. This document describes the
+system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 
-### High-Level Overview
+## Context map (`lib/tasky/`)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Browser (Client)                        │
-│                                                                 │
-│  ┌──────────────────┐              ┌──────────────────┐        │
-│  │  Student View    │              │  Teacher View    │        │
-│  │                  │              │                  │        │
-│  │  • My Tasks      │              │  • Tasks List    │        │
-│  │  • Task Detail   │              │  • Submissions   │        │
-│  │  • View Grades   │              │  • Grading Form  │        │
-│  └──────────────────┘              └──────────────────┘        │
-│           │                                  │                  │
-└───────────┼──────────────────────────────────┼─────────────────┘
-            │                                  │
-            │          LiveView WebSocket      │
-            │                                  │
-┌───────────┴──────────────────────────────────┴─────────────────┐
-│                    Phoenix LiveView Layer                       │
-│                                                                 │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │               Router (Authorization)                   │   │
-│  │                                                        │   │
-│  │  ┌──────────────────┐      ┌──────────────────┐      │   │
-│  │  │ :student scope   │      │ :tasks scope     │      │   │
-│  │  │ (Student only)   │      │ (Teacher/Admin)  │      │   │
-│  │  └──────────────────┘      └──────────────────┘      │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │                   LiveView Modules                     │   │
-│  │                                                        │   │
-│  │  Student.*           Teacher.*         TaskLive.*     │   │
-│  │  ├─ TaskLive         ├─ SubmissionsLive  ├─ Index   │   │
-│  │  └─ MyTasksLive      └─ GradeLive        ├─ Show    │   │
-│  │                                           └─ Form    │   │
-│  └────────────────────────────────────────────────────────┘   │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-┌─────────────────────────┴───────────────────────────────────────┐
-│                     Context Layer (Business Logic)              │
-│                                                                 │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │                  Tasky.Tasks Context                   │   │
-│  │                                                        │   │
-│  │  • list_my_submissions(scope)                         │   │
-│  │  • get_or_create_submission(scope, task_id)           │   │
-│  │  • update_submission_status(scope, id, status)        │   │
-│  │  • complete_task(scope, submission_id)                │   │
-│  │  • list_task_submissions(scope, task_id)              │   │
-│  │  • grade_submission(scope, id, attrs)                 │   │
-│  │  • get_submission!(scope, id)                         │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │              Tasky.Accounts.Scope                      │   │
-│  │                                                        │   │
-│  │  • for_user(user)                                     │   │
-│  │  • student?(scope)                                    │   │
-│  │  • admin_or_teacher?(scope)                           │   │
-│  └────────────────────────────────────────────────────────┘   │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │
-┌─────────────────────────┴───────────────────────────────────────┐
-│                    Data Layer (Ecto/Database)                   │
-│                                                                 │
-│  ┌─────────────┐   ┌──────────────┐   ┌──────────────┐       │
-│  │    tasks    │   │ task_        │   │    users     │       │
-│  │             │   │ submissions  │   │              │       │
-│  │ • id        │───│ • id         │───│ • id         │       │
-│  │ • name      │   │ • task_id    │   │ • email      │       │
-│  │ • content   │   │ • student_id │───│ • role       │       │
-│  │ • status    │   │ • status     │   │ • ...        │       │
-│  │ • position  │   │ • completed_at│   └──────────────┘       │
-│  │ • user_id   │   │ • points     │         ▲                 │
-│  └─────────────┘   │ • feedback   │         │                 │
-│                    │ • graded_at  │─────────┘                 │
-│                    │ • graded_by_id│ (teacher)                │
-│                    └──────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Module | Responsibility |
+|---|---|
+| `Tasky.Accounts` | Users, sessions, roles (`admin`/`teacher`/`student`). Registration auto-confirms; **email delivery is disabled** (local adapter everywhere). |
+| `Tasky.Policy` | The one authorization rule: **admins manage everything, owners manage their own**. `:system` is the trusted scope for supervised background jobs — never passed from the web layer. |
+| `Tasky.Exams` | Exam CRUD, lifecycle (`draft → open → running → finished → archived`, enforced), guest enrollment/submissions, grading writes. Every mutator takes a scope (or `:system`) and authorizes internally. |
+| `Tasky.Tasks` | Learning units, student submissions, review flow. Same scoping rules. |
+| `Tasky.Courses` / `Tasky.Classes` | Course/class membership; `Courses.enrolled?/2` gates all student task access. |
+| `Tasky.ExamDoc` | Pure Tiptap document algebra: split into parts, preamble, reassembly, answer-block labels, **stable part ids**. |
+| `Tasky.Grading` | Pure grading domain: quarter-point rounding, verdict semantics, part/total computation, the **one** Swiss mark formula (screen and PDF). |
+| `Tasky.Correction.AnswerKey` | Splits an answer-filled doc into answer-free `content` + an answers map keyed by `answerId`; merges them back. |
+| `Tasky.Correction.StringComparator` | Deterministic auto-correction of one part (no AI; an AI client can be swapped in behind the same contract). |
+| `Tasky.AI.NodePatcher` | Lists answer blocks of a doc, applies/rewrites ✅/🟡/❌ markers. |
+| `Tasky.AI.BulkCorrectionRunner` | Auto-corrects all eligible (submission, part) pairs of an exam. **Singleton per exam** (Registry); overlapping triggers queue a re-run; the terminal `:bulk_correction_done` broadcast is crash-safe. |
+| `Tasky.AI.CorrectionOrchestrator` | Subscribes to `"exam_events"` and starts runner jobs — the only link between `Exams` and the runner (no cycle). |
+| `Tasky.Uploads` | Validation + key building for stored files (type whitelists, size caps, magic-byte sniffing for images). Physical IO goes through `Tasky.Storage`. |
+| `Tasky.Storage` (+ `Local`, `R2`) | Storage behaviour (`put/fetch/delete/delete_prefix`). `Local` serves files from the volume; `R2` keeps a private bucket and serves via presigned URLs. Selected by `STORAGE_ADAPTER` at boot. |
+| `Tasky.Exams.ExportRunner` / `ExportJanitor` | PDF export via Gotenberg (serialized, retried), ZIP with failure manifest on partial success, id-signed download tokens, janitor-based tmp cleanup. |
+| `Tasky.PDF.Gotenberg` | Thin Req client for the Gotenberg service (transient-error retries). |
 
-## 🔄 Data Flow
+## Document & grading model
 
-### Student Workflow
+The exam document is **Tiptap JSON**, stored as-is and rendered client-side
+everywhere (editors, read-only viewers, the PDF print view) — there is no
+server-side JSON→HTML rendering.
 
-```
-1. Student Views Task
-   Browser → Router → Student.TaskLive
-                    ↓
-              Tasks.get_task!(scope, id)
-                    ↓
-              Tasks.get_or_create_submission(scope, task_id)
-                    ↓
-              Database Query
-                    ↓
-              Render with task & submission data
+- **Answer ids**: every answer-bearing node (`answerBlock`, `lueckentext`,
+  `taskItem`) carries a stable `attrs.answerId` (client-generated
+  `crypto.randomUUID()`, server fallback in `AnswerKey.ensure_ids/1`). Paste
+  deduplication regenerates colliding ids.
+- **Part ids**: every question heading (h3) carries a stable `attrs.partId`
+  (client-stamped, server fallback in `ExamDoc.ensure_part_ids/1`). All
+  part-keyed data (sample-solution points, AI config, corrected parts,
+  points per part) uses these ids, so reordering questions re-keys nothing.
+- **Verdicts** live in `exam_submissions.block_verdicts`, keyed by the
+  block's `answerId`: `"correct"`, `"wrong"`, legacy `"half"`, or a number
+  (manual points, clamped/quarter-rounded). The ✅/🟡/❌ markers inside
+  `corrected_content` are still written server-side on verdict changes and
+  read back as an inference fallback for AI-corrected parts (making them
+  fully render-only is the one open Phase-3 item, 3.3).
+- **Grading writes are transactional**: every read-modify-write over the
+  JSON columns runs in `Repo.transaction(mode: :immediate)` with an
+  in-transaction refetch; bulk operations (grouped verdicts, mark-all) are
+  single transactions. Submit gates re-check inside the transaction (TOCTOU).
 
-2. Student Starts Task
-   Browser (Click) → handle_event("start_task")
-                           ↓
-                    Tasks.update_submission_status(scope, id, "in_progress")
-                           ↓
-                    Database Update
-                           ↓
-                    Updated submission assigned to socket
-                           ↓
-                    Browser (Re-render with new status)
+## Web layer (`lib/tasky_web/`)
 
-3. Student Completes Task
-   Browser (Click) → handle_event("complete_task")
-                           ↓
-                    Tasks.complete_task(scope, id)
-                           ↓
-                    Database Update (status + completed_at)
-                           ↓
-                    Updated submission assigned to socket
-                           ↓
-                    Browser (Show "waiting for grade")
+- **No raw `Repo` under `lib/tasky_web/`** — a credo `ForbiddenModule` check
+  enforces it; contexts expose accessors instead.
+- Pipelines: `:browser` carries a strict CSP (`script-src 'self'`, no inline
+  scripts — even the Gotenberg print-ready signal lives in the bundle);
+  `/uploads` responses are sandboxed (`default-src 'none'`, nosniff, CORP);
+  the guest enrollment routes are rate-limited per IP
+  (`TaskyWeb.Plugs.RateLimit`; the 128-bit `exam_token` API routes are not).
+- JSON APIs (autosave, images) share `TaskyWeb.ApiHelpers`
+  (`render_save_result/2`, uniform errors). File downloads share
+  `TaskyWeb.StorageServing` (local `send_file`/`send_download` vs. presigned
+  302).
+- Client params are parsed via `TaskyWeb.Params.int/1` and explicit atom
+  whitelists — malformed input never crashes a LiveView.
 
-4. Student Views Grade
-   Teacher grades → Database Update
-                           ↓
-   Student refreshes → Tasks.get_submission!(scope, id)
-                           ↓
-                    Database Query (with grade)
-                           ↓
-                    Browser (Display points + feedback)
-```
+## Frontend (`assets/js/`)
 
-### Teacher Workflow
+- One React/Tiptap component (`react/ExamContentEditor.jsx`) drives all
+  editor modes (author, sample solution, student, correction, read-only) via
+  props. Splitting it into typed TS modules is the open Phase-4.6 item.
+- All React islands are built by `hooks/create_react_hook.jsx`: dynamic
+  imports, destroyed-after-await guard, **loud failure** on corrupt
+  `data-content` (refuses to mount so an autosave can't overwrite the server
+  copy), optional lazy mounting, shared submit-flush handshake.
+- Autosave (`react/api.js` + the editor's flush loop): retries transient
+  failures with backoff; 401/403/login-redirects are **permanent** ("bitte
+  Seite neu laden"); unload-time flushes use `keepalive`; `beforeunload`
+  warns while unsaved.
 
-```
-1. Teacher Views Submissions
-   Browser → Router → Teacher.SubmissionsLive
-                    ↓
-              Tasks.list_task_submissions(scope, task_id)
-                    ↓
-              Database Query (with preloads: student, graded_by)
-                    ↓
-              Calculate stats (total, completed, graded, pending)
-                    ↓
-              Render with submissions & stats
+## Background work
 
-2. Teacher Grades Submission
-   Browser (Click Grade) → Navigate to Teacher.GradeLive
-                                    ↓
-                           Tasks.get_submission!(scope, id)
-                                    ↓
-                           Database Query (with preloads)
-                                    ↓
-                           Render grading form
+No job queue (decided): supervised in-process Tasks. A job lost to a restart
+is re-triggered by the teacher. Bulk correction is a per-exam singleton; PDF
+exports deliver partial results with a `FEHLER.txt` manifest; tmp ZIPs are
+cleaned by `ExportJanitor`.
 
-   Browser (Submit Form) → handle_event("save_grade")
-                                    ↓
-                           Tasks.grade_submission(scope, id, attrs)
-                                    ↓
-                           Database Update:
-                             • points
-                             • feedback
-                             • graded_at (automatic)
-                             • graded_by_id (automatic)
-                                    ↓
-                           Navigate back to submissions list
-                                    ↓
-                           Stats updated
-```
+## Deployment
 
-## 🔐 Authorization Flow
+Fly.io app `tasky-be-med` (`fly.be-med.toml`, `MIX_ENV=demo`), single machine,
+SQLite + uploads on one volume. `PHX_HOST` is mandatory (boot fails without
+it). Optional, env-gated:
 
-```
-Request → Router Pipeline → Plug Chain → LiveView on_mount → Context Function
-                            │
-                            ├─ :browser
-                            ├─ :require_authenticated_user
-                            ├─ :require_student (for student routes)
-                            └─ :require_admin_or_teacher (for teacher routes)
-                                          │
-                                          ▼
-                            on_mount callback checks:
-                              • User authenticated?
-                              • User has correct role?
-                              • Redirect if not authorized
-                                          │
-                                          ▼
-                            Context function checks:
-                              • Scope has correct role?
-                              • User owns the resource?
-                              • Return data or raise error
-```
+- `STORAGE_ADAPTER=r2` — uploads in a private R2 bucket (presigned serving).
+- `LITESTREAM_ENABLED=true` — continuous DB replication to a second R2
+  bucket; the entrypoint (`rel/overlays/start.sh`) restores an empty volume
+  from the replica before boot.
 
-### Authorization Matrix
+PDF export needs `GOTENBERG_URL` and `GOTENBERG_CALLBACK_URL` (Gotenberg's
+Chrome fetches token-authenticated `/print` pages back from the app and polls
+`window.printReady`, which the page gates on viewer render + image load).
 
-| Route | Pipeline | on_mount | Context Check |
-|-------|----------|----------|---------------|
-| `/student/tasks/:id` | `:require_authenticated_user` + `:require_student` | `require_student` | Student owns submission |
-| `/student/my-tasks` | `:require_authenticated_user` + `:require_student` | `require_student` | Student's submissions only |
-| `/tasks/:id/submissions` | `:require_authenticated_user` + `:require_admin_or_teacher` | `require_admin_or_teacher` | Teacher owns task |
-| `/tasks/:task_id/grade/:id` | `:require_authenticated_user` + `:require_admin_or_teacher` | `require_admin_or_teacher` | Teacher owns task |
+## Testing & CI
 
-## 📊 Database Schema
-
-### Relationships
-
-```
-users (1) ──────────────┬─────────────── (many) tasks
-                        │                        │
-                        │                        │
-                        │                        │ (one task has many submissions)
-                        │                        │
-                        └────────┬───────────────┘
-                                 │
-                                 │ (one student has many submissions)
-                                 │
-                                 ▼
-                        task_submissions
-                                 │
-                                 │ (graded_by references users)
-                                 │
-                                 └──────────────> users (grader)
-```
-
-### Submission State Machine
-
-```
-┌─────────────┐
-│ not_started │ ◄─── Initial state (auto-created)
-└──────┬──────┘
-       │ Student clicks "Start Task"
-       │ Tasks.update_submission_status(scope, id, "in_progress")
-       ▼
-┌─────────────┐
-│ in_progress │
-└──────┬──────┘
-       │ Student clicks "Mark as Complete"
-       │ Tasks.complete_task(scope, id)
-       │ Sets: completed_at = DateTime.utc_now()
-       ▼
-┌─────────────┐
-│  completed  │
-└──────┬──────┘
-       │ Teacher grades
-       │ Tasks.grade_submission(scope, id, attrs)
-       │ Sets: points, feedback, graded_at, graded_by_id
-       ▼
-┌─────────────┐
-│   graded    │ (still status = "completed", but has grade data)
-└─────────────┘
-```
-
-## 🎨 UI Component Hierarchy
-
-### Student Views
-
-```
-Student.TaskLive
-├── Layouts.app
-│   ├── Header (with navigation)
-│   └── Main content
-│       ├── Task content section
-│       │   ├── Task name
-│       │   ├── Tiptap editor (teacher content locked,
-│       │   │   answer fields editable, autosaved)
-│       │   └── Dateien tab (attachments + upload slots)
-│       └── Action section
-│           ├── "Abschliessen" button (flush-check + required uploads)
-│           └── Review states (completed / approved / sent back)
-│               ├── Feedback
-│               └── Reviewed date
-
-Student.MyTasksLive
-├── Layouts.app
-│   └── Main content
-│       ├── Statistics cards
-│       │   ├── Total tasks
-│       │   ├── Completed
-│       │   └── Graded
-│       └── Submissions table
-│           └── For each submission:
-│               ├── Task name
-│               ├── Status badge
-│               ├── Completed date
-│               ├── Grade (if graded)
-│               └── View button
-```
-
-### Teacher Views
-
-```
-Teacher.SubmissionsLive
-├── Layouts.app
-│   └── Main content
-│       ├── Statistics cards
-│       │   ├── Total students
-│       │   ├── Completed
-│       │   ├── Graded
-│       │   └── Pending
-│       └── Submissions table
-│           └── For each submission:
-│               ├── Student avatar & email
-│               ├── Status badge
-│               ├── Completed date
-│               ├── Grade (if graded)
-│               ├── Graded by (if graded)
-│               └── Action button (Grade/Edit Grade)
-
-Teacher.GradeLive
-├── Layouts.app
-│   └── Main content
-│       ├── Submission details section
-│       │   ├── Student info
-│       │   ├── Task info
-│       │   ├── Completion date
-│       │   └── Current grade (if updating)
-│       └── Grading form
-│           ├── Points input (0-100)
-│           ├── Feedback textarea
-│           ├── Cancel button
-│           └── Save button
-```
-
-## 🔧 Key Technical Patterns
-
-### 1. Authorization Pattern
-```elixir
-# Every context function takes a scope as first argument
-def list_my_submissions(%Scope{user: user} = _scope) when user.role == "student"
-
-# Scope enforces authorization at data access level
-def get_submission!(%Scope{user: user} = scope, submission_id) do
-  submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(...)
-  
-  cond do
-    user.role == "student" and submission.student_id == user.id -> submission
-    Scope.admin_or_teacher?(scope) -> submission
-    true -> raise Ecto.NoResultsError
-  end
-end
-```
-
-### 2. LiveView Mount Pattern
-```elixir
-def mount(%{"id" => id}, _session, socket) do
-  # Get data using scope from socket.assigns.current_scope
-  task = Tasks.get_task!(socket.assigns.current_scope, id)
-  
-  # Auto-create submission (student view)
-  {:ok, submission} = Tasks.get_or_create_submission(
-    socket.assigns.current_scope,
-    id
-  )
-  
-  # Assign to socket
-  {:ok, assign(socket, task: task, submission: submission)}
-end
-```
-
-### 3. Event Handler Pattern
-```elixir
-def handle_event("complete_task", %{"id" => id}, socket) do
-  # Call context function with scope
-  {:ok, submission} = Tasks.complete_task(
-    socket.assigns.current_scope,
-    id
-  )
-  
-  # Update socket state and provide feedback
-  {:noreply,
-   socket
-   |> put_flash(:info, "Task completed!")
-   |> assign(:submission, submission)}
-end
-```
-
-### 4. Statistics Pattern
-```elixir
-# Calculate stats from list of submissions
-stats = %{
-  total: length(submissions),
-  completed: Enum.count(submissions, &(&1.status == "completed")),
-  graded: Enum.count(submissions, &(&1.graded_at != nil)),
-  pending: Enum.count(submissions, &(&1.status == "completed" and is_nil(&1.graded_at)))
-}
-```
-
-## 🧪 Testing Architecture
-
-```
-Test Layer
-├── LiveView Tests
-│   ├── Student Tests
-│   │   ├── Integration tests (full workflow)
-│   │   ├── Navigation tests
-│   │   └── Authorization tests
-│   └── Teacher Tests
-│       ├── Integration tests (grading workflow)
-│       ├── Stats accuracy tests
-│       └── Authorization tests
-│
-└── Context Tests (already existed)
-    ├── CRUD operations
-    ├── Authorization
-    └── Business logic
-```
-
-## 📦 Deployment Architecture
-
-```
-Production Environment
-├── Application Server (Phoenix)
-│   ├── LiveView processes (stateful)
-│   ├── Database connection pool
-│   └── PubSub (for real-time updates)
-│
-├── Database (SQLite/Postgres)
-│   ├── users table
-│   ├── tasks table
-│   └── task_submissions table
-│
-└── Static Assets
-    ├── Compiled CSS (Tailwind)
-    ├── Compiled JS (esbuild)
-    └── Images (Heroicons)
-```
-
-## 🚀 Performance Considerations
-
-### Database Queries
-- **Preloading**: All associations preloaded to avoid N+1 queries
-- **Indexing**: Foreign keys indexed (task_id, student_id, graded_by_id)
-- **Selective loading**: Only load needed fields
-
-### LiveView Optimization
-- **Stateful connections**: Maintains state across interactions
-- **Minimal re-renders**: Only updates changed assigns
-- **Efficient diffing**: Phoenix tracks changes automatically
-
-### Caching Strategy
-- **No caching needed**: Data updates are infrequent
-- **LiveView state**: Keeps current page data in memory
-- **Database**: Fast enough for current scale
-
-## 🔄 Future Scalability
-
-### Horizontal Scaling
-- Multiple Phoenix nodes with PubSub
-- Shared database
-- Session storage in distributed cache
-
-### Feature Extensions
-- File storage service (S3/local)
-- Background job processing (Oban)
-- Email service integration
-- Analytics database (separate read replica)
-
----
-
-This architecture provides a solid foundation for a scalable, maintainable task submission system with clear separation of concerns and proper authorization at every layer.
+`mix precommit` = compile with warnings-as-errors, format check, credo
+(strict), sobelow, tests — identical to CI (`.github/workflows/ci.yml`,
+plus dialyzer and the asset build). Domain logic (`Grading`, `ExamDoc`,
+block points, authorization rules) is unit-tested; broad LiveView/controller
+coverage is the open Phase-8.1 item.

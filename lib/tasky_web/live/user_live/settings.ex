@@ -1,8 +1,6 @@
 defmodule TaskyWeb.UserLive.Settings do
   use TaskyWeb, :live_view
 
-  on_mount {TaskyWeb.UserAuth, :require_sudo_mode}
-
   alias Tasky.Accounts
 
   @impl true
@@ -119,7 +117,6 @@ defmodule TaskyWeb.UserLive.Settings do
             </.form>
           </div>
         </div>
-
       </div>
     </Layouts.app>
     """

@@ -45,7 +45,11 @@ defmodule Tasky.PDF.Gotenberg do
                url: "#{base}/forms/chromium/convert/url",
                form_multipart: form,
                receive_timeout: @timeout,
-               connect_options: [transport_opts: [inet6: true]]
+               connect_options: [transport_opts: [inet6: true]],
+               # Transient failures (429/5xx/timeouts) get a couple of
+               # backed-off retries instead of failing the whole export.
+               retry: :transient,
+               max_retries: 2
              ) do
           {:ok, %Req.Response{status: 200, body: pdf_binary}} ->
             {:ok, pdf_binary}

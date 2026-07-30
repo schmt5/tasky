@@ -8,6 +8,7 @@ defmodule TaskyWeb.Student.TaskLive do
   use TaskyWeb, :live_view
 
   import TaskyWeb.FileComponents
+  import TaskyWeb.StudentComponents
 
   alias Tasky.Tasks
   alias Tasky.Uploads
@@ -66,7 +67,10 @@ defmodule TaskyWeb.Student.TaskLive do
       </div>
 
       <%!-- Review-denied feedback banner (unit was sent back for revision) --%>
-      <div :if={@editable and @submission.status == "review_denied"} class="max-w-4xl mx-auto px-8 pt-6">
+      <div
+        :if={@editable and @submission.status == "review_denied"}
+        class="max-w-4xl mx-auto px-8 pt-6"
+      >
         <div class="bg-rose-50 border border-rose-200 rounded-[14px] p-5">
           <div class="flex items-start gap-3">
             <div class="w-9 h-9 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
@@ -177,7 +181,10 @@ defmodule TaskyWeb.Student.TaskLive do
                 </p>
               </div>
               <div class="px-6 pb-6 space-y-4">
-                <div :for={field <- @upload_fields} class="rounded-xl border border-stone-200 px-5 py-4">
+                <div
+                  :for={field <- @upload_fields}
+                  class="rounded-xl border border-stone-200 px-5 py-4"
+                >
                   <div class="flex items-center gap-2.5 flex-wrap">
                     <h3 class="text-base font-semibold text-stone-800">{field.label}</h3>
                     <span
@@ -528,31 +535,29 @@ defmodule TaskyWeb.Student.TaskLive do
     """
   end
 
-  attr :label, :string, required: true
-  attr :tab, :string, required: true
-  attr :active, :boolean, required: true
-
-  defp student_tab_button(assigns) do
-    ~H"""
-    <button
-      type="button"
-      phx-click="switch_student_tab"
-      phx-value-tab={@tab}
-      class={[
-        "px-3 py-1 rounded-md text-sm font-medium transition-colors",
-        if(@active,
-          do: "bg-white text-sky-700 shadow-sm",
-          else: "text-sky-600/70 hover:text-sky-800"
-        )
-      ]}
-    >
-      {@label}
-    </button>
-    """
-  end
-
   @impl true
   def mount(%{"id" => id} = params, _session, socket) do
+    scope = socket.assigns.current_scope
+
+    task =
+      case Integer.parse(id) do
+        {task_id, ""} -> Tasks.get_task_for_student(scope, task_id)
+        _ -> nil
+      end
+
+    case task do
+      nil ->
+        {:ok,
+         socket
+         |> put_flash(:error, "Aufgabe nicht gefunden.")
+         |> push_navigate(to: ~p"/student/courses")}
+
+      task ->
+        mount_task(task, params, socket)
+    end
+  end
+
+  defp mount_task(task, params, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(
         Tasky.PubSub,
@@ -560,12 +565,9 @@ defmodule TaskyWeb.Student.TaskLive do
       )
     end
 
-    task_id = String.to_integer(id)
+    {:ok, submission} = Tasks.get_or_create_submission(socket.assigns.current_scope, task.id)
 
-    {:ok, submission} = Tasks.get_or_create_submission(socket.assigns.current_scope, task_id)
-
-    submission = Tasky.Repo.preload(submission, :task)
-    task = submission.task
+    submission = %{submission | task: task}
 
     if task.locked do
       {:ok,
@@ -582,7 +584,7 @@ defmodule TaskyWeb.Student.TaskLive do
                  "in_progress"
                ) do
             {:ok, updated_submission} ->
-              Tasky.Repo.preload(updated_submission, :task, force: true)
+              %{updated_submission | task: task}
 
             {:error, _} ->
               submission
@@ -721,7 +723,7 @@ defmodule TaskyWeb.Student.TaskLive do
   defp complete_task(socket) do
     case Tasks.complete_task(socket.assigns.current_scope, socket.assigns.submission.id) do
       {:ok, updated_submission} ->
-        updated_submission = Tasky.Repo.preload(updated_submission, :task, force: true)
+        updated_submission = %{updated_submission | task: socket.assigns.task}
 
         {:noreply,
          socket
@@ -747,7 +749,7 @@ defmodule TaskyWeb.Student.TaskLive do
   @impl true
   def handle_info({:submission_updated, updated_submission}, socket) do
     if updated_submission.id == socket.assigns.submission.id do
-      updated_submission = Tasky.Repo.preload(updated_submission, :task, force: true)
+      updated_submission = %{updated_submission | task: socket.assigns.task}
 
       {:noreply, assign_submission(socket, updated_submission)}
     else
@@ -766,45 +768,43 @@ defmodule TaskyWeb.Student.TaskLive do
 
       field = Enum.find(socket.assigns.upload_fields, &(to_string(&1.id) == field_id))
 
-      cond do
-        is_nil(field) or not socket.assigns.editable ->
-          {:noreply, cancel_upload(socket, name, entry.ref)}
+      if is_nil(field) or not socket.assigns.editable do
+        {:noreply, cancel_upload(socket, name, entry.ref)}
+      else
+        result =
+          consume_uploaded_entry(socket, entry, fn %{path: path} ->
+            case Uploads.save_task_submission_file(
+                   task.id,
+                   submission.id,
+                   path,
+                   entry.client_name,
+                   field.allowed_types
+                 ) do
+              {:ok, meta} ->
+                {:ok,
+                 Tasks.put_submission_file(
+                   submission,
+                   field,
+                   Map.put(meta, :original_name, entry.client_name)
+                 )}
 
-        true ->
-          result =
-            consume_uploaded_entry(socket, entry, fn %{path: path} ->
-              case Uploads.save_task_submission_file(
-                     task.id,
-                     submission.id,
-                     path,
-                     entry.client_name,
-                     field.allowed_types
-                   ) do
-                {:ok, meta} ->
-                  {:ok,
-                   Tasks.put_submission_file(
-                     submission,
-                     field,
-                     Map.put(meta, :original_name, entry.client_name)
-                   )}
+              {:error, reason} ->
+                {:ok, {:error, reason}}
+            end
+          end)
 
-                {:error, reason} ->
-                  {:ok, {:error, reason}}
-              end
-            end)
+        case result do
+          {:ok, _file} ->
+            {:noreply, refresh_submission_files(socket)}
 
-          case result do
-            {:ok, _file} ->
-              {:noreply, refresh_submission_files(socket)}
-
-            {:error, _reason} ->
-              {:noreply,
-               put_flash(
-                 socket,
-                 :error,
-                 "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
-               )}
-          end
+          {:error, _reason} ->
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
+             )}
+        end
       end
     else
       {:noreply, socket}

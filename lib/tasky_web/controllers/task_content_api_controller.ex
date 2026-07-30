@@ -1,30 +1,18 @@
 defmodule TaskyWeb.TaskContentApiController do
   use TaskyWeb, :controller
 
+  import TaskyWeb.ApiHelpers
+
   alias Tasky.Tasks
 
   def update(conn, %{"id" => id, "content" => content}) when is_map(content) do
     scope = conn.assigns.current_scope
     task = Tasks.get_task!(scope, id)
 
-    case Tasks.save_task_content(scope, task, content) do
-      {:ok, updated} ->
-        json(conn, %{ok: true, updated_at: updated.updated_at})
-
-      {:error, changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "Invalid content", details: translate_errors(changeset)})
-    end
+    render_save_result(conn, Tasks.save_task_content(scope, task, content))
   end
 
   def update(conn, _params) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "Missing or invalid content field"})
-  end
-
-  defp translate_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+    json_error(conn, :bad_request, "Missing or invalid content field")
   end
 end

@@ -66,11 +66,20 @@ defmodule Tasky.Tasks.TaskSubmission do
     |> change(status: "completed", completed_at: DateTime.utc_now(:second))
   end
 
+  # Client-controlled JSON must stay within reason.
+  @max_content_bytes 5 * 1024 * 1024
+
   @doc """
   Changeset for saving the student's answer doc (Tiptap JSON).
   """
   def answers_changeset(submission, content) when is_map(content) do
-    change(submission, content: content)
+    submission
+    |> change(content: content)
+    |> validate_change(:content, fn :content, doc ->
+      if :erlang.external_size(doc) > @max_content_bytes,
+        do: [content: "Inhalt ist zu gross"],
+        else: []
+    end)
   end
 
   @doc """

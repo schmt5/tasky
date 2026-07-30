@@ -96,5 +96,3 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
-
-config :tasky, :anthropic_api_key, System.get_env("ANTHROPIC_API_KEY")

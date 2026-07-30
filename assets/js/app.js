@@ -35,6 +35,9 @@ import { ExamReadOnlyViewer } from "./hooks/exam_readonly_viewer_hook";
 import { PowerView } from "./hooks/power_view_hook";
 import { BulkPowerKeys } from "./hooks/bulk_power_keys_hook";
 import { StickyShadow } from "./hooks/sticky_shadow_hook";
+import { initPrintReady } from "./print_ready";
+
+initPrintReady();
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")

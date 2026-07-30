@@ -1,29 +1,18 @@
 defmodule TaskyWeb.ExamContentApiController do
   use TaskyWeb, :controller
 
+  import TaskyWeb.ApiHelpers
+
   alias Tasky.Exams
 
   def update(conn, %{"id" => id, "content" => content}) when is_map(content) do
-    exam = Exams.get_exam!(conn.assigns.current_scope, id)
+    scope = conn.assigns.current_scope
+    exam = Exams.get_exam!(scope, id)
 
-    case Exams.save_exam_structure(exam, content) do
-      {:ok, updated} ->
-        json(conn, %{ok: true, updated_at: updated.updated_at})
-
-      {:error, changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "Invalid content", details: translate_errors(changeset)})
-    end
+    render_save_result(conn, Exams.save_exam_structure(scope, exam, content))
   end
 
   def update(conn, _params) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "Missing or invalid content field"})
-  end
-
-  defp translate_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+    json_error(conn, :bad_request, "Missing or invalid content field")
   end
 end

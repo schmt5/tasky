@@ -2,25 +2,13 @@ defmodule TaskyWeb.GuestExamLiveTest do
   use TaskyWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
-  import Tasky.AccountsFixtures
+  import Tasky.ExamsFixtures
 
   alias Tasky.Exams
 
   defp running_exam_with_submission do
-    teacher = user_fixture(%{role: "teacher"})
-    scope = user_scope_fixture(teacher)
-
-    {:ok, exam} =
-      Exams.create_exam(scope, %{
-        name: "Live Prüfung",
-        content: %{"type" => "doc", "content" => []}
-      })
-
-    {:ok, exam} = Exams.open_exam_session(exam)
-    {:ok, exam} = Exams.update_exam_status(exam, "running")
-
-    {:ok, submission} =
-      Exams.create_exam_submission(exam, %{"firstname" => "Max", "lastname" => "Muster"})
+    exam = exam_fixture(status: "running", attrs: %{name: "Live Prüfung"})
+    submission = exam_submission_fixture(exam)
 
     %{exam: exam, submission: submission}
   end
@@ -44,7 +32,9 @@ defmodule TaskyWeb.GuestExamLiveTest do
 
       assert {:error, {:live_redirect, %{to: "/guest/exam/" <> token}}} =
                view
-               |> form("#enrollment-form", enrollment: %{firstname: "Lena", lastname: "Späti"})
+               |> form("#enrollment-form",
+                 enrollment: %{firstname: "Lena", lastname: "Späti", email: "lena@example.com"}
+               )
                |> render_submit()
 
       {:ok, _view, html} = live(conn, ~p"/guest/exam/#{token}")

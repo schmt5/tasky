@@ -1,6 +1,8 @@
 defmodule TaskyWeb.ExamImageApiController do
   use TaskyWeb, :controller
 
+  import TaskyWeb.ApiHelpers
+
   alias Tasky.{Exams, Uploads}
 
   def create(conn, %{"id" => id, "image" => %Plug.Upload{} = upload}) do
@@ -12,21 +14,20 @@ defmodule TaskyWeb.ExamImageApiController do
         json(conn, %{url: url})
 
       {:error, :unsupported_type} ->
-        error(conn, :unprocessable_entity, "Nicht unterstütztes Bildformat.")
+        json_error(conn, :unprocessable_entity, "Nicht unterstütztes Bildformat.")
+
+      {:error, :invalid_image} ->
+        json_error(conn, :unprocessable_entity, "Datei ist kein gültiges Bild.")
 
       {:error, :too_large} ->
-        error(conn, :request_entity_too_large, "Bild ist zu groß (max. 10 MB).")
+        json_error(conn, :request_entity_too_large, "Bild ist zu groß (max. 10 MB).")
 
       {:error, _} ->
-        error(conn, :unprocessable_entity, "Bild konnte nicht gespeichert werden.")
+        json_error(conn, :unprocessable_entity, "Bild konnte nicht gespeichert werden.")
     end
   end
 
   def create(conn, _params) do
-    error(conn, :bad_request, "Kein Bild übermittelt.")
-  end
-
-  defp error(conn, status, message) do
-    conn |> put_status(status) |> json(%{error: message})
+    json_error(conn, :bad_request, "Kein Bild übermittelt.")
   end
 end

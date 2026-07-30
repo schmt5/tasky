@@ -196,7 +196,10 @@ defmodule TaskyWeb.Admin.UserLive do
   defp put_class_filter(filters, "none"), do: [{:class_id, :none} | filters]
 
   defp put_class_filter(filters, class_id) do
-    [{:class_id, String.to_integer(class_id)} | filters]
+    case TaskyWeb.Params.int(class_id) do
+      nil -> filters
+      id -> [{:class_id, id} | filters]
+    end
   end
 
   defp filters_active?(search, role, class) do

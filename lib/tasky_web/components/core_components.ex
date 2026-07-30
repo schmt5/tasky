@@ -662,6 +662,15 @@ defmodule TaskyWeb.CoreComponents do
     """
   end
 
+  @doc ~S|Initials for an avatar chip, e.g. "MH"; missing names yield "?".|
+  def initials(%{firstname: firstname, lastname: lastname}) do
+    initial(firstname) <> initial(lastname)
+  end
+
+  defp initial(nil), do: "?"
+  defp initial(""), do: "?"
+  defp initial(name), do: name |> String.first() |> String.upcase()
+
   @doc """
   Translates an error message using gettext.
   """

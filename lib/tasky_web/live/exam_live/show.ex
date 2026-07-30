@@ -260,7 +260,7 @@ defmodule TaskyWeb.ExamLive.Show do
 
   @impl true
   def handle_event("delete", _params, socket) do
-    {:ok, _} = Exams.delete_exam(socket.assigns.exam)
+    {:ok, _} = Exams.delete_exam(socket.assigns.current_scope, socket.assigns.exam)
 
     {:noreply,
      socket
@@ -270,7 +270,11 @@ defmodule TaskyWeb.ExamLive.Show do
 
   @impl true
   def handle_event("duplicate_exam", _params, socket) do
-    case Exams.duplicate_exam(socket.assigns.current_scope, socket.assigns.exam) do
+    case Exams.duplicate_exam(
+           socket.assigns.current_scope,
+           socket.assigns.exam,
+           "Kopie von — #{socket.assigns.exam.name}"
+         ) do
       {:ok, new_exam} ->
         {:noreply, push_navigate(socket, to: ~p"/exams/#{new_exam}")}
 
@@ -281,7 +285,7 @@ defmodule TaskyWeb.ExamLive.Show do
 
   @impl true
   def handle_event("open_session", _params, socket) do
-    case Exams.open_exam_session(socket.assigns.exam) do
+    case Exams.open_exam_session(socket.assigns.current_scope, socket.assigns.exam) do
       {:ok, exam} ->
         {:noreply, push_navigate(socket, to: ~p"/exams/#{exam}/cockpit")}
 

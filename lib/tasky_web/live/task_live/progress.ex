@@ -105,7 +105,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                       <td class="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap border-r border-stone-200">
                         <div class="flex items-center gap-3">
                           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
-                            {if @anonymized, do: "?", else: get_initials(student)}
+                            {if @anonymized, do: "?", else: initials(student)}
                           </div>
                           <span class="text-[14px] font-medium text-stone-800">
                             {if @anonymized,
@@ -508,7 +508,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
     progress_map = build_progress_map(task.id, students)
 
-    has_data = length(students) > 0
+    has_data = students != []
 
     {:ok,
      socket
@@ -539,7 +539,7 @@ defmodule TaskyWeb.TaskLive.Progress do
   end
 
   def handle_event("show_submission", %{"student-id" => student_id}, socket) do
-    student_id = String.to_integer(student_id)
+    student_id = TaskyWeb.Params.int(student_id)
     student = Enum.find(socket.assigns.students, &(&1.id == student_id))
 
     if student do
@@ -558,7 +558,11 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
-  def handle_event("save_feedback", %{"submission" => %{"feedback" => feedback_text}} = params, socket) do
+  def handle_event(
+        "save_feedback",
+        %{"submission" => %{"feedback" => feedback_text}} = params,
+        socket
+      ) do
     case socket.assigns.selected_submission_record do
       nil ->
         {:noreply, put_flash(socket, :error, "Keine Einreichung gefunden")}
@@ -638,8 +642,11 @@ defmodule TaskyWeb.TaskLive.Progress do
 
     files_by_field =
       case submission do
-        nil -> %{}
-        submission -> submission |> Tasks.list_submission_files() |> Map.new(&{&1.upload_field_id, &1})
+        nil ->
+          %{}
+
+        submission ->
+          submission |> Tasks.list_submission_files() |> Map.new(&{&1.upload_field_id, &1})
       end
 
     submission_files =
@@ -695,24 +702,6 @@ defmodule TaskyWeb.TaskLive.Progress do
       %{status: status} when status in ["completed", "review_approved", "review_denied"] -> true
       _ -> false
     end
-  end
-
-  defp get_initials(student) do
-    first_initial =
-      case student.firstname do
-        nil -> "?"
-        "" -> "?"
-        name -> name |> String.first() |> String.upcase()
-      end
-
-    last_initial =
-      case student.lastname do
-        nil -> "?"
-        "" -> "?"
-        name -> name |> String.first() |> String.upcase()
-      end
-
-    "#{first_initial}#{last_initial}"
   end
 
   defp get_email_username(email) when is_binary(email) do

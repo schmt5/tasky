@@ -9,21 +9,28 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   (across all submitted submissions of the exam, when the teacher edits the
   exam structure or the model answers).
 
-  Each job currently delegates to `Tasky.Correction.StringComparator` for
-  deterministic, AI-free comparison. The original AI-backed client
-  (`Tasky.AI.CorrectionClient`) is preserved for future reuse.
+  Each job delegates to `Tasky.Correction.StringComparator` for
+  deterministic, AI-free comparison. (The former AI-backed client was
+  removed — rebuild a client cleanly if AI correction returns; see
+  docs/ROBUSTNESS_PLAN.md Phase 7.)
   """
 
   require Logger
 
-  alias Tasky.Exams
-  alias Tasky.Exams.ExamSubmission
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.StringComparator
+  alias Tasky.Exams
+  alias Tasky.Exams.ExamSubmission
   alias Tasky.Repo
 
   @doc """
   Starts the bulk-correction coordinator under `Tasky.TaskSupervisor`.
+
+  At most one run is active per exam (`Tasky.BulkCorrectionRegistry`).
+  Triggering while a run is active queues a full re-run on the active
+  process instead of interleaving writes and progress streams. A crash
+  anywhere still emits the terminal `:bulk_correction_done` broadcast so
+  the UI can never hang on a stale progress bar.
 
   Options:
     * `:submission_id` — restrict the run to a single submission.
@@ -33,9 +40,54 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   def start_for_exam(exam, opts \\ []) do
     Task.Supervisor.start_child(
       Tasky.TaskSupervisor,
-      fn -> run(exam, opts) end,
+      fn ->
+        case Registry.register(Tasky.BulkCorrectionRegistry, exam.id, nil) do
+          {:ok, _} ->
+            run_with_guaranteed_done(exam, opts)
+
+          {:error, {:already_registered, pid}} ->
+            # The active run's jobs may predate the change that triggered us —
+            # ask it to run once more after it finishes.
+            send(pid, :rerun)
+            :ok
+        end
+      end,
       restart: :temporary
     )
+  end
+
+  defp run_with_guaranteed_done(exam, opts) do
+    run(exam, opts)
+    rerun_if_requested(exam)
+  rescue
+    exception ->
+      Logger.error("Bulk correction run crashed: #{Exception.message(exception)}")
+
+      Exams.broadcast_bulk_correction(
+        exam.id,
+        {:bulk_correction_done, %{total: 0, errors: []}}
+      )
+  end
+
+  # Collapses any number of queued re-run requests into one full run against
+  # a freshly loaded exam (the struct captured at start may be stale).
+  defp rerun_if_requested(exam) do
+    receive do
+      :rerun ->
+        drain_reruns()
+        run(Repo.get!(Tasky.Exams.Exam, exam.id), [])
+        rerun_if_requested(exam)
+    after
+      0 -> :ok
+    end
+  end
+
+  defp drain_reruns do
+    receive do
+      :rerun -> drain_reruns()
+    after
+      0 -> :ok
+    end
   end
 
   defp run(exam, opts) do
@@ -94,12 +146,8 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          max_points = Map.get(exam.sample_solution_points || %{}, part_id),
          {annotated_nodes, answer_count} = NodePatcher.annotate(submission_nodes),
          :ok <- ensure_has_answers(answer_count),
-         block_points =
-           Exams.resolve_block_points(
-             exam,
-             part_id,
-             NodePatcher.list_answer_blocks(submission_nodes)
-           ),
+         blocks = NodePatcher.list_answer_blocks(submission_nodes),
+         block_points = Exams.resolve_block_points(exam, part_id, blocks),
          {:ok, %{verdicts: verdicts, points: points}} <-
            StringComparator.correct_part(
              annotated_nodes,
@@ -112,12 +160,11 @@ defmodule Tasky.AI.BulkCorrectionRunner do
              }
            ),
          corrected_nodes = NodePatcher.apply_verdicts(annotated_nodes, verdicts),
-         clamped = clamp_points(points, max_points),
-         {:ok, updated_submission} <-
-           Exams.update_corrected_part_content(submission, part_id, corrected_nodes),
-         {:ok, updated_submission} <-
-           Exams.set_part_points(updated_submission, part_id, clamped),
-         {:ok, _} <- Exams.mark_part_auto_corrected(updated_submission, part_id) do
+         {:ok, _updated} <-
+           Exams.apply_auto_correction(:system, submission, part_id, corrected_nodes,
+             verdicts: verdicts_by_answer_id(verdicts, blocks),
+             points: clamp_points(points, max_points)
+           ) do
       :ok
     else
       {:error, reason} -> {:error, reason}
@@ -129,7 +176,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
       {:error, Exception.message(exception)}
   end
 
-  defp ensure_has_answers(0), do: {:error, "Aufgabe enthält keine Antwortfelder"}
+  defp ensure_has_answers(0), do: {:error, :no_answer_fields}
   defp ensure_has_answers(_), do: :ok
 
   defp fetch_submission(exam_id, submission_id) do
@@ -165,4 +212,17 @@ defmodule Tasky.AI.BulkCorrectionRunner do
 
   defp clamp_points(points, nil), do: max(points, 0)
   defp clamp_points(points, max_points), do: points |> max(0) |> min(max_points)
+
+  # StringComparator keys verdicts by the annotation id (`__ai_id`, which is
+  # block index + 1); grading data is keyed by the block's stable answerId.
+  defp verdicts_by_answer_id(verdicts, blocks) do
+    by_index = Map.new(blocks, fn b -> {b.index, b.answer_id} end)
+
+    for {id_str, verdict} <- verdicts,
+        answer_id = Map.get(by_index, String.to_integer(id_str) - 1),
+        is_binary(answer_id),
+        into: %{} do
+      {answer_id, verdict}
+    end
+  end
 end

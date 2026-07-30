@@ -7,6 +7,8 @@ defmodule Tasky.Application do
 
   @impl true
   def start(_type, _args) do
+    TaskyWeb.Plugs.RateLimit.create_table()
+
     children = [
       TaskyWeb.Telemetry,
       Tasky.Repo,
@@ -15,6 +17,12 @@ defmodule Tasky.Application do
       {DNSCluster, query: Application.get_env(:tasky, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Tasky.PubSub},
       {Task.Supervisor, name: Tasky.TaskSupervisor},
+      # One bulk-correction run per exam at a time (see BulkCorrectionRunner).
+      {Registry, keys: :unique, name: Tasky.BulkCorrectionRegistry},
+      # Cleans up stale export ZIPs, incl. leftovers from before a restart.
+      Tasky.Exams.ExportJanitor,
+      # Starts auto-correction runs in response to exam domain events.
+      Tasky.AI.CorrectionOrchestrator,
       TaskyWeb.Presence,
       # Start a worker by calling: Tasky.Worker.start_link(arg)
       # {Tasky.Worker, arg},
@@ -36,7 +44,7 @@ defmodule Tasky.Application do
     :ok
   end
 
-  defp skip_migrations?() do
+  defp skip_migrations? do
     # By default, sqlite migrations are run when using a release
     System.get_env("RELEASE_NAME") == nil
   end

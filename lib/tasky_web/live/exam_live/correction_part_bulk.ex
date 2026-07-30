@@ -1,11 +1,8 @@
 defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   use TaskyWeb, :live_view
 
-  import Ecto.Query, only: [from: 2]
-
   alias Tasky.Exams
-  alias Tasky.Exams.ExamSubmission
-  alias Tasky.Repo
+  alias Tasky.Grading
 
   @impl true
   def render(assigns) do
@@ -202,21 +199,9 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
               {if @max_points, do: format_max_points(@max_points), else: "—"}
             </span>
           </span>
-          {render_config_chip(%{
-            active: @auto_correct,
-            label_on: "Auto-Korrektur",
-            label_off: "Keine Auto-Korrektur"
-          })}
-          {render_config_chip(%{
-            active: @ignore_case,
-            label_on: "Gross/Klein ignorieren",
-            label_off: "Gross/Klein beachten"
-          })}
-          {render_config_chip(%{
-            active: @ignore_spelling,
-            label_on: "Fuzzy-Matching",
-            label_off: "Exakte Schreibung"
-          })}
+          <.config_chip active={@auto_correct} label="Auto-Korrektur" />
+          <.config_chip active={@ignore_case} label="Gross/Klein ignorieren" />
+          <.config_chip active={@ignore_spelling} label="Fuzzy-Matching" />
         </div>
       </div>
       <div class="p-5">
@@ -228,16 +213,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     """
   end
 
-  defp render_config_chip(%{active: false}) do
-    assigns = %{}
-    ~H""
-  end
+  attr :active, :boolean, required: true
+  attr :label, :string, required: true
 
-  defp render_config_chip(%{active: true, label_on: on}) do
-    assigns = %{label: on}
-
+  # Declarative function component (instead of a render_* helper building
+  # its own assigns) so LiveView change tracking works.
+  defp config_chip(assigns) do
     ~H"""
-    <span class="inline-flex items-center text-xs font-semibold rounded-full px-3 py-1 text-stone-600 bg-stone-100 border border-stone-200">
+    <span
+      :if={@active}
+      class="inline-flex items-center text-xs font-semibold rounded-full px-3 py-1 text-stone-600 bg-stone-100 border border-stone-200"
+    >
       {@label}
     </span>
     """
@@ -249,19 +235,9 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   defp config_chip_classes(false),
     do: "text-stone-400 bg-stone-50 border border-stone-200"
 
-  defp format_max_points(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_max_points(n) when is_float(n) do
-    if n == trunc(n) do
-      Integer.to_string(trunc(n))
-    else
-      n
-      |> :erlang.float_to_binary(decimals: 2)
-      |> String.trim_trailing("0")
-      |> String.trim_trailing(".")
-    end
-  end
-
+  # Points formatting is centralized in Tasky.Grading (one source of truth for
+  # screen + PDF); this thin wrapper keeps the "—" fallback for non-numbers.
+  defp format_max_points(n) when is_number(n), do: Grading.format_points(n)
   defp format_max_points(_), do: "—"
 
   defp render_summary(assigns) do
@@ -646,7 +622,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         %{"index" => idx_str, "text" => text, "verdict" => verdict},
         socket
       ) do
-    idx = String.to_integer(idx_str)
+    idx = TaskyWeb.Params.int(idx_str)
     part_id = socket.assigns.current_part.id
 
     group_text =
@@ -661,11 +637,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       new_verdict = if effective == verdict, do: nil, else: verdict
 
       ids = Enum.map(group.students, & &1.submission_id)
-      subs = Repo.all(from(s in ExamSubmission, where: s.id in ^ids))
 
-      Enum.each(subs, fn sub ->
-        Exams.set_block_verdict(sub, part_id, idx, new_verdict)
-      end)
+      Exams.set_block_verdict_bulk(
+        socket.assigns.current_scope,
+        socket.assigns.exam,
+        part_id,
+        idx,
+        new_verdict,
+        ids
+      )
 
       {:noreply, refresh_assigns(socket)}
     else
@@ -674,7 +654,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   end
 
   def handle_event("open_manual_input", %{"index" => idx_str, "text" => text}, socket) do
-    idx = String.to_integer(to_string(idx_str))
+    idx = TaskyWeb.Params.int(idx_str)
     group_text = if text == "", do: nil, else: text
 
     with %{} = block <- Enum.find(socket.assigns.answer_blocks, &(&1.index == idx)),
@@ -703,7 +683,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         %{"index" => idx_str, "text" => text, "points" => raw},
         socket
       ) do
-    idx = String.to_integer(idx_str)
+    idx = TaskyWeb.Params.int(idx_str)
     part_id = socket.assigns.current_part.id
     group_text = if text == "", do: nil, else: text
 
@@ -711,11 +691,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          %{} = block <- Enum.find(socket.assigns.answer_blocks, &(&1.index == idx)),
          %{} = group <- Enum.find(block.groups, &(&1.text == group_text)) do
       ids = Enum.map(group.students, & &1.submission_id)
-      subs = Repo.all(from(s in ExamSubmission, where: s.id in ^ids))
 
-      Enum.each(subs, fn sub ->
-        Exams.set_block_verdict(sub, part_id, idx, points)
-      end)
+      Exams.set_block_verdict_bulk(
+        socket.assigns.current_scope,
+        socket.assigns.exam,
+        part_id,
+        idx,
+        points,
+        ids
+      )
 
       {:noreply,
        socket
@@ -729,50 +713,35 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   def handle_event("toggle_part_corrected", _params, socket) do
     exam = socket.assigns.exam
     part_id = socket.assigns.current_part.id
-    submissions = Exams.list_exam_submissions(exam)
+    scope = socket.assigns.current_scope
 
     if socket.assigns.is_corrected do
-      # Un-mark every submission. Leave block_verdicts as-is so re-marking
-      # doesn't lose teacher overrides.
-      Enum.each(submissions, fn sub ->
-        Exams.unmark_part_corrected(sub, part_id)
-      end)
-
-      {:noreply, refresh_assigns(socket)}
+      Exams.unmark_part_corrected_bulk(scope, exam, part_id)
     else
-      # Mark every submission. Persist default verdicts for any block that
-      # still has no explicit choice for that submission, so points get
-      # tallied even when the teacher left the system's pre-judgement
-      # untouched. Chain the updated submission through each block so
-      # subsequent calls see prior writes.
-      Enum.each(submissions, fn sub ->
-        updated =
-          Enum.reduce(socket.assigns.answer_blocks, sub, fn block, acc ->
-            key = "#{part_id}:#{block.index}"
-
-            if Map.get(acc.block_verdicts || %{}, key) == nil do
-              default =
-                case Enum.find(block.groups, fn g ->
-                       Enum.any?(g.students, &(&1.submission_id == sub.id))
-                     end) do
-                  nil -> nil
-                  g -> g.default_verdict
-                end
-
-              case default && Exams.set_block_verdict(acc, part_id, block.index, default) do
-                {:ok, new} -> new
-                _ -> acc
+      # Default verdicts for blocks the teacher left untouched, so points get
+      # tallied even when the system's pre-judgement was never clicked. The
+      # context persists them and marks every submission in one transaction.
+      defaults =
+        Map.new(Exams.list_exam_submissions(exam), fn submission ->
+          per_block =
+            Enum.reduce(socket.assigns.answer_blocks, %{}, fn block, acc ->
+              block.groups
+              |> Enum.find(fn g ->
+                Enum.any?(g.students, &(&1.submission_id == submission.id))
+              end)
+              |> case do
+                nil -> acc
+                group -> Map.put(acc, block.index, group.default_verdict)
               end
-            else
-              acc
-            end
-          end)
+            end)
 
-        Exams.mark_part_corrected(updated, part_id)
-      end)
+          {submission.id, per_block}
+        end)
 
-      {:noreply, refresh_assigns(socket)}
+      Exams.mark_part_corrected_bulk(scope, exam, part_id, defaults)
     end
+
+    {:noreply, refresh_assigns(socket)}
   end
 
   @impl true
@@ -823,8 +792,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     end
   end
 
-  defp half_of(max) when is_number(max), do: Float.round(max * 0.5 * 4) / 4
-  defp half_of(_), do: 0
+  defp half_of(max), do: Tasky.Grading.half_of(max)
 
   defp block_totals(block) do
     Enum.reduce(block.groups, %{correct: 0, half: 0, wrong: 0, total: 0}, fn g, acc ->

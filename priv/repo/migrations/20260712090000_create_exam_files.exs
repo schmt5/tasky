@@ -30,11 +30,9 @@ defmodule Tasky.Repo.Migrations.CreateExamFiles do
     create index(:exam_upload_fields, [:exam_id])
 
     create table(:exam_submission_files) do
-      add :exam_submission_id, references(:exam_submissions, on_delete: :delete_all),
-        null: false
+      add :exam_submission_id, references(:exam_submissions, on_delete: :delete_all), null: false
 
-      add :upload_field_id, references(:exam_upload_fields, on_delete: :delete_all),
-        null: false
+      add :upload_field_id, references(:exam_upload_fields, on_delete: :delete_all), null: false
 
       add :stored_filename, :string, null: false
       add :original_name, :string, null: false

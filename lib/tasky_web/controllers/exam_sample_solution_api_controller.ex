@@ -1,35 +1,22 @@
 defmodule TaskyWeb.ExamSampleSolutionApiController do
   use TaskyWeb, :controller
 
+  import TaskyWeb.ApiHelpers
+
   alias Tasky.Exams
 
   def update_part(conn, %{"id" => id, "part_id" => part_id, "nodes" => nodes})
       when is_list(nodes) do
-    exam = Exams.get_exam!(conn.assigns.current_scope, id)
+    scope = conn.assigns.current_scope
+    exam = Exams.get_exam!(scope, id)
 
-    case Exams.save_sample_solution_part(exam, part_id, nodes) do
-      {:ok, updated} ->
-        json(conn, %{ok: true, updated_at: updated.updated_at})
-
-      {:error, changeset} ->
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "Invalid content", details: translate_errors(changeset)})
-    end
+    render_save_result(conn, Exams.save_sample_solution_part(scope, exam, part_id, nodes))
   rescue
     ArgumentError ->
-      conn
-      |> put_status(:unprocessable_entity)
-      |> json(%{error: "Unknown part_id"})
+      json_error(conn, :unprocessable_entity, "Unknown part_id")
   end
 
   def update_part(conn, _params) do
-    conn
-    |> put_status(:bad_request)
-    |> json(%{error: "Missing or invalid params"})
-  end
-
-  defp translate_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+    json_error(conn, :bad_request, "Missing or invalid params")
   end
 end

@@ -6,14 +6,15 @@ defmodule Tasky.Tasks do
   import Ecto.Query, warn: false
   alias Tasky.Repo
 
-  alias Tasky.Tasks.Task
-  alias Tasky.Tasks.TaskSubmission
-  alias Tasky.Tasks.TaskAttachment
-  alias Tasky.Tasks.TaskUploadField
-  alias Tasky.Tasks.TaskSubmissionFile
-  alias Tasky.Correction.AnswerKey
   alias Tasky.Accounts.Scope
   alias Tasky.Accounts.User
+  alias Tasky.Correction.AnswerKey
+  alias Tasky.Policy
+  alias Tasky.Tasks.Task
+  alias Tasky.Tasks.TaskAttachment
+  alias Tasky.Tasks.TaskSubmission
+  alias Tasky.Tasks.TaskSubmissionFile
+  alias Tasky.Tasks.TaskUploadField
 
   # Submission statuses in which the student may still edit answers,
   # upload files and mark the unit as complete.
@@ -50,6 +51,10 @@ defmodule Tasky.Tasks do
       [%Task{}, ...]
 
   """
+  def list_tasks(%Scope{user: %{role: "admin"}}) do
+    Repo.all(Task)
+  end
+
   def list_tasks(%Scope{} = scope) do
     Repo.all_by(Task, user_id: scope.user.id)
   end
@@ -85,7 +90,13 @@ defmodule Tasky.Tasks do
 
   """
   def get_task!(%Scope{} = scope, id) do
-    Repo.get_by!(Task, id: id, user_id: scope.user.id)
+    task = Repo.get!(Task, id)
+
+    if Policy.can_manage?(scope, task.user_id) do
+      task
+    else
+      raise Ecto.NoResultsError, queryable: Task
+    end
   end
 
   @doc """
@@ -123,9 +134,8 @@ defmodule Tasky.Tasks do
 
   """
   def update_task(%Scope{} = scope, %Task{} = task, attrs) do
-    true = task.user_id == scope.user.id
-
-    with {:ok, task = %Task{}} <-
+    with :ok <- Policy.authorize(scope, task.user_id),
+         {:ok, task = %Task{}} <-
            task
            |> Task.changeset(attrs, scope)
            |> Repo.update() do
@@ -145,9 +155,8 @@ defmodule Tasky.Tasks do
 
   """
   def toggle_locked(%Scope{} = scope, %Task{} = task) do
-    true = task.user_id == scope.user.id
-
-    with {:ok, task = %Task{}} <-
+    with :ok <- Policy.authorize(scope, task.user_id),
+         {:ok, task = %Task{}} <-
            task
            |> Ecto.Changeset.change(%{locked: !task.locked})
            |> Repo.update() do
@@ -169,10 +178,11 @@ defmodule Tasky.Tasks do
 
   """
   def delete_task(%Scope{} = scope, %Task{} = task) do
-    true = task.user_id == scope.user.id
-
-    with {:ok, task = %Task{}} <-
-           Repo.delete(task) do
+    with :ok <- Policy.authorize(scope, task.user_id),
+         {:ok, task = %Task{}} <- Repo.delete(task) do
+      # The DB cascade removes the rows; the stored bytes (content images,
+      # attachments, submission files) must go too or they leak forever.
+      Tasky.Uploads.delete_task_files(task.id)
       broadcast_task(scope, {:deleted, task})
       {:ok, task}
     end
@@ -188,7 +198,9 @@ defmodule Tasky.Tasks do
 
   """
   def change_task(%Scope{} = scope, %Task{} = task, attrs \\ %{}) do
-    true = task.user_id == scope.user.id
+    unless Policy.can_manage?(scope, task.user_id) do
+      raise Ecto.NoResultsError, queryable: Task
+    end
 
     Task.changeset(task, attrs, scope)
   end
@@ -205,9 +217,10 @@ defmodule Tasky.Tasks do
   def reorder_tasks(%Scope{} = scope, task_positions) when is_list(task_positions) do
     ids = Enum.map(task_positions, & &1.id)
 
-    # Fetch all tasks in one query and verify every one belongs to this scope's user
+    # Fetch all tasks in one query and verify the scope may manage every one
     owned_tasks =
-      Repo.all(from t in Task, where: t.id in ^ids and t.user_id == ^scope.user.id)
+      Repo.all(from t in Task, where: t.id in ^ids)
+      |> Enum.filter(&Policy.can_manage?(scope, &1.user_id))
 
     if length(owned_tasks) != length(ids) do
       {:error, :unauthorized}
@@ -406,29 +419,37 @@ defmodule Tasky.Tasks do
 
   """
   def complete_task(%Scope{user: user} = _scope, submission_id) when user.role == "student" do
-    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+    # Gate checks and the write run in one BEGIN IMMEDIATE transaction (fresh
+    # refetch inside) so the completion can't slip past concurrently-changed
+    # state (TOCTOU on the upload check).
+    result =
+      Repo.transaction(
+        fn ->
+          submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
-    cond do
-      submission.student_id != user.id ->
-        {:error, :unauthorized}
+          cond do
+            submission.student_id != user.id ->
+              Repo.rollback(:unauthorized)
 
-      submission.status not in @editable_statuses ->
-        {:error, :not_editable}
+            submission.status not in @editable_statuses ->
+              Repo.rollback(:not_editable)
 
-      missing_required_uploads(submission) != [] ->
-        {:error, :missing_uploads}
+            missing_required_uploads(submission) != [] ->
+              Repo.rollback(:missing_uploads)
 
-      true ->
-        case submission
-             |> TaskSubmission.complete_changeset()
-             |> Repo.update() do
-          {:ok, updated_submission} = result ->
-            broadcast_submission_updated(updated_submission, submission.task.course_id)
-            result
+            true ->
+              case submission |> TaskSubmission.complete_changeset() |> Repo.update() do
+                {:ok, updated} -> %{updated | task: submission.task}
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+          end
+        end,
+        mode: :immediate
+      )
 
-          error ->
-            error
-        end
+    with {:ok, updated} <- result do
+      broadcast_submission_updated(updated, updated.task.course_id)
+      {:ok, updated}
     end
   end
 
@@ -652,27 +673,6 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Returns a map of %{{student_id, task_id} => status} for all combinations
-  of the given students and tasks within a course. Used by the course
-  progress LiveView.
-  """
-  def get_progress_map_for_course(course_id, student_ids, task_ids) do
-    submissions =
-      Repo.all(
-        from s in TaskSubmission,
-          join: t in assoc(s, :task),
-          where:
-            s.student_id in ^student_ids and s.task_id in ^task_ids and
-              t.course_id == ^course_id,
-          select: %{student_id: s.student_id, task_id: s.task_id, status: s.status}
-      )
-
-    Enum.reduce(submissions, %{}, fn submission, acc ->
-      Map.put(acc, {submission.student_id, submission.task_id}, submission.status)
-    end)
-  end
-
-  @doc """
   Gets a task preloaded with its associated course. Used by progress views
   that need the course_id without raw Repo access in LiveViews.
   """
@@ -690,11 +690,27 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Gets a task by id without owner scoping, for student-facing views and
-  endpoints (visibility is decided by the caller via enrollment + status).
+  Gets a single submission of the given task, or nil. Authorization rides on
+  the task: callers fetch it via `get_task!/2` first.
   """
-  def get_task_for_student(task_id) do
-    Repo.get(Task, task_id)
+  def get_submission(%Task{} = task, id) do
+    Repo.get_by(TaskSubmission, id: id, task_id: task.id)
+  end
+
+  @doc """
+  Gets a task by id for a student, or `nil` when the task does not exist or
+  the student is not enrolled in the task's course. This is the single entry
+  point for student-facing task access — enrollment is checked here, not in
+  the callers.
+  """
+  def get_task_for_student(%Scope{user: user} = _scope, task_id)
+      when user.role == "student" do
+    with %Task{} = task <- Repo.get(Task, task_id),
+         true <- Tasky.Courses.enrolled?(task.course_id, user.id) do
+      task
+    else
+      _ -> nil
+    end
   end
 
   @doc "True while the student may still edit answers / upload files / complete."
@@ -709,9 +725,8 @@ defmodule Tasky.Tasks do
   `Tasky.Correction.AnswerKey`). Only the owning teacher may save.
   """
   def save_task_content(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
-    true = task.user_id == scope.user.id
-
-    with {:ok, task = %Task{}} <-
+    with :ok <- Policy.authorize(scope, task.user_id),
+         {:ok, task = %Task{}} <-
            task
            |> Task.content_changeset(AnswerKey.ensure_ids(doc))
            |> Repo.update() do

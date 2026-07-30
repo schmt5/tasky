@@ -1,9 +1,9 @@
 defmodule TaskyWeb.CourseLive.Students do
   use TaskyWeb, :live_view
 
-  alias Tasky.Courses
   alias Tasky.Accounts
   alias Tasky.Classes
+  alias Tasky.Courses
 
   @impl true
   def render(assigns) do
@@ -225,7 +225,7 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:unenrolled_students, [])
      |> assign(:classes, [])
      |> assign(:selected_class_id, nil)
-     |> assign(:has_students, length(enrolled_students) > 0)
+     |> assign(:has_students, enrolled_students != [])
      |> assign(:student_count, length(enrolled_students))
      |> stream(:enrolled_students, enrolled_students)}
   end
@@ -261,14 +261,14 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:selected_class_id, nil)}
   end
 
-  def handle_event("filter_by_class", %{"class_id" => class_id}, socket) do
-    class_id = String.to_integer(class_id)
-    unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id, class_id)
+  def handle_event("filter_by_class", %{"class_id" => raw_class_id}, socket) do
+    class_id = TaskyWeb.Params.int(raw_class_id)
 
-    {:noreply,
-     socket
-     |> assign(:unenrolled_students, unenrolled_students)
-     |> assign(:selected_class_id, class_id)}
+    if is_nil(class_id) do
+      {:noreply, socket}
+    else
+      filter_by_class(socket, class_id)
+    end
   end
 
   def handle_event("enroll_all_from_class", _params, socket) do
@@ -307,9 +307,9 @@ defmodule TaskyWeb.CourseLive.Students do
   end
 
   def handle_event("enroll_student", %{"student_id" => student_id}, socket) do
-    student_id = String.to_integer(student_id)
+    student_id = TaskyWeb.Params.int(student_id)
 
-    case Courses.enroll_student(socket.assigns.course.id, student_id) do
+    case student_id && Courses.enroll_student(socket.assigns.course.id, student_id) do
       {:ok, _enrollment} ->
         student = Accounts.get_user!(student_id)
 
@@ -326,13 +326,16 @@ defmodule TaskyWeb.CourseLive.Students do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to enroll student")}
+
+      nil ->
+        {:noreply, socket}
     end
   end
 
   def handle_event("unenroll_student", %{"student_id" => student_id}, socket) do
-    student_id = String.to_integer(student_id)
+    student_id = TaskyWeb.Params.int(student_id)
 
-    case Courses.unenroll_student(socket.assigns.course.id, student_id) do
+    case student_id && Courses.unenroll_student(socket.assigns.course.id, student_id) do
       {:ok, _} ->
         student = Accounts.get_user!(student_id)
         enrolled_students = Courses.list_enrolled_students(socket.assigns.course.id)
@@ -348,6 +351,18 @@ defmodule TaskyWeb.CourseLive.Students do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to unenroll student")}
+
+      nil ->
+        {:noreply, socket}
     end
+  end
+
+  defp filter_by_class(socket, class_id) do
+    unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id, class_id)
+
+    {:noreply,
+     socket
+     |> assign(:unenrolled_students, unenrolled_students)
+     |> assign(:selected_class_id, class_id)}
   end
 end

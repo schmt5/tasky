@@ -26,18 +26,21 @@ defmodule Tasky.UploadsTest do
     %Plug.Upload{path: tmp_file(content), content_type: content_type, filename: "x"}
   end
 
+  @png_bytes <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, "fake-image-data">>
+  @jpg_bytes <<0xFF, 0xD8, 0xFF, 0xE0, "fake-image-data">>
+
   describe "save_exam_image/2" do
     test "stores a valid png and returns a fetchable public url" do
-      assert {:ok, url} = Uploads.save_exam_image("42", upload("png-bytes", "image/png"))
+      assert {:ok, url} = Uploads.save_exam_image("42", upload(@png_bytes, "image/png"))
       assert url =~ ~r"^/uploads/exams/42/[0-9a-f-]+\.png$"
 
       filename = url |> String.split("/") |> List.last()
-      assert {:ok, {path, "image/png"}} = Uploads.fetch_exam_image("42", filename)
+      assert {:ok, {{:file, path}, "image/png"}} = Uploads.fetch_exam_image("42", filename)
       assert File.exists?(path)
     end
 
     test "maps jpeg content type to a .jpg extension" do
-      assert {:ok, url} = Uploads.save_exam_image("1", upload("bytes", "image/jpeg"))
+      assert {:ok, url} = Uploads.save_exam_image("1", upload(@jpg_bytes, "image/jpeg"))
       assert String.ends_with?(url, ".jpg")
     end
 
@@ -47,8 +50,25 @@ defmodule Tasky.UploadsTest do
     end
 
     test "rejects files over the 10 MB limit" do
-      big = :binary.copy("a", 10 * 1024 * 1024 + 1)
+      big = @png_bytes <> :binary.copy("a", 10 * 1024 * 1024 + 1)
       assert {:error, :too_large} = Uploads.save_exam_image("1", upload(big, "image/png"))
+    end
+
+    test "rejects content whose bytes don't match the claimed image type" do
+      html = "<html><script>alert(1)</script></html>"
+      assert {:error, :invalid_image} = Uploads.save_exam_image("1", upload(html, "image/png"))
+
+      # png bytes uploaded as jpeg are also a mismatch
+      assert {:error, :invalid_image} =
+               Uploads.save_exam_image("1", upload(@png_bytes, "image/jpeg"))
+    end
+
+    test "accepts gif and webp signatures" do
+      gif = "GIF89a" <> <<0, 0, 0, 0>>
+      webp = "RIFF" <> <<0, 0, 0, 0>> <> "WEBP" <> "VP8 "
+
+      assert {:ok, _} = Uploads.save_exam_image("1", upload(gif, "image/gif"))
+      assert {:ok, _} = Uploads.save_exam_image("1", upload(webp, "image/webp"))
     end
   end
 

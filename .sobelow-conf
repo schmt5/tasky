@@ -1,0 +1,12 @@
+[
+  verbose: false,
+  private: false,
+  # honor inline `# sobelow_skip` annotations (each carries a justification)
+  skip: true,
+  router: "lib/tasky_web/router.ex",
+  # fail (non-zero exit) on medium+ findings so CI can gate on it
+  exit: "medium",
+  threshold: "medium",
+  ignore: [],
+  ignore_files: []
+]

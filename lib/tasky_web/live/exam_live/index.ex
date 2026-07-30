@@ -135,7 +135,7 @@ defmodule TaskyWeb.ExamLive.Index do
      socket
      |> assign(:page_title, "Prüfungen")
      |> assign(:exam_count, length(exams))
-     |> assign(:has_exams, length(exams) > 0)
+     |> assign(:has_exams, exams != [])
      |> stream(:exams, exams)}
   end
 end

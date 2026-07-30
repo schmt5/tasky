@@ -146,7 +146,7 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
 
     params = maybe_generate_quit_password(params, exam)
 
-    case Exams.update_exam(exam, params) do
+    case Exams.update_exam(socket.assigns.current_scope, exam, params) do
       {:ok, updated_exam} ->
         changeset = Exam.changeset(updated_exam, %{})
 
@@ -177,7 +177,5 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
     end
   end
 
-  defp generate_quit_password do
-    (:rand.uniform(899_999) + 100_000) |> Integer.to_string()
-  end
+  defp generate_quit_password, do: Tasky.Exams.generate_quit_password()
 end

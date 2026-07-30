@@ -18,18 +18,30 @@ defmodule Tasky.Tasks.Task do
     timestamps(type: :utc_datetime)
   end
 
+  @statuses ~w(draft published archived)
+
   @doc false
   def changeset(task, attrs, user_scope) do
     task
     |> cast(attrs, [:name, :position, :status, :course_id, :locked])
     |> validate_required([:name, :position, :status])
+    |> validate_inclusion(:status, @statuses)
     |> put_change(:user_id, user_scope.user.id)
   end
+
+  # Client-controlled JSON must stay within reason.
+  @max_content_bytes 5 * 1024 * 1024
 
   @doc """
   Changeset for saving the learning unit's Tiptap content doc.
   """
   def content_changeset(task, content) when is_map(content) do
-    change(task, content: content)
+    task
+    |> change(content: content)
+    |> validate_change(:content, fn :content, doc ->
+      if :erlang.external_size(doc) > @max_content_bytes,
+        do: [content: "Inhalt ist zu gross"],
+        else: []
+    end)
   end
 end

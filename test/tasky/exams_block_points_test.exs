@@ -26,7 +26,7 @@ defmodule Tasky.ExamsBlockPointsTest do
         [
           %{
             "type" => "heading",
-            "attrs" => %{"level" => 3},
+            "attrs" => %{"level" => 3, "partId" => "q-1"},
             "content" => [%{"type" => "text", "text" => "Frage 1"}]
           }
         ] ++ Enum.map(block_ids, &answer_block(&1, "Antwort #{&1}"))
@@ -43,15 +43,32 @@ defmodule Tasky.ExamsBlockPointsTest do
     }
   end
 
-  defp submission_fixture(exam) do
-    {:ok, exam} = Exams.open_exam_session(exam)
-    {:ok, exam} = Exams.update_exam_status(exam, "running")
+  defp submission_fixture(exam, attrs \\ %{}) do
+    # Refetch: callers may hold a stale struct after earlier fixture calls.
+    exam = Tasky.Repo.get!(Tasky.Exams.Exam, exam.id)
+
+    exam =
+      if exam.status == "running" do
+        exam
+      else
+        {:ok, exam} = Exams.open_exam_session(:system, exam)
+        {:ok, exam} = Exams.update_exam_status(:system, exam, "running")
+        exam
+      end
+
     {:ok, submission} =
-      Exams.create_exam_submission(exam, %{
-        "firstname" => "Max",
-        "lastname" => "Muster",
-        "email" => "max@example.com"
-      })
+      Exams.create_exam_submission(
+        exam,
+        Map.merge(
+          %{
+            "firstname" => "Max",
+            "lastname" => "Muster",
+            "email" => "max@example.com"
+          },
+          attrs
+        )
+      )
+
     {:ok, submission} = Exams.update_exam_submission_content(submission, exam.content)
     submission
   end
@@ -110,11 +127,37 @@ defmodule Tasky.ExamsBlockPointsTest do
 
       submission = submission_fixture(exam)
 
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 0, "correct")
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 1, "wrong")
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 2, "correct")
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 0, "correct")
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 1, "wrong")
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 2, "correct")
 
       assert submission.points_per_part["q-1"] == 2
+    end
+
+    test "verdict writes based on a stale struct don't lose earlier verdicts" do
+      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
+      submission = submission_fixture(exam)
+
+      # Both writes go through the SAME stale struct — the in-transaction
+      # refetch must merge them instead of the second clobbering the first.
+      {:ok, _} = Exams.set_block_verdict(:system, submission, "q-1", 0, "correct")
+      {:ok, _} = Exams.set_block_verdict(:system, submission, "q-1", 1, "wrong")
+
+      reloaded = Tasky.Repo.get!(Tasky.Exams.ExamSubmission, submission.id)
+      assert reloaded.block_verdicts["11"] == "correct"
+      assert reloaded.block_verdicts["22"] == "wrong"
+    end
+
+    test "set_block_verdict_bulk sets the same verdict across submissions" do
+      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
+      sub_a = submission_fixture(exam)
+      sub_b = submission_fixture(exam, %{"email" => "zwei@example.com"})
+
+      {:ok, updated} =
+        Exams.set_block_verdict_bulk(:system, exam, "q-1", 0, "correct", [sub_a.id, sub_b.id])
+
+      assert length(updated) == 2
+      assert Enum.all?(updated, &(&1.block_verdicts["11"] == "correct"))
     end
 
     test "numeric verdicts are clamped to the block max and rounded to 0.25" do
@@ -129,13 +172,13 @@ defmodule Tasky.ExamsBlockPointsTest do
       submission = submission_fixture(exam)
 
       # 99 clamps to 1.5; 0.3 rounds to 0.25; -2 clamps to 0
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 0, 99)
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 1, 0.3)
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 2, -2)
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 0, 99)
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 1, 0.3)
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 2, -2)
 
-      assert submission.block_verdicts["q-1:0"] == 1.5
-      assert submission.block_verdicts["q-1:1"] == 0.25
-      assert submission.block_verdicts["q-1:2"] == 0.0
+      assert submission.block_verdicts["11"] == 1.5
+      assert submission.block_verdicts["22"] == 0.25
+      assert submission.block_verdicts["33"] == 0.0
       assert submission.points_per_part["q-1"] == 1.75
     end
 
@@ -144,9 +187,9 @@ defmodule Tasky.ExamsBlockPointsTest do
       submission = submission_fixture(exam)
 
       # equal split → 1.0 per block
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 0, 1.0)
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 1, 0.5)
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 2, 0)
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 0, 1.0)
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 1, 0.5)
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 2, 0)
 
       inferred =
         submission.corrected_content
@@ -165,7 +208,7 @@ defmodule Tasky.ExamsBlockPointsTest do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
       submission = submission_fixture(exam)
 
-      {:ok, submission} = Exams.set_block_verdict(submission, "q-1", 0, "half")
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 0, "half")
 
       assert submission.points_per_part["q-1"] == 0.5
     end
@@ -175,7 +218,7 @@ defmodule Tasky.ExamsBlockPointsTest do
     test "enable_custom_block_points seeds equal shares and keeps the total" do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
 
-      {:ok, exam} = Exams.enable_custom_block_points(exam, "q-1")
+      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
 
       assert exam.sample_solution_block_points["q-1"] ==
                %{"11" => 1, "22" => 1, "33" => 1, "44" => 1}
@@ -186,12 +229,12 @@ defmodule Tasky.ExamsBlockPointsTest do
 
     test "set_sample_solution_block_point keeps the part total in sync as the sum" do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
-      {:ok, exam} = Exams.enable_custom_block_points(exam, "q-1")
+      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
 
-      {:ok, exam} = Exams.set_sample_solution_block_point(exam, "q-1", "11", 1.5)
-      {:ok, exam} = Exams.set_sample_solution_block_point(exam, "q-1", "22", 1.5)
-      {:ok, exam} = Exams.set_sample_solution_block_point(exam, "q-1", "33", 0.5)
-      {:ok, exam} = Exams.set_sample_solution_block_point(exam, "q-1", "44", 0.5)
+      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "11", 1.5)
+      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "22", 1.5)
+      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "33", 0.5)
+      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "44", 0.5)
 
       assert exam.sample_solution_points["q-1"] == 4
       assert exam.sample_solution_block_points["q-1"]["33"] == 0.5
@@ -199,10 +242,10 @@ defmodule Tasky.ExamsBlockPointsTest do
 
     test "clear_custom_block_points falls back to equal split, total preserved" do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
-      {:ok, exam} = Exams.enable_custom_block_points(exam, "q-1")
-      {:ok, exam} = Exams.set_sample_solution_block_point(exam, "q-1", "11", 3)
+      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
+      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "11", 3)
 
-      {:ok, exam} = Exams.clear_custom_block_points(exam, "q-1")
+      {:ok, exam} = Exams.clear_custom_block_points(:system, exam, "q-1")
 
       refute Exams.custom_block_points?(exam, "q-1")
       # last sum stays as the part total
@@ -221,7 +264,7 @@ defmodule Tasky.ExamsBlockPointsTest do
         })
 
       # New structure without block 44
-      {:ok, exam} = Exams.save_exam_structure(exam, question_doc([11, 22, 33]))
+      {:ok, exam} = Exams.save_exam_structure(:system, exam, question_doc([11, 22, 33]))
 
       assert exam.sample_solution_block_points["q-1"] ==
                %{"11" => 1.5, "22" => 1.5, "33" => 0.5}
@@ -236,7 +279,7 @@ defmodule Tasky.ExamsBlockPointsTest do
           sample_solution_block_points: %{"q-1" => %{"11" => 4}}
         })
 
-      {:ok, exam} = Exams.save_exam_structure(exam, question_doc([99]))
+      {:ok, exam} = Exams.save_exam_structure(:system, exam, question_doc([99]))
 
       refute Map.has_key?(exam.sample_solution_block_points, "q-1")
       assert exam.sample_solution_points["q-1"] == 4

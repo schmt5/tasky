@@ -29,13 +29,13 @@ defmodule Tasky.TasksTest do
     end
 
     test "create_task/2 with valid data creates a task" do
-      valid_attrs = %{name: "some name", position: 42, status: "some status"}
+      valid_attrs = %{name: "some name", position: 42, status: "draft"}
       scope = user_scope_fixture()
 
       assert {:ok, %Task{} = task} = Tasks.create_task(scope, valid_attrs)
       assert task.name == "some name"
       assert task.position == 42
-      assert task.status == "some status"
+      assert task.status == "draft"
       assert task.user_id == scope.user.id
     end
 
@@ -51,23 +51,21 @@ defmodule Tasky.TasksTest do
       update_attrs = %{
         name: "some updated name",
         position: 43,
-        status: "some updated status"
+        status: "published"
       }
 
       assert {:ok, %Task{} = task} = Tasks.update_task(scope, task, update_attrs)
       assert task.name == "some updated name"
       assert task.position == 43
-      assert task.status == "some updated status"
+      assert task.status == "published"
     end
 
-    test "update_task/3 with invalid scope raises" do
+    test "update_task/3 with invalid scope returns unauthorized" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       task = task_fixture(scope)
 
-      assert_raise MatchError, fn ->
-        Tasks.update_task(other_scope, task, %{})
-      end
+      assert {:error, :unauthorized} = Tasks.update_task(other_scope, task, %{})
     end
 
     test "update_task/3 with invalid data returns error changeset" do
@@ -84,11 +82,11 @@ defmodule Tasky.TasksTest do
       assert_raise Ecto.NoResultsError, fn -> Tasks.get_task!(scope, task.id) end
     end
 
-    test "delete_task/2 with invalid scope raises" do
+    test "delete_task/2 with invalid scope returns unauthorized" do
       scope = user_scope_fixture()
       other_scope = user_scope_fixture()
       task = task_fixture(scope)
-      assert_raise MatchError, fn -> Tasks.delete_task(other_scope, task) end
+      assert {:error, :unauthorized} = Tasks.delete_task(other_scope, task)
     end
 
     test "change_task/2 returns a task changeset" do

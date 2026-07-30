@@ -1,8 +1,8 @@
 defmodule TaskyWeb.Student.CourseLive do
   use TaskyWeb, :live_view
 
-  alias Tasky.Tasks
   alias Tasky.Courses
+  alias Tasky.Tasks
 
   @impl true
   def render(assigns) do
@@ -384,15 +384,19 @@ defmodule TaskyWeb.Student.CourseLive do
 
   @impl true
   def handle_event("show_feedback", %{"submission-id" => submission_id}, socket) do
-    submission_id = String.to_integer(submission_id)
+    submission_id = TaskyWeb.Params.int(submission_id)
 
-    submission = Enum.find(socket.assigns.submissions, &(&1.id == submission_id))
+    case Enum.find(socket.assigns.submissions, &(&1.id == submission_id)) do
+      nil ->
+        {:noreply, socket}
 
-    {:noreply,
-     socket
-     |> assign(:show_feedback_modal, true)
-     |> assign(:feedback_text, submission.feedback || "")
-     |> assign(:feedback_task_name, submission.task.name)}
+      submission ->
+        {:noreply,
+         socket
+         |> assign(:show_feedback_modal, true)
+         |> assign(:feedback_text, submission.feedback || "")
+         |> assign(:feedback_task_name, submission.task.name)}
+    end
   end
 
   @impl true

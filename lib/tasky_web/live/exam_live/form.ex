@@ -123,7 +123,7 @@ defmodule TaskyWeb.ExamLive.Form do
   end
 
   defp save_exam(socket, :edit, exam_params) do
-    case Exams.update_exam(socket.assigns.exam, exam_params) do
+    case Exams.update_exam(socket.assigns.current_scope, socket.assigns.exam, exam_params) do
       {:ok, exam} ->
         {:noreply,
          socket

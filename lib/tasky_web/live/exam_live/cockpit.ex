@@ -489,10 +489,17 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   # waiting room (or simply online when SEB is not required).
   defp presence_label(present, token, seb_enabled) do
     case Map.get(present, token) do
-      nil -> {"bg-stone-300", "text-stone-400", "Abwesend"}
-      %{in_seb: true} -> {"bg-emerald-400", "text-emerald-500", "Im Warteraum"}
-      %{in_seb: false} when seb_enabled -> {"bg-yellow-400", "text-yellow-600", "SEB noch nicht gestartet"}
-      _ -> {"bg-emerald-400", "text-emerald-500", "Online"}
+      nil ->
+        {"bg-stone-300", "text-stone-400", "Abwesend"}
+
+      %{in_seb: true} ->
+        {"bg-emerald-400", "text-emerald-500", "Im Warteraum"}
+
+      %{in_seb: false} when seb_enabled ->
+        {"bg-yellow-400", "text-yellow-600", "SEB noch nicht gestartet"}
+
+      _ ->
+        {"bg-emerald-400", "text-emerald-500", "Online"}
     end
   end
 
@@ -513,7 +520,15 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
   @impl true
   def handle_event("show_confirm", %{"action" => action}, socket) do
-    {:noreply, assign(socket, :confirm_action, String.to_existing_atom(action))}
+    # Explicit whitelist: client params must never mint or crash on atoms.
+    confirm_action =
+      case action do
+        "start_exam" -> :start_exam
+        "end_exam" -> :end_exam
+        _ -> nil
+      end
+
+    {:noreply, assign(socket, :confirm_action, confirm_action)}
   end
 
   def handle_event("close_confirm", _params, socket) do
@@ -523,7 +538,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   def handle_event("confirm_action", _params, socket) do
     case socket.assigns.confirm_action do
       :start_exam ->
-        case Exams.update_exam_status(socket.assigns.exam, "running") do
+        case Exams.update_exam_status(
+               socket.assigns.current_scope,
+               socket.assigns.exam,
+               "running"
+             ) do
           {:ok, exam} ->
             {:noreply,
              socket
@@ -538,7 +557,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
         end
 
       :end_exam ->
-        case Exams.update_exam_status(socket.assigns.exam, "finished") do
+        case Exams.update_exam_status(
+               socket.assigns.current_scope,
+               socket.assigns.exam,
+               "finished"
+             ) do
           {:ok, exam} ->
             {:noreply,
              socket

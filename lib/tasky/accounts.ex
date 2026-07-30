@@ -6,7 +6,7 @@ defmodule Tasky.Accounts do
   import Ecto.Query, warn: false
   alias Tasky.Repo
 
-  alias Tasky.Accounts.{User, UserToken, UserNotifier}
+  alias Tasky.Accounts.{User, UserNotifier, UserToken}
 
   ## Database getters
 
@@ -59,6 +59,12 @@ defmodule Tasky.Accounts do
 
   """
   def get_user!(id), do: Repo.get!(User, id)
+
+  @doc "Gets a single user with the class association loaded."
+  def get_user_with_class!(id), do: Repo.get!(User, id) |> Repo.preload(:class)
+
+  @doc "Reloads the user's class association (e.g. after a class change)."
+  def reload_user_class(%User{} = user), do: Repo.preload(user, :class, force: true)
 
   ## User registration
 

@@ -5,6 +5,8 @@ defmodule TaskyWeb.Student.FileController do
   """
   use TaskyWeb, :controller
 
+  import TaskyWeb.StorageServing
+
   alias Tasky.Tasks
   alias Tasky.Uploads
 
@@ -14,16 +16,15 @@ defmodule TaskyWeb.Student.FileController do
     with submission when not is_nil(submission) <-
            Tasks.get_submission_for_student(task_id, user.id),
          file when not is_nil(file) <- Tasks.get_submission_file(submission, field_id),
-         {:ok, path} <-
-           Uploads.task_submission_file_path(
+         {:ok, source} <-
+           Uploads.fetch_task_submission_file(
              submission.task_id,
              submission.id,
-             file.stored_filename
+             file.stored_filename,
+             disposition: {"attachment", file.original_name},
+             content_type: file.content_type
            ) do
-      send_download(conn, {:file, path},
-        filename: file.original_name,
-        content_type: file.content_type
-      )
+      serve_download(conn, source, file.original_name, file.content_type)
     else
       _ -> conn |> put_status(:not_found) |> text("Not found")
     end

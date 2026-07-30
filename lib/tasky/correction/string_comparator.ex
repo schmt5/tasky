@@ -2,9 +2,9 @@ defmodule Tasky.Correction.StringComparator do
   @moduledoc """
   Deterministic, AI-free correction of a single exam part.
 
-  Mirrors the `{:ok, %{verdicts:, points:}}` contract of
-  `Tasky.AI.CorrectionClient.correct_part/4` so the bulk runner can swap
-  implementations without further changes.
+  Returns `{:ok, %{verdicts:, points:}}` — the contract the bulk runner
+  consumes, kept implementation-agnostic so a future AI-backed corrector
+  could be swapped in without further changes.
 
   Comparison rules per answer node:
 
@@ -127,7 +127,7 @@ defmodule Tasky.Correction.StringComparator do
         _, acc -> acc
       end)
 
-    Float.round(raw * 4) / 4
+    Tasky.Grading.round_quarter(raw)
   end
 
   defp calculate_points(verdicts, max_points, _opts), do: calculate_points(verdicts, max_points)
@@ -143,7 +143,7 @@ defmodule Tasky.Correction.StringComparator do
     else
       correct = verdicts |> Map.values() |> Enum.count(&(&1 == "correct"))
       raw = correct / total * max_points
-      Float.round(raw * 4) / 4
+      Tasky.Grading.round_quarter(raw)
     end
   end
 
@@ -184,13 +184,11 @@ defmodule Tasky.Correction.StringComparator do
   end
 
   defp extract_plain_text(content) when is_list(content) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "", fn
       %{"type" => "text", "text" => t} -> t
       %{"content" => inner} when is_list(inner) -> extract_plain_text(inner)
       _ -> ""
     end)
-    |> Enum.join("")
   end
 
   defp extract_plain_text(_), do: ""

@@ -3,14 +3,38 @@ defmodule TaskyWeb.Router do
 
   import TaskyWeb.UserAuth
 
+  # Everything is served same-origin (bundled assets, local fonts, uploaded
+  # images); LiveView needs the websocket, Tiptap/React need inline style
+  # attributes, and content images are embedded as data:/blob: while uploading.
+  @content_security_policy "default-src 'self'; " <>
+                             "script-src 'self'; " <>
+                             "style-src 'self' 'unsafe-inline'; " <>
+                             "img-src 'self' data: blob:; " <>
+                             "font-src 'self' data:; " <>
+                             "connect-src 'self' ws: wss:; " <>
+                             "object-src 'none'; " <>
+                             "base-uri 'self'; " <>
+                             "frame-ancestors 'self'; " <>
+                             "form-action 'self'"
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {TaskyWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug :put_secure_browser_headers, %{"content-security-policy" => @content_security_policy}
     plug :fetch_current_scope_for_user
+  end
+
+  # Served user uploads: never render as HTML/scripts, never leak referers.
+  # Interim hardening while /uploads is world-readable; the real fix is the
+  # private R2 bucket with presigned URLs (ROBUSTNESS_PLAN Phase 6).
+  pipeline :uploads do
+    plug :put_secure_browser_headers, %{
+      "content-security-policy" => "default-src 'none'; sandbox",
+      "cross-origin-resource-policy" => "same-origin"
+    }
   end
 
   pipeline :api do
@@ -39,10 +63,16 @@ defmodule TaskyWeb.Router do
     get "/handbook", PageController, :handbook
   end
 
+  # Guest exam tokens are short strings — cap probing per IP (generous enough
+  # for a whole class behind one school NAT).
+  pipeline :guest_rate_limit do
+    plug TaskyWeb.Plugs.RateLimit, bucket: :guest, limit: 300, window_ms: 60_000
+  end
+
   ## Guest exam routes (no authentication required)
 
   scope "/guest", TaskyWeb.Guest do
-    pipe_through [:browser]
+    pipe_through [:browser, :guest_rate_limit]
 
     get "/exam/:exam_token/seb-config", SebController, :config
     get "/exam/:exam_token/seb-quit", SebController, :quit
@@ -75,7 +105,9 @@ defmodule TaskyWeb.Router do
         :update
   end
 
-  # Guest JSON API (token-gated via exam_token in URL)
+  # Guest JSON API (token-gated via the 128-bit exam_token in the URL — not
+  # brute-forceable, and autosave traffic from a whole class behind one NAT
+  # would trip any sensible per-IP limit, so no rate limiting here).
   scope "/api/guest", TaskyWeb.Guest do
     pipe_through :guest_api
 
@@ -92,6 +124,8 @@ defmodule TaskyWeb.Router do
   # Public serving of uploaded exam images (unguessable UUID filenames). Public
   # so the browser and Gotenberg can load <img> sources without an auth token.
   scope "/uploads", TaskyWeb do
+    pipe_through :uploads
+
     get "/exams/:exam_id/attachments/:filename", UploadController, :attachment
     get "/exams/:exam_id/:filename", UploadController, :show
     get "/tasks/:task_id/attachments/:filename", UploadController, :task_attachment
@@ -148,7 +182,6 @@ defmodule TaskyWeb.Router do
 
       live "/exams/:id/content", ExamLive.Content, :content
     end
-
   end
 
   ## Student routes
@@ -186,7 +219,6 @@ defmodule TaskyWeb.Router do
     live_session :require_authenticated_user,
       on_mount: [{TaskyWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
-      live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
   end
 

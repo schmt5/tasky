@@ -25,6 +25,8 @@ defmodule Tasky.Exams.Exam do
   end
 
   @doc false
+  # :status and :enrollment_token are deliberately not castable — the exam
+  # lifecycle goes through Exams.update_exam_status/3 / open_exam_session/2.
   def changeset(exam, attrs) do
     exam
     |> cast(attrs, [
@@ -33,8 +35,6 @@ defmodule Tasky.Exams.Exam do
       :sample_solution,
       :sample_solution_points,
       :sample_solution_block_points,
-      :enrollment_token,
-      :status,
       :seb_enabled,
       :seb_quit_password,
       :ai_correction_config,
@@ -42,8 +42,6 @@ defmodule Tasky.Exams.Exam do
     ])
     |> validate_required([:name])
     |> validate_length(:name, min: 3, max: 255)
-    |> validate_inclusion(:status, ~w(draft open running finished archived))
-    |> unique_constraint(:enrollment_token)
   end
 
   @doc false

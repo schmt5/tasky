@@ -24,10 +24,25 @@ defmodule Tasky.Exams.ExamSubmission do
   @doc """
   Changeset for updating only the submission content (used by the student editor).
   """
+  # Client-controlled JSON must stay within reason — a runaway (or malicious)
+  # editor payload otherwise bloats the row unbounded.
+  @max_content_bytes 5 * 1024 * 1024
+
   def content_changeset(exam_submission, attrs) do
     exam_submission
     |> cast(attrs, [:content])
     |> validate_required([:content])
+    |> validate_content_size()
+  end
+
+  defp validate_content_size(changeset) do
+    validate_change(changeset, :content, fn :content, content ->
+      if :erlang.external_size(content) > @max_content_bytes do
+        [content: "Inhalt ist zu gross"]
+      else
+        []
+      end
+    end)
   end
 
   @doc false
@@ -54,6 +69,10 @@ defmodule Tasky.Exams.ExamSubmission do
     )
     |> put_exam_token()
     |> unique_constraint(:exam_token)
+    |> unique_constraint([:exam_id, :email],
+      name: :exam_submissions_exam_id_email_index,
+      message: "ist für diese Prüfung bereits eingeschrieben"
+    )
   end
 
   defp put_exam_token(changeset) do

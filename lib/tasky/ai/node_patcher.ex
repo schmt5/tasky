@@ -59,6 +59,7 @@ defmodule Tasky.AI.NodePatcher do
       text: text,
       inferred_verdict: inferred
     }
+
     collect_blocks(rest, [entry | acc], counter + 1)
   end
 
@@ -70,13 +71,11 @@ defmodule Tasky.AI.NodePatcher do
   defp collect_blocks([_ | rest], acc, counter), do: collect_blocks(rest, acc, counter)
 
   defp extract_plain_text(content) when is_list(content) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "", fn
       %{"type" => "text", "text" => t} -> t
       %{"content" => inner} when is_list(inner) -> extract_plain_text(inner)
       _ -> ""
     end)
-    |> Enum.join("")
   end
 
   defp extract_plain_text(_), do: ""
@@ -97,8 +96,6 @@ defmodule Tasky.AI.NodePatcher do
       true -> nil
     end
   end
-
-  defp infer_verdict_from_text(_), do: nil
 
   @doc """
   Rewrites the trailing ✅/❌/🟡 markers on answer-bearing nodes within
@@ -256,11 +253,6 @@ defmodule Tasky.AI.NodePatcher do
   end
 
   defp do_append([], _marker, found), do: {[], found}
-
-  defp do_append([head | tail], marker, true) do
-    {rest, _} = do_append(tail, marker, true)
-    {[head | rest], true}
-  end
 
   defp do_append([%{"type" => "text", "text" => text} = leaf | rest], marker, false) do
     {[Map.put(leaf, "text", "#{text} #{marker}") | rest], true}

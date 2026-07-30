@@ -2,6 +2,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   use TaskyWeb, :live_view
 
   import TaskyWeb.FileComponents
+  import TaskyWeb.StudentComponents
 
   alias Tasky.Exams
   alias Tasky.Uploads
@@ -846,45 +847,43 @@ defmodule TaskyWeb.Guest.ExamLive do
 
       field = Enum.find(socket.assigns.upload_fields, &(to_string(&1.id) == field_id))
 
-      cond do
-        is_nil(field) or submission.submitted or exam.status != "running" ->
-          {:noreply, cancel_upload(socket, name, entry.ref)}
+      if is_nil(field) or submission.submitted or exam.status != "running" do
+        {:noreply, cancel_upload(socket, name, entry.ref)}
+      else
+        result =
+          consume_uploaded_entry(socket, entry, fn %{path: path} ->
+            case Uploads.save_submission_file(
+                   exam.id,
+                   submission.id,
+                   path,
+                   entry.client_name,
+                   field.allowed_types
+                 ) do
+              {:ok, meta} ->
+                {:ok,
+                 Exams.put_submission_file(
+                   submission,
+                   field,
+                   Map.put(meta, :original_name, entry.client_name)
+                 )}
 
-        true ->
-          result =
-            consume_uploaded_entry(socket, entry, fn %{path: path} ->
-              case Uploads.save_submission_file(
-                     exam.id,
-                     submission.id,
-                     path,
-                     entry.client_name,
-                     field.allowed_types
-                   ) do
-                {:ok, meta} ->
-                  {:ok,
-                   Exams.put_submission_file(
-                     submission,
-                     field,
-                     Map.put(meta, :original_name, entry.client_name)
-                   )}
+              {:error, reason} ->
+                {:ok, {:error, reason}}
+            end
+          end)
 
-                {:error, reason} ->
-                  {:ok, {:error, reason}}
-              end
-            end)
+        case result do
+          {:ok, _file} ->
+            {:noreply, refresh_submission_files(socket)}
 
-          case result do
-            {:ok, _file} ->
-              {:noreply, refresh_submission_files(socket)}
-
-            {:error, _reason} ->
-              {:noreply,
-               put_flash(
-                 socket,
-                 :error,
-                 "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
-               )}
-          end
+          {:error, _reason} ->
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
+             )}
+        end
       end
     else
       {:noreply, socket}
@@ -895,28 +894,5 @@ defmodule TaskyWeb.Guest.ExamLive do
     socket
     |> assign(:submission_files, submission_files_by_field(socket.assigns.submission))
     |> assign(:missing_uploads, Exams.missing_required_uploads(socket.assigns.submission))
-  end
-
-  attr :label, :string, required: true
-  attr :tab, :string, required: true
-  attr :active, :boolean, required: true
-
-  defp student_tab_button(assigns) do
-    ~H"""
-    <button
-      type="button"
-      phx-click="switch_student_tab"
-      phx-value-tab={@tab}
-      class={[
-        "px-3 py-1 rounded-md text-sm font-medium transition-colors",
-        if(@active,
-          do: "bg-white text-sky-700 shadow-sm",
-          else: "text-sky-600/70 hover:text-sky-800"
-        )
-      ]}
-    >
-      {@label}
-    </button>
-    """
   end
 end

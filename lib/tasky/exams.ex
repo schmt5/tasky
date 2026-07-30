@@ -6,14 +6,16 @@ defmodule Tasky.Exams do
   import Ecto.Query, warn: false
   alias Tasky.Repo
 
+  alias Tasky.Accounts.Scope
+  alias Tasky.AI.NodePatcher
+  alias Tasky.Correction.AnswerKey
   alias Tasky.Exams.Exam
   alias Tasky.Exams.ExamAttachment
   alias Tasky.Exams.ExamSubmission
   alias Tasky.Exams.ExamSubmissionFile
   alias Tasky.Exams.ExamUploadField
-  alias Tasky.Accounts.Scope
-  alias Tasky.AI.NodePatcher
-  alias Tasky.Correction.AnswerKey
+  alias Tasky.Grading
+  alias Tasky.Policy
 
   @doc """
   Returns the list of exams for a given scope.
@@ -45,19 +47,10 @@ defmodule Tasky.Exams do
   def get_exam!(scope, id) do
     exam = Repo.get!(Exam, id) |> Repo.preload([:teacher])
 
-    case scope.user.role do
-      "admin" ->
-        exam
-
-      "teacher" ->
-        if exam.teacher_id == scope.user.id do
-          exam
-        else
-          raise Ecto.NoResultsError, queryable: Exam
-        end
-
-      _ ->
-        raise Ecto.NoResultsError, queryable: Exam
+    if Policy.can_manage?(scope, exam.teacher_id) do
+      exam
+    else
+      raise Ecto.NoResultsError, queryable: Exam
     end
   end
 
@@ -71,22 +64,19 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Duplicates an existing exam. The copy is always in "draft" status with no
-  enrollment_token. If SEB is enabled, a fresh quit password is generated.
+  Duplicates an existing exam under the given (caller-provided, localized)
+  name. The copy is always in "draft" status with no enrollment_token. If SEB
+  is enabled, a fresh quit password is generated.
   """
-  def duplicate_exam(scope, %Exam{} = source) do
+  def duplicate_exam(scope, %Exam{} = source, name) do
     attrs = %{
-      "name" => String.slice("Kopie von — #{source.name}", 0, 255),
+      "name" => String.slice(name, 0, 255),
       "content" => source.content || %{},
       "sample_solution" => source.sample_solution || %{},
       "sample_solution_points" => source.sample_solution_points || %{},
       "sample_solution_block_points" => source.sample_solution_block_points || %{},
       "seb_enabled" => source.seb_enabled,
-      "seb_quit_password" =>
-        if(source.seb_enabled,
-          do: (:rand.uniform(899_999) + 100_000) |> Integer.to_string(),
-          else: nil
-        ),
+      "seb_quit_password" => if(source.seb_enabled, do: generate_quit_password(), else: nil),
       "ai_correction_config" => source.ai_correction_config || %{}
       # status defaults to "draft" via schema
       # enrollment_token stays nil
@@ -97,52 +87,89 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Updates an exam.
+  Updates an exam's regular attributes (name, content, SEB config, …).
+  Status and enrollment token are not mass-assignable — they change only
+  through `update_exam_status/3` and `open_exam_session/2`.
   """
-  def update_exam(%Exam{} = exam, attrs) do
-    exam
-    |> Exam.changeset(attrs)
-    |> Repo.update()
+  def update_exam(scope, %Exam{} = exam, attrs) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      exam
+      |> Exam.changeset(attrs)
+      |> Repo.update()
+    end
   end
 
+  # The exam lifecycle is a one-way street; anything else is a caller bug or
+  # a forged request. "open" additionally requires an enrollment token, so it
+  # is only reachable via open_exam_session/2.
+  @status_transitions %{
+    "draft" => ~w(open),
+    "open" => ~w(running),
+    "running" => ~w(finished),
+    "finished" => ~w(archived),
+    "archived" => ~w()
+  }
+
   @doc """
-  Updates the status of an exam.
+  Advances the status of an exam along the allowed lifecycle
+  (draft → open → running → finished → archived). Returns
+  `{:error, :invalid_transition}` for anything else.
   """
-  def update_exam_status(%Exam{} = exam, status) do
-    result =
+  def update_exam_status(scope, %Exam{} = exam, status) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_status_transition(exam.status, status) do
       exam
       |> Ecto.Changeset.change(%{status: status})
-      |> Ecto.Changeset.validate_inclusion(:status, ~w(draft open running finished archived))
-      |> Repo.update()
+      |> update_and_broadcast(&broadcast_exam_update/1)
+    end
+  end
 
-    case result do
-      {:ok, updated_exam} ->
-        broadcast_exam_update(updated_exam)
-        {:ok, updated_exam}
-
-      error ->
-        error
+  defp validate_status_transition(from, to) do
+    if to in Map.get(@status_transitions, from, []) do
+      :ok
+    else
+      {:error, :invalid_transition}
     end
   end
 
   @doc """
   Opens an exam session by generating an enrollment token and setting status to open.
   """
-  def open_exam_session(%Exam{} = exam) do
-    token = generate_enrollment_token()
+  def open_exam_session(scope, %Exam{} = exam) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_status_transition(exam.status, "open") do
+      case open_with_fresh_token(exam, 5) do
+        {:ok, updated_exam} ->
+          broadcast_exam_update(updated_exam)
+          {:ok, updated_exam}
 
+        error ->
+          error
+      end
+    end
+  end
+
+  # The 6-char token space is small enough that collisions are possible —
+  # retry with a fresh token instead of surfacing a constraint error.
+  defp open_with_fresh_token(_exam, 0), do: {:error, :token_collision}
+
+  defp open_with_fresh_token(exam, attempts) do
     result =
       exam
-      |> Ecto.Changeset.change(%{status: "open", enrollment_token: token})
+      |> Ecto.Changeset.change(%{status: "open", enrollment_token: generate_enrollment_token()})
+      |> Ecto.Changeset.unique_constraint(:enrollment_token)
       |> Repo.update()
 
     case result do
-      {:ok, updated_exam} ->
-        broadcast_exam_update(updated_exam)
-        {:ok, updated_exam}
+      {:error, %Ecto.Changeset{errors: errors}} = error ->
+        if Keyword.has_key?(errors, :enrollment_token) do
+          open_with_fresh_token(exam, attempts - 1)
+        else
+          error
+        end
 
-      error ->
-        error
+      other ->
+        other
     end
   end
 
@@ -154,10 +181,25 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Generates a fresh 6-digit SEB quit password from a cryptographically
+  strong source. The single place quit passwords come from.
+  """
+  def generate_quit_password do
+    <<n::32>> = :crypto.strong_rand_bytes(4)
+    Integer.to_string(100_000 + rem(n, 900_000))
+  end
+
+  @doc """
   Deletes an exam.
   """
-  def delete_exam(%Exam{} = exam) do
-    Repo.delete(exam)
+  def delete_exam(scope, %Exam{} = exam) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         {:ok, deleted} <- Repo.delete(exam) do
+      # The DB cascade removes the rows; the stored bytes (content images,
+      # attachments, submission files) must go too or they leak forever.
+      Tasky.Uploads.delete_exam_files(exam.id)
+      {:ok, deleted}
+    end
   end
 
   @doc """
@@ -201,16 +243,35 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Gets a single submission of the given exam. Authorization rides on the
+  exam: callers fetch it via `get_exam!/2` first. Raises if the submission
+  does not exist or belongs to a different exam.
+  """
+  def get_submission!(%Exam{} = exam, id) do
+    Repo.get_by!(ExamSubmission, id: id, exam_id: exam.id)
+  end
+
+  @doc "Like `get_submission!/2` but returns nil instead of raising."
+  def get_submission(%Exam{} = exam, id) do
+    Repo.get_by(ExamSubmission, id: id, exam_id: exam.id)
+  end
+
+  @doc "Lists the exam's submissions with the given ids (foreign ids are ignored)."
+  def list_submissions_by_ids(%Exam{} = exam, ids) when is_list(ids) do
+    Repo.all(from s in ExamSubmission, where: s.id in ^ids and s.exam_id == ^exam.id)
+  end
+
+  @doc """
   Creates an exam submission for a guest user.
   The exam must be in "open" or "running" status.
   """
   def create_exam_submission(%Exam{} = exam, attrs) do
-    if exam.status not in ["open", "running"] do
-      {:error, :exam_not_open}
-    else
+    if exam.status in ["open", "running"] do
       %ExamSubmission{exam_id: exam.id}
       |> ExamSubmission.changeset(attrs)
       |> Repo.insert()
+    else
+      {:error, :exam_not_open}
     end
   end
 
@@ -272,41 +333,50 @@ defmodule Tasky.Exams do
   Only allowed when the associated exam is still running.
   """
   def submit_exam_submission(%ExamSubmission{} = submission) do
-    submission = Repo.preload(submission, :exam, force: true)
+    # Gate checks and the write run in one BEGIN IMMEDIATE transaction (fresh
+    # refetch inside), so the submit can't slip past a concurrently-changed
+    # exam status or upload state (TOCTOU).
+    result =
+      Repo.transaction(
+        fn ->
+          locked =
+            ExamSubmission |> Repo.get!(submission.id) |> Repo.preload(:exam, force: true)
 
-    cond do
-      submission.exam.status != "running" ->
-        {:error, :exam_not_running}
+          cond do
+            locked.exam.status != "running" ->
+              Repo.rollback(:exam_not_running)
 
-      missing_required_uploads(submission) != [] ->
-        {:error, :missing_required_uploads}
+            missing_required_uploads(locked) != [] ->
+              Repo.rollback(:missing_required_uploads)
 
-      true ->
-        do_submit_exam_submission(submission)
+            true ->
+              case locked |> Ecto.Changeset.change(%{submitted: true}) |> Repo.update() do
+                {:ok, updated} -> %{updated | exam: locked.exam}
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+          end
+        end,
+        mode: :immediate
+      )
+
+    with {:ok, updated} <- result do
+      Phoenix.PubSub.broadcast(
+        Tasky.PubSub,
+        "exam_cockpit:#{updated.exam.id}",
+        {:submission_submitted, updated}
+      )
+
+      broadcast_exam_event({:submission_submitted, updated.exam, updated.id})
+
+      {:ok, updated}
     end
   end
 
-  defp do_submit_exam_submission(submission) do
-    case submission
-         |> Ecto.Changeset.change(%{submitted: true})
-         |> Repo.update() do
-      {:ok, updated} = result ->
-        Phoenix.PubSub.broadcast(
-          Tasky.PubSub,
-          "exam_cockpit:#{submission.exam.id}",
-          {:submission_submitted, updated}
-        )
-
-        Tasky.AI.BulkCorrectionRunner.start_for_exam(
-          submission.exam,
-          submission_id: updated.id
-        )
-
-        result
-
-      error ->
-        error
-    end
+  # Domain events on the "exam_events" topic — consumed by the correction
+  # orchestrator (Tasky.AI.CorrectionOrchestrator), never by this module, so
+  # the Exams ↔ BulkCorrectionRunner dependency stays one-way.
+  defp broadcast_exam_event(event) do
+    Phoenix.PubSub.broadcast(Tasky.PubSub, Tasky.AI.CorrectionOrchestrator.topic(), event)
   end
 
   @doc """
@@ -321,81 +391,9 @@ defmodule Tasky.Exams do
     * `label` — the heading's inline text content, or fallback `"Frage N"`
     * `nodes` — the part's nodes, starting with the leading `h3` node
   """
-  def split_content_into_parts(doc) when is_map(doc) do
-    nodes = Map.get(doc, "content", []) || []
-
-    {parts, current} =
-      Enum.reduce(nodes, {[], nil}, fn
-        node, {parts, current} when is_map(node) ->
-          if question_heading?(node) do
-            part = build_part_from_heading(node, length(parts) + count_if(current))
-            parts = if current, do: [current | parts], else: parts
-            {parts, part}
-          else
-            if current,
-              do: {parts, %{current | nodes: current.nodes ++ [node]}},
-              # pre-first-question content = preamble; ignore here
-              else: {parts, nil}
-          end
-      end)
-
-    parts = if current, do: [current | parts], else: parts
-    Enum.reverse(parts)
-  end
-
-  def split_content_into_parts(_), do: []
-
-  defp question_heading?(%{"type" => "heading", "attrs" => %{"level" => 3}}), do: true
-  defp question_heading?(_), do: false
-
-  defp count_if(nil), do: 0
-  defp count_if(_), do: 1
-
-  defp build_part_from_heading(h, idx) do
-    label = heading_text(h) || "Frage #{idx + 1}"
-    %{id: "q-#{idx + 1}", label: label, nodes: [h]}
-  end
-
-  defp heading_text(%{"content" => content}) when is_list(content) do
-    content
-    |> Enum.map_join("", fn
-      %{"text" => t} when is_binary(t) -> t
-      _ -> ""
-    end)
-    |> case do
-      "" -> nil
-      t -> t
-    end
-  end
-
-  defp heading_text(_), do: nil
-
-  @doc """
-  Returns the preamble — nodes before the first level-3 heading. Empty list
-  if the document has no preamble (starts with an h3) or no h3 headings.
-  """
-  def content_preamble(doc) when is_map(doc) do
-    (doc |> Map.get("content", []) || [])
-    |> Enum.take_while(fn n -> not question_heading?(n) end)
-  end
-
-  def content_preamble(_), do: []
-
-  @doc """
-  Reassembles a TipTap doc from a preamble (nodes before the first question)
-  and a list of parts (as returned by `split_content_into_parts/1`).
-
-  Each part's `nodes` already includes its leading `question` node, so the
-  reassembly is just concatenation. Inverse of `split_content_into_parts/1`
-  + `content_preamble/1`.
-  """
-  def assemble_parts_into_content(preamble, parts)
-      when is_list(preamble) and is_list(parts) do
-    %{
-      "type" => "doc",
-      "content" => preamble ++ Enum.flat_map(parts, & &1.nodes)
-    }
-  end
+  defdelegate split_content_into_parts(doc), to: Tasky.ExamDoc
+  defdelegate content_preamble(doc), to: Tasky.ExamDoc
+  defdelegate assemble_parts_into_content(preamble, parts), to: Tasky.ExamDoc
 
   @doc """
   Returns the decoded submission content for correction.
@@ -409,79 +407,83 @@ defmodule Tasky.Exams do
     end
   end
 
+  # Grading writes go through the exam owner (or an admin / the :system
+  # scope of a trusted background job); one indexed lookup resolves the
+  # submission's owning teacher.
+  defp authorize_submission(scope, %ExamSubmission{} = submission) do
+    teacher_id =
+      Repo.one!(from e in Exam, where: e.id == ^submission.exam_id, select: e.teacher_id)
+
+    Policy.authorize(scope, teacher_id)
+  end
+
   @doc ~S"""
   Marks a single part of a submission as corrected (idempotent).
   Broadcasts `{:submission_corrected_parts_changed, submission}` on the
   `exam_correction:#{exam_id}` topic.
   """
-  def mark_part_corrected(%ExamSubmission{} = submission, part_id)
+  def mark_part_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
-    parts = Enum.uniq([part_id | submission.corrected_parts || []])
-    update_corrected_parts(submission, parts)
+    with :ok <- authorize_submission(scope, submission) do
+      parts = Enum.uniq([part_id | submission.corrected_parts || []])
+      update_corrected_parts(submission, parts)
+    end
   end
 
   @doc """
   Removes a part from the submission's corrected list.
   """
-  def unmark_part_corrected(%ExamSubmission{} = submission, part_id)
+  def unmark_part_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
-    parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
-    update_corrected_parts(submission, parts)
+    with :ok <- authorize_submission(scope, submission) do
+      parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
+      update_corrected_parts(submission, parts)
+    end
+  end
+
+  # One place for the update-then-broadcast dance — success broadcasts,
+  # errors pass through untouched (the divergence-prone pattern this replaces
+  # was hand-copied across the context).
+  defp update_and_broadcast(changeset, broadcast_fun) do
+    with {:ok, updated} <- Repo.update(changeset) do
+      broadcast_fun.(updated)
+      {:ok, updated}
+    end
   end
 
   defp update_corrected_parts(submission, parts) do
-    case submission
-         |> Ecto.Changeset.change(%{corrected_parts: parts})
-         |> Repo.update() do
-      {:ok, updated} = result ->
-        Phoenix.PubSub.broadcast(
-          Tasky.PubSub,
-          "exam_correction:#{updated.exam_id}",
-          {:submission_corrected_parts_changed, updated}
-        )
-
-        result
-
-      error ->
-        error
-    end
+    submission
+    |> Ecto.Changeset.change(%{corrected_parts: parts})
+    |> update_and_broadcast(&broadcast_submission_change/1)
   end
 
   @doc """
   Marks a single part of a submission as AI-auto-corrected (idempotent).
   Broadcasts `{:submission_corrected_parts_changed, submission}`.
   """
-  def mark_part_auto_corrected(%ExamSubmission{} = submission, part_id)
+  def mark_part_auto_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
-    parts = Enum.uniq([part_id | submission.auto_corrected_parts || []])
-    update_auto_corrected_parts(submission, parts)
+    with :ok <- authorize_submission(scope, submission) do
+      parts = Enum.uniq([part_id | submission.auto_corrected_parts || []])
+      update_auto_corrected_parts(submission, parts)
+    end
   end
 
   @doc """
   Removes a part from the submission's AI-auto-corrected list.
   """
-  def unmark_part_auto_corrected(%ExamSubmission{} = submission, part_id)
+  def unmark_part_auto_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
-    parts = Enum.reject(submission.auto_corrected_parts || [], &(&1 == part_id))
-    update_auto_corrected_parts(submission, parts)
+    with :ok <- authorize_submission(scope, submission) do
+      parts = Enum.reject(submission.auto_corrected_parts || [], &(&1 == part_id))
+      update_auto_corrected_parts(submission, parts)
+    end
   end
 
   defp update_auto_corrected_parts(submission, parts) do
-    case submission
-         |> Ecto.Changeset.change(%{auto_corrected_parts: parts})
-         |> Repo.update() do
-      {:ok, updated} = result ->
-        Phoenix.PubSub.broadcast(
-          Tasky.PubSub,
-          "exam_correction:#{updated.exam_id}",
-          {:submission_corrected_parts_changed, updated}
-        )
-
-        result
-
-      error ->
-        error
-    end
+    submission
+    |> Ecto.Changeset.change(%{auto_corrected_parts: parts})
+    |> update_and_broadcast(&broadcast_submission_change/1)
   end
 
   @doc """
@@ -493,24 +495,39 @@ defmodule Tasky.Exams do
   replaces the matching part, reassembles, and saves back into
   `corrected_content`. Raises if `part_id` is not present.
   """
-  def update_corrected_part_content(%ExamSubmission{} = submission, part_id, part_nodes)
+  def update_corrected_part_content(scope, %ExamSubmission{} = submission, part_id, part_nodes)
       when is_binary(part_id) and is_list(part_nodes) do
-    doc = correction_content(submission)
-    parts = split_content_into_parts(doc)
-    preamble = content_preamble(doc)
+    with :ok <- authorize_submission(scope, submission) do
+      # Splice runs against a refetched row inside BEGIN IMMEDIATE so two
+      # near-simultaneous part saves can't clobber each other's parts.
+      Repo.transaction(
+        fn ->
+          locked = Repo.get!(ExamSubmission, submission.id)
+          doc = correction_content(locked)
+          parts = split_content_into_parts(doc)
+          preamble = content_preamble(doc)
 
-    unless Enum.any?(parts, &(&1.id == part_id)) do
-      raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+          unless Enum.any?(parts, &(&1.id == part_id)) do
+            raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
+          end
+
+          new_parts =
+            Enum.map(parts, fn p ->
+              if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+            end)
+
+          new_doc = assemble_parts_into_content(preamble, new_parts)
+
+          case locked
+               |> Ecto.Changeset.change(%{corrected_content: new_doc})
+               |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end,
+        mode: :immediate
+      )
     end
-
-    new_parts =
-      Enum.map(parts, fn p -> if p.id == part_id, do: %{p | nodes: part_nodes}, else: p end)
-
-    new_doc = assemble_parts_into_content(preamble, new_parts)
-
-    submission
-    |> Ecto.Changeset.change(%{corrected_content: new_doc})
-    |> Repo.update()
   end
 
   @doc """
@@ -522,11 +539,13 @@ defmodule Tasky.Exams do
   content are pruned. Re-runs auto-correction so existing submissions get
   re-graded against the (possibly restructured) exam.
   """
-  def save_exam_structure(%Exam{} = exam, doc) when is_map(doc) do
-    new_content = AnswerKey.ensure_ids(doc)
-    pruned_answers = prune_orphan_answers(new_content, exam.sample_solution || %{})
+  def save_exam_structure(scope, %Exam{} = exam, doc) when is_map(doc) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      new_content = doc |> AnswerKey.ensure_ids() |> Tasky.ExamDoc.ensure_part_ids()
+      pruned_answers = prune_orphan_answers(new_content, exam.sample_solution || %{})
 
-    persist_content_and_answers(exam, new_content, pruned_answers)
+      persist_content_and_answers(exam, new_content, pruned_answers)
+    end
   end
 
   @doc """
@@ -541,8 +560,14 @@ defmodule Tasky.Exams do
   Per the unified-view design, incidental edits to question text in this tab
   are persisted (they ride along with the blanked nodes into `content`).
   """
-  def save_sample_solution_part(%Exam{} = exam, part_id, part_nodes)
+  def save_sample_solution_part(scope, %Exam{} = exam, part_id, part_nodes)
       when is_binary(part_id) and is_list(part_nodes) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      do_save_sample_solution_part(exam, part_id, part_nodes)
+    end
+  end
+
+  defp do_save_sample_solution_part(exam, part_id, part_nodes) do
     {blanked_doc, partial_answers} =
       AnswerKey.split(%{"type" => "doc", "content" => part_nodes})
 
@@ -601,7 +626,7 @@ defmodule Tasky.Exams do
       )
 
     with {:ok, updated} <- result do
-      Tasky.AI.BulkCorrectionRunner.start_for_exam(updated)
+      broadcast_exam_event({:exam_answers_changed, updated})
       {:ok, updated}
     end
   end
@@ -614,21 +639,14 @@ defmodule Tasky.Exams do
         exam.sample_solution_points || %{}
       )
 
-    case exam
-         |> Exam.changeset(%{
-           content: content,
-           sample_solution: answers,
-           sample_solution_block_points: pruned_block_points,
-           sample_solution_points: synced_points
-         })
-         |> Repo.update() do
-      {:ok, updated} = result ->
-        Tasky.AI.BulkCorrectionRunner.start_for_exam(updated)
-        result
-
-      error ->
-        error
-    end
+    exam
+    |> Exam.changeset(%{
+      content: content,
+      sample_solution: answers,
+      sample_solution_block_points: pruned_block_points,
+      sample_solution_points: synced_points
+    })
+    |> update_and_broadcast(&broadcast_exam_event({:exam_answers_changed, &1}))
   end
 
   defp prune_orphan_answers(content, answers) do
@@ -663,8 +681,14 @@ defmodule Tasky.Exams do
   Sets (or clears, when `points` is `nil`) the maximum points for a single
   part of an exam's sample solution.
   """
-  def set_sample_solution_part_points(%Exam{} = exam, part_id, points)
+  def set_sample_solution_part_points(scope, %Exam{} = exam, part_id, points)
       when is_binary(part_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      do_set_sample_solution_part_points(exam, part_id, points)
+    end
+  end
+
+  defp do_set_sample_solution_part_points(exam, part_id, points) do
     current = exam.sample_solution_points || %{}
 
     new_map =
@@ -727,8 +751,14 @@ defmodule Tasky.Exams do
   The part's total in `sample_solution_points` is kept in sync as the sum of
   all block values.
   """
-  def set_sample_solution_block_point(%Exam{} = exam, part_id, answer_id, points)
+  def set_sample_solution_block_point(scope, %Exam{} = exam, part_id, answer_id, points)
       when is_binary(part_id) and is_binary(answer_id) and is_number(points) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      do_set_sample_solution_block_point(exam, part_id, answer_id, points)
+    end
+  end
+
+  defp do_set_sample_solution_block_point(exam, part_id, answer_id, points) do
     part_map =
       (exam.sample_solution_block_points || %{})
       |> Map.get(part_id, %{})
@@ -742,7 +772,13 @@ defmodule Tasky.Exams do
   answer block with an equal share (rounded to 0.25) of the part's current
   max points. The part total becomes the sum of the seeded shares.
   """
-  def enable_custom_block_points(%Exam{} = exam, part_id) when is_binary(part_id) do
+  def enable_custom_block_points(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      do_enable_custom_block_points(exam, part_id)
+    end
+  end
+
+  defp do_enable_custom_block_points(exam, part_id) do
     blocks = exam_part_blocks(exam, part_id)
     max_points = Map.get(exam.sample_solution_points || %{}, part_id)
 
@@ -765,12 +801,14 @@ defmodule Tasky.Exams do
   Disables custom distribution for a part. The part keeps its current total
   in `sample_solution_points` and falls back to the equal split.
   """
-  def clear_custom_block_points(%Exam{} = exam, part_id) when is_binary(part_id) do
-    block_points = Map.delete(exam.sample_solution_block_points || %{}, part_id)
+  def clear_custom_block_points(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      block_points = Map.delete(exam.sample_solution_block_points || %{}, part_id)
 
-    exam
-    |> Ecto.Changeset.change(%{sample_solution_block_points: block_points})
-    |> Repo.update()
+      exam
+      |> Ecto.Changeset.change(%{sample_solution_block_points: block_points})
+      |> Repo.update()
+    end
   end
 
   defp put_custom_block_points(%Exam{} = exam, part_id, part_map) do
@@ -787,7 +825,7 @@ defmodule Tasky.Exams do
   end
 
   defp normalize_block_points(n) when is_number(n) do
-    rounded = Float.round(max(n, 0) * 4.0) / 4
+    rounded = Grading.round_quarter(max(n, 0))
     if rounded == trunc(rounded), do: trunc(rounded), else: rounded
   end
 
@@ -806,31 +844,40 @@ defmodule Tasky.Exams do
   part of a submission. Broadcasts the updated submission so the correction
   grid stays in sync.
   """
-  def set_part_points(%ExamSubmission{} = submission, part_id, points)
+  def set_part_points(scope, %ExamSubmission{} = submission, part_id, points)
       when is_binary(part_id) do
-    current = submission.points_per_part || %{}
+    with :ok <- authorize_submission(scope, submission) do
+      do_set_part_points(submission, part_id, points)
+    end
+  end
 
-    new_map =
-      if is_nil(points) do
-        Map.delete(current, part_id)
-      else
-        Map.put(current, part_id, points)
-      end
+  defp do_set_part_points(submission, part_id, points) do
+    result =
+      Repo.transaction(
+        fn ->
+          locked = Repo.get!(ExamSubmission, submission.id)
+          current = locked.points_per_part || %{}
 
-    case submission
-         |> Ecto.Changeset.change(%{points_per_part: new_map})
-         |> Repo.update() do
-      {:ok, updated} = result ->
-        Phoenix.PubSub.broadcast(
-          Tasky.PubSub,
-          "exam_correction:#{updated.exam_id}",
-          {:submission_corrected_parts_changed, updated}
-        )
+          new_map =
+            if is_nil(points) do
+              Map.delete(current, part_id)
+            else
+              Map.put(current, part_id, points)
+            end
 
-        result
+          case locked
+               |> Ecto.Changeset.change(%{points_per_part: new_map})
+               |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end,
+        mode: :immediate
+      )
 
-      error ->
-        error
+    with {:ok, updated} <- result do
+      broadcast_submission_change(updated)
+      {:ok, updated}
     end
   end
 
@@ -840,7 +887,8 @@ defmodule Tasky.Exams do
 
   Each entry is `%{index: i, text: t, verdict: v}` where `v` is `"correct"`,
   `"half"` (legacy), `"wrong"`, a number (manual points) or `nil`.
-  Verdicts are keyed by `"<part_id>:<index>"` in `submission.block_verdicts`.
+  Verdicts are keyed by the block's stable `answerId` in
+  `submission.block_verdicts`.
   """
   def list_part_answer_blocks(%ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
@@ -859,8 +907,9 @@ defmodule Tasky.Exams do
         part.nodes
         |> NodePatcher.list_answer_blocks()
         |> Enum.map(fn entry ->
-          key = block_verdict_key(part_id, entry.index)
-          verdict = Map.get(explicit, key) || entry.inferred_verdict
+          verdict =
+            (entry.answer_id && Map.get(explicit, entry.answer_id)) || entry.inferred_verdict
+
           Map.put(entry, :verdict, verdict)
         end)
     end
@@ -876,7 +925,7 @@ defmodule Tasky.Exams do
   readable (0.5 × block points) but are no longer written by the UI.
 
   Persists three things atomically:
-    * `block_verdicts` — keyed by `"<part_id>:<index>"`
+    * `block_verdicts` — keyed by the block's stable `answerId`
     * `corrected_content` — the trailing ✅/🟡/❌ marker on the affected
       node is rewritten to match the new verdict
     * `points_per_part[part_id]` — recomputed as the sum of each block's
@@ -886,11 +935,46 @@ defmodule Tasky.Exams do
 
   Broadcasts the updated submission so the correction grid stays in sync.
   """
-  def set_block_verdict(%ExamSubmission{} = submission, part_id, index, verdict)
+  def set_block_verdict(scope, %ExamSubmission{} = submission, part_id, index, verdict)
       when is_binary(part_id) and is_integer(index) and
              (verdict in ["correct", "half", "wrong", nil] or is_number(verdict)) do
-    exam = Repo.get!(Exam, submission.exam_id)
+    with :ok <- authorize_submission(scope, submission) do
+      do_set_block_verdict(submission, part_id, index, verdict)
+    end
+  end
 
+  # The read-modify-write over the three JSON columns runs in a BEGIN
+  # IMMEDIATE transaction with an in-transaction refetch, so a concurrent
+  # write (teacher click during a bulk-correction run) can never be lost.
+  defp do_set_block_verdict(submission, part_id, index, verdict) do
+    result =
+      Repo.transaction(
+        fn ->
+          locked = Repo.get!(ExamSubmission, submission.id)
+          exam = Repo.get!(Exam, locked.exam_id)
+
+          case block_verdict_changes(locked, exam, part_id, index, verdict) do
+            {:ok, changes} ->
+              case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
+                {:ok, updated} -> updated
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+
+            {:error, reason} ->
+              Repo.rollback(reason)
+          end
+        end,
+        mode: :immediate
+      )
+
+    with {:ok, updated} <- result do
+      broadcast_submission_change(updated)
+      {:ok, updated}
+    end
+  end
+
+  # Pure computation of the three-column update for one verdict change.
+  defp block_verdict_changes(submission, exam, part_id, index, verdict) do
     doc = correction_content(submission)
     parts = split_content_into_parts(doc)
     preamble = content_preamble(doc)
@@ -901,75 +985,287 @@ defmodule Tasky.Exams do
 
       part ->
         blocks = NodePatcher.list_answer_blocks(part.nodes)
-        points_by_index = resolve_block_points(exam, part_id, blocks)
 
-        verdict = normalize_verdict(verdict, points_by_index && points_by_index[index])
+        # Verdicts are keyed by the block's stable answerId — inserting or
+        # reordering blocks must never shift existing verdicts.
+        case Enum.find(blocks, &(&1.index == index)) do
+          %{answer_id: key} when is_binary(key) ->
+            ctx = %{
+              part_id: part_id,
+              parts: parts,
+              preamble: preamble,
+              part: part,
+              blocks: blocks,
+              index: index,
+              key: key
+            }
 
-        key = block_verdict_key(part_id, index)
-        current_verdicts = submission.block_verdicts || %{}
+            block_verdict_changes_for_key(submission, exam, ctx, verdict)
 
-        new_verdicts =
-          if is_nil(verdict) do
-            Map.delete(current_verdicts, key)
-          else
-            Map.put(current_verdicts, key, verdict)
-          end
-
-        # Effective verdict for each block: explicit teacher choice if any,
-        # otherwise fall back to the verdict inferred from the existing
-        # ✅/🟡/❌ marker on the node (e.g. left by AI auto-correction).
-        # This ensures untouched blocks keep their markers and contribute
-        # their points when the teacher only edits a single block.
-        effective_indexed = effective_verdicts_for_part(blocks, new_verdicts, part_id)
-
-        new_part_points = compute_part_points(effective_indexed, points_by_index)
-
-        new_points_per_part =
-          if is_nil(new_part_points) do
-            Map.delete(submission.points_per_part || %{}, part_id)
-          else
-            Map.put(submission.points_per_part || %{}, part_id, new_part_points)
-          end
-
-        marker_verdicts = marker_verdicts(effective_indexed, points_by_index)
-        rewritten_nodes = NodePatcher.rewrite_markers(part.nodes, marker_verdicts)
-
-        new_parts =
-          Enum.map(parts, fn p ->
-            if p.id == part_id, do: %{p | nodes: rewritten_nodes}, else: p
-          end)
-
-        new_doc = assemble_parts_into_content(preamble, new_parts)
-
-        case submission
-             |> Ecto.Changeset.change(%{
-               block_verdicts: new_verdicts,
-               corrected_content: new_doc,
-               points_per_part: new_points_per_part
-             })
-             |> Repo.update() do
-          {:ok, updated} = result ->
-            Phoenix.PubSub.broadcast(
-              Tasky.PubSub,
-              "exam_correction:#{updated.exam_id}",
-              {:submission_corrected_parts_changed, updated}
-            )
-
-            result
-
-          error ->
-            error
+          _ ->
+            {:error, :unknown_block}
         end
     end
   end
 
-  defp block_verdict_key(part_id, index), do: "#{part_id}:#{index}"
+  defp block_verdict_changes_for_key(submission, exam, ctx, verdict) do
+    %{
+      part_id: part_id,
+      parts: parts,
+      preamble: preamble,
+      part: part,
+      blocks: blocks,
+      index: index,
+      key: key
+    } = ctx
 
-  defp effective_verdicts_for_part(blocks, explicit_verdicts, part_id) do
+    points_by_index = resolve_block_points(exam, part_id, blocks)
+
+    verdict = normalize_verdict(verdict, points_by_index && points_by_index[index])
+
+    current_verdicts = submission.block_verdicts || %{}
+
+    new_verdicts =
+      if is_nil(verdict) do
+        Map.delete(current_verdicts, key)
+      else
+        Map.put(current_verdicts, key, verdict)
+      end
+
+    # Effective verdict for each block: explicit teacher choice if any,
+    # otherwise fall back to the verdict inferred from the existing
+    # ✅/🟡/❌ marker on the node (e.g. left by AI auto-correction).
+    # This ensures untouched blocks keep their markers and contribute
+    # their points when the teacher only edits a single block.
+    effective_indexed = effective_verdicts_for_part(blocks, new_verdicts)
+
+    new_part_points = compute_part_points(effective_indexed, points_by_index)
+
+    new_points_per_part =
+      if is_nil(new_part_points) do
+        Map.delete(submission.points_per_part || %{}, part_id)
+      else
+        Map.put(submission.points_per_part || %{}, part_id, new_part_points)
+      end
+
+    marker_verdicts = marker_verdicts(effective_indexed, points_by_index)
+    rewritten_nodes = NodePatcher.rewrite_markers(part.nodes, marker_verdicts)
+
+    new_parts =
+      Enum.map(parts, fn p ->
+        if p.id == part_id, do: %{p | nodes: rewritten_nodes}, else: p
+      end)
+
+    new_doc = assemble_parts_into_content(preamble, new_parts)
+
+    {:ok,
+     %{
+       block_verdicts: new_verdicts,
+       corrected_content: new_doc,
+       points_per_part: new_points_per_part
+     }}
+  end
+
+  defp broadcast_submission_change(submission) do
+    Phoenix.PubSub.broadcast(
+      Tasky.PubSub,
+      "exam_correction:#{submission.exam_id}",
+      {:submission_corrected_parts_changed, submission}
+    )
+  end
+
+  @doc """
+  Persists one auto-corrected part in a single transaction: the
+  marker-annotated nodes into `corrected_content`, the authoritative
+  per-block verdicts (keyed by the blocks' `answerId`s) into
+  `block_verdicts`, the part's points and the auto-corrected flag. Used by
+  the bulk-correction runner — one atomic write instead of three racy ones,
+  and grading no longer depends on re-inferring the runner's verdicts from
+  the ✅/🟡/❌ markers.
+  """
+  def apply_auto_correction(scope, %ExamSubmission{} = submission, part_id, part_nodes, opts)
+      when is_binary(part_id) and is_list(part_nodes) do
+    verdicts = Keyword.get(opts, :verdicts, %{})
+    points = Keyword.get(opts, :points)
+
+    with :ok <- authorize_submission(scope, submission) do
+      result =
+        Repo.transaction(
+          fn ->
+            locked = Repo.get!(ExamSubmission, submission.id)
+            doc = correction_content(locked)
+            parts = split_content_into_parts(doc)
+            preamble = content_preamble(doc)
+
+            unless Enum.any?(parts, &(&1.id == part_id)) do
+              Repo.rollback(:unknown_part)
+            end
+
+            new_parts =
+              Enum.map(parts, fn p ->
+                if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+              end)
+
+            new_points =
+              if is_nil(points) do
+                Map.delete(locked.points_per_part || %{}, part_id)
+              else
+                Map.put(locked.points_per_part || %{}, part_id, points)
+              end
+
+            changes = %{
+              corrected_content: assemble_parts_into_content(preamble, new_parts),
+              block_verdicts: Map.merge(locked.block_verdicts || %{}, verdicts),
+              points_per_part: new_points,
+              auto_corrected_parts: Enum.uniq([part_id | locked.auto_corrected_parts || []])
+            }
+
+            case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
+              {:ok, updated} -> updated
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+          end,
+          mode: :immediate
+        )
+
+      with {:ok, updated} <- result do
+        broadcast_submission_change(updated)
+        {:ok, updated}
+      end
+    end
+  end
+
+  @doc """
+  Un-marks a part as corrected on every submission of the exam — one
+  transaction instead of N racy writes. Leaves `block_verdicts` untouched so
+  re-marking doesn't lose teacher overrides.
+  """
+  def unmark_part_corrected_bulk(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      result =
+        Repo.transaction(
+          fn ->
+            for submission <- list_exam_submissions(exam) do
+              parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
+
+              case submission
+                   |> Ecto.Changeset.change(%{corrected_parts: parts})
+                   |> Repo.update() do
+                {:ok, updated} -> updated
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+            end
+          end,
+          mode: :immediate
+        )
+
+      with {:ok, updated} <- result do
+        Enum.each(updated, &broadcast_submission_change/1)
+        {:ok, updated}
+      end
+    end
+  end
+
+  @doc """
+  Marks a part as corrected on every submission of the exam, first persisting
+  the given default verdicts for blocks the teacher left untouched (no
+  explicit verdict yet), so points get tallied. `defaults` maps
+  `submission_id => %{block_index => verdict}`. One transaction for the whole
+  operation instead of N×M racy writes.
+  """
+  def mark_part_corrected_bulk(scope, %Exam{} = exam, part_id, defaults)
+      when is_binary(part_id) and is_map(defaults) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      result =
+        Repo.transaction(
+          fn ->
+            exam = Repo.get!(Exam, exam.id)
+
+            for submission <- list_exam_submissions(exam) do
+              submission =
+                defaults
+                |> Map.get(submission.id, %{})
+                |> Enum.reduce(submission, fn {index, verdict}, acc ->
+                  apply_default_verdict(acc, exam, part_id, index, verdict)
+                end)
+
+              parts = Enum.uniq([part_id | submission.corrected_parts || []])
+
+              case submission
+                   |> Ecto.Changeset.change(%{corrected_parts: parts})
+                   |> Repo.update() do
+                {:ok, updated} -> updated
+                {:error, changeset} -> Repo.rollback(changeset)
+              end
+            end
+          end,
+          mode: :immediate
+        )
+
+      with {:ok, updated} <- result do
+        Enum.each(updated, &broadcast_submission_change/1)
+        {:ok, updated}
+      end
+    end
+  end
+
+  # Persists a default verdict only where the teacher made no explicit choice.
+  defp apply_default_verdict(submission, exam, part_id, index, verdict) do
+    if verdict && explicit_block_verdict(submission, part_id, index) == nil do
+      case block_verdict_changes(submission, exam, part_id, index, verdict) do
+        {:ok, changes} ->
+          case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+
+        {:error, _reason} ->
+          submission
+      end
+    else
+      submission
+    end
+  end
+
+  @doc """
+  Sets the same block verdict on many submissions of the exam at once (the
+  grouped bulk-correction view) — one transaction instead of N racy writes.
+  Unknown submission ids are ignored; returns `{:ok, updated_submissions}`.
+  """
+  def set_block_verdict_bulk(scope, %Exam{} = exam, part_id, index, verdict, submission_ids)
+      when is_binary(part_id) and is_integer(index) and is_list(submission_ids) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      result =
+        Repo.transaction(
+          fn ->
+            exam = Repo.get!(Exam, exam.id)
+
+            for submission <- list_submissions_by_ids(exam, submission_ids) do
+              case block_verdict_changes(submission, exam, part_id, index, verdict) do
+                {:ok, changes} ->
+                  case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
+                    {:ok, updated} -> updated
+                    {:error, changeset} -> Repo.rollback(changeset)
+                  end
+
+                {:error, reason} ->
+                  Repo.rollback(reason)
+              end
+            end
+          end,
+          mode: :immediate
+        )
+
+      with {:ok, updated_submissions} <- result do
+        Enum.each(updated_submissions, &broadcast_submission_change/1)
+        {:ok, updated_submissions}
+      end
+    end
+  end
+
+  defp effective_verdicts_for_part(blocks, explicit_verdicts) do
     Enum.reduce(blocks, %{}, fn entry, acc ->
-      key = block_verdict_key(part_id, entry.index)
-
-      case Map.get(explicit_verdicts, key) do
+      case entry.answer_id && Map.get(explicit_verdicts, entry.answer_id) do
         nil ->
           case entry.inferred_verdict do
             nil -> acc
@@ -982,45 +1278,39 @@ defmodule Tasky.Exams do
     end)
   end
 
+  @doc """
+  The teacher's explicit verdict for the block at `index` in the given part,
+  or nil. Resolves the block's stable answerId from the submission's doc.
+  """
+  def explicit_block_verdict(%ExamSubmission{} = submission, part_id, index)
+      when is_binary(part_id) and is_integer(index) do
+    parts = submission |> correction_content() |> split_content_into_parts()
+
+    with %{} = part <- Enum.find(parts, &(&1.id == part_id)),
+         %{answer_id: answer_id} when is_binary(answer_id) <-
+           part.nodes |> NodePatcher.list_answer_blocks() |> Enum.find(&(&1.index == index)) do
+      Map.get(submission.block_verdicts || %{}, answer_id)
+    else
+      _ -> nil
+    end
+  end
+
   # Manual numeric verdicts are rounded to 0.25 steps and clamped to the
   # block's max points (when known). String verdicts pass through.
-  defp normalize_verdict(v, block_max) when is_number(v) do
-    v = max(v, 0)
-    v = if is_number(block_max), do: min(v, block_max), else: v
-    Float.round(v * 4.0) / 4
-  end
+  defp normalize_verdict(v, block_max) when is_number(v),
+    do: Grading.normalize_manual_points(v, block_max)
 
   defp normalize_verdict(v, _block_max), do: v
 
-  defp compute_part_points(_indexed, nil), do: nil
-
-  defp compute_part_points(indexed, points_by_index) when is_map(points_by_index) do
-    total =
-      Enum.reduce(indexed, 0.0, fn
-        {idx, "correct"}, acc -> acc + block_points_value(points_by_index[idx])
-        {idx, "half"}, acc -> acc + block_points_value(points_by_index[idx]) * 0.5
-        {_idx, "wrong"}, acc -> acc
-        {_idx, v}, acc when is_number(v) -> acc + v
-        _, acc -> acc
-      end)
-
-    rounded = Float.round(total * 4) / 4
-
-    if rounded == trunc(rounded), do: trunc(rounded), else: rounded
-  end
+  defp compute_part_points(indexed, points_by_index),
+    do: Grading.part_points(indexed, points_by_index)
 
   # Maps numeric (manual) verdicts to the marker vocabulary understood by
   # NodePatcher.rewrite_markers: full block points → ✅, zero → ❌, else 🟡.
   defp marker_verdicts(indexed, points_by_index) do
     Map.new(indexed, fn
       {idx, v} when is_number(v) ->
-        block_max = points_by_index && points_by_index[idx]
-
-        cond do
-          v == 0 -> {idx, "wrong"}
-          is_number(block_max) and v >= block_max -> {idx, "correct"}
-          true -> {idx, "half"}
-        end
+        {idx, Grading.marker_verdict(v, points_by_index && points_by_index[idx])}
 
       {idx, v} ->
         {idx, v}
@@ -1032,10 +1322,12 @@ defmodule Tasky.Exams do
   the override (the grading view then falls back to the sum of
   `sample_solution_points`).
   """
-  def update_grading_max_points(%Exam{} = exam, value) do
-    exam
-    |> Ecto.Changeset.change(%{grading_max_points: value})
-    |> Repo.update()
+  def update_grading_max_points(scope, %Exam{} = exam, value) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      exam
+      |> Ecto.Changeset.change(%{grading_max_points: value})
+      |> Repo.update()
+    end
   end
 
   @doc """
@@ -1043,24 +1335,28 @@ defmodule Tasky.Exams do
   a submission. The mark is stored as a float; when `nil`, callers should
   fall back to the calculated mark from `points / max_points`.
   """
-  def set_submission_mark(%ExamSubmission{} = submission, mark) do
-    submission
-    |> Ecto.Changeset.change(%{mark: mark})
-    |> Repo.update()
+  def set_submission_mark(scope, %ExamSubmission{} = submission, mark) do
+    with :ok <- authorize_submission(scope, submission) do
+      submission
+      |> Ecto.Changeset.change(%{mark: mark})
+      |> Repo.update()
+    end
   end
 
   @doc """
   Updates the AI correction configuration for a single part of an exam.
   The config is stored as a map keyed by part_id.
   """
-  def update_ai_correction_config(%Exam{} = exam, part_id, config)
+  def update_ai_correction_config(scope, %Exam{} = exam, part_id, config)
       when is_binary(part_id) and is_map(config) do
-    current = exam.ai_correction_config || %{}
-    updated = Map.put(current, part_id, config)
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      current = exam.ai_correction_config || %{}
+      updated = Map.put(current, part_id, config)
 
-    exam
-    |> Ecto.Changeset.change(%{ai_correction_config: updated})
-    |> Repo.update()
+      exam
+      |> Ecto.Changeset.change(%{ai_correction_config: updated})
+      |> Repo.update()
+    end
   end
 
   @doc """
@@ -1068,18 +1364,20 @@ defmodule Tasky.Exams do
   `updates` is a map of `%{part_id => %{key => value, ...}, ...}`.
   Each part's config is merged with the existing config for that part.
   """
-  def update_ai_correction_config_bulk(%Exam{} = exam, updates) when is_map(updates) do
-    current = exam.ai_correction_config || %{}
+  def update_ai_correction_config_bulk(scope, %Exam{} = exam, updates) when is_map(updates) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      current = exam.ai_correction_config || %{}
 
-    merged =
-      Enum.reduce(updates, current, fn {part_id, new_config}, acc ->
-        existing = Map.get(acc, part_id, %{})
-        Map.put(acc, part_id, Map.merge(existing, new_config))
-      end)
+      merged =
+        Enum.reduce(updates, current, fn {part_id, new_config}, acc ->
+          existing = Map.get(acc, part_id, %{})
+          Map.put(acc, part_id, Map.merge(existing, new_config))
+        end)
 
-    exam
-    |> Ecto.Changeset.change(%{ai_correction_config: merged})
-    |> Repo.update()
+      exam
+      |> Ecto.Changeset.change(%{ai_correction_config: merged})
+      |> Repo.update()
+    end
   end
 
   @doc """
@@ -1205,7 +1503,7 @@ defmodule Tasky.Exams do
     labels_by_index =
       case exam_part do
         nil -> %{}
-        p -> answer_block_labels(p.nodes)
+        p -> Tasky.ExamDoc.answer_block_labels(p.nodes)
       end
 
     exam_blocks =
@@ -1243,7 +1541,7 @@ defmodule Tasky.Exams do
         |> Enum.map(&String.trim/1)
         |> Enum.reject(&(&1 == ""))
 
-      groups = build_answer_groups(per_submission_blocks, part_id, index, sample_answers, opts)
+      groups = build_answer_groups(per_submission_blocks, index, sample_answers, opts)
 
       %{
         index: index,
@@ -1255,31 +1553,31 @@ defmodule Tasky.Exams do
     end)
   end
 
-  defp build_answer_groups(per_submission_blocks, part_id, index, sample_answers, opts) do
+  defp build_answer_groups(per_submission_blocks, index, sample_answers, opts) do
     entries =
       Enum.map(per_submission_blocks, fn {sub, blocks} ->
-        text =
-          case Enum.find(blocks, &(&1.index == index)) do
-            nil -> nil
-            %{text: t} -> t
-          end
-
-        {sub, normalize_group_text(text)}
+        case Enum.find(blocks, &(&1.index == index)) do
+          nil -> {sub, nil, nil}
+          %{text: t, answer_id: id} -> {sub, normalize_group_text(t), id}
+        end
       end)
 
     entries
-    |> Enum.group_by(fn {_sub, text} -> text end)
+    |> Enum.group_by(fn {_sub, text, _id} -> text end)
     |> Enum.map(fn {text, members} ->
-      subs = Enum.map(members, fn {sub, _} -> sub end)
-      build_one_group(text, subs, part_id, index, sample_answers, opts)
+      subs_with_ids = Enum.map(members, fn {sub, _text, id} -> {sub, id} end)
+      build_one_group(text, subs_with_ids, sample_answers, opts)
     end)
     |> Enum.sort_by(fn g -> -g.count end)
   end
 
-  defp build_one_group(text, subs, part_id, index, sample_answers, opts) do
+  defp build_one_group(text, subs_with_ids, sample_answers, opts) do
+    subs = Enum.map(subs_with_ids, fn {sub, _id} -> sub end)
+
+    # Verdicts are keyed by each submission's own block answerId.
     verdicts =
-      Enum.map(subs, fn s ->
-        Map.get(s.block_verdicts || %{}, "#{part_id}:#{index}")
+      Enum.map(subs_with_ids, fn {s, answer_id} ->
+        answer_id && Map.get(s.block_verdicts || %{}, answer_id)
       end)
 
     current_verdict =
@@ -1354,107 +1652,6 @@ defmodule Tasky.Exams do
   def sample_solution_doc(%Exam{} = exam) do
     AnswerKey.merge(exam.content || %{}, exam.sample_solution || %{})
   end
-
-  defp answer_block_labels(nodes) when is_list(nodes) do
-    {labels, _, _} = walk_labels(nodes, %{}, "", 0)
-    labels
-  end
-
-  defp walk_labels(nodes, labels, buffer, counter) when is_list(nodes) do
-    Enum.reduce(nodes, {labels, buffer, counter}, fn node, {l, b, c} ->
-      visit_label(node, l, b, c)
-    end)
-  end
-
-  @answer_node_types ["answerBlock", "lueckentext", "taskItem"]
-
-  defp visit_label(%{"type" => type}, labels, buffer, counter)
-       when type in @answer_node_types do
-    label =
-      case String.trim(buffer || "") do
-        "" -> nil
-        t -> t
-      end
-
-    {Map.put(labels, counter, label), "", counter + 1}
-  end
-
-  defp visit_label(%{"type" => "text", "text" => t}, labels, buffer, counter)
-       when is_binary(t) do
-    {labels, (buffer || "") <> t, counter}
-  end
-
-  # The leading h3 of a part is the question heading; its inline text is the
-  # question label, not a sub-input label. Reset the buffer and skip its
-  # content so the first answer block doesn't inherit the question text.
-  defp visit_label(
-         %{"type" => "heading", "attrs" => %{"level" => 3}},
-         labels,
-         _buffer,
-         counter
-       ),
-       do: {labels, "", counter}
-
-  # Tables: an answer cell is labelled by the preceding cell in the same row
-  # (the common "Begriff | [Antwort]" layout, often repeated across the row).
-  # We handle the row explicitly because the linear text buffer has no notion
-  # of cell boundaries — without this, the header row and other cells leak
-  # into the first answer's label.
-  defp visit_label(%{"type" => "tableRow", "content" => cells}, labels, _buffer, counter)
-       when is_list(cells) do
-    {labels, _prev, counter} =
-      Enum.reduce(cells, {labels, nil, counter}, fn cell, {l, prev, c} ->
-        if cell_contains_answer?(cell) do
-          {l2, c2} = label_answers(cell, l, prev, c)
-          {l2, nil, c2}
-        else
-          {l, cell_text(cell), c}
-        end
-      end)
-
-    {labels, "", counter}
-  end
-
-  defp visit_label(%{"content" => content}, labels, buffer, counter) when is_list(content) do
-    walk_labels(content, labels, buffer, counter)
-  end
-
-  defp visit_label(_, labels, buffer, counter), do: {labels, buffer, counter}
-
-  defp label_answers(%{"type" => type}, labels, label, counter)
-       when type in @answer_node_types do
-    normalized =
-      case String.trim(label || "") do
-        "" -> nil
-        t -> t
-      end
-
-    {Map.put(labels, counter, normalized), counter + 1}
-  end
-
-  defp label_answers(%{"content" => content}, labels, label, counter) when is_list(content) do
-    Enum.reduce(content, {labels, counter}, fn node, {l, c} ->
-      label_answers(node, l, label, c)
-    end)
-  end
-
-  defp label_answers(_, labels, _label, counter), do: {labels, counter}
-
-  defp cell_contains_answer?(%{"type" => type}) when type in @answer_node_types, do: true
-
-  defp cell_contains_answer?(%{"content" => content}) when is_list(content) do
-    Enum.any?(content, &cell_contains_answer?/1)
-  end
-
-  defp cell_contains_answer?(_), do: false
-
-  defp cell_text(%{"type" => "text", "text" => t}) when is_binary(t), do: t
-
-  defp cell_text(%{"content" => content}) when is_list(content) do
-    Enum.map_join(content, "", &cell_text/1)
-  end
-
-  defp cell_text(_), do: ""
 
   @doc """
   Subscribes to correction-grid events for a given exam ID.

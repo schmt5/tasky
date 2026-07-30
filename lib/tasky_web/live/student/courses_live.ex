@@ -107,7 +107,7 @@ defmodule TaskyWeb.Student.CoursesLive do
      socket
      |> assign(:page_title, "Meine Kurse")
      |> assign(:course_count, length(courses))
-     |> assign(:has_courses, length(courses) > 0)
+     |> assign(:has_courses, courses != [])
      |> stream(:courses, courses)}
   end
 end

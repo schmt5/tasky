@@ -242,7 +242,7 @@ defmodule TaskyWeb.CourseLive.Show do
      socket
      |> assign(:page_title, course.name)
      |> assign(:course, course)
-     |> assign(:has_tasks, length(course.tasks) > 0)
+     |> assign(:has_tasks, course.tasks != [])
      |> stream(:tasks, course.tasks)}
   end
 
@@ -255,7 +255,7 @@ defmodule TaskyWeb.CourseLive.Show do
 
     {:noreply,
      socket
-     |> assign(:has_tasks, length(course.tasks) > 0)
+     |> assign(:has_tasks, course.tasks != [])
      |> stream_delete(:tasks, task)}
   end
 

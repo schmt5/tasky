@@ -6,39 +6,30 @@ defmodule TaskyWeb.Student.TaskAnswersApiController do
   """
   use TaskyWeb, :controller
 
-  alias Tasky.{Courses, Tasks}
+  import TaskyWeb.ApiHelpers
+
+  alias Tasky.Tasks
   alias Tasky.Tasks.{Task, TaskSubmission}
 
   def update(conn, %{"id" => task_id, "content" => content}) when is_map(content) do
     scope = conn.assigns.current_scope
     user = scope.user
 
-    with %Task{} = task <- Tasks.get_task_for_student(task_id),
-         true <- Courses.enrolled?(task.course_id, user.id),
+    with %Task{} = task <- Tasks.get_task_for_student(scope, task_id),
          %TaskSubmission{} = submission <- Tasks.get_submission_for_student(task.id, user.id) do
       case Tasks.save_student_answers(scope, submission, content) do
-        {:ok, updated} ->
-          json(conn, %{ok: true, updated_at: updated.updated_at})
-
         {:error, :not_editable} ->
-          error(conn, :conflict, "Die Aufgabe ist bereits abgeschlossen.")
+          json_error(conn, :conflict, "Die Aufgabe ist bereits abgeschlossen.")
 
-        {:error, :unauthorized} ->
-          error(conn, :forbidden, "Keine Berechtigung.")
-
-        {:error, _changeset} ->
-          error(conn, :unprocessable_entity, "Antworten konnten nicht gespeichert werden.")
+        result ->
+          render_save_result(conn, result)
       end
     else
-      _ -> error(conn, :not_found, "Aufgabe nicht gefunden.")
+      _ -> json_error(conn, :not_found, "Aufgabe nicht gefunden.")
     end
   end
 
   def update(conn, _params) do
-    error(conn, :bad_request, "Missing or invalid content field")
-  end
-
-  defp error(conn, status, message) do
-    conn |> put_status(status) |> json(%{error: message})
+    json_error(conn, :bad_request, "Missing or invalid content field")
   end
 end

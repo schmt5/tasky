@@ -9,8 +9,9 @@ defmodule TaskyWeb.ExamLive.Print do
 
   use TaskyWeb, :live_view
 
-  alias Tasky.Exams.{PrintToken, ExamSubmission}
-  alias Tasky.Repo
+  alias Tasky.Exams
+  alias Tasky.Exams.PrintToken
+  alias Tasky.Grading
 
   @impl true
   def render(%{error: error} = assigns) when not is_nil(error) do
@@ -75,30 +76,10 @@ defmodule TaskyWeb.ExamLive.Print do
         <% end %>
       <% end %>
 
-      <%!-- Tells Gotenberg we are ready to be printed. Small delay lets the
-           React-based TipTap viewer(s) finish their first render; then we wait
-           for any images to finish loading so they aren't cut from the PDF. --%>
-      <script>
-        window.printReady = false;
-        setTimeout(function () {
-          window.requestAnimationFrame(function () {
-            window.requestAnimationFrame(function () {
-              var imgs = Array.prototype.slice.call(document.images);
-              Promise.all(
-                imgs.map(function (img) {
-                  if (img.complete) return Promise.resolve();
-                  return new Promise(function (resolve) {
-                    img.addEventListener("load", resolve, { once: true });
-                    img.addEventListener("error", resolve, { once: true });
-                  });
-                })
-              ).then(function () {
-                window.printReady = true;
-              });
-            });
-          });
-        }, 1000);
-      </script>
+      <%!-- Marker for assets/js/print_ready.js: tells Gotenberg when we are
+           ready to be printed (viewers rendered, images loaded). Kept in the
+           bundle instead of an inline script so the CSP stays strict. --%>
+      <div id="print-ready-signal" hidden></div>
     </main>
     """
   end
@@ -106,8 +87,8 @@ defmodule TaskyWeb.ExamLive.Print do
   @impl true
   def mount(%{"exam_id" => exam_id, "submission_id" => submission_id} = params, _session, socket) do
     case PrintToken.verify(socket.endpoint, params["token"]) do
-      {:ok, {_user_id, ^exam_id, ^submission_id, opts}} ->
-        mount_with_data(exam_id, submission_id, opts, socket)
+      {:ok, {user_id, ^exam_id, ^submission_id, opts}} ->
+        mount_with_data(user_id, exam_id, submission_id, opts, socket)
 
       {:ok, _other_payload} ->
         {:ok, assign_error(socket, "Token entspricht nicht der angeforderten Druckansicht.")}
@@ -117,9 +98,12 @@ defmodule TaskyWeb.ExamLive.Print do
     end
   end
 
-  defp mount_with_data(exam_id, submission_id, opts, socket) do
-    exam = Repo.get!(Tasky.Exams.Exam, exam_id)
-    submission = Repo.get_by!(ExamSubmission, id: submission_id, exam_id: exam.id)
+  defp mount_with_data(user_id, exam_id, submission_id, opts, socket) do
+    # The signed token carries the requesting teacher's id — rebuild their
+    # scope so the regular scoped accessors enforce ownership here too.
+    scope = Tasky.Accounts.Scope.for_user(Tasky.Accounts.get_user!(user_id))
+    exam = Exams.get_exam!(scope, exam_id)
+    submission = Exams.get_submission!(exam, submission_id)
 
     sample_solution_total = sum_map_points(exam.sample_solution_points)
     max_points = exam.grading_max_points || sample_solution_total
@@ -187,52 +171,14 @@ defmodule TaskyWeb.ExamLive.Print do
   defp doc_nodes(doc) when is_map(doc), do: Map.get(doc, "content", [])
   defp doc_nodes(_), do: []
 
-  defp sum_map_points(nil), do: 0
+  defp sum_map_points(map), do: Grading.sum_points(map)
 
-  defp sum_map_points(map) when is_map(map) do
-    map
-    |> Map.values()
-    |> Enum.reduce(0, fn
-      v, acc when is_number(v) -> acc + v
-      _, acc -> acc
-    end)
-  end
+  defp total_points(submission), do: Grading.sum_points(submission.points_per_part)
 
-  defp total_points(submission) do
-    sum_map_points(submission.points_per_part)
-  end
+  # One mark formula for screen and PDF — Tasky.Grading is the source of truth.
+  defp calculate_mark(points, max), do: Grading.mark(points, max)
 
-  # Swiss 1–6 scale, rounded to 0.25, clamped.
-  defp calculate_mark(_, max) when max in [nil, 0, 0.0], do: nil
+  defp format_mark(mark), do: Grading.format_mark(mark)
 
-  defp calculate_mark(points, max) when is_number(points) and is_number(max) do
-    raw = points / max * 5 + 1
-    raw |> Float.round(2) |> then(&(Float.round(&1 * 4) / 4)) |> clamp_mark()
-  end
-
-  defp calculate_mark(_, _), do: nil
-
-  defp clamp_mark(n) when n < 1.0, do: 1.0
-  defp clamp_mark(n) when n > 6.0, do: 6.0
-  defp clamp_mark(n), do: n
-
-  defp format_mark(nil), do: "—"
-
-  defp format_mark(n) when is_number(n) do
-    n = n * 1.0
-
-    if n == trunc(n),
-      do: :erlang.float_to_binary(n, decimals: 1),
-      else: :erlang.float_to_binary(n, decimals: 2)
-  end
-
-  defp format_points(nil), do: "—"
-  defp format_points(0), do: "0"
-  defp format_points(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_points(n) when is_float(n) do
-    if n == trunc(n),
-      do: Integer.to_string(trunc(n)),
-      else: :erlang.float_to_binary(n, decimals: 1)
-  end
+  defp format_points(points), do: Grading.format_points(points)
 end

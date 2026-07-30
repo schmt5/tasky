@@ -1,39 +1,20 @@
-import "../react/exam_content_editor.css";
+import { createReactHook } from "./create_react_hook";
 
-export const ExamReadOnlyViewer = {
-  async mounted() {
-    const [ReactDOMClient, { default: ExamContentEditorComponent }] =
-      await Promise.all([
-        import("react-dom/client"),
-        import("../react/ExamContentEditor"),
-      ]);
-
-    const createRoot =
-      ReactDOMClient.createRoot ?? ReactDOMClient.default?.createRoot;
-
-    const { content } = this.el.dataset;
-    let initialContent = {};
-    try {
-      initialContent = content ? JSON.parse(content) : {};
-    } catch (err) {
-      console.error("ExamReadOnlyViewer: invalid content JSON", err);
-    }
-
-    this.root = createRoot(this.el);
-    this.root.render(
-      <ExamContentEditorComponent
-        initialContent={initialContent}
-        save={() => Promise.resolve()}
-        editable={false}
-        notFullWidth={true}
-      />,
-    );
+export const ExamReadOnlyViewer = createReactHook({
+  name: "ExamReadOnlyViewer",
+  mapProps: (_hook, { initialContent }) => ({
+    initialContent,
+    save: () => Promise.resolve(),
+    mode: "readonly",
+  }),
+  // Signal for the print-readiness gate (assets/js/print_ready.js): the
+  // double rAF guarantees the rendered content has been committed and
+  // painted before Gotenberg is told the page is ready.
+  afterRender: (hook) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        hook.el.setAttribute("data-print-rendered", "true");
+      });
+    });
   },
-
-  destroyed() {
-    if (this.root) {
-      this.root.unmount();
-      this.root = null;
-    }
-  },
-};
+});

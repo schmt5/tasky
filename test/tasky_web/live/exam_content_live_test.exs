@@ -155,9 +155,9 @@ defmodule TaskyWeb.ExamContentLiveTest do
         }
       ]
 
-      {:ok, _} = Exams.save_sample_solution_part(stale, "q-1", part_one_nodes)
+      {:ok, _} = Exams.save_sample_solution_part(scope, stale, "q-1", part_one_nodes)
       # second save still uses the stale struct (its content predates save #1)
-      {:ok, _} = Exams.save_sample_solution_part(stale, "q-2", part_two_nodes)
+      {:ok, _} = Exams.save_sample_solution_part(scope, stale, "q-2", part_two_nodes)
 
       reloaded = Exams.get_exam!(scope, exam.id)
       json = Jason.encode!(reloaded.content)

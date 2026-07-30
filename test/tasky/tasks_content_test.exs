@@ -71,12 +71,11 @@ defmodule Tasky.TasksContentTest do
       assert to_string(id) != ""
     end
 
-    test "raises for a non-owner", %{student_scope: other, task: task} do
+    test "returns unauthorized for a non-owner", %{student_scope: other, task: task} do
       other_teacher_scope = user_scope_fixture(user_fixture(%{role: "teacher"}))
 
-      assert_raise MatchError, fn ->
-        Tasks.save_task_content(other_teacher_scope, task, @doc_without_ids)
-      end
+      assert {:error, :unauthorized} =
+               Tasks.save_task_content(other_teacher_scope, task, @doc_without_ids)
 
       _ = other
     end
@@ -147,10 +146,16 @@ defmodule Tasky.TasksContentTest do
       assert field_id == field.id
 
       {:ok, _} =
-        Tasks.put_submission_file(submission, field, stored_submission_file_attrs(task, submission))
+        Tasks.put_submission_file(
+          submission,
+          field,
+          stored_submission_file_attrs(task, submission)
+        )
 
       assert Tasks.missing_required_uploads(submission) == []
-      assert {:ok, %TaskSubmission{status: "completed"}} = Tasks.complete_task(scope, submission.id)
+
+      assert {:ok, %TaskSubmission{status: "completed"}} =
+               Tasks.complete_task(scope, submission.id)
     end
 
     test "cannot complete twice", %{student_scope: scope, task: task} do
@@ -215,7 +220,7 @@ defmodule Tasky.TasksContentTest do
       assert [^a1, ^a2] = Tasks.list_task_attachments(task)
       assert a1.position < a2.position
 
-      {:ok, path} = Tasky.Uploads.task_attachment_path(task.id, a1.stored_filename)
+      {:ok, {:file, path}} = Tasky.Uploads.fetch_task_attachment(task.id, a1.stored_filename)
       assert File.exists?(path)
 
       {:ok, _} = Tasks.delete_task_attachment(a1)
@@ -260,8 +265,8 @@ defmodule Tasky.TasksContentTest do
       attrs = stored_submission_file_attrs(task, submission)
       {:ok, file} = Tasks.put_submission_file(submission, f1, attrs)
 
-      {:ok, path} =
-        Tasky.Uploads.task_submission_file_path(task.id, submission.id, file.stored_filename)
+      {:ok, {:file, path}} =
+        Tasky.Uploads.fetch_task_submission_file(task.id, submission.id, file.stored_filename)
 
       assert File.exists?(path)
 
@@ -283,10 +288,14 @@ defmodule Tasky.TasksContentTest do
       submission = submission(scope, task)
 
       {:ok, first} =
-        Tasks.put_submission_file(submission, field, stored_submission_file_attrs(task, submission))
+        Tasks.put_submission_file(
+          submission,
+          field,
+          stored_submission_file_attrs(task, submission)
+        )
 
-      {:ok, first_path} =
-        Tasky.Uploads.task_submission_file_path(task.id, submission.id, first.stored_filename)
+      {:ok, {:file, first_path}} =
+        Tasky.Uploads.fetch_task_submission_file(task.id, submission.id, first.stored_filename)
 
       {:ok, second} =
         Tasks.put_submission_file(

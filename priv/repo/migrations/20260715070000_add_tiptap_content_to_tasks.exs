@@ -38,11 +38,9 @@ defmodule Tasky.Repo.Migrations.AddTiptapContentToTasks do
     create index(:task_upload_fields, [:task_id])
 
     create table(:task_submission_files) do
-      add :task_submission_id, references(:task_submissions, on_delete: :delete_all),
-        null: false
+      add :task_submission_id, references(:task_submissions, on_delete: :delete_all), null: false
 
-      add :upload_field_id, references(:task_upload_fields, on_delete: :delete_all),
-        null: false
+      add :upload_field_id, references(:task_upload_fields, on_delete: :delete_all), null: false
 
       add :stored_filename, :string, null: false
       add :original_name, :string, null: false

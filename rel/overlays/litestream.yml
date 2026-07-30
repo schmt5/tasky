@@ -1,0 +1,22 @@
+# Litestream configuration — continuous SQLite replication to Cloudflare R2
+# (S3-compatible). All values come from the environment so the same image
+# runs with or without replication; see rel/overlays/start.sh.
+#
+# Required env when replication is enabled (LITESTREAM_ENABLED=true):
+#   DATABASE_PATH                — the SQLite file (same one the app uses)
+#   LITESTREAM_R2_ACCOUNT_ID    — Cloudflare account id
+#   LITESTREAM_R2_BUCKET        — bucket reserved for backups (NOT the uploads bucket)
+#   LITESTREAM_R2_ACCESS_KEY_ID / LITESTREAM_R2_SECRET_ACCESS_KEY
+
+dbs:
+  - path: ${DATABASE_PATH}
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_R2_BUCKET}
+        path: tasky-db
+        endpoint: https://${LITESTREAM_R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+        access-key-id: ${LITESTREAM_R2_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_R2_SECRET_ACCESS_KEY}
+        # R2 has no reduced-redundancy tiers; hourly snapshots + WAL segments.
+        snapshot-interval: 1h
+        retention: 72h

@@ -31,8 +31,13 @@ defmodule Tasky.Exams.ExamUploadField do
   end
 
   defp validate_allowed_types(changeset) do
-    changeset
-    |> validate_length(:allowed_types, min: 1, message: "mindestens einen Dateityp wählen")
-    |> validate_subset(:allowed_types, Tasky.Uploads.answer_type_keys())
+    changeset = validate_subset(changeset, :allowed_types, Tasky.Uploads.answer_type_keys())
+
+    # validate_length only runs on changes, so an untouched empty default
+    # would slip through — check the resulting field value instead.
+    case get_field(changeset, :allowed_types) do
+      [_ | _] -> changeset
+      _ -> add_error(changeset, :allowed_types, "mindestens einen Dateityp wählen")
+    end
   end
 end

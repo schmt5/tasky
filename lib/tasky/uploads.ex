@@ -62,11 +62,16 @@ defmodule Tasky.Uploads do
   """
   def save_exam_image(exam_id, %Plug.Upload{} = upload) do
     with {:ok, ext} <- allowed_extension(upload.content_type),
-         :ok <- validate_size(upload.path) do
+         :ok <- validate_size(upload.path),
+         :ok <- validate_image_signature(upload.path, ext) do
       filename = Ecto.UUID.generate() <> ext
-      dest_dir = Path.join([dir(), "exams", to_string(exam_id)])
-      File.mkdir_p!(dest_dir)
-      File.cp!(upload.path, Path.join(dest_dir, filename))
+
+      :ok =
+        Tasky.Storage.put(storage_key(["exams", to_string(exam_id)], filename), upload.path,
+          content_type: content_type_for_ext(ext),
+          disposition: "inline"
+        )
+
       {:ok, "/uploads/exams/#{exam_id}/#{filename}"}
     end
   end
@@ -78,16 +83,9 @@ defmodule Tasky.Uploads do
   def fetch_exam_image(exam_id, filename) do
     ext = filename |> Path.extname() |> String.downcase()
 
-    with :ok <- validate_segment(to_string(exam_id)),
-         :ok <- validate_segment(filename),
-         {:ok, content_type} <- extension_content_type(ext) do
-      path = Path.join([dir(), "exams", to_string(exam_id), filename])
-
-      if File.regular?(path) do
-        {:ok, {path, content_type}}
-      else
-        {:error, :not_found}
-      end
+    with {:ok, content_type} <- extension_content_type(ext),
+         {:ok, source} <- fetch_stored(["exams", to_string(exam_id)], filename) do
+      {:ok, {source, content_type}}
     end
   end
 
@@ -97,11 +95,16 @@ defmodule Tasky.Uploads do
   """
   def save_task_image(task_id, %Plug.Upload{} = upload) do
     with {:ok, ext} <- allowed_extension(upload.content_type),
-         :ok <- validate_size(upload.path) do
+         :ok <- validate_size(upload.path),
+         :ok <- validate_image_signature(upload.path, ext) do
       filename = Ecto.UUID.generate() <> ext
-      dest_dir = Path.join([dir(), "tasks", to_string(task_id)])
-      File.mkdir_p!(dest_dir)
-      File.cp!(upload.path, Path.join(dest_dir, filename))
+
+      :ok =
+        Tasky.Storage.put(storage_key(["tasks", to_string(task_id)], filename), upload.path,
+          content_type: content_type_for_ext(ext),
+          disposition: "inline"
+        )
+
       {:ok, "/uploads/tasks/#{task_id}/#{filename}"}
     end
   end
@@ -113,16 +116,9 @@ defmodule Tasky.Uploads do
   def fetch_task_image(task_id, filename) do
     ext = filename |> Path.extname() |> String.downcase()
 
-    with :ok <- validate_segment(to_string(task_id)),
-         :ok <- validate_segment(filename),
-         {:ok, content_type} <- extension_content_type(ext) do
-      path = Path.join([dir(), "tasks", to_string(task_id), filename])
-
-      if File.regular?(path) do
-        {:ok, {path, content_type}}
-      else
-        {:error, :not_found}
-      end
+    with {:ok, content_type} <- extension_content_type(ext),
+         {:ok, source} <- fetch_stored(["tasks", to_string(task_id)], filename) do
+      {:ok, {source, content_type}}
     end
   end
 
@@ -168,15 +164,13 @@ defmodule Tasky.Uploads do
     ])
   end
 
-  @doc "Absolute path of a stored attachment, or an error tuple."
-  def attachment_path(exam_id, stored_filename),
-    do: stored_path(["exams", to_string(exam_id), "attachments"], stored_filename)
+  @doc "Serveable source of a stored attachment, or an error tuple."
+  def fetch_attachment(exam_id, stored_filename, opts \\ []),
+    do: fetch_stored(["exams", to_string(exam_id), "attachments"], stored_filename, opts)
 
-  @doc "Removes a stored attachment from disk (idempotent)."
-  def delete_exam_attachment_file(exam_id, stored_filename) do
-    with {:ok, path} <- attachment_path(exam_id, stored_filename), do: File.rm(path)
-    :ok
-  end
+  @doc "Removes a stored attachment (idempotent)."
+  def delete_exam_attachment_file(exam_id, stored_filename),
+    do: delete_stored(["exams", to_string(exam_id), "attachments"], stored_filename)
 
   @doc """
   Stores a teacher attachment for a learning unit (task). Same validation as
@@ -190,15 +184,13 @@ defmodule Tasky.Uploads do
     ])
   end
 
-  @doc "Absolute path of a stored task attachment, or an error tuple."
-  def task_attachment_path(task_id, stored_filename),
-    do: stored_path(["tasks", to_string(task_id), "attachments"], stored_filename)
+  @doc "Serveable source of a stored task attachment, or an error tuple."
+  def fetch_task_attachment(task_id, stored_filename, opts \\ []),
+    do: fetch_stored(["tasks", to_string(task_id), "attachments"], stored_filename, opts)
 
-  @doc "Removes a stored task attachment from disk (idempotent)."
-  def delete_task_attachment_file(task_id, stored_filename) do
-    with {:ok, path} <- task_attachment_path(task_id, stored_filename), do: File.rm(path)
-    :ok
-  end
+  @doc "Removes a stored task attachment (idempotent)."
+  def delete_task_attachment_file(task_id, stored_filename),
+    do: delete_stored(["tasks", to_string(task_id), "attachments"], stored_filename)
 
   ## Student answer files
 
@@ -215,27 +207,34 @@ defmodule Tasky.Uploads do
     ])
   end
 
-  @doc "Absolute path of a stored submission file, or an error tuple."
-  def submission_file_path(exam_id, submission_id, stored_filename) do
-    stored_path(
+  @doc "Serveable source of a stored submission file, or an error tuple."
+  def fetch_submission_file(exam_id, submission_id, stored_filename, opts \\ []) do
+    fetch_stored(
       ["exams", to_string(exam_id), "submissions", to_string(submission_id)],
-      stored_filename
+      stored_filename,
+      opts
     )
   end
 
-  @doc "Removes a stored submission file from disk (idempotent)."
+  @doc "Removes a stored submission file (idempotent)."
   def delete_submission_file_from_disk(exam_id, submission_id, stored_filename) do
-    with {:ok, path} <- submission_file_path(exam_id, submission_id, stored_filename),
-         do: File.rm(path)
-
-    :ok
+    delete_stored(
+      ["exams", to_string(exam_id), "submissions", to_string(submission_id)],
+      stored_filename
+    )
   end
 
   @doc """
   Stores a student's answer file for one upload field of a learning unit
   (task) submission. `allowed_type_keys` are the field's allowed registry keys.
   """
-  def save_task_submission_file(task_id, submission_id, src_path, original_name, allowed_type_keys) do
+  def save_task_submission_file(
+        task_id,
+        submission_id,
+        src_path,
+        original_name,
+        allowed_type_keys
+      ) do
     save_file(src_path, original_name, accept_exts(allowed_type_keys), [
       "tasks",
       to_string(task_id),
@@ -244,18 +243,41 @@ defmodule Tasky.Uploads do
     ])
   end
 
-  @doc "Absolute path of a stored task submission file, or an error tuple."
-  def task_submission_file_path(task_id, submission_id, stored_filename) do
-    stored_path(
+  @doc "Serveable source of a stored task submission file, or an error tuple."
+  def fetch_task_submission_file(task_id, submission_id, stored_filename, opts \\ []) do
+    fetch_stored(
+      ["tasks", to_string(task_id), "submissions", to_string(submission_id)],
+      stored_filename,
+      opts
+    )
+  end
+
+  @doc "Removes a stored task submission file (idempotent)."
+  def delete_task_submission_file_from_disk(task_id, submission_id, stored_filename) do
+    delete_stored(
       ["tasks", to_string(task_id), "submissions", to_string(submission_id)],
       stored_filename
     )
   end
 
-  @doc "Removes a stored task submission file from disk (idempotent)."
-  def delete_task_submission_file_from_disk(task_id, submission_id, stored_filename) do
-    with {:ok, path} <- task_submission_file_path(task_id, submission_id, stored_filename),
-         do: File.rm(path)
+  @doc """
+  Removes every stored file of an exam (content images, attachments,
+  submission files). Called when the exam is deleted so no bytes are
+  orphaned.
+  """
+  def delete_exam_files(exam_id) do
+    with :ok <- validate_segment(to_string(exam_id)) do
+      Tasky.Storage.delete_prefix("exams/#{exam_id}")
+    end
+
+    :ok
+  end
+
+  @doc "Removes every stored file of a learning unit (task); see `delete_exam_files/1`."
+  def delete_task_files(task_id) do
+    with :ok <- validate_segment(to_string(task_id)) do
+      Tasky.Storage.delete_prefix("tasks/#{task_id}")
+    end
 
     :ok
   end
@@ -306,18 +328,24 @@ defmodule Tasky.Uploads do
     with :ok <- validate_file_ext(ext, allowed_exts),
          {:ok, size} <- validate_file_size(src_path) do
       stored_filename = Ecto.UUID.generate() <> ext
-      dest_dir = Path.join([dir() | segments])
-      File.mkdir_p!(dest_dir)
-      File.cp!(src_path, Path.join(dest_dir, stored_filename))
+      content_type = content_type_for_ext(ext) || "application/octet-stream"
+
+      :ok =
+        Tasky.Storage.put(storage_key(segments, stored_filename), src_path,
+          content_type: content_type,
+          disposition: {"attachment", original_name}
+        )
 
       {:ok,
        %{
          stored_filename: stored_filename,
-         content_type: content_type_for_ext(ext) || "application/octet-stream",
+         content_type: content_type,
          size: size
        }}
     end
   end
+
+  defp storage_key(segments, stored_filename), do: Enum.join(segments ++ [stored_filename], "/")
 
   defp validate_file_ext(ext, allowed_exts) do
     if ext in allowed_exts and Map.has_key?(@ext_content_types, ext),
@@ -333,17 +361,53 @@ defmodule Tasky.Uploads do
     end
   end
 
-  defp stored_path(segments, stored_filename) do
+  # Resolves a stored file to a serveable source ({:file, path} or
+  # {:redirect, url}) after validating every path segment.
+  defp fetch_stored(segments, stored_filename, opts \\ []) do
     with :ok <- validate_segments(segments),
          :ok <- validate_segment(stored_filename) do
-      path = Path.join([dir() | segments] ++ [stored_filename])
-      if File.regular?(path), do: {:ok, path}, else: {:error, :not_found}
+      Tasky.Storage.fetch(storage_key(segments, stored_filename), opts)
     end
+  end
+
+  defp delete_stored(segments, stored_filename) do
+    with :ok <- validate_segments(segments),
+         :ok <- validate_segment(stored_filename) do
+      Tasky.Storage.delete(storage_key(segments, stored_filename))
+    end
+
+    :ok
   end
 
   defp validate_segments(segments) do
     if Enum.all?(segments, &(validate_segment(&1) == :ok)), do: :ok, else: {:error, :invalid}
   end
+
+  # Content images are served world-readable and inline from /uploads, so an
+  # upload must actually be the image type its content-type claims — first
+  # bytes are checked against the format's signature (interim hardening while
+  # files live on the local volume; see ROBUSTNESS_PLAN Phase 1.8/6).
+  defp validate_image_signature(path, ext) do
+    with {:ok, file} <- File.open(path, [:read, :binary]),
+         head when is_binary(head) <- IO.binread(file, 12),
+         :ok <- File.close(file),
+         true <- image_signature_matches?(ext, head) do
+      :ok
+    else
+      _ -> {:error, :invalid_image}
+    end
+  end
+
+  defp image_signature_matches?(".png", <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, _::binary>>),
+    do: true
+
+  defp image_signature_matches?(".jpg", <<0xFF, 0xD8, 0xFF, _::binary>>), do: true
+  defp image_signature_matches?(".gif", <<"GIF87a", _::binary>>), do: true
+  defp image_signature_matches?(".gif", <<"GIF89a", _::binary>>), do: true
+
+  defp image_signature_matches?(".webp", <<"RIFF", _::binary-size(4), "WEBP">>), do: true
+
+  defp image_signature_matches?(_ext, _head), do: false
 
   defp allowed_extension(content_type) do
     case Map.fetch(@allowed_image_types, content_type) do

@@ -234,7 +234,7 @@ defmodule TaskyWeb.Admin.UserEditLive do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    user = Accounts.get_user!(id) |> Tasky.Repo.preload(:class)
+    user = Accounts.get_user_with_class!(id)
     changeset = Accounts.change_user_admin(user, %{}, validate_unique: false)
 
     {:ok,
@@ -261,7 +261,7 @@ defmodule TaskyWeb.Admin.UserEditLive do
   def handle_event("update_user", %{"user" => params}, socket) do
     case Accounts.admin_update_user(socket.assigns.user, params) do
       {:ok, user} ->
-        user = Tasky.Repo.preload(user, :class, force: true)
+        user = Accounts.reload_user_class(user)
 
         {:noreply,
          socket
@@ -310,20 +310,6 @@ defmodule TaskyWeb.Admin.UserEditLive do
       name -> name
     end
   end
-
-  defp initials(user) do
-    first = first_letter(user.firstname)
-    last = first_letter(user.lastname)
-
-    case first <> last do
-      "" -> "?"
-      letters -> letters
-    end
-  end
-
-  defp first_letter(nil), do: ""
-  defp first_letter(""), do: ""
-  defp first_letter(name), do: name |> String.first() |> String.upcase()
 
   defp format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%d.%m.%Y")
   defp format_date(%NaiveDateTime{} = dt), do: Calendar.strftime(dt, "%d.%m.%Y")

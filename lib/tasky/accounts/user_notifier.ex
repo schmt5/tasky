@@ -1,8 +1,13 @@
 defmodule Tasky.Accounts.UserNotifier do
+  @moduledoc """
+  Delivers account-related emails (login, confirmation and update
+  instructions) via Swoosh using the application mailer.
+  """
+
   import Swoosh.Email
 
-  alias Tasky.Mailer
   alias Tasky.Accounts.User
+  alias Tasky.Mailer
 
   # Delivers the email using the application mailer.
   defp deliver(recipient, subject, body) do

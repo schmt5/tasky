@@ -7,9 +7,9 @@ defmodule Tasky.Courses do
   alias Tasky.Repo
   alias Tasky.Tasks.Task
 
+  alias Tasky.Accounts.Scope
   alias Tasky.Courses.Course
   alias Tasky.Courses.CourseEnrollment
-  alias Tasky.Accounts.Scope
 
   @doc """
   Returns the list of courses for a given scope.
@@ -58,19 +58,10 @@ defmodule Tasky.Courses do
     tasks_query = from t in Task, order_by: [asc: t.position]
     course = Repo.get!(Course, id) |> Repo.preload([:teacher, tasks: tasks_query])
 
-    case scope.user.role do
-      "admin" ->
-        course
-
-      "teacher" ->
-        if course.teacher_id == scope.user.id do
-          course
-        else
-          raise Ecto.NoResultsError, queryable: Course
-        end
-
-      _ ->
-        raise Ecto.NoResultsError, queryable: Course
+    if Tasky.Policy.can_manage?(scope, course.teacher_id) do
+      course
+    else
+      raise Ecto.NoResultsError, queryable: Course
     end
   end
 

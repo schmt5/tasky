@@ -97,7 +97,7 @@ defmodule TaskyWeb.CourseLive.Progress do
                       <td class="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap border-r border-stone-200">
                         <div class="flex items-center gap-3">
                           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
-                            {if @anonymized, do: "?", else: get_initials(student)}
+                            {if @anonymized, do: "?", else: initials(student)}
                           </div>
                           <span class="text-[14px] font-medium text-stone-800">
                             {if @anonymized,
@@ -225,7 +225,7 @@ defmodule TaskyWeb.CourseLive.Progress do
 
     progress_map = build_progress_map(course.id, students, tasks)
 
-    has_data = length(students) > 0 && length(tasks) > 0
+    has_data = students != [] && tasks != []
 
     {:ok,
      socket
@@ -270,24 +270,6 @@ defmodule TaskyWeb.CourseLive.Progress do
       nil -> :not_started
       _ -> :not_started
     end
-  end
-
-  defp get_initials(student) do
-    first_initial =
-      case student.firstname do
-        nil -> "?"
-        "" -> "?"
-        name -> name |> String.first() |> String.upcase()
-      end
-
-    last_initial =
-      case student.lastname do
-        nil -> "?"
-        "" -> "?"
-        name -> name |> String.first() |> String.upcase()
-      end
-
-    "#{first_initial}#{last_initial}"
   end
 
   defp get_full_name(student) do

@@ -43,3 +43,7 @@ npm-debug.log
 
 # Locally uploaded exam images (dev)
 /priv/uploads/
+
+# Dialyzer PLT cache
+/priv/plts/*.plt
+/priv/plts/*.plt.hash

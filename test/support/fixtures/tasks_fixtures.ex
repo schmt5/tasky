@@ -20,7 +20,7 @@ defmodule Tasky.TasksFixtures do
       Enum.into(attrs, %{
         name: "some name",
         position: 42,
-        status: "some status"
+        status: "draft"
       })
 
     {:ok, task} = Tasky.Tasks.create_task(scope, attrs)
