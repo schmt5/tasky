@@ -22,6 +22,10 @@ defmodule Tasky.Storage.R2 do
   # per render, and short enough that leaked links go stale quickly.
   @presign_ttl_seconds 15 * 60
 
+  # R2 has no regions; its S3 API expects "auto" in the sigv4 credential scope.
+  # Req would otherwise default to "us-east-1" and the signature would not match.
+  @region "auto"
+
   @impl true
   def put(key, src_path, opts) do
     headers = put_headers(opts)
@@ -98,6 +102,7 @@ defmodule Tasky.Storage.R2 do
       bucket: bucket(),
       key: key,
       endpoint_url: endpoint_url(),
+      region: @region,
       expires: @presign_ttl_seconds
     )
   end
@@ -130,13 +135,19 @@ defmodule Tasky.Storage.R2 do
 
   defp object_url(key), do: "s3://#{bucket()}/#{key}"
 
+  # `:aws_endpoint_url_s3` is what rewrites the `s3://bucket/key` URLs onto the
+  # R2 endpoint (path-style). It is a ReqS3 option, not an `:aws_sigv4` one —
+  # putting it inside `:aws_sigv4` makes Req raise `unknown option
+  # :endpoint_url`, and without it every request would go to AWS S3 instead.
   defp req do
     Req.new(retry: :transient, max_retries: 2)
     |> ReqS3.attach(
+      aws_endpoint_url_s3: endpoint_url(),
       aws_sigv4: [
         access_key_id: config()[:access_key_id],
         secret_access_key: config()[:secret_access_key],
-        endpoint_url: endpoint_url()
+        region: @region,
+        service: :s3
       ]
     )
   end

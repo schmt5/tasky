@@ -48,7 +48,12 @@ RUN mkdir config
 COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
 
-RUN mix assets.setup
+# Only the tailwind/esbuild binaries here — deliberately NOT `mix assets.setup`,
+# whose alias also runs `npm install --prefix assets`, and assets/ is not copied
+# until further down. Downloading the binaries this early keeps them in a layer
+# that stays cached when only application code or assets change.
+RUN mix tailwind.install --if-missing \
+  && mix esbuild.install --if-missing
 
 COPY priv priv
 
