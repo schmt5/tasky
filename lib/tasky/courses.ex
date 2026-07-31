@@ -94,6 +94,49 @@ defmodule Tasky.Courses do
   end
 
   @doc """
+  Duplicates a course under the given (caller-provided, localized) name,
+  including every learning unit with its content, attachments and upload
+  fields (see `Tasky.Tasks.duplicate_task_into_course/3`). Enrollments,
+  submissions and student files are not copied — the copy starts empty and
+  belongs to the duplicating user.
+
+  The records are written in one transaction; the copied file bytes are the
+  one side effect a rollback cannot undo, so a failure can leave orphaned
+  files in storage but never half-linked records.
+  """
+  def duplicate_course(scope, %Course{} = source, name) do
+    with :ok <- Tasky.Policy.authorize(scope, source.teacher_id) do
+      tasks_query = from t in Task, order_by: [asc: t.position]
+      source = Repo.preload(source, tasks: tasks_query)
+
+      attrs = %{
+        "name" => String.slice(name, 0, 255),
+        "description" => source.description
+      }
+
+      Repo.transaction(fn -> insert_duplicate(scope, source, attrs) end)
+    end
+  end
+
+  defp insert_duplicate(scope, source, attrs) do
+    with {:ok, course} <- create_course(scope, attrs),
+         :ok <- duplicate_tasks(scope, source.tasks, course.id) do
+      course
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp duplicate_tasks(scope, tasks, course_id) do
+    Enum.reduce_while(tasks, :ok, fn task, _acc ->
+      case Tasky.Tasks.duplicate_task_into_course(scope, task, course_id) do
+        {:ok, _task} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  @doc """
   Updates a course.
   """
   def update_course(%Course{} = course, attrs) do

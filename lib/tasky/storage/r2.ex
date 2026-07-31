@@ -49,6 +49,21 @@ defmodule Tasky.Storage.R2 do
     end
   end
 
+  # Server-side copy: the bytes never travel through the app. The default
+  # metadata directive is COPY, so content type and disposition of the source
+  # carry over to the new object.
+  @impl true
+  def copy(src, dest) do
+    headers = [{"x-amz-copy-source", "/" <> bucket() <> "/" <> URI.encode(src)}]
+
+    case Req.put(req(), url: object_url(dest), body: "", headers: headers) do
+      {:ok, %Req.Response{status: status}} when status in 200..299 -> :ok
+      {:ok, %Req.Response{status: 404}} -> {:error, :not_found}
+      {:ok, %Req.Response{status: status}} -> {:error, {:r2_http_error, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @impl true
   def delete(key) do
     case Req.delete(req(), url: object_url(key)) do

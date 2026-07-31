@@ -122,6 +122,124 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  Copies a learning unit into another course, including its Tiptap content
+  (with its content images), teacher attachments and student upload fields.
+  Submissions and the files students uploaded are deliberately left behind —
+  a duplicate starts without any student data.
+
+  ## Examples
+
+      iex> duplicate_task_into_course(scope, task, course.id)
+      {:ok, %Task{}}
+
+  """
+  def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id) do
+    with :ok <- Policy.authorize(scope, source.user_id),
+         {:ok, task} <-
+           create_task(scope, %{
+             name: source.name,
+             position: source.position,
+             status: source.status,
+             locked: source.locked,
+             course_id: course_id
+           }),
+         {:ok, task} <- copy_task_content(task, source),
+         :ok <- copy_task_attachments(task, source),
+         :ok <- copy_task_upload_fields(task, source) do
+      {:ok, task}
+    end
+  end
+
+  defp copy_task_content(task, %Task{content: nil}), do: {:ok, task}
+
+  defp copy_task_content(task, %Task{content: content} = source) do
+    task
+    |> Task.content_changeset(copy_content_images(content, source.id, task.id))
+    |> Repo.update()
+  end
+
+  # Content images live under their own task's upload prefix, so the copy has
+  # to take its own bytes along and point at them — sharing the source's files
+  # would blank the duplicate out as soon as the original unit is deleted.
+  defp copy_content_images(content, from_task_id, to_task_id) do
+    ctx = {
+      "/uploads/tasks/#{from_task_id}/",
+      "/uploads/tasks/#{to_task_id}/",
+      from_task_id,
+      to_task_id
+    }
+
+    rewrite_image_refs(content, ctx)
+  end
+
+  defp rewrite_image_refs(value, ctx) when is_map(value),
+    do: Map.new(value, fn {k, v} -> {k, rewrite_image_refs(v, ctx)} end)
+
+  defp rewrite_image_refs(value, ctx) when is_list(value),
+    do: Enum.map(value, &rewrite_image_refs(&1, ctx))
+
+  defp rewrite_image_refs(value, {prefix, new_prefix, from_task_id, to_task_id})
+       when is_binary(value) do
+    # Only direct children of the task prefix are content images; anything
+    # deeper (an attachment path, say) is not ours to rewrite. A file that no
+    # longer exists keeps its old URL rather than failing the duplication.
+    with true <- String.starts_with?(value, prefix),
+         filename = String.replace_prefix(value, prefix, ""),
+         false <- String.contains?(filename, "/"),
+         :ok <- Tasky.Uploads.copy_task_image(from_task_id, to_task_id, filename) do
+      new_prefix <> filename
+    else
+      _ -> value
+    end
+  end
+
+  defp rewrite_image_refs(value, _ctx), do: value
+
+  defp copy_task_attachments(task, source) do
+    source
+    |> list_task_attachments()
+    |> Enum.reduce_while(:ok, fn attachment, _acc ->
+      case Tasky.Uploads.copy_task_attachment_file(
+             source.id,
+             task.id,
+             attachment.stored_filename
+           ) do
+        {:ok, stored_filename} ->
+          case create_task_attachment(task, %{
+                 stored_filename: stored_filename,
+                 original_name: attachment.original_name,
+                 content_type: attachment.content_type,
+                 size: attachment.size
+               }) do
+            {:ok, _attachment} -> {:cont, :ok}
+            {:error, changeset} -> {:halt, {:error, changeset}}
+          end
+
+        # Bytes that already vanished from storage leave a dangling record
+        # behind; that is not a reason to fail the whole duplication.
+        {:error, _reason} ->
+          {:cont, :ok}
+      end
+    end)
+  end
+
+  defp copy_task_upload_fields(task, source) do
+    source
+    |> list_task_upload_fields()
+    |> Enum.reduce_while(:ok, fn field, _acc ->
+      case create_task_upload_field(task, %{
+             "label" => field.label,
+             "instruction" => field.instruction,
+             "allowed_types" => field.allowed_types,
+             "required" => field.required
+           }) do
+        {:ok, _field} -> {:cont, :ok}
+        {:error, changeset} -> {:halt, {:error, changeset}}
+      end
+    end)
+  end
+
+  @doc """
   Updates a task.
 
   ## Examples

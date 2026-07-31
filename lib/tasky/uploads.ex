@@ -192,6 +192,50 @@ defmodule Tasky.Uploads do
   def delete_task_attachment_file(task_id, stored_filename),
     do: delete_stored(["tasks", to_string(task_id), "attachments"], stored_filename)
 
+  ## Copying between learning units (duplication)
+
+  @doc """
+  Copies a content image of one learning unit over to another, keeping the
+  stored filename (the task id in the path already makes the key unique).
+  Returns `:ok` or `{:error, reason}`.
+  """
+  def copy_task_image(from_task_id, to_task_id, filename) do
+    copy_stored(
+      {["tasks", to_string(from_task_id)], filename},
+      {["tasks", to_string(to_task_id)], filename}
+    )
+  end
+
+  @doc """
+  Copies a teacher attachment of one learning unit over to another under a
+  fresh stored filename (`task_attachments.stored_filename` is globally
+  unique). Returns `{:ok, new_stored_filename}` or `{:error, reason}`.
+  """
+  def copy_task_attachment_file(from_task_id, to_task_id, stored_filename) do
+    ext = stored_filename |> Path.extname() |> String.downcase()
+    new_stored_filename = Ecto.UUID.generate() <> ext
+
+    case copy_stored(
+           {["tasks", to_string(from_task_id), "attachments"], stored_filename},
+           {["tasks", to_string(to_task_id), "attachments"], new_stored_filename}
+         ) do
+      :ok -> {:ok, new_stored_filename}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp copy_stored({src_segments, src_filename}, {dest_segments, dest_filename}) do
+    with :ok <- validate_segments(src_segments),
+         :ok <- validate_segment(src_filename),
+         :ok <- validate_segments(dest_segments),
+         :ok <- validate_segment(dest_filename) do
+      Tasky.Storage.copy(
+        storage_key(src_segments, src_filename),
+        storage_key(dest_segments, dest_filename)
+      )
+    end
+  end
+
   ## Student answer files
 
   @doc """

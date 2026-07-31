@@ -21,6 +21,23 @@ defmodule Tasky.Storage.Local do
   end
 
   @impl true
+  def copy(src, dest) do
+    src_path = Path.join(root(), src)
+
+    if File.regular?(src_path) do
+      dest_path = Path.join(root(), dest)
+      File.mkdir_p!(Path.dirname(dest_path))
+
+      case File.cp(src_path, dest_path) do
+        :ok -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, :not_found}
+    end
+  end
+
+  @impl true
   def delete(key) do
     _ = File.rm(Path.join(root(), key))
     :ok

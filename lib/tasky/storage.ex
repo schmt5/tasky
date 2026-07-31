@@ -34,6 +34,7 @@ defmodule Tasky.Storage do
 
   @callback put(key, src_path :: Path.t(), put_opts) :: :ok | {:error, term()}
   @callback fetch(key, fetch_opts) :: {:ok, source} | {:error, :not_found | term()}
+  @callback copy(src :: key, dest :: key) :: :ok | {:error, :not_found | term()}
   @callback delete(key) :: :ok
   @callback delete_prefix(prefix :: String.t()) :: :ok
 
@@ -41,6 +42,13 @@ defmodule Tasky.Storage do
 
   def put(key, src_path, opts \\ []), do: adapter().put(key, src_path, opts)
   def fetch(key, opts \\ []), do: adapter().fetch(key, opts)
+
+  @doc """
+  Copies a stored object to a second key, keeping its metadata. Used when a
+  resource is duplicated (see `Tasky.Courses.duplicate_course/3`) so the copy
+  owns its own bytes instead of borrowing the source's.
+  """
+  def copy(src, dest), do: adapter().copy(src, dest)
   def delete(key), do: adapter().delete(key)
   def delete_prefix(prefix), do: adapter().delete_prefix(prefix)
 end

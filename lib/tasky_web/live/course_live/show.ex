@@ -17,12 +17,25 @@ defmodule TaskyWeb.CourseLive.Show do
               %{label: @course.name}
             ]} />
 
-            <.link
-              navigate={~p"/courses/#{@course}/edit?return_to=show"}
-              class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-            >
-              <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
-            </.link>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="duplicate-course"
+                phx-click="duplicate_course"
+                phx-disable-with="Wird dupliziert…"
+                data-confirm={"Kopie von \"#{@course.name}\" mit allen Lerneinheiten erstellen? Lernende und Abgaben werden nicht kopiert."}
+                class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
+              >
+                <.icon name="hero-document-duplicate" class="w-4 h-4" /> Inhalt duplizieren
+              </button>
+
+              <.link
+                navigate={~p"/courses/#{@course}/edit?return_to=show"}
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+              >
+                <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
+              </.link>
+            </div>
           </div>
 
           <div class="flex items-center gap-3 mb-3">
@@ -243,6 +256,24 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:course, course)
      |> assign(:has_tasks, course.tasks != [])
      |> stream(:tasks, course.tasks)}
+  end
+
+  @impl true
+  def handle_event("duplicate_course", _params, socket) do
+    case Courses.duplicate_course(
+           socket.assigns.current_scope,
+           socket.assigns.course,
+           "Kopie von — #{socket.assigns.course.name}"
+         ) do
+      {:ok, course} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Inhalt wurde in einen neuen Kurs dupliziert.")
+         |> push_navigate(to: ~p"/courses/#{course}")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Inhalt konnte nicht dupliziert werden.")}
+    end
   end
 
   @impl true
