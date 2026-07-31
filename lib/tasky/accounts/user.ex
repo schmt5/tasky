@@ -18,7 +18,7 @@ defmodule Tasky.Accounts.User do
     belongs_to :class, Tasky.Classes.Class
 
     has_many :task_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :student_id
-    has_many :graded_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :graded_by_id
+    has_many :reviewed_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :feedback_by_id
     has_many :taught_courses, Tasky.Courses.Course, foreign_key: :teacher_id
 
     many_to_many :enrolled_courses, Tasky.Courses.Course,

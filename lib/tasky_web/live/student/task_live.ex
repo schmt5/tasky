@@ -66,9 +66,11 @@ defmodule TaskyWeb.Student.TaskLive do
         </div>
       </div>
 
-      <%!-- Review-denied feedback banner (unit was sent back for revision) --%>
+      <%!-- Review-denied feedback banner (unit was sent back for revision).
+          Bleibt auch nach dem Wechsel auf `in_revision` stehen — sonst wäre die
+          Begründung genau in dem Moment weg, in dem überarbeitet wird. --%>
       <div
-        :if={@editable and @submission.status == "review_denied"}
+        :if={@editable and @submission.status in ["review_denied", "in_revision"]}
         class="max-w-4xl mx-auto px-8 pt-6"
       >
         <div class="bg-rose-50 border border-rose-200 rounded-[14px] p-5">
@@ -85,7 +87,7 @@ defmodule TaskyWeb.Student.TaskLive do
                 und markiere die Aufgabe erneut als erledigt.
               </p>
               <div
-                :if={present?(@submission.feedback)}
+                :if={Tasks.has_feedback?(@submission)}
                 class="mt-3 bg-white rounded-lg p-4 border border-rose-100"
               >
                 <p class="text-[13px] font-semibold text-stone-700 mb-1.5">
@@ -339,7 +341,7 @@ defmodule TaskyWeb.Student.TaskLive do
                   </p>
 
                   <div
-                    :if={present?(@submission.feedback)}
+                    :if={Tasks.has_feedback?(@submission)}
                     class="mt-4 bg-white rounded-lg p-4 border border-emerald-100"
                   >
                     <p class="text-[13px] font-semibold text-stone-700 mb-2">
@@ -350,8 +352,8 @@ defmodule TaskyWeb.Student.TaskLive do
                     </p>
                   </div>
 
-                  <div :if={@submission.graded_at} class="mt-3 text-[12px] text-stone-500">
-                    Bewertet am {format_date(@submission.graded_at)}
+                  <div :if={@submission.feedback_at} class="mt-3 text-[12px] text-stone-500">
+                    Feedback vom {format_date(@submission.feedback_at)}
                   </div>
 
                   <div class="mt-5 flex items-center gap-3">
@@ -389,6 +391,22 @@ defmodule TaskyWeb.Student.TaskLive do
                   Sehr gute Arbeit — deine Lehrperson schaut sich deine Antworten an
                   und gibt dir Feedback.
                 </p>
+
+                <%!-- Feedback ohne Verdikt: war hier bisher unsichtbar. --%>
+                <div
+                  :if={Tasks.has_feedback?(@submission)}
+                  class="w-full max-w-[420px] text-left bg-amber-50 border border-amber-100 rounded-[10px] p-4 mb-8"
+                >
+                  <p class="text-[13px] font-semibold text-stone-700 mb-1.5">
+                    Feedback der Lehrperson:
+                  </p>
+                  <p class="text-[14px] text-stone-600 whitespace-pre-wrap leading-relaxed">
+                    {@submission.feedback}
+                  </p>
+                  <p :if={@submission.feedback_at} class="mt-2 text-[12px] text-stone-400">
+                    Feedback vom {format_date(@submission.feedback_at)}
+                  </p>
+                </div>
 
                 <div class="flex items-center gap-3 animate-[fadeUp_0.4s_0.25s_ease_both]">
                   <.link
@@ -578,25 +596,24 @@ defmodule TaskyWeb.Student.TaskLive do
        |> put_flash(:info, "Diese Aufgabe ist noch nicht verfügbar.")
        |> push_navigate(to: ~p"/student/courses/#{task.course_id}")}
     else
-      # Auto-start the task if it's not started yet
+      preview_mode = Map.get(params, "preview") == "true"
+
+      # Öffnen heisst Arbeiten: neu → in Bearbeitung, zurückgegeben → in
+      # Überarbeitung (damit die Lehrperson sieht, dass die Rückgabe ankam).
+      # Blosses Nachlesen im Vorschaumodus ändert nichts.
       submission =
-        if submission.status in ["not_started", "open", "draft"] do
-          case Tasks.update_submission_status(
+        with false <- preview_mode,
+             next_status when is_binary(next_status) <- Tasks.resume_status(submission),
+             {:ok, updated} <-
+               Tasks.update_submission_status(
                  socket.assigns.current_scope,
                  submission.id,
-                 "in_progress"
+                 next_status
                ) do
-            {:ok, updated_submission} ->
-              %{updated_submission | task: task}
-
-            {:error, _} ->
-              submission
-          end
+          %{updated | task: task}
         else
-          submission
+          _ -> submission
         end
-
-      preview_mode = Map.get(params, "preview") == "true"
 
       attachments = Tasks.list_task_attachments(task)
       upload_fields = Tasks.list_task_upload_fields(task)
@@ -819,8 +836,6 @@ defmodule TaskyWeb.Student.TaskLive do
     |> assign(:submission_files, submission_files_by_field(socket.assigns.submission))
     |> assign(:missing_uploads, Tasks.missing_required_uploads(socket.assigns.submission))
   end
-
-  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 
   defp format_date(datetime) do
     Calendar.strftime(datetime, "%d.%m.%Y um %H:%M")

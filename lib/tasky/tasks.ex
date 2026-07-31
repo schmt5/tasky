@@ -18,7 +18,11 @@ defmodule Tasky.Tasks do
 
   # Submission statuses in which the student may still edit answers,
   # upload files and mark the unit as complete.
-  @editable_statuses ~w(draft open in_progress not_started review_denied)
+  @editable_statuses ~w(not_started in_progress in_revision review_denied)
+
+  # Statuses a teacher may put a verdict on: eingereicht, in Überarbeitung
+  # (Verdikt korrigieren) oder schon einmal reviewt.
+  @reviewable_statuses ~w(completed in_revision review_approved review_denied)
 
   @doc """
   Subscribes to scoped notifications about any task changes.
@@ -489,7 +493,7 @@ defmodule Tasky.Tasks do
     if Scope.admin_or_teacher?(scope) do
       TaskSubmission
       |> where([s], s.task_id == ^task_id)
-      |> preload([:student, :graded_by])
+      |> preload([:student, :feedback_by])
       |> order_by([s], asc: s.status, desc: s.updated_at)
       |> Repo.all()
     else
@@ -499,7 +503,10 @@ defmodule Tasky.Tasks do
 
   @doc """
   Updates the status of a task submission.
-  Students can only update their own submissions.
+
+  Students can only update their own submissions, and only to a status they may
+  reach by working on the unit — `complete_task/2` and `review_submission/4`
+  own all other transitions.
 
   ## Examples
 
@@ -508,32 +515,16 @@ defmodule Tasky.Tasks do
 
   """
   def update_submission_status(%Scope{user: user} = _scope, submission_id, status)
-      when user.role == "student" do
+      when user.role == "student" and status in ["in_progress", "in_revision"] do
     submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
     if submission.student_id == user.id do
-      case submission
-           |> TaskSubmission.status_changeset(%{status: status})
-           |> Repo.update() do
-        {:ok, updated_submission} = result ->
-          # Broadcast to student's own subscription
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "student:#{user.id}:submissions",
-            {:submission_updated, updated_submission}
-          )
-
-          # Broadcast to course progress view for teachers
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "course:#{submission.task.course_id}:progress",
-            {:submission_updated, updated_submission}
-          )
-
-          result
-
-        error ->
-          error
+      with {:ok, updated} <-
+             submission
+             |> TaskSubmission.status_changeset(%{status: status})
+             |> Repo.update() do
+        broadcast_submission_updated(updated, submission.task.course_id)
+        {:ok, updated}
       end
     else
       {:error, :unauthorized}
@@ -583,42 +574,25 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Grades a task submission.
-  Only teachers and admins can grade submissions.
+  Saves a teacher's feedback text on a submission without changing its status.
+  Only the teacher owning the learning unit (or an admin) may do so.
 
   ## Examples
 
-      iex> grade_submission(scope, submission_id, %{points: 85, feedback: "Great work!"})
+      iex> save_feedback(scope, submission_id, %{feedback: "Great work!"})
       {:ok, %TaskSubmission{}}
 
   """
-  def grade_submission(%Scope{user: user} = scope, submission_id, attrs) do
-    if Scope.admin_or_teacher?(scope) do
-      submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+  def save_feedback(%Scope{user: user} = scope, submission_id, attrs) do
+    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
-      case submission
-           |> TaskSubmission.grade_changeset(attrs, user.id)
+    with :ok <- Policy.authorize(scope, submission.task.user_id),
+         {:ok, updated} <-
+           submission
+           |> TaskSubmission.feedback_changeset(attrs, user.id)
            |> Repo.update() do
-        {:ok, updated_submission} = result ->
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "student:#{submission.student_id}:submissions",
-            {:submission_updated, updated_submission}
-          )
-
-          Phoenix.PubSub.broadcast(
-            Tasky.PubSub,
-            "course:#{submission.task.course_id}:progress",
-            {:submission_updated, updated_submission}
-          )
-
-          result
-
-        error ->
-          error
-      end
-    else
-      {:error, :unauthorized}
+      broadcast_submission_updated(updated, submission.task.course_id)
+      {:ok, updated}
     end
   end
 
@@ -634,7 +608,7 @@ defmodule Tasky.Tasks do
   def get_submission!(%Scope{user: user} = scope, submission_id) do
     submission =
       TaskSubmission
-      |> preload([:task, :student, :graded_by])
+      |> preload([:task, :student, :feedback_by])
       |> Repo.get!(submission_id)
 
     cond do
@@ -842,9 +816,34 @@ defmodule Tasky.Tasks do
     end
   end
 
+  @doc "Maximale Länge des Feedbacktexts (auch fürs `maxlength` im Formular)."
+  defdelegate max_feedback_chars(), to: TaskSubmission
+
+  @doc """
+  True when the submission carries a teacher's feedback text.
+
+  Die einzige Quelle für den Feedback-Hinweis der Lernenden — an einem
+  Zeitstempel allein darf er nicht hängen, sonst zeigt er auf leeren Text.
+  """
+  def has_feedback?(%TaskSubmission{feedback: feedback}),
+    do: is_binary(feedback) and String.trim(feedback) != ""
+
+  def has_feedback?(nil), do: false
+
   @doc "True while the student may still edit answers / upload files / complete."
   def editable_submission?(%TaskSubmission{status: status}),
     do: status in @editable_statuses
+
+  @doc """
+  Status, in den eine Einheit wechselt, wenn der Lernende sie öffnet.
+
+  Eine zurückgegebene Einheit geht nach `in_revision`, damit die Lehrperson im
+  Fortschritt sieht, dass die Rückgabe angekommen ist. `nil` heisst: Status
+  bleibt, wie er ist.
+  """
+  def resume_status(%TaskSubmission{status: "not_started"}), do: "in_progress"
+  def resume_status(%TaskSubmission{status: "review_denied"}), do: "in_revision"
+  def resume_status(%TaskSubmission{}), do: nil
 
   ## Learning-unit content (Tiptap)
 
@@ -886,29 +885,31 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Sets a teacher's review verdict on a completed submission and saves the
+  Sets a teacher's review verdict on a submitted submission and saves the
   feedback in one go. `verdict` is `"review_approved"` or `"review_denied"`;
   a denied submission becomes editable for the student again.
+
+  Only the teacher owning the learning unit (or an admin) may review, and only
+  a submission the student has actually handed in.
   """
   def review_submission(%Scope{user: user} = scope, submission_id, verdict, attrs \\ %{})
       when verdict in ["review_approved", "review_denied"] do
-    if Scope.admin_or_teacher?(scope) do
-      submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
 
-      case submission
-           |> TaskSubmission.grade_changeset(attrs, user.id)
+    with :ok <- Policy.authorize(scope, submission.task.user_id),
+         :ok <- ensure_reviewable(submission),
+         {:ok, updated} <-
+           submission
+           |> TaskSubmission.feedback_changeset(attrs, user.id)
            |> Ecto.Changeset.put_change(:status, verdict)
            |> Repo.update() do
-        {:ok, updated_submission} = result ->
-          broadcast_submission_updated(updated_submission, submission.task.course_id)
-          result
-
-        error ->
-          error
-      end
-    else
-      {:error, :unauthorized}
+      broadcast_submission_updated(updated, submission.task.course_id)
+      {:ok, updated}
     end
+  end
+
+  defp ensure_reviewable(%TaskSubmission{status: status}) do
+    if status in @reviewable_statuses, do: :ok, else: {:error, :not_reviewable}
   end
 
   ## Attachments (teacher-provided files)

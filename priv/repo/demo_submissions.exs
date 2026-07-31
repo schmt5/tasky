@@ -132,32 +132,30 @@ student3_scope = Scope.for_user(student3)
 {:ok, _sub3_1} = Tasks.get_or_create_submission(student3_scope, task1.id)
 IO.puts("✅ Student3 viewed: #{task1.name}")
 
-# Teacher grades some submissions
-IO.puts("\n⭐ Grading submissions...")
+# Teacher reviews some submissions — genehmigt, zurückgegeben und Feedback
+# ohne Verdikt, damit alle drei Zustände in den Demodaten vorkommen.
+IO.puts("\n⭐ Reviewing submissions...")
 
 {:ok, _} =
-  Tasks.grade_submission(teacher_scope, sub1_1.id, %{
-    points: 95,
+  Tasks.review_submission(teacher_scope, sub1_1.id, "review_approved", %{
     feedback: "Excellent work! Your understanding of Elixir basics is very strong."
   })
 
-IO.puts("✅ Graded Student1's #{task1.name}: 95/100")
+IO.puts("✅ Approved Student1's #{task1.name}")
 
 {:ok, _} =
-  Tasks.grade_submission(teacher_scope, sub1_2.id, %{
-    points: 88,
-    feedback: "Good job! Consider exploring Phoenix contexts more deeply."
+  Tasks.review_submission(teacher_scope, sub1_2.id, "review_denied", %{
+    feedback: "Bitte ergänze noch ein Beispiel zu Phoenix Contexts und reiche erneut ein."
   })
 
-IO.puts("✅ Graded Student1's #{task2.name}: 88/100")
+IO.puts("↩️  Sent back Student1's #{task2.name}")
 
 {:ok, _} =
-  Tasks.grade_submission(teacher_scope, sub2_2.id, %{
-    points: 92,
+  Tasks.save_feedback(teacher_scope, sub2_2.id, %{
     feedback: "Great work! Your Phoenix implementation is solid."
   })
 
-IO.puts("✅ Graded Student2's #{task2.name}: 92/100")
+IO.puts("💬 Feedback on Student2's #{task2.name}")
 
 # Print summary
 IO.puts("\n" <> String.duplicate("=", 60))

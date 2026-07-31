@@ -156,14 +156,14 @@ defmodule TaskyWeb.Student.CourseLive do
                     index != 1 && index != length(@submissions) &&
                     "bg-sky-500 text-white shadow-[0_0_0_3px_#e0f2fe,0_2px_8px_rgba(14,165,233,0.25)]",
                   submission.task.id != @active_task_id &&
-                    submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                    submission.status in ["not_started", "in_progress"] &&
                     (index == 1 || index == length(@submissions)) &&
                     "bg-white text-stone-700 shadow-[0_0_0_2px_#e7e5e4]",
                   submission.task.id != @active_task_id &&
-                    submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                    submission.status in ["not_started", "in_progress"] &&
                     index != 1 && index != length(@submissions) &&
                     "bg-stone-200 text-stone-500 shadow-[0_0_0_2px_#e7e5e4]",
-                  submission.status == "review_denied" &&
+                  submission.status in ["review_denied", "in_revision"] &&
                     "bg-rose-100 text-rose-700 shadow-[0_0_0_2px_#ffe4e6]"
                 ]}>
                   <%= if submission.status in ["completed", "review_approved"] do %>
@@ -187,9 +187,9 @@ defmodule TaskyWeb.Student.CourseLive do
                   submission.task.id == @active_task_id &&
                     "bg-white border-sky-200 shadow-[0_0_0_3px_#f0f9ff]",
                   submission.task.id != @active_task_id &&
-                    submission.status in ["not_started", "open", "draft", "in_progress"] &&
+                    submission.status in ["not_started", "in_progress"] &&
                     "bg-white border-stone-200",
-                  submission.status == "review_denied" &&
+                  submission.status in ["review_denied", "in_revision"] &&
                     "bg-white border-rose-200"
                 ]}>
                   <%!-- Card Body --%>
@@ -203,7 +203,7 @@ defmodule TaskyWeb.Student.CourseLive do
                       ]}>
                         {submission.task.name}
                       </span>
-                      <%= if submission.graded_at do %>
+                      <%= if Tasks.has_feedback?(submission) do %>
                         <button
                           type="button"
                           phx-click="show_feedback"
@@ -218,13 +218,12 @@ defmodule TaskyWeb.Student.CourseLive do
                     <div>
                       <span class={[
                         "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap",
-                        submission.status == "draft" && "bg-gray-100 text-gray-700",
                         submission.status == "not_started" && "bg-stone-100 text-stone-500",
-                        submission.status == "open" && "bg-stone-100 text-stone-500",
                         submission.status == "in_progress" && "bg-sky-100 text-sky-700",
                         submission.status == "completed" && "bg-green-100 text-green-800",
                         submission.status == "review_approved" && "bg-sky-100 text-sky-700",
-                        submission.status == "review_denied" && "bg-rose-100 text-rose-700"
+                        submission.status == "review_denied" && "bg-rose-100 text-rose-700",
+                        submission.status == "in_revision" && "bg-amber-100 text-amber-700"
                       ]}>
                         {format_status(submission.status)}
                       </span>
@@ -244,16 +243,19 @@ defmodule TaskyWeb.Student.CourseLive do
                         >
                           Ansehen
                         </.link>
-                      <% submission.status == "review_denied" -> %>
-                        <div class="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center">
-                          <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
-                        </div>
+                      <% submission.status in ["review_denied", "in_revision"] -> %>
+                        <.link
+                          navigate={~p"/student/tasks/#{submission.task.id}"}
+                          class="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-all duration-150 shadow-[0_2px_8px_rgba(244,63,94,0.25)]"
+                        >
+                          <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5" /> Überarbeiten
+                        </.link>
                       <% submission.task.id == @active_task_id -> %>
                         <.link
                           navigate={~p"/student/tasks/#{submission.task.id}"}
                           class="px-4 py-2 text-[13px] font-semibold bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-all duration-150 shadow-[0_2px_8px_rgba(14,165,233,0.25)]"
                         >
-                          {if submission.status in ["not_started", "open", "draft"],
+                          {if submission.status == "not_started",
                             do: "Starten",
                             else: "Öffnen"}
                         </.link>
@@ -310,8 +312,14 @@ defmodule TaskyWeb.Student.CourseLive do
               <%!-- Body --%>
               <div class="px-6 py-5">
                 <div class="bg-amber-50 border border-amber-100 rounded-[10px] px-4 py-4">
-                  <p class="text-[14px] text-stone-700 whitespace-pre-line leading-relaxed">
-                    {String.trim(@feedback_text || "")}
+                  <p
+                    :if={@feedback_text not in [nil, ""]}
+                    class="text-[14px] text-stone-700 whitespace-pre-line leading-relaxed"
+                  >
+                    {@feedback_text}
+                  </p>
+                  <p :if={@feedback_text in [nil, ""]} class="text-[14px] text-stone-400 italic">
+                    Zu dieser Lerneinheit gibt es keinen Feedbacktext.
                   </p>
                 </div>
               </div>
@@ -322,7 +330,7 @@ defmodule TaskyWeb.Student.CourseLive do
                   phx-click="close_feedback_modal"
                   class="px-4 py-2 bg-stone-900 text-white text-[13px] font-medium rounded-[8px] hover:bg-stone-800 transition-colors"
                 >
-                  Schließen
+                  Schliessen
                 </button>
               </div>
             </div>
@@ -366,7 +374,7 @@ defmodule TaskyWeb.Student.CourseLive do
   end
 
   @impl true
-  def handle_info({:submission_updated, _updated_submission}, socket) do
+  def handle_info({:submission_updated, updated_submission}, socket) do
     # Reload all submissions to get the latest state
     submissions =
       Tasks.list_course_submissions(socket.assigns.current_scope, socket.assigns.course.id)
@@ -379,7 +387,23 @@ defmodule TaskyWeb.Student.CourseLive do
      |> assign(:submissions, submissions)
      |> assign(:stats, stats)
      |> assign(:active_task_id, active_task_id)
-     |> put_flash(:info, "Aufgabenstatus aktualisiert!")}
+     |> put_flash(:info, update_message(updated_submission))}
+  end
+
+  # Sagt, was passiert ist — "Status aktualisiert" hilft niemandem.
+  defp update_message(%{status: "review_approved"} = submission) do
+    if Tasks.has_feedback?(submission),
+      do: "Lerneinheit genehmigt — mit Feedback deiner Lehrperson",
+      else: "Lerneinheit genehmigt"
+  end
+
+  defp update_message(%{status: "review_denied"}),
+    do: "Deine Lehrperson hat eine Lerneinheit zur Überarbeitung zurückgegeben"
+
+  defp update_message(submission) do
+    if Tasks.has_feedback?(submission),
+      do: "Neues Feedback deiner Lehrperson",
+      else: "Aufgabenstatus aktualisiert"
   end
 
   @impl true
@@ -394,7 +418,7 @@ defmodule TaskyWeb.Student.CourseLive do
         {:noreply,
          socket
          |> assign(:show_feedback_modal, true)
-         |> assign(:feedback_text, submission.feedback || "")
+         |> assign(:feedback_text, String.trim(submission.feedback || ""))
          |> assign(:feedback_task_name, submission.task.name)}
     end
   end
@@ -410,10 +434,9 @@ defmodule TaskyWeb.Student.CourseLive do
 
   defp format_status(status) do
     case status do
-      "draft" -> "TODO"
       "not_started" -> "Nicht begonnen"
-      "open" -> "Offen"
       "in_progress" -> "In Bearbeitung"
+      "in_revision" -> "In Überarbeitung"
       "completed" -> "Eingereicht"
       "review_approved" -> "Genehmigt"
       "review_denied" -> "Zur Überarbeitung"
@@ -430,8 +453,10 @@ defmodule TaskyWeb.Student.CourseLive do
   end
 
   defp find_active_task_id(submissions) do
-    # Find the in_progress task
-    in_progress = Enum.find(submissions, &(&1.status == "in_progress"))
+    # Angefangene Arbeit zuerst — eine Rückgabe ist die dringendste davon.
+    in_progress =
+      Enum.find(submissions, &(&1.status in ["review_denied", "in_revision"])) ||
+        Enum.find(submissions, &(&1.status == "in_progress"))
 
     if in_progress do
       in_progress.task.id

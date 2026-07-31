@@ -177,10 +177,12 @@ defmodule Tasky.TasksContentTest do
 
       assert reviewed.status == "review_approved"
       assert reviewed.feedback == "Gut gemacht"
-      assert reviewed.graded_by_id == teacher.user.id
+      assert reviewed.feedback_by_id == teacher.user.id
+      assert %DateTime{} = reviewed.feedback_at
+      assert Tasks.has_feedback?(reviewed)
     end
 
-    test "denying reopens editing and re-completion", %{
+    test "a verdict without feedback text leaves no feedback trace", %{
       student_scope: scope,
       teacher_scope: teacher,
       task: task
@@ -188,11 +190,78 @@ defmodule Tasky.TasksContentTest do
       submission = submission(scope, task)
       {:ok, _} = Tasks.complete_task(scope, submission.id)
 
-      {:ok, denied} = Tasks.review_submission(teacher, submission.id, "review_denied")
-      assert denied.status == "review_denied"
+      assert {:ok, reviewed} =
+               Tasks.review_submission(teacher, submission.id, "review_approved", %{
+                 feedback: "   "
+               })
 
-      assert {:ok, %TaskSubmission{status: "completed"}} =
+      assert reviewed.status == "review_approved"
+      assert reviewed.feedback == nil
+      assert reviewed.feedback_at == nil
+      assert reviewed.feedback_by_id == nil
+      refute Tasks.has_feedback?(reviewed)
+    end
+
+    test "clearing the text clears the feedback trace", %{
+      student_scope: scope,
+      teacher_scope: teacher,
+      task: task
+    } do
+      submission = submission(scope, task)
+      {:ok, _} = Tasks.complete_task(scope, submission.id)
+
+      {:ok, _} = Tasks.save_feedback(teacher, submission.id, %{feedback: "Erst mal so"})
+      assert {:ok, cleared} = Tasks.save_feedback(teacher, submission.id, %{feedback: ""})
+
+      assert cleared.feedback == nil
+      assert cleared.feedback_at == nil
+      refute Tasks.has_feedback?(cleared)
+    end
+
+    test "rejects feedback longer than the limit", %{
+      student_scope: scope,
+      teacher_scope: teacher,
+      task: task
+    } do
+      submission = submission(scope, task)
+      too_long = String.duplicate("a", Tasks.max_feedback_chars() + 1)
+
+      assert {:error, changeset} =
+               Tasks.save_feedback(teacher, submission.id, %{feedback: too_long})
+
+      assert %{feedback: _} = errors_on(changeset)
+    end
+
+    test "denying reopens editing, revision and re-completion", %{
+      student_scope: scope,
+      teacher_scope: teacher,
+      task: task
+    } do
+      submission = submission(scope, task)
+      {:ok, _} = Tasks.complete_task(scope, submission.id)
+
+      {:ok, denied} =
+        Tasks.review_submission(teacher, submission.id, "review_denied", %{
+          feedback: "Bitte ergänzen"
+        })
+
+      assert denied.status == "review_denied"
+      assert Tasks.editable_submission?(denied)
+
+      # Öffnen der zurückgegebenen Einheit → in Überarbeitung, weiterhin editierbar
+      assert Tasks.resume_status(denied) == "in_revision"
+      {:ok, revising} = Tasks.update_submission_status(scope, denied.id, "in_revision")
+      assert Tasks.editable_submission?(revising)
+      assert Tasks.resume_status(revising) == nil
+      assert revising.feedback == "Bitte ergänzen"
+
+      # Erneutes Einreichen räumt das Feedback der letzten Runde weg.
+      assert {:ok, %TaskSubmission{status: "completed"} = recompleted} =
                Tasks.complete_task(scope, submission.id)
+
+      assert recompleted.feedback == nil
+      assert recompleted.feedback_at == nil
+      refute Tasks.has_feedback?(recompleted)
     end
 
     test "students may not review", %{student_scope: scope, task: task} do
@@ -201,6 +270,32 @@ defmodule Tasky.TasksContentTest do
 
       assert {:error, :unauthorized} =
                Tasks.review_submission(scope, submission.id, "review_approved")
+    end
+
+    test "another teacher may neither review nor comment", %{
+      student_scope: scope,
+      task: task
+    } do
+      other_teacher = user_scope_fixture(user_fixture(%{role: "teacher"}))
+      submission = submission(scope, task)
+      {:ok, _} = Tasks.complete_task(scope, submission.id)
+
+      assert {:error, :unauthorized} =
+               Tasks.review_submission(other_teacher, submission.id, "review_approved")
+
+      assert {:error, :unauthorized} =
+               Tasks.save_feedback(other_teacher, submission.id, %{feedback: "Nicht meine Klasse"})
+    end
+
+    test "a submission that was never handed in cannot be reviewed", %{
+      student_scope: scope,
+      teacher_scope: teacher,
+      task: task
+    } do
+      submission = submission(scope, task)
+
+      assert {:error, :not_reviewable} =
+               Tasks.review_submission(teacher, submission.id, "review_approved")
     end
   end
 

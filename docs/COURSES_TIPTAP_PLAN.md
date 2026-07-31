@@ -9,7 +9,7 @@
 
 - **Field scope:** Learning units get rich Tiptap content **plus interactive answer fields** (answerBlock, Lückentext, MC checkboxes) — but **no** sample solutions, points-per-field, or AI/bulk correction. The teacher reads the student's answers and gives feedback.
 - **Completion flow:** Student marks a unit complete (gated on required uploads). Teacher reviews, gives feedback, and can **approve** or **send back** (student can edit + re-complete). Uses existing `review_approved` / `review_denied` statuses.
-- **Grading:** Feedback text only. `TaskSubmission.points` stays unused.
+- **Grading:** Feedback text only. `TaskSubmission.points` was dropped (2026-07-31) — Lerneinheiten werden nicht bewertet, der Feedbacktext trägt `feedback_at`/`feedback_by_id` und ist die einzige Quelle des Feedback-Hinweises.
 - **Tally:** Removed entirely in a final cleanup phase. No production data to preserve — destructive migrations are fine.
 - **Upload slots:** Separate section below the content (reuse the `ExamUploadField` pattern), **one file per slot**, re-upload replaces.
 - **Export/print:** The Tally-based `/courses/:id/export` page is dropped for now.
@@ -17,7 +17,7 @@
 ## Defaults chosen (veto if wrong)
 
 - Student answers live in a full copy of the doc on the submission (`task_submissions.content`), exactly like `ExamSubmission.content` — reuses `LockExamContent` and the autosave engine unchanged.
-- On `completed`, the student's editor becomes read-only; on `review_denied` it unlocks again.
+- On `completed`, the student's editor becomes read-only; on `review_denied` it unlocks again — Öffnen setzt die Einheit dann auf `in_revision` (2026-07-31), damit die Lehrperson sieht, dass die Rückgabe angekommen ist.
 - Teacher-side saves go through new authenticated JSON endpoints (same pattern as `/api/exams/:id/content`), student-side through a session-authenticated endpoint (no guest tokens — course students are logged in).
 - `tasks.status` draft/published semantics stay (draft = invisible to students), `locked` stays.
 - Existing PubSub topics (`student:{id}:submissions`, `course:{id}:progress`) are preserved so all live progress views keep working.

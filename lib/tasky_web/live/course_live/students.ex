@@ -202,7 +202,7 @@ defmodule TaskyWeb.CourseLive.Students do
                 phx-click="hide_enroll_modal"
                 class="inline-flex items-center gap-2 text-stone-600 text-sm font-medium px-5 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-800"
               >
-                Schließen
+                Schliessen
               </button>
             </div>
           </div>

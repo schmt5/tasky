@@ -20,7 +20,7 @@ defmodule TaskyWeb.ExamImageApiController do
         json_error(conn, :unprocessable_entity, "Datei ist kein gültiges Bild.")
 
       {:error, :too_large} ->
-        json_error(conn, :request_entity_too_large, "Bild ist zu groß (max. 10 MB).")
+        json_error(conn, :request_entity_too_large, "Bild ist zu gross (max. 10 MB).")
 
       {:error, _} ->
         json_error(conn, :unprocessable_entity, "Bild konnte nicht gespeichert werden.")

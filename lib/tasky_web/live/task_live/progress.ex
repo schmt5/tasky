@@ -149,6 +149,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                 <.legend_item status={:in_progress} />
                 <.legend_item status={:completed} />
                 <.legend_item status={:review_denied} />
+                <.legend_item status={:in_revision} />
                 <.legend_item status={:review_approved} />
               </div>
             </div>
@@ -350,6 +351,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                       field={@feedback_form[:feedback]}
                       placeholder="Schreibe hier dein Feedback für die/den Lernende/n..."
                       rows="3"
+                      maxlength={Tasks.max_feedback_chars()}
                       class="w-full text-[13px] text-stone-800 bg-white border border-stone-200 rounded-[8px] px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent placeholder:text-stone-300 transition"
                     />
                     <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
@@ -378,7 +380,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                           phx-click="close_modal"
                           class="px-4 py-2 text-[13px] font-medium text-stone-600 hover:text-stone-900 transition-colors"
                         >
-                          Schließen
+                          Schliessen
                         </button>
                         <button
                           type="submit"
@@ -471,6 +473,15 @@ defmodule TaskyWeb.TaskLive.Progress do
       badge: "bg-rose-100 text-rose-700"
     }
 
+  defp status_meta(:in_revision),
+    do: %{
+      label: "In Überarbeitung",
+      icon: "hero-pencil-square",
+      bg: "bg-amber-500",
+      fg: "text-white",
+      badge: "bg-amber-100 text-amber-700"
+    }
+
   defp status_meta(:in_progress),
     do: %{
       label: "In Bearbeitung",
@@ -492,7 +503,8 @@ defmodule TaskyWeb.TaskLive.Progress do
   defp status_atom("completed"), do: :completed
   defp status_atom("review_approved"), do: :review_approved
   defp status_atom("review_denied"), do: :review_denied
-  defp status_atom(status) when status in ["in_progress", "open", "draft"], do: :in_progress
+  defp status_atom("in_revision"), do: :in_revision
+  defp status_atom("in_progress"), do: :in_progress
   defp status_atom(_), do: :not_started
 
   @impl true
@@ -568,21 +580,31 @@ defmodule TaskyWeb.TaskLive.Progress do
         {:noreply, put_flash(socket, :error, "Keine Einreichung gefunden")}
 
       record ->
+        verdict = params["verdict"]
+        scope = socket.assigns.current_scope
+
         result =
-          case params["verdict"] do
-            verdict when verdict in ["review_approved", "review_denied"] ->
-              Tasks.review_submission(socket.assigns.current_scope, record.id, verdict, %{
-                feedback: feedback_text
-              })
+          case verdict do
+            v when v in ["review_approved", "review_denied"] ->
+              Tasks.review_submission(scope, record.id, v, %{feedback: feedback_text})
 
             _ ->
-              Tasks.grade_submission(socket.assigns.current_scope, record.id, %{
-                feedback: feedback_text
-              })
+              Tasks.save_feedback(scope, record.id, %{feedback: feedback_text})
           end
 
-        case result do
-          {:ok, updated} ->
+        case {result, verdict} do
+          # Ein Verdikt beendet das Review: Modal zu, Bestätigung als Flash.
+          {{:ok, _updated}, verdict} when verdict in ["review_approved", "review_denied"] ->
+            {:noreply,
+             socket
+             |> put_flash(:info, verdict_flash(verdict, socket.assigns.selected_student_name))
+             |> assign(
+               :progress_map,
+               build_progress_map(socket.assigns.task.id, socket.assigns.students)
+             )
+             |> reset_modal_assigns()}
+
+          {{:ok, updated}, _no_verdict} ->
             {:noreply,
              socket
              |> assign(:selected_submission_record, updated)
@@ -596,8 +618,8 @@ defmodule TaskyWeb.TaskLive.Progress do
                build_progress_map(socket.assigns.task.id, socket.assigns.students)
              )}
 
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Feedback konnte nicht gespeichert werden")}
+          {{:error, reason}, _} ->
+            {:noreply, put_flash(socket, :error, save_error_message(reason))}
         end
     end
   end
@@ -627,6 +649,26 @@ defmodule TaskyWeb.TaskLive.Progress do
   end
 
   # Private Functions
+
+  defp verdict_flash("review_approved", name), do: "Lerneinheit von #{name} genehmigt"
+
+  defp verdict_flash("review_denied", name),
+    do: "Lerneinheit an #{name} zur Überarbeitung zurückgegeben"
+
+  defp save_error_message(:unauthorized),
+    do: "Du kannst diese Lerneinheit nicht beurteilen"
+
+  defp save_error_message(:not_reviewable),
+    do: "Diese Lerneinheit wurde noch nicht eingereicht"
+
+  defp save_error_message(%Ecto.Changeset{} = changeset) do
+    case changeset.errors[:feedback] do
+      nil -> "Feedback konnte nicht gespeichert werden"
+      _ -> "Feedback ist zu lang (max. #{Tasks.max_feedback_chars()} Zeichen)"
+    end
+  end
+
+  defp save_error_message(_reason), do: "Feedback konnte nicht gespeichert werden"
 
   # Loads the selected student's submission incl. answer doc and files into
   # the modal assigns.

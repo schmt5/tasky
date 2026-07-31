@@ -131,6 +131,13 @@ defmodule TaskyWeb.CourseLive.Progress do
                               >
                                 <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-white" />
                               </div>
+                            <% :in_revision -> %>
+                              <div
+                                class="w-10 h-10 rounded-[8px] bg-amber-500 flex items-center justify-center shadow-sm"
+                                title="In Überarbeitung"
+                              >
+                                <.icon name="hero-pencil-square" class="w-5 h-5 text-white" />
+                              </div>
                             <% :in_progress -> %>
                               <div
                                 class="w-10 h-10 rounded-[8px] bg-sky-500 flex items-center justify-center shadow-sm"
@@ -182,6 +189,13 @@ defmodule TaskyWeb.CourseLive.Progress do
                     <.icon name="hero-arrow-uturn-left" class="w-4 h-4 text-white" />
                   </div>
                   <span class="text-[13px] text-stone-600">Zurückgegeben</span>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 rounded-[6px] bg-amber-500 flex items-center justify-center">
+                    <.icon name="hero-pencil-square" class="w-4 h-4 text-white" />
+                  </div>
+                  <span class="text-[13px] text-stone-600">In Überarbeitung</span>
                 </div>
 
                 <div class="flex items-center gap-2">
@@ -265,9 +279,8 @@ defmodule TaskyWeb.CourseLive.Progress do
       "completed" -> :completed
       "review_approved" -> :review_approved
       "review_denied" -> :review_denied
+      "in_revision" -> :in_revision
       "in_progress" -> :in_progress
-      "open" -> :in_progress
-      nil -> :not_started
       _ -> :not_started
     end
   end
