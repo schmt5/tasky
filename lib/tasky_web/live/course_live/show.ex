@@ -21,9 +21,7 @@ defmodule TaskyWeb.CourseLive.Show do
               <button
                 type="button"
                 id="duplicate-course"
-                phx-click="duplicate_course"
-                phx-disable-with="Wird dupliziert…"
-                data-confirm={"Kopie von \"#{@course.name}\" mit allen Lerneinheiten erstellen? Lernende und Abgaben werden nicht kopiert."}
+                phx-click="open_duplicate"
                 class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
               >
                 <.icon name="hero-document-duplicate" class="w-4 h-4" /> Inhalt duplizieren
@@ -255,6 +253,66 @@ defmodule TaskyWeb.CourseLive.Show do
           </div>
         </div>
       </div>
+      <%!-- Duplicate Course Confirmation Modal --%>
+      <%= if @duplicating_course do %>
+        <dialog
+          id="duplicate-course-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_duplicate"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_duplicate"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-document-duplicate" class="w-5 h-5 text-sky-600" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">Inhalt duplizieren</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">Es entsteht ein neuer Kurs.</p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Kopie von <span class="font-semibold text-stone-800">{@course.name}</span>
+                mit allen Lerneinheiten erstellen?
+              </p>
+              <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
+                <div class="flex items-start gap-2.5">
+                  <.icon
+                    name="hero-exclamation-triangle"
+                    class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                  />
+                  <p class="text-xs text-amber-700 leading-relaxed">
+                    Lernende und Abgaben werden nicht kopiert.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6 pt-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                phx-click="close_duplicate"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                id="confirm-duplicate-course"
+                phx-click="duplicate_course"
+                phx-disable-with="Wird dupliziert…"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <.icon name="hero-document-duplicate" class="w-4 h-4" /> Duplizieren
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
       <%!-- Rename Modal --%>
       <%= if @renaming_task do %>
         <dialog
@@ -321,7 +379,18 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:has_tasks, course.tasks != [])
      |> assign(:renaming_task, nil)
      |> assign(:rename_form, nil)
+     |> assign(:duplicating_course, false)
      |> stream(:tasks, course.tasks)}
+  end
+
+  @impl true
+  def handle_event("open_duplicate", _params, socket) do
+    {:noreply, assign(socket, :duplicating_course, true)}
+  end
+
+  @impl true
+  def handle_event("close_duplicate", _params, socket) do
+    {:noreply, assign(socket, :duplicating_course, false)}
   end
 
   @impl true
@@ -338,7 +407,10 @@ defmodule TaskyWeb.CourseLive.Show do
          |> push_navigate(to: ~p"/courses/#{course}")}
 
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Inhalt konnte nicht dupliziert werden.")}
+        {:noreply,
+         socket
+         |> assign(:duplicating_course, false)
+         |> put_flash(:error, "Inhalt konnte nicht dupliziert werden.")}
     end
   end
 

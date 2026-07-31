@@ -273,6 +273,22 @@
     padding: 0 2px;
 }
 
+/* Links. StarterKit registriert die Link-Extension implizit, Tailwinds Preflight
+   setzt Farbe und Unterstreichung aber auf `inherit` — ohne diese Regel sind
+   gepastete Links optisch nicht von normalem Text zu unterscheiden. Die
+   Spezifität schlägt bewusst das `a { color: inherit }` im @media-print-Block
+   von app.css, damit Links auch im PDF-Export als Links erkennbar bleiben. */
+.exam-editor__content .ProseMirror a {
+    color: #0284c7;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.exam-editor__content .ProseMirror a:hover {
+    color: #0369a1;
+}
+
 .exam-editor__content .ProseMirror img {
     max-width: 100%;
     height: auto;

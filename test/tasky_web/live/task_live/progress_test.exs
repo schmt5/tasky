@@ -48,6 +48,36 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
     lv |> form("form[phx-submit='save_feedback']") |> render_submit(params)
   end
 
+  test "sending back asks for confirmation in a modal instead of a native dialog", %{
+    conn: conn,
+    task: task,
+    student: student
+  } do
+    lv = open_review(conn, task, student)
+
+    refute has_element?(lv, "#return-submission[data-confirm]")
+    refute has_element?(lv, "#return-submission-modal")
+
+    html =
+      submit_feedback(lv, %{
+        "submission" => %{"feedback" => "Bitte ergänze Aufgabe 2"},
+        "verdict" => "review_denied"
+      })
+
+    assert has_element?(lv, "dialog#return-submission-modal.modal-open")
+    assert html =~ "Zur Überarbeitung zurückgeben"
+    assert html =~ "Das erfasste Feedback wird mitgeschickt."
+
+    # Nichts passiert, solange nicht bestätigt wurde.
+    assert Tasks.get_submission_for_student(task.id, student.id).status == "completed"
+
+    lv |> element("#return-submission-modal button", "Abbrechen") |> render_click()
+
+    refute has_element?(lv, "#return-submission-modal")
+    # Die Einreichung bleibt offen, damit weitergearbeitet werden kann.
+    assert has_element?(lv, "form[phx-submit='save_feedback']")
+  end
+
   test "sending back stores the feedback, closes the modal and reports it", %{
     conn: conn,
     task: task,
@@ -56,11 +86,12 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
   } do
     lv = open_review(conn, task, student)
 
-    html =
-      submit_feedback(lv, %{
-        "submission" => %{"feedback" => "Bitte ergänze Aufgabe 2"},
-        "verdict" => "review_denied"
-      })
+    submit_feedback(lv, %{
+      "submission" => %{"feedback" => "Bitte ergänze Aufgabe 2"},
+      "verdict" => "review_denied"
+    })
+
+    html = lv |> element("#confirm-return-submission") |> render_click()
 
     assert html =~ "zur Überarbeitung zurückgegeben"
     # Modal ist zu: kein Feedback-Formular mehr im DOM.

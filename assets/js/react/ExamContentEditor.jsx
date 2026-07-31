@@ -96,7 +96,15 @@ export default function ExamContentEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ horizontalRule: false, heading: false }),
+      // StarterKit bringt die Link-Extension mit (autolink, linkOnPaste,
+      // target="_blank" + rel="noopener noreferrer nofollow" sind Defaults);
+      // nur das Default-Protokoll wäre http, ein gepastetes "www.foo.ch" also
+      // unverschlüsselt.
+      StarterKit.configure({
+        horizontalRule: false,
+        heading: false,
+        link: { defaultProtocol: "https" },
+      }),
       HeadingWithPartId,
       ...(lockContent ? [] : [PartIdStamper]),
       Lueckentext,

@@ -358,9 +358,9 @@ defmodule TaskyWeb.TaskLive.Progress do
                       <div class="flex items-center gap-2">
                         <button
                           type="submit"
+                          id="return-submission"
                           name="verdict"
                           value="review_denied"
-                          data-confirm="Aufgabe zur Überarbeitung an die/den Lernende/n zurückgeben?"
                           class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-rose-200 text-rose-600 text-[13px] font-semibold rounded-[8px] hover:bg-rose-50 transition-colors"
                         >
                           <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5" /> Zurückgeben
@@ -392,6 +392,67 @@ defmodule TaskyWeb.TaskLive.Progress do
                     </div>
                   </.form>
                 </div>
+              </div>
+            </div>
+          </dialog>
+        <% end %>
+        <%!-- Return-for-revision Confirmation Modal (stacks on top of the submission modal) --%>
+        <%= if @confirming_return do %>
+          <dialog id="return-submission-modal" class="modal modal-open z-[1000]">
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_return_confirm"></div>
+            <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+              <div class="p-6 border-b border-stone-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
+                    <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 class="text-lg font-semibold text-stone-800">
+                      Zur Überarbeitung zurückgeben
+                    </h3>
+                    <p class="text-xs text-stone-400 mt-0.5">Das Review wird damit beendet.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="p-6">
+                <p class="text-sm text-stone-600 leading-relaxed">
+                  Lerneinheit an
+                  <span class="font-semibold text-stone-800">{@selected_student_name}</span>
+                  zur Überarbeitung zurückgeben?
+                </p>
+                <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
+                  <div class="flex items-start gap-2.5">
+                    <.icon
+                      name="hero-exclamation-triangle"
+                      class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                    />
+                    <p class="text-xs text-amber-700 leading-relaxed">
+                      <%= if String.trim(@pending_return_feedback || "") == "" do %>
+                        Es wird kein Feedback mitgeschickt.
+                      <% else %>
+                        Das erfasste Feedback wird mitgeschickt.
+                      <% end %>
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="p-6 pt-0 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  phx-click="close_return_confirm"
+                  class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  id="confirm-return-submission"
+                  phx-click="confirm_return"
+                  phx-disable-with="Wird zurückgegeben…"
+                  class="inline-flex items-center gap-2 bg-rose-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(244,63,94,0.25)] transition-all duration-150 hover:bg-rose-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Zurückgeben
+                </button>
               </div>
             </div>
           </dialog>
@@ -570,6 +631,25 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
+  # Zurückgeben ist irreversibel und wird erst nach Bestätigung im Modal ausgeführt;
+  # das erfasste Feedback wartet bis dahin in den Assigns.
+  def handle_event(
+        "save_feedback",
+        %{"verdict" => "review_denied", "submission" => %{"feedback" => feedback_text}},
+        socket
+      ) do
+    case socket.assigns.selected_submission_record do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Keine Einreichung gefunden")}
+
+      _record ->
+        {:noreply,
+         socket
+         |> assign(:pending_return_feedback, feedback_text)
+         |> assign(:confirming_return, true)}
+    end
+  end
+
   def handle_event(
         "save_feedback",
         %{"submission" => %{"feedback" => feedback_text}} = params,
@@ -585,8 +665,8 @@ defmodule TaskyWeb.TaskLive.Progress do
 
         result =
           case verdict do
-            v when v in ["review_approved", "review_denied"] ->
-              Tasks.review_submission(scope, record.id, v, %{feedback: feedback_text})
+            "review_approved" ->
+              Tasks.review_submission(scope, record.id, verdict, %{feedback: feedback_text})
 
             _ ->
               Tasks.save_feedback(scope, record.id, %{feedback: feedback_text})
@@ -644,8 +724,49 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
+  def handle_event("confirm_return", _params, socket) do
+    case socket.assigns.selected_submission_record do
+      nil ->
+        {:noreply,
+         socket |> close_return_confirm() |> put_flash(:error, "Keine Einreichung gefunden")}
+
+      record ->
+        feedback = socket.assigns.pending_return_feedback || ""
+
+        case Tasks.review_submission(socket.assigns.current_scope, record.id, "review_denied", %{
+               feedback: feedback
+             }) do
+          {:ok, _updated} ->
+            {:noreply,
+             socket
+             |> put_flash(
+               :info,
+               verdict_flash("review_denied", socket.assigns.selected_student_name)
+             )
+             |> assign(
+               :progress_map,
+               build_progress_map(socket.assigns.task.id, socket.assigns.students)
+             )
+             |> reset_modal_assigns()}
+
+          {:error, reason} ->
+            {:noreply,
+             socket |> close_return_confirm() |> put_flash(:error, save_error_message(reason))}
+        end
+    end
+  end
+
+  def handle_event("close_return_confirm", _params, socket) do
+    {:noreply, close_return_confirm(socket)}
+  end
+
+  # Escape schliesst zuerst die Rückgabe-Bestätigung, nicht gleich die ganze Einreichung.
   def handle_event("close_modal", _params, socket) do
-    {:noreply, reset_modal_assigns(socket)}
+    if socket.assigns.confirming_return do
+      {:noreply, close_return_confirm(socket)}
+    else
+      {:noreply, reset_modal_assigns(socket)}
+    end
   end
 
   # Private Functions
@@ -708,6 +829,7 @@ defmodule TaskyWeb.TaskLive.Progress do
       to_form(%{"feedback" => (submission && submission.feedback) || ""}, as: :submission)
     )
     |> assign(:feedback_saved, false)
+    |> close_return_confirm()
   end
 
   defp reset_modal_assigns(socket) do
@@ -722,6 +844,13 @@ defmodule TaskyWeb.TaskLive.Progress do
     |> assign(:students_with_submissions, [])
     |> assign(:feedback_form, to_form(%{"feedback" => ""}, as: :submission))
     |> assign(:feedback_saved, false)
+    |> close_return_confirm()
+  end
+
+  defp close_return_confirm(socket) do
+    socket
+    |> assign(:confirming_return, false)
+    |> assign(:pending_return_feedback, nil)
   end
 
   defp build_progress_map(task_id, students) do

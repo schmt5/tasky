@@ -29,11 +29,31 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       assert html =~ "Inhalt duplizieren"
     end
 
+    test "the action asks for confirmation in a modal, not a native dialog", %{
+      conn: conn,
+      course: course
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      refute has_element?(lv, "#duplicate-course[data-confirm]")
+      refute has_element?(lv, "#duplicate-course-modal")
+
+      html = lv |> element("#duplicate-course") |> render_click()
+
+      assert has_element?(lv, "dialog#duplicate-course-modal.modal-open")
+      assert html =~ "Lernende und Abgaben werden nicht kopiert."
+
+      lv |> element("#duplicate-course-modal button", "Abbrechen") |> render_click()
+      refute has_element?(lv, "#duplicate-course-modal")
+    end
+
     test "duplicating navigates to the new course", %{conn: conn, scope: scope, course: course} do
       {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
 
+      lv |> element("#duplicate-course") |> render_click()
+
       assert {:error, {:live_redirect, %{to: to}}} =
-               lv |> element("#duplicate-course") |> render_click()
+               lv |> element("#confirm-duplicate-course") |> render_click()
 
       [copy] = Enum.reject(Courses.list_courses(scope), &(&1.id == course.id))
       assert to == ~p"/courses/#{copy}"
