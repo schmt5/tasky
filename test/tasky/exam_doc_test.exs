@@ -44,6 +44,37 @@ defmodule Tasky.ExamDocTest do
                ExamDoc.split_content_into_parts(d)
     end
 
+    test "a callout following a heading belongs to that part" do
+      callout = %{
+        "type" => "callout",
+        "attrs" => %{"color" => "yellow"},
+        "content" => [%{"type" => "paragraph"}]
+      }
+
+      d = doc([heading("Frage", %{"partId" => "q-a"}), callout])
+
+      assert [%{id: "q-a", nodes: nodes}] = ExamDoc.split_content_into_parts(d)
+      assert callout in nodes
+    end
+
+    # Splitting only looks at TOP-LEVEL headings, so a question wrapped in a
+    # callout disappears from the part list — which would make
+    # Exams.prune_orphan_block_points drop that part's block points. The editor
+    # prevents creating this shape (setCallout refuses a selection with an h3);
+    # this test pins the server-side behaviour it protects against.
+    test "a heading nested inside a callout yields no parts" do
+      d =
+        doc([
+          %{
+            "type" => "callout",
+            "attrs" => %{"color" => "red"},
+            "content" => [heading("Frage", %{"partId" => "q-a"})]
+          }
+        ])
+
+      assert ExamDoc.split_content_into_parts(d) == []
+    end
+
     test "reordering keeps part ids attached to their headings" do
       h1 = heading("Erste", %{"partId" => "q-one"})
       h2 = heading("Zweite", %{"partId" => "q-two"})

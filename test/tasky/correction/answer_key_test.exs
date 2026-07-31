@@ -160,6 +160,51 @@ defmodule Tasky.Correction.AnswerKeyTest do
     end
   end
 
+  describe "callout nodes" do
+    test "answer blocks nested in a callout still split and merge back" do
+      answer_block = %{
+        "type" => "answerBlock",
+        "attrs" => %{"answerId" => "a-1"},
+        "content" => [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Paris"}]}
+        ]
+      }
+
+      callout = %{
+        "type" => "callout",
+        "attrs" => %{"color" => "blue"},
+        "content" => [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Hinweis"}]},
+          answer_block
+        ]
+      }
+
+      doc = %{"type" => "doc", "content" => [callout]}
+
+      {content, answers} = AnswerKey.split(doc)
+
+      # The nested answer is extracted...
+      assert answers["a-1"] == [
+               %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Paris"}]}
+             ]
+
+      # ...the callout itself survives verbatim, with its blanked child.
+      [%{"type" => "callout", "attrs" => attrs, "content" => [hint, blanked]}] =
+        content["content"]
+
+      assert attrs == %{"color" => "blue"}
+
+      assert hint == %{
+               "type" => "paragraph",
+               "content" => [%{"type" => "text", "text" => "Hinweis"}]
+             }
+
+      assert blanked["content"] == [%{"type" => "paragraph"}]
+
+      assert AnswerKey.merge(content, answers) == doc
+    end
+  end
+
   defp collect_ids(%{"content" => content}) do
     Enum.flat_map(content, fn
       %{"type" => t} = node when t in ["answerBlock", "lueckentext", "taskItem"] ->

@@ -19,7 +19,7 @@ defmodule TaskyWeb.Student.TaskAnswersApiController do
          %TaskSubmission{} = submission <- Tasks.get_submission_for_student(task.id, user.id) do
       case Tasks.save_student_answers(scope, submission, content) do
         {:error, :not_editable} ->
-          json_error(conn, :conflict, "Die Aufgabe ist bereits abgeschlossen.")
+          json_error(conn, :conflict, "Die Aufgabe ist bereits als erledigt markiert.")
 
         result ->
           render_save_result(conn, result)

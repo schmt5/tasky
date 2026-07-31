@@ -33,3 +33,32 @@ export const TEXT_COLORS: ColorOption[] = [
   { name: "Blau", value: "#2563eb" },
   { name: "Lila", value: "#9333ea" },
 ];
+
+// Callout ("Hinweisbox") palette. Only the token lands in the document; the
+// hex values live in the toolbar and the stylesheet, so the palette can be
+// retuned without touching stored docs.
+export type CalloutColor = "red" | "yellow" | "green" | "blue" | "violet";
+
+export const CALLOUT_COLOR_VALUES: readonly CalloutColor[] = [
+  "red",
+  "yellow",
+  "green",
+  "blue",
+  "violet",
+];
+
+export const DEFAULT_CALLOUT_COLOR: CalloutColor = "yellow";
+
+// `swatch` only paints the toolbar chip — it mirrors the border colour of the
+// corresponding `.callout[data-color]` rule in exam_content_editor.css.
+export const CALLOUT_COLORS: Array<{
+  name: string;
+  value: CalloutColor;
+  swatch: string;
+}> = [
+  { name: "Rot", value: "red", swatch: "#f87171" },
+  { name: "Gelb", value: "yellow", swatch: "#facc15" },
+  { name: "Grün", value: "green", swatch: "#4ade80" },
+  { name: "Blau", value: "blue", swatch: "#60a5fa" },
+  { name: "Lila", value: "violet", swatch: "#a78bfa" },
+];

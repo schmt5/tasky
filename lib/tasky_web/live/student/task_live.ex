@@ -45,7 +45,7 @@ defmodule TaskyWeb.Student.TaskLive do
               phx-click="show_complete_modal"
               class="inline-flex items-center gap-2 bg-emerald-500 text-white text-sm font-semibold px-5 py-2 rounded-lg shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98]"
             >
-              <.icon name="hero-check" class="w-4 h-4" /> Abschliessen
+              <.icon name="hero-check" class="w-4 h-4" /> Als erledigt markieren
             </button>
           </div>
         </div>
@@ -82,7 +82,7 @@ defmodule TaskyWeb.Student.TaskLive do
               </h3>
               <p class="text-[13px] text-rose-700 mt-0.5">
                 Deine Lehrperson hat die Aufgabe zurückgegeben. Überarbeite deine Antworten
-                und schliesse die Aufgabe erneut ab.
+                und markiere die Aufgabe erneut als erledigt.
               </p>
               <div
                 :if={present?(@submission.feedback)}
@@ -426,8 +426,10 @@ defmodule TaskyWeb.Student.TaskLive do
                   <.icon name="hero-check-circle" class="w-5 h-5 text-emerald-500" />
                 </div>
                 <div>
-                  <h3 class="text-lg font-semibold text-stone-800">Aufgabe abschliessen</h3>
-                  <p class="text-xs text-stone-400 mt-0.5">Bitte bestätige den Abschluss.</p>
+                  <h3 class="text-lg font-semibold text-stone-800">
+                    Aufgabe als erledigt markieren
+                  </h3>
+                  <p class="text-xs text-stone-400 mt-0.5">Bitte bestätige den Vorgang.</p>
                 </div>
               </div>
             </div>
@@ -444,7 +446,7 @@ defmodule TaskyWeb.Student.TaskLive do
                   <p class="text-sm text-stone-600 leading-relaxed">
                     Möchtest du die Aufgabe
                     <span class="font-semibold text-stone-800">{@task.name}</span>
-                    jetzt abschliessen?
+                    jetzt als erledigt markieren?
                   </p>
                   <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
                     <div class="flex items-start gap-2.5">
@@ -453,8 +455,8 @@ defmodule TaskyWeb.Student.TaskLive do
                         class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
                       />
                       <p class="text-xs text-amber-700 leading-relaxed">
-                        Nach dem Abschluss kannst du deine Antworten nicht mehr ändern,
-                        bis deine Lehrperson die Aufgabe angeschaut hat.
+                        Sobald du die Aufgabe als erledigt markiert hast, kannst du deine
+                        Antworten nicht mehr ändern, bis deine Lehrperson sie angeschaut hat.
                       </p>
                     </div>
                   </div>
@@ -468,8 +470,8 @@ defmodule TaskyWeb.Student.TaskLive do
                       <p class="text-xs text-red-700 leading-relaxed">
                         Deine letzten Änderungen konnten nicht gespeichert werden.
                         Prüfe deine Internetverbindung und versuche es erneut.
-                        Du kannst die Aufgabe erst abschliessen, wenn alle Antworten
-                        gespeichert sind.
+                        Du kannst die Aufgabe erst als erledigt markieren, wenn alle
+                        Antworten gespeichert sind.
                       </p>
                     </div>
                   </div>
@@ -493,7 +495,8 @@ defmodule TaskyWeb.Student.TaskLive do
                       <li :for={field <- @missing_uploads}>{field.label}</li>
                     </ul>
                     <p class="mt-1.5">
-                      Lade die Dateien im Tab «Dateien» hoch, bevor du abschliesst.
+                      Lade die Dateien im Tab «Dateien» hoch, bevor du die Aufgabe
+                      als erledigt markierst.
                     </p>
                   </div>
                 </div>
@@ -525,7 +528,7 @@ defmodule TaskyWeb.Student.TaskLive do
                 disabled={@submit_check != :ok or @missing_uploads != []}
                 class="inline-flex items-center gap-2 bg-emerald-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
               >
-                <.icon name="hero-check" class="w-4 h-4" /> Jetzt abschliessen
+                <.icon name="hero-check" class="w-4 h-4" /> Jetzt als erledigt markieren
               </button>
             </div>
           </div>
@@ -741,7 +744,7 @@ defmodule TaskyWeb.Student.TaskLive do
       {:error, _} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Aufgabe konnte nicht abgeschlossen werden.")
+         |> put_flash(:error, "Aufgabe konnte nicht als erledigt markiert werden.")
          |> assign(:show_complete_modal, false)}
     end
   end

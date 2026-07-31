@@ -23,6 +23,7 @@ import {
   QuestionMarkCircleIcon,
   NumberedListIcon,
   ChatBubbleLeftEllipsisIcon,
+  InformationCircleIcon,
   PhotoIcon,
   TableCellsIcon,
   PaintBrushIcon,
@@ -33,7 +34,13 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Tooltip from "@radix-ui/react-tooltip";
 
-import { HIGHLIGHT_COLORS, TEXT_COLORS } from "./constants";
+import {
+  CALLOUT_COLORS,
+  DEFAULT_CALLOUT_COLOR,
+  HIGHLIGHT_COLORS,
+  TEXT_COLORS,
+  type CalloutColor,
+} from "./constants";
 import {
   TextColorIcon,
   FreitextIcon,
@@ -99,6 +106,12 @@ export function Toolbar({
       textColor: TEXT_COLORS.find((c) =>
         editor.isActive("textStyle", { color: c.value }),
       )?.value,
+      calloutColor: CALLOUT_COLORS.find((c) =>
+        editor.isActive("callout", { color: c.value }),
+      )?.value,
+      // False when the selection covers a question heading — wrapping one
+      // would hide it from the server-side part splitting.
+      canCallout: editor.can().setCallout(DEFAULT_CALLOUT_COLOR),
       canUndo: editor.can().undo(),
       canRedo: editor.can().redo(),
     }),
@@ -111,7 +124,8 @@ export function Toolbar({
     isActive = false,
     disabled = false,
   ) => (
-    <Tip label={title}>
+    // Keyed by title: the group() helper receives these as a plain array.
+    <Tip key={title} label={title}>
       <button
         type="button"
         aria-label={title}
@@ -135,69 +149,81 @@ export function Toolbar({
     onPick,
     onClear,
     clearLabel,
+    disabled = false,
   }: {
     title: string;
     icon: ReactNode;
-    colors: Array<{ name: string; value: string }>;
+    // `swatch` decouples the painted chip from the stored value — the callout
+    // palette stores a token ("red"), not a hex colour.
+    colors: Array<{ name: string; value: string; swatch?: string }>;
     activeColor?: string;
     onPick: (value: string) => void;
     onClear: () => void;
     clearLabel: string;
-  }) => (
-    <DropdownMenu.Root>
-      <Tip label={title}>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            aria-label={title}
-            className={"exam-editor__btn" + (activeColor ? " is-active" : "")}
-            onMouseDown={(e) => e.preventDefault()}
+    disabled?: boolean;
+  }) => {
+    const swatchOf = (value?: string) =>
+      colors.find((c) => c.value === value)?.swatch ?? value;
+
+    return (
+      <DropdownMenu.Root key={title}>
+        <Tip label={title}>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label={title}
+              className={"exam-editor__btn" + (activeColor ? " is-active" : "")}
+              onMouseDown={(e) => e.preventDefault()}
+              disabled={disabled}
+            >
+              {icon}
+              <span
+                className="exam-editor__btn-bar"
+                style={{
+                  backgroundColor: swatchOf(activeColor) || "transparent",
+                }}
+              />
+            </button>
+          </DropdownMenu.Trigger>
+        </Tip>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            className="exam-editor__menu"
+            sideOffset={4}
+            align="start"
           >
-            {icon}
-            <span
-              className="exam-editor__btn-bar"
-              style={{ backgroundColor: activeColor || "transparent" }}
-            />
-          </button>
-        </DropdownMenu.Trigger>
-      </Tip>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          className="exam-editor__menu"
-          sideOffset={4}
-          align="start"
-        >
-          <div className="exam-editor__menu-swatches">
-            {colors.map((c) => (
-              <DropdownMenu.Item
-                key={c.value}
-                asChild
-                onSelect={() => onPick(c.value)}
-              >
-                <button
-                  type="button"
-                  title={c.name}
-                  aria-label={c.name}
-                  className={
-                    "exam-editor__swatch" +
-                    (activeColor === c.value ? " is-active" : "")
-                  }
-                  style={{ backgroundColor: c.value }}
-                />
-              </DropdownMenu.Item>
-            ))}
-          </div>
-          <DropdownMenu.Separator className="exam-editor__menu-separator" />
-          <DropdownMenu.Item
-            className="exam-editor__menu-item"
-            onSelect={onClear}
-          >
-            {clearLabel}
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
+            <div className="exam-editor__menu-swatches">
+              {colors.map((c) => (
+                <DropdownMenu.Item
+                  key={c.value}
+                  asChild
+                  onSelect={() => onPick(c.value)}
+                >
+                  <button
+                    type="button"
+                    title={c.name}
+                    aria-label={c.name}
+                    className={
+                      "exam-editor__swatch" +
+                      (activeColor === c.value ? " is-active" : "")
+                    }
+                    style={{ backgroundColor: c.swatch ?? c.value }}
+                  />
+                </DropdownMenu.Item>
+              ))}
+            </div>
+            <DropdownMenu.Separator className="exam-editor__menu-separator" />
+            <DropdownMenu.Item
+              className="exam-editor__menu-item"
+              onSelect={onClear}
+            >
+              {clearLabel}
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    );
+  };
 
   const textColorMenu = colorMenu({
     title: "Textfarbe",
@@ -218,6 +244,22 @@ export function Toolbar({
       editor.chain().focus().toggleHighlight({ color: value }).run(),
     onClear: () => editor.chain().focus().unsetHighlight().run(),
     clearLabel: "Markierung entfernen",
+  });
+
+  const calloutMenu = colorMenu({
+    title: "Hinweisbox",
+    icon: <InformationCircleIcon className={iconCls} />,
+    colors: CALLOUT_COLORS,
+    activeColor: active.calloutColor,
+    onPick: (value) =>
+      editor
+        .chain()
+        .focus()
+        .setCallout(value as CalloutColor)
+        .run(),
+    onClear: () => editor.chain().focus().unsetCallout().run(),
+    clearLabel: "Hinweisbox entfernen",
+    disabled: !active.canCallout,
   });
 
   const group = (label: string, children: ReactNode) => (
@@ -321,6 +363,7 @@ export function Toolbar({
                 active.orderedList,
               ),
             ])}
+            {!hideAnswers && group("Hinweisbox", [calloutMenu])}
             {!hideQuestion &&
               group("Frage", [
                 btn(
