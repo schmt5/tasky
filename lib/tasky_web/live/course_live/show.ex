@@ -104,7 +104,8 @@ defmodule TaskyWeb.CourseLive.Show do
         </div>
 
         <%!-- Tasks Section --%>
-        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+        <%!-- No `overflow-hidden` here: it would clip the per-row actions dropdown. --%>
+        <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="flex items-center justify-between p-6 border-b border-stone-100">
             <div>
               <h2 class="text-lg font-semibold text-stone-800">Lerneinheiten</h2>
@@ -133,7 +134,7 @@ defmodule TaskyWeb.CourseLive.Show do
             <li
               :for={{id, task} <- @streams.tasks}
               id={id}
-              class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 hover:bg-stone-50"
+              class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 last:rounded-b-[14px] hover:bg-stone-50"
             >
               <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600">
                 <.icon name="hero-clipboard-document-list" class="w-5 h-5" />
@@ -168,56 +169,68 @@ defmodule TaskyWeb.CourseLive.Show do
                 </div>
               </div>
 
-              <div class="flex items-center gap-2 shrink-0 pt-0.5">
-                <.link
-                  navigate={~p"/tasks/#{task.id}/content"}
-                  class="inline-flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+              <div class="dropdown dropdown-end shrink-0 pt-0.5">
+                <label
+                  id={"task-actions-#{task.id}"}
+                  tabindex="0"
+                  aria-label="Aktionen"
+                  class="cursor-pointer flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 transition-colors duration-150 hover:bg-stone-100 hover:text-stone-700"
                 >
-                  <.icon name="hero-pencil" class="w-4 h-4" />
-                  <span class="hidden sm:inline">Bearbeiten</span>
-                </.link>
-                <button
-                  type="button"
-                  phx-click="toggle_status"
-                  phx-value-id={task.id}
-                  title={
-                    if task.status == "draft",
-                      do: "Für Lernende veröffentlichen",
-                      else: "Zurück in den Entwurf"
-                  }
-                  class="inline-flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
+                  <.icon name="hero-ellipsis-vertical" class="w-5 h-5" />
+                </label>
+                <ul
+                  tabindex="0"
+                  class="dropdown-content z-[60] menu p-2 shadow-lg bg-white rounded-[10px] w-60 mt-2 border border-stone-100"
                 >
-                  <%= if task.status == "draft" do %>
-                    <.icon name="hero-eye" class="w-4 h-4" />
-                    <span class="hidden sm:inline">Veröffentlichen</span>
-                  <% else %>
-                    <.icon name="hero-eye-slash" class="w-4 h-4" />
-                    <span class="hidden sm:inline">Verbergen</span>
-                  <% end %>
-                </button>
-                <button
-                  type="button"
-                  phx-click="toggle_locked"
-                  phx-value-id={task.id}
-                  title={if task.locked, do: "Aufgabe freigeben", else: "Aufgabe sperren"}
-                  class="inline-flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 text-stone-500 hover:bg-stone-100 hover:text-stone-700"
-                >
-                  <%= if task.locked do %>
-                    <.icon name="hero-lock-open" class="w-4 h-4" />
-                    <span class="hidden sm:inline">Freigeben</span>
-                  <% else %>
-                    <.icon name="hero-lock-closed" class="w-4 h-4" />
-                    <span class="hidden sm:inline">Sperren</span>
-                  <% end %>
-                </button>
-                <button
-                  type="button"
-                  phx-click={JS.push("delete_task", value: %{id: task.id}) |> hide("##{id}")}
-                  data-confirm="Sind Sie sicher?"
-                  class="inline-flex items-center gap-2 text-red-600 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-red-100 hover:text-red-700"
-                >
-                  <.icon name="hero-trash" class="w-4 h-4" />
-                </button>
+                  <li>
+                    <button
+                      type="button"
+                      phx-click="open_rename"
+                      phx-value-id={task.id}
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <.icon name="hero-pencil" class="w-4 h-4 text-stone-400" /> Umbenennen
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      phx-click="toggle_status"
+                      phx-value-id={task.id}
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <%= if task.status == "draft" do %>
+                        <.icon name="hero-eye" class="w-4 h-4 text-stone-400" /> Veröffentlichen
+                      <% else %>
+                        <.icon name="hero-eye-slash" class="w-4 h-4 text-stone-400" /> Verbergen
+                      <% end %>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      phx-click="toggle_locked"
+                      phx-value-id={task.id}
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <%= if task.locked do %>
+                        <.icon name="hero-lock-open" class="w-4 h-4 text-stone-400" /> Freigeben
+                      <% else %>
+                        <.icon name="hero-lock-closed" class="w-4 h-4 text-stone-400" /> Sperren
+                      <% end %>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
+                      phx-click={JS.push("delete_task", value: %{id: task.id}) |> hide("##{id}")}
+                      data-confirm="Sind Sie sicher?"
+                      class="flex items-center gap-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <.icon name="hero-trash" class="w-4 h-4" /> Löschen
+                    </button>
+                  </li>
+                </ul>
               </div>
             </li>
           </ul>
@@ -242,6 +255,57 @@ defmodule TaskyWeb.CourseLive.Show do
           </div>
         </div>
       </div>
+      <%!-- Rename Modal --%>
+      <%= if @renaming_task do %>
+        <dialog
+          id="rename-task-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_rename"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_rename"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <h3 class="text-lg font-semibold text-stone-800">Lerneinheit umbenennen</h3>
+            </div>
+
+            <.form
+              for={@rename_form}
+              id="rename-task-form"
+              phx-change="validate_rename"
+              phx-submit="save_rename"
+            >
+              <div class="p-6">
+                <.input
+                  field={@rename_form[:name]}
+                  type="text"
+                  label="Name der Lerneinheit"
+                  required
+                  maxlength="255"
+                  phx-mounted={JS.focus()}
+                />
+              </div>
+
+              <div class="flex items-center justify-end gap-3 px-6 pb-6">
+                <button
+                  type="button"
+                  phx-click="close_rename"
+                  class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  phx-disable-with="Speichert…"
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Speichern
+                </button>
+              </div>
+            </.form>
+          </div>
+        </dialog>
+      <% end %>
     </Layouts.app>
     """
   end
@@ -255,6 +319,8 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:page_title, course.name)
      |> assign(:course, course)
      |> assign(:has_tasks, course.tasks != [])
+     |> assign(:renaming_task, nil)
+     |> assign(:rename_form, nil)
      |> stream(:tasks, course.tasks)}
   end
 
@@ -307,5 +373,47 @@ defmodule TaskyWeb.CourseLive.Show do
       Tasks.update_task(socket.assigns.current_scope, task, %{status: new_status})
 
     {:noreply, stream_insert(socket, :tasks, updated_task)}
+  end
+
+  @impl true
+  def handle_event("open_rename", %{"id" => id}, socket) do
+    task = Tasks.get_task!(socket.assigns.current_scope, id)
+    changeset = Tasks.change_task(socket.assigns.current_scope, task)
+
+    {:noreply,
+     socket
+     |> assign(:renaming_task, task)
+     |> assign(:rename_form, to_form(changeset, as: :task))}
+  end
+
+  @impl true
+  def handle_event("validate_rename", %{"task" => task_params}, socket) do
+    changeset =
+      Tasks.change_task(socket.assigns.current_scope, socket.assigns.renaming_task, task_params)
+
+    {:noreply, assign(socket, :rename_form, to_form(changeset, action: :validate, as: :task))}
+  end
+
+  @impl true
+  def handle_event("save_rename", %{"task" => %{"name" => name}}, socket) do
+    task = socket.assigns.renaming_task
+
+    case Tasks.update_task(socket.assigns.current_scope, task, %{name: String.trim(name)}) do
+      {:ok, updated_task} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Lerneinheit «#{updated_task.name}» umbenannt.")
+         |> assign(:renaming_task, nil)
+         |> assign(:rename_form, nil)
+         |> stream_insert(:tasks, updated_task)}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :rename_form, to_form(changeset, as: :task))}
+    end
+  end
+
+  @impl true
+  def handle_event("close_rename", _params, socket) do
+    {:noreply, socket |> assign(:renaming_task, nil) |> assign(:rename_form, nil)}
   end
 end
