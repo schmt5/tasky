@@ -54,18 +54,6 @@ defmodule TaskyWeb.Student.TaskLive do
         </div>
       </div>
 
-      <%!-- Erweiterte Lerneinheit: freiwillig, zählt nicht zum Pflichtfortschritt --%>
-      <div :if={@task.extended} class="max-w-4xl mx-auto px-8 pt-6">
-        <div class="bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 flex items-center gap-3">
-          <.icon name="hero-sparkles" class="w-5 h-5 text-violet-600 flex-shrink-0" />
-          <p class="text-[13px] text-violet-800 leading-relaxed">
-            <span class="font-medium">Freiwillige Erweiterung.</span>
-            Diese Lerneinheit ist keine Pflicht und zählt nicht zu deinem Fortschrittsbalken –
-            mach sie, wenn du genügend Zeit hast.
-          </p>
-        </div>
-      </div>
-
       <%!-- Preview Mode Banner --%>
       <div :if={@preview_mode} class="max-w-4xl mx-auto px-8 pt-6">
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">

@@ -534,7 +534,6 @@ defmodule Tasky.Tasks do
       graded: Enum.count(submissions, &(&1.status == "review_approved")),
       extended_total: extended_total,
       extended_completed: extended_completed,
-      extended_open: extended_total - extended_completed,
       no_mandatory?: total == 0
     }
   end

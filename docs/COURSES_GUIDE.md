@@ -229,8 +229,8 @@ Independently of its status, a learning unit carries an `extended` flag:
 The flag is set when creating a unit and can be flipped afterwards via
 "Bearbeiten" in the row's actions menu. It is copied when a unit or a whole
 course is duplicated. Extended units are marked with a violet "Erweitert"
-chip for teachers and an "Erweitert · freiwillig" chip plus an explanatory
-banner for students.
+chip for teachers and an "Erweitert · freiwillig" chip for students, both on
+the course timeline and in the unit itself.
 
 ### How it affects the progress bar
 
@@ -238,8 +238,8 @@ banner for students.
 
 - **100 % means all published mandatory units are done** — a student never
   needs an extension to reach a full bar.
-- Completed extensions are reported separately (`+N Erweiterungen`), and open
-  ones are advertised below the bar.
+- Completed extensions are reported separately as a `+N Erweiterungen` chip
+  next to the bar.
 - A unit counts as done from `completed` on; it does not have to be approved.
 - A course made up of nothing but extensions reports 100 % and shows
   "Keine Pflichtaufgaben" instead of dividing by zero.

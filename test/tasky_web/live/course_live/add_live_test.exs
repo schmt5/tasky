@@ -45,7 +45,7 @@ defmodule TaskyWeb.CourseLive.AddTest do
     {:ok, _lv, html} = live(conn, ~p"/courses/#{course}/add")
 
     assert html =~ "Erweiterte Lerneinheit"
-    assert html =~ "zählt nicht zum Fortschrittsbalken"
+    assert html =~ "als freiwillige Erweiterung"
   end
 
   test "a blank name keeps the form on screen and creates nothing", %{

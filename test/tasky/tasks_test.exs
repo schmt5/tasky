@@ -158,7 +158,6 @@ defmodule Tasky.TasksTest do
 
       assert progress.extended_total == 3
       assert progress.extended_completed == 1
-      assert progress.extended_open == 2
       # The extensions never dilute the bar.
       assert progress.percent == 100
     end
@@ -188,7 +187,8 @@ defmodule Tasky.TasksTest do
 
       assert progress.percent == 100
       assert progress.completed == progress.total
-      assert progress.extended_open == 1
+      assert progress.extended_total == 1
+      assert progress.extended_completed == 0
     end
 
     test "reads the flag off the real submissions of a course" do

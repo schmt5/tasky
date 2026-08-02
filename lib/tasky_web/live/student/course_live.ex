@@ -85,12 +85,6 @@ defmodule TaskyWeb.Student.CourseLive do
                       </div>
                     </div>
                   </div>
-
-                  <p :if={@stats.extended_open > 0} class="text-[12px] text-violet-600 mt-2">
-                    Noch {@stats.extended_open} freiwillige {pluralize_extensions(
-                      @stats.extended_open
-                    )} verfügbar
-                  </p>
                 </div>
 
                 <%!-- Stats row --%>
@@ -288,7 +282,9 @@ defmodule TaskyWeb.Student.CourseLive do
                           navigate={~p"/student/tasks/#{submission.task.id}"}
                           class="px-3.5 py-2 text-[13px] font-semibold bg-transparent text-stone-500 rounded-lg border-[1.5px] border-stone-200 hover:bg-sky-50 hover:text-sky-600 hover:border-sky-200 transition-all duration-150"
                         >
-                          Öffnen
+                          {if submission.status == "not_started",
+                            do: "Starten",
+                            else: "Öffnen"}
                         </.link>
                     <% end %>
                   </div>

@@ -149,7 +149,7 @@ defmodule TaskyWeb.Student.CourseLiveTest do
       assert html =~ "Erweitert · freiwillig"
     end
 
-    test "open extensions are advertised without touching the percentage", %{
+    test "open extensions do not hold the bar back", %{
       conn: conn,
       teacher_scope: teacher_scope,
       course: course
@@ -162,7 +162,7 @@ defmodule TaskyWeb.Student.CourseLiveTest do
       # Die einzige Pflichtaufgabe ist im Setup schon erledigt.
       assert html =~ "100%"
       assert html =~ "Alle Pflichtaufgaben erledigt!"
-      assert html =~ "Noch 2 freiwillige Erweiterungen verfügbar"
+      assert html =~ "1 / 1 Pflichtaufgaben"
     end
 
     test "a course of nothing but extensions has no mandatory work to show", %{
@@ -195,9 +195,10 @@ defmodule TaskyWeb.Student.CourseLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/student/courses/#{course.id}")
 
-      # Die offene Pflichtaufgabe ist "dran", nicht die davor stehende Erweiterung.
-      assert has_element?(lv, ~s(a[href="/student/tasks/#{pflicht.id}"]), "Starten")
-      refute has_element?(lv, ~s(a[href="/student/tasks/#{extension.id}"]), "Starten")
+      # Die offene Pflichtaufgabe ist "dran" (blau hervorgehoben), nicht die
+      # davor stehende Erweiterung — beide heissen "Starten".
+      assert has_element?(lv, ~s(a[href="/student/tasks/#{pflicht.id}"].bg-sky-500))
+      refute has_element?(lv, ~s(a[href="/student/tasks/#{extension.id}"].bg-sky-500))
     end
   end
 end

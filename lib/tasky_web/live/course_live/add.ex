@@ -75,7 +75,7 @@ defmodule TaskyWeb.CourseLive.Add do
                   field={@form[:extended]}
                   accent="violet"
                   label="Erweiterte Lerneinheit"
-                  description="Freiwilliger Zusatzauftrag für Lernende, die genügend Zeit haben. Sie ist keine Basis-Lerneinheit und zählt nicht zum Fortschrittsbalken – 100 % sind auch ohne sie erreichbar."
+                  description="Markiert die Lerneinheit für Lernende als freiwillige Erweiterung."
                 />
               </div>
             </div>
