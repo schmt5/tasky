@@ -45,27 +45,39 @@ defmodule TaskyWeb.CourseLive.Add do
 
       <div class="max-w-6xl mx-auto px-8 pb-8">
         <div class="max-w-xl bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-8">
-          <form phx-submit="create_task" phx-change="validate" class="space-y-6">
+          <.form
+            for={@form}
+            id="add-task-form"
+            phx-submit="create_task"
+            phx-change="validate"
+            class="space-y-6"
+          >
             <div>
-              <label for="task-name" class="block text-sm font-medium text-stone-600 mb-1.5">
-                Name der Lerneinheit
-              </label>
-              <input
-                id="task-name"
+              <.input
+                field={@form[:name]}
                 type="text"
-                name="name"
-                value={@name}
+                label="Name der Lerneinheit"
                 placeholder="z. B. Kapitel 1 – Grundlagen"
                 maxlength="255"
                 autofocus
                 phx-debounce="300"
                 class="w-full text-sm text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400"
               />
-              <p :if={@name_error} class="text-xs text-red-600 mt-1">{@name_error}</p>
               <p class="text-xs text-stone-400 mt-2 leading-relaxed">
                 Die Lerneinheit wird als Entwurf erstellt und ist für Lernende erst sichtbar,
                 wenn Sie sie veröffentlichen.
               </p>
+            </div>
+
+            <div class="pt-1 border-t border-stone-100">
+              <div class="pt-5">
+                <.checkbox_field
+                  field={@form[:extended]}
+                  accent="violet"
+                  label="Erweiterte Lerneinheit"
+                  description="Freiwilliger Zusatzauftrag für Lernende, die genügend Zeit haben. Sie ist keine Basis-Lerneinheit und zählt nicht zum Fortschrittsbalken – 100 % sind auch ohne sie erreichbar."
+                />
+              </div>
             </div>
 
             <div class="flex items-center justify-end gap-3">
@@ -77,13 +89,13 @@ defmodule TaskyWeb.CourseLive.Add do
               </.link>
               <button
                 type="submit"
-                disabled={@creating}
+                phx-disable-with="Wird erstellt…"
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <.icon name="hero-plus" class="w-4 h-4" /> Erstellen und Inhalt gestalten
               </button>
             </div>
-          </form>
+          </.form>
         </div>
       </div>
     </Layouts.app>
@@ -98,49 +110,55 @@ defmodule TaskyWeb.CourseLive.Add do
      socket
      |> assign(:page_title, "Lerneinheit hinzufügen")
      |> assign(:course, course)
-     |> assign(:name, "")
-     |> assign(:name_error, nil)
-     |> assign(:creating, false)}
+     |> assign(:form, to_form(Tasks.change_new_task(socket.assigns.current_scope)))}
   end
 
   @impl true
-  def handle_event("validate", %{"name" => name}, socket) do
-    {:noreply, socket |> assign(:name, name) |> assign(:name_error, nil)}
+  def handle_event("validate", %{"task" => params}, socket) do
+    changeset =
+      Tasks.change_new_task(
+        socket.assigns.current_scope,
+        task_attrs(socket.assigns.course, params)
+      )
+
+    {:noreply, assign(socket, :form, to_form(changeset, action: :validate))}
   end
 
-  def handle_event("create_task", %{"name" => name}, socket) do
-    name = String.trim(name)
+  def handle_event("create_task", %{"task" => params}, socket) do
+    scope = socket.assigns.current_scope
+    attrs = task_attrs(socket.assigns.course, params)
 
-    if name == "" do
-      {:noreply, assign(socket, :name_error, "Name darf nicht leer sein.")}
-    else
-      course = socket.assigns.course
+    case Tasks.create_task(scope, attrs) do
+      {:ok, task} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Lerneinheit «#{task.name}» erstellt.")
+         |> push_navigate(to: ~p"/tasks/#{task}/content")}
 
-      next_position =
-        course.id
-        |> Tasks.list_tasks_by_course()
-        |> Enum.map(& &1.position)
-        |> Enum.reject(&is_nil/1)
-        |> Enum.max(fn -> 0 end)
-        |> Kernel.+(1)
-
-      attrs = %{
-        name: name,
-        position: next_position,
-        status: "draft",
-        course_id: course.id
-      }
-
-      case Tasks.create_task(socket.assigns.current_scope, attrs) do
-        {:ok, task} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Lerneinheit «#{task.name}» erstellt.")
-           |> push_navigate(to: ~p"/tasks/#{task}/content")}
-
-        {:error, _changeset} ->
-          {:noreply, assign(socket, :name_error, "Lerneinheit konnte nicht erstellt werden.")}
-      end
+      {:error, changeset} ->
+        {:noreply, assign(socket, :form, to_form(changeset, action: :validate))}
     end
+  end
+
+  # `position` and `status` are not part of the form but are required by the
+  # changeset, so they ride along on every validate and on the final insert.
+  # The position is (re)computed on each call so a unit created in a parallel
+  # session can't hand us a stale one.
+  defp task_attrs(course, params) do
+    Map.merge(params, %{
+      "name" => params |> Map.get("name", "") |> String.trim(),
+      "position" => next_position(course),
+      "status" => "draft",
+      "course_id" => course.id
+    })
+  end
+
+  defp next_position(course) do
+    course.id
+    |> Tasks.list_tasks_by_course()
+    |> Enum.map(& &1.position)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max(fn -> 0 end)
+    |> Kernel.+(1)
   end
 end

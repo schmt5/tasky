@@ -110,6 +110,8 @@ GET /student/courses/:id     # View course and its tasks
 1. Navigate to the course detail page (`/courses/:id`)
 2. Click "Lerneinheit hinzufügen" in the Tasks section
 3. Enter the unit's name — it is created as a **draft** (invisible to students)
+   and optionally tick **"Erweiterte Lerneinheit"** to make it a voluntary
+   extension (see below)
 4. Author the content in the Tiptap editor (`/tasks/:id/content`), including
    interactive answer fields (answer blocks, Lückentext, checkboxes)
 5. Optionally add teacher attachments and student upload fields in the
@@ -215,6 +217,37 @@ Tasks have three statuses that affect student visibility:
 - **archived** - Not visible to students (completed/outdated)
 
 Only published tasks appear on student course pages.
+
+## Erweiterte Lerneinheiten (voluntary extensions)
+
+Independently of its status, a learning unit carries an `extended` flag:
+
+- **Basis-Lerneinheit** (`extended: false`, the default) — mandatory work.
+- **Erweiterte Lerneinheit** (`extended: true`) — a voluntary extra for
+  students who have enough time. It is offered, never required.
+
+The flag is set when creating a unit and can be flipped afterwards via
+"Bearbeiten" in the row's actions menu. It is copied when a unit or a whole
+course is duplicated. Extended units are marked with a violet "Erweitert"
+chip for teachers and an "Erweitert · freiwillig" chip plus an explanatory
+banner for students.
+
+### How it affects the progress bar
+
+`Tasks.course_progress/1` is the single place this is computed:
+
+- **100 % means all published mandatory units are done** — a student never
+  needs an extension to reach a full bar.
+- Completed extensions are reported separately (`+N Erweiterungen`), and open
+  ones are advertised below the bar.
+- A unit counts as done from `completed` on; it does not have to be approved.
+- A course made up of nothing but extensions reports 100 % and shows
+  "Keine Pflichtaufgaben" instead of dividing by zero.
+- **Locked** mandatory units stay in the denominator and cannot be completed,
+  so the bar stays below 100 % while any of them is locked. This is
+  pre-existing behaviour, deliberately left unchanged.
+- The "Jetzt dran" pointer in the student timeline prefers mandatory units and
+  only falls through to an extension once all mandatory work is done.
 
 ## Seed Data
 

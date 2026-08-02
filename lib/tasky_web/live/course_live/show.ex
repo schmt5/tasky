@@ -154,11 +154,19 @@ defmodule TaskyWeb.CourseLive.Show do
                       <.icon name="hero-lock-closed" class="w-3 h-3" /> Gesperrt
                     </span>
                   <% end %>
+
+                  <.extended_chip :if={task.extended} />
                 </div>
 
                 <%= if task.locked do %>
                   <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
                     Lernende sehen diese Aufgabe, können sie aber nicht starten.
+                  </p>
+                <% end %>
+
+                <%= if task.extended do %>
+                  <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
+                    Freiwilliger Zusatzauftrag – zählt nicht zum Pflicht-Fortschritt der Lernenden.
                   </p>
                 <% end %>
 
@@ -187,7 +195,7 @@ defmodule TaskyWeb.CourseLive.Show do
                       phx-value-id={task.id}
                       class="flex items-center gap-2 text-sm text-stone-700"
                     >
-                      <.icon name="hero-pencil" class="w-4 h-4 text-stone-400" /> Umbenennen
+                      <.icon name="hero-pencil" class="w-4 h-4 text-stone-400" /> Bearbeiten
                     </button>
                   </li>
                   <li>
@@ -324,7 +332,7 @@ defmodule TaskyWeb.CourseLive.Show do
           <div class="modal-backdrop bg-stone-900/50" phx-click="close_rename"></div>
           <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
             <div class="p-6 border-b border-stone-100">
-              <h3 class="text-lg font-semibold text-stone-800">Lerneinheit umbenennen</h3>
+              <h3 class="text-lg font-semibold text-stone-800">Lerneinheit bearbeiten</h3>
             </div>
 
             <.form
@@ -333,7 +341,7 @@ defmodule TaskyWeb.CourseLive.Show do
               phx-change="validate_rename"
               phx-submit="save_rename"
             >
-              <div class="p-6">
+              <div class="p-6 space-y-5">
                 <.input
                   field={@rename_form[:name]}
                   type="text"
@@ -341,6 +349,13 @@ defmodule TaskyWeb.CourseLive.Show do
                   required
                   maxlength="255"
                   phx-mounted={JS.focus()}
+                />
+
+                <.checkbox_field
+                  field={@rename_form[:extended]}
+                  accent="violet"
+                  label="Erweiterte Lerneinheit"
+                  description="Freiwilliger Zusatzauftrag für Lernende, die genügend Zeit haben. Sie ist keine Basis-Lerneinheit und zählt nicht zum Fortschrittsbalken – 100 % sind auch ohne sie erreichbar."
                 />
               </div>
 
@@ -467,14 +482,19 @@ defmodule TaskyWeb.CourseLive.Show do
   end
 
   @impl true
-  def handle_event("save_rename", %{"task" => %{"name" => name}}, socket) do
+  def handle_event("save_rename", %{"task" => params}, socket) do
     task = socket.assigns.renaming_task
 
-    case Tasks.update_task(socket.assigns.current_scope, task, %{name: String.trim(name)}) do
+    attrs = %{
+      name: params |> Map.get("name", "") |> String.trim(),
+      extended: params["extended"] == "true"
+    }
+
+    case Tasks.update_task(socket.assigns.current_scope, task, attrs) do
       {:ok, updated_task} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Lerneinheit «#{updated_task.name}» umbenannt.")
+         |> put_flash(:info, "Lerneinheit «#{updated_task.name}» gespeichert.")
          |> assign(:renaming_task, nil)
          |> assign(:rename_form, nil)
          |> stream_insert(:tasks, updated_task)}

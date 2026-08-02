@@ -80,6 +80,7 @@ defmodule TaskyWeb.CourseLive.Reorder do
               </div>
 
               <div class="flex items-center gap-2 shrink-0">
+                <.extended_chip :if={task.extended} />
                 <.task_status_chip status={task.status} />
 
                 <%!-- Not draggable, so a press on an arrow can't start a drag. --%>

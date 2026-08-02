@@ -57,9 +57,16 @@ defmodule Tasky.CoursesDuplicateTest do
 
       task_fixture(scope, %{name: "Einheit 2", position: 1, course_id: course.id, locked: true})
 
+      task_fixture(scope, %{
+        name: "Vertiefung",
+        position: 2,
+        course_id: course.id,
+        extended: true
+      })
+
       assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
 
-      assert [one, two] = Tasks.list_tasks_by_course(copy.id)
+      assert [one, two, three] = Tasks.list_tasks_by_course(copy.id)
       assert one.name == "Einheit 1"
       assert one.position == 0
       assert one.status == "published"
@@ -67,8 +74,13 @@ defmodule Tasky.CoursesDuplicateTest do
       assert two.name == "Einheit 2"
       assert two.locked
 
+      # A voluntary extension must not be silently demoted to a mandatory unit.
+      refute one.extended
+      assert three.name == "Vertiefung"
+      assert three.extended
+
       # The originals stay where they are.
-      assert length(Tasks.list_tasks_by_course(course.id)) == 2
+      assert length(Tasks.list_tasks_by_course(course.id)) == 3
     end
 
     test "copies the content doc and takes its images along", %{scope: scope, course: course} do

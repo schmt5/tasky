@@ -117,4 +117,87 @@ defmodule TaskyWeb.Student.CourseLiveTest do
     assert Tasks.get_submission_for_student(task.id, submission.student_id).status ==
              "review_denied"
   end
+
+  describe "Fortschritt mit erweiterten Lerneinheiten" do
+    # Adds units to the course of the outer setup, which already contains one
+    # completed mandatory unit ("Testaufgabe").
+    defp add_unit(teacher_scope, course, name, attrs) do
+      task_fixture(
+        teacher_scope,
+        Map.merge(%{name: name, course_id: course.id, status: "published"}, attrs)
+      )
+    end
+
+    test "an extension is left out of the bar and counted on its own", %{
+      conn: conn,
+      teacher_scope: teacher_scope,
+      student_scope: student_scope,
+      course: course
+    } do
+      add_unit(teacher_scope, course, "Pflicht 2", %{position: 1})
+      extension = add_unit(teacher_scope, course, "Vertiefung", %{position: 2, extended: true})
+
+      {:ok, sub} = Tasks.get_or_create_submission(student_scope, extension.id)
+      {:ok, _} = Tasks.complete_task(student_scope, sub.id)
+
+      {:ok, _lv, html} = live(conn, ~p"/student/courses/#{course.id}")
+
+      # 1 von 2 Pflichtaufgaben erledigt — die erledigte Erweiterung zählt nicht mit.
+      assert html =~ "50%"
+      assert html =~ "1 / 2 Pflichtaufgaben"
+      assert html =~ "+1 Erweiterung"
+      assert html =~ "Erweitert · freiwillig"
+    end
+
+    test "open extensions are advertised without touching the percentage", %{
+      conn: conn,
+      teacher_scope: teacher_scope,
+      course: course
+    } do
+      add_unit(teacher_scope, course, "Vertiefung A", %{position: 1, extended: true})
+      add_unit(teacher_scope, course, "Vertiefung B", %{position: 2, extended: true})
+
+      {:ok, _lv, html} = live(conn, ~p"/student/courses/#{course.id}")
+
+      # Die einzige Pflichtaufgabe ist im Setup schon erledigt.
+      assert html =~ "100%"
+      assert html =~ "Alle Pflichtaufgaben erledigt!"
+      assert html =~ "Noch 2 freiwillige Erweiterungen verfügbar"
+    end
+
+    test "a course of nothing but extensions has no mandatory work to show", %{
+      conn: conn,
+      teacher_scope: teacher_scope,
+      student_scope: student_scope
+    } do
+      {:ok, course} = Courses.create_course(teacher_scope, %{name: "Nur Freiwilliges"})
+      {:ok, _} = Courses.enroll_student(course.id, student_scope.user.id)
+      add_unit(teacher_scope, course, "Vertiefung", %{position: 0, extended: true})
+
+      {:ok, _lv, html} = live(conn, ~p"/student/courses/#{course.id}")
+
+      assert html =~ "Keine Pflichtaufgaben"
+      assert html =~ "100%"
+      refute html =~ "Alle Pflichtaufgaben erledigt!"
+    end
+
+    test "the active-unit pointer skips an extension while mandatory work is open", %{
+      conn: conn,
+      teacher_scope: teacher_scope,
+      student_scope: student_scope,
+      course: course
+    } do
+      extension = add_unit(teacher_scope, course, "Vertiefung", %{position: 1, extended: true})
+      pflicht = add_unit(teacher_scope, course, "Pflicht 2", %{position: 2})
+
+      {:ok, _} = Tasks.get_or_create_submission(student_scope, extension.id)
+      {:ok, _} = Tasks.get_or_create_submission(student_scope, pflicht.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/student/courses/#{course.id}")
+
+      # Die offene Pflichtaufgabe ist "dran", nicht die davor stehende Erweiterung.
+      assert has_element?(lv, ~s(a[href="/student/tasks/#{pflicht.id}"]), "Starten")
+      refute has_element?(lv, ~s(a[href="/student/tasks/#{extension.id}"]), "Starten")
+    end
+  end
 end

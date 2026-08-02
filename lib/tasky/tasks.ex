@@ -24,6 +24,10 @@ defmodule Tasky.Tasks do
   # (Verdikt korrigieren) oder schon einmal reviewt.
   @reviewable_statuses ~w(completed in_revision review_approved review_denied)
 
+  # Statuses that count as "done" for the student's course progress. A unit
+  # handed in counts even before the teacher has approved it.
+  @completed_statuses ~w(completed review_approved)
+
   @doc """
   Subscribes to scoped notifications about any task changes.
 
@@ -145,6 +149,7 @@ defmodule Tasky.Tasks do
              position: source.position,
              status: source.status,
              locked: source.locked,
+             extended: source.extended,
              course_id: course_id
            }),
          {:ok, task} <- copy_task_content(task, source),
@@ -328,6 +333,22 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  Returns an `%Ecto.Changeset{}` for a learning unit that does not exist yet.
+
+  `change_task/3` cannot be used here: an unsaved `%Task{}` has no `user_id`,
+  so the ownership check would reject the very teacher who is creating it.
+
+  ## Examples
+
+      iex> change_new_task(scope, %{"name" => "Kapitel 1"})
+      %Ecto.Changeset{data: %Task{}}
+
+  """
+  def change_new_task(%Scope{} = scope, attrs \\ %{}) do
+    Task.changeset(%Task{}, attrs, scope)
+  end
+
+  @doc """
   Reorders a course's tasks to match `ordered_ids`.
 
   `ordered_ids` must list *every* task of the course exactly once — a partial
@@ -477,6 +498,45 @@ defmodule Tasky.Tasks do
       end
     end)
     |> Enum.reject(&is_nil/1)
+  end
+
+  @doc """
+  Derives a student's course progress from the submissions of
+  `list_course_submissions/2` (their `:task` must be preloaded).
+
+  The percentage counts **mandatory units only** — an "erweiterte Lerneinheit"
+  is a voluntary extra, so 100 % stays reachable without doing a single one.
+  Completed extensions are reported separately instead.
+
+  A course made up of nothing but extensions has no mandatory work left to do,
+  so it reports 100 % with `no_mandatory?: true`; the caller words the label
+  differently rather than dividing by zero.
+
+  ## Examples
+
+      iex> course_progress(submissions)
+      %{total: 8, completed: 6, percent: 75, ...}
+
+  """
+  def course_progress(submissions) do
+    {extended, mandatory} = Enum.split_with(submissions, & &1.task.extended)
+    done = fn list -> Enum.count(list, &(&1.status in @completed_statuses)) end
+
+    total = length(mandatory)
+    completed = done.(mandatory)
+    extended_total = length(extended)
+    extended_completed = done.(extended)
+
+    %{
+      total: total,
+      completed: completed,
+      percent: if(total == 0, do: 100, else: round(completed / total * 100)),
+      graded: Enum.count(submissions, &(&1.status == "review_approved")),
+      extended_total: extended_total,
+      extended_completed: extended_completed,
+      extended_open: extended_total - extended_completed,
+      no_mandatory?: total == 0
+    }
   end
 
   @doc """

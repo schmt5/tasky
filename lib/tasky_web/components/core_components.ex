@@ -725,6 +725,59 @@ defmodule TaskyWeb.CoreComponents do
     """
   end
 
+  @doc """
+  Chip marking a learning unit as an "erweiterte Lerneinheit" — a voluntary
+  extra that does not count towards the mandatory progress bar.
+
+  Violet is reserved for this axis: it must not collide with the status chip
+  (emerald/amber/stone) or the "Gesperrt" chip (red).
+  """
+  attr :label, :string, default: "Erweitert"
+
+  def extended_chip(assigns) do
+    ~H"""
+    <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-violet-100 text-violet-700">
+      <.icon name="hero-sparkles" class="w-3 h-3" />{@label}
+    </span>
+    """
+  end
+
+  @doc """
+  A checkbox with a bold label and an explanatory description underneath.
+
+  `<.input type="checkbox">` renders the label inline and has nowhere to put a
+  description, so this is the house pattern for flags that need explaining.
+  Bind it to a form field so the value round-trips like any other input.
+  """
+  attr :field, Phoenix.HTML.FormField, required: true
+  attr :label, :string, required: true
+  attr :description, :string, required: true
+  attr :accent, :string, default: "sky", values: ~w(sky violet)
+
+  def checkbox_field(assigns) do
+    ~H"""
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input type="hidden" name={@field.name} value="false" />
+      <input
+        type="checkbox"
+        id={@field.id}
+        name={@field.name}
+        value="true"
+        checked={Phoenix.HTML.Form.normalize_value("checkbox", @field.value)}
+        class={[
+          "mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 cursor-pointer transition-colors duration-150 shrink-0 focus:ring-offset-0",
+          @accent == "violet" && "text-violet-500 focus:ring-violet-500/30",
+          @accent == "sky" && "text-sky-500 focus:ring-sky-500/30"
+        ]}
+      />
+      <span class="min-w-0">
+        <span class="block text-sm font-medium text-stone-700">{@label}</span>
+        <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">{@description}</span>
+      </span>
+    </label>
+    """
+  end
+
   attr :status, :string, required: true
 
   def exam_status_chip(assigns) do

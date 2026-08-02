@@ -24,9 +24,12 @@ defmodule TaskyWeb.Student.TaskLive do
       <%!-- Compact Page Header --%>
       <div class="sticky top-0 z-20 bg-white border-b border-stone-200 h-[54px] flex items-center px-8">
         <div class="max-w-6xl mx-auto w-full flex items-center justify-between gap-4">
-          <h1 class="text-[16px] font-semibold text-stone-900 truncate">
-            {@task.name}
-          </h1>
+          <div class="flex items-center gap-2 min-w-0">
+            <h1 class="text-[16px] font-semibold text-stone-900 truncate">
+              {@task.name}
+            </h1>
+            <.extended_chip :if={@task.extended} label="Erweitert · freiwillig" />
+          </div>
 
           <div
             :if={@has_files and (@editable or @preview_mode)}
@@ -48,6 +51,18 @@ defmodule TaskyWeb.Student.TaskLive do
               <.icon name="hero-check" class="w-4 h-4" /> Als erledigt markieren
             </button>
           </div>
+        </div>
+      </div>
+
+      <%!-- Erweiterte Lerneinheit: freiwillig, zählt nicht zum Pflichtfortschritt --%>
+      <div :if={@task.extended} class="max-w-4xl mx-auto px-8 pt-6">
+        <div class="bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 flex items-center gap-3">
+          <.icon name="hero-sparkles" class="w-5 h-5 text-violet-600 flex-shrink-0" />
+          <p class="text-[13px] text-violet-800 leading-relaxed">
+            <span class="font-medium">Freiwillige Erweiterung.</span>
+            Diese Lerneinheit ist keine Pflicht und zählt nicht zu deinem Fortschrittsbalken –
+            mach sie, wenn du genügend Zeit hast.
+          </p>
         </div>
       </div>
 

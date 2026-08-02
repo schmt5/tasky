@@ -65,28 +65,32 @@ defmodule TaskyWeb.Student.CourseLive do
                   <%!-- Large percentage display --%>
                   <div class="flex-shrink-0 text-right">
                     <div class="text-[36px] font-bold text-emerald-600 leading-none">
-                      {if @stats.total > 0,
-                        do: round(@stats.completed / @stats.total * 100),
-                        else: 0}%
+                      {@stats.percent}%
                     </div>
                     <div class="text-[11px] text-stone-400 font-medium mt-1">
-                      Abgeschlossen
+                      Pflicht erledigt
                     </div>
                   </div>
                 </div>
 
-                <%!-- Progress bar --%>
+                <%!-- Progress bar: mandatory units only, so 100 % stays reachable --%>
                 <div class="mb-4">
                   <div class="w-full bg-stone-100 rounded-full h-3 overflow-hidden shadow-inner">
                     <div
                       class="bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 h-3 rounded-full transition-all duration-700 ease-out shadow-[0_0_12px_rgba(16,185,129,0.5)] relative"
-                      style={"width: #{if @stats.total > 0, do: (@stats.completed / @stats.total * 100), else: 0}%"}
+                      style={"width: #{@stats.percent}%"}
                     >
                       <%!-- Shimmer effect --%>
                       <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_2s_infinite]">
                       </div>
                     </div>
                   </div>
+
+                  <p :if={@stats.extended_open > 0} class="text-[12px] text-violet-600 mt-2">
+                    Noch {@stats.extended_open} freiwillige {pluralize_extensions(
+                      @stats.extended_open
+                    )} verfügbar
+                  </p>
                 </div>
 
                 <%!-- Stats row --%>
@@ -94,7 +98,11 @@ defmodule TaskyWeb.Student.CourseLive do
                   <div class="flex items-center gap-2">
                     <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
                     <span class="text-stone-600 font-medium">
-                      {@stats.completed} / {@stats.total} Aufgaben
+                      <%= if @stats.no_mandatory? do %>
+                        Keine Pflichtaufgaben
+                      <% else %>
+                        {@stats.completed} / {@stats.total} Pflichtaufgaben
+                      <% end %>
                     </span>
                   </div>
 
@@ -107,10 +115,19 @@ defmodule TaskyWeb.Student.CourseLive do
                     </div>
                   <% end %>
 
-                  <%= if @stats.completed == @stats.total && @stats.total > 0 do %>
+                  <%= if @stats.extended_completed > 0 do %>
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-violet-50 rounded-lg border border-violet-100">
+                      <.icon name="hero-sparkles" class="w-4 h-4 text-violet-600" />
+                      <span class="text-violet-700 font-semibold">
+                        +{@stats.extended_completed} {pluralize_extensions(@stats.extended_completed)}
+                      </span>
+                    </div>
+                  <% end %>
+
+                  <%= if !@stats.no_mandatory? && @stats.completed == @stats.total do %>
                     <div class="ml-auto flex items-center gap-2 text-emerald-600 font-semibold animate-[fadeIn_0.5s_ease]">
                       <span class="text-[18px]">🎉</span>
-                      <span>Alle erledigt!</span>
+                      <span>Alle Pflichtaufgaben erledigt!</span>
                     </div>
                   <% end %>
                 </div>
@@ -155,14 +172,17 @@ defmodule TaskyWeb.Student.CourseLive do
                   submission.task.id == @active_task_id &&
                     index != 1 && index != length(@submissions) &&
                     "bg-sky-500 text-white shadow-[0_0_0_3px_#e0f2fe,0_2px_8px_rgba(14,165,233,0.25)]",
-                  submission.task.id != @active_task_id &&
+                  submission.task.id != @active_task_id && !submission.task.extended &&
                     submission.status in ["not_started", "in_progress"] &&
                     (index == 1 || index == length(@submissions)) &&
                     "bg-white text-stone-700 shadow-[0_0_0_2px_#e7e5e4]",
-                  submission.task.id != @active_task_id &&
+                  submission.task.id != @active_task_id && !submission.task.extended &&
                     submission.status in ["not_started", "in_progress"] &&
                     index != 1 && index != length(@submissions) &&
                     "bg-stone-200 text-stone-500 shadow-[0_0_0_2px_#e7e5e4]",
+                  submission.task.id != @active_task_id && submission.task.extended &&
+                    submission.status in ["not_started", "in_progress"] &&
+                    "bg-violet-100 text-violet-600 shadow-[0_0_0_2px_#ede9fe]",
                   submission.status in ["review_denied", "in_revision"] &&
                     "bg-rose-100 text-rose-700 shadow-[0_0_0_2px_#ffe4e6]"
                 ]}>
@@ -203,6 +223,10 @@ defmodule TaskyWeb.Student.CourseLive do
                       ]}>
                         {submission.task.name}
                       </span>
+                      <.extended_chip
+                        :if={submission.task.extended}
+                        label="Erweitert · freiwillig"
+                      />
                       <%= if Tasks.has_feedback?(submission) do %>
                         <button
                           type="button"
@@ -358,7 +382,7 @@ defmodule TaskyWeb.Student.CourseLive do
     # Get submissions for this specific course
     submissions = Tasks.list_course_submissions(socket.assigns.current_scope, course_id)
 
-    stats = calculate_stats(submissions)
+    stats = Tasks.course_progress(submissions)
     active_task_id = find_active_task_id(submissions)
 
     {:ok,
@@ -379,7 +403,7 @@ defmodule TaskyWeb.Student.CourseLive do
     submissions =
       Tasks.list_course_submissions(socket.assigns.current_scope, socket.assigns.course.id)
 
-    stats = calculate_stats(submissions)
+    stats = Tasks.course_progress(submissions)
     active_task_id = find_active_task_id(submissions)
 
     {:noreply,
@@ -444,36 +468,31 @@ defmodule TaskyWeb.Student.CourseLive do
     end
   end
 
-  defp calculate_stats(submissions) do
-    %{
-      total: length(submissions),
-      completed: Enum.count(submissions, &(&1.status in ["completed", "review_approved"])),
-      graded: Enum.count(submissions, &(&1.status == "review_approved"))
-    }
+  defp pluralize_extensions(1), do: "Erweiterung"
+  defp pluralize_extensions(_), do: "Erweiterungen"
+
+  # Pflicht geht vor: solange eine Basis-Lerneinheit offen ist, darf der
+  # "Jetzt dran"-Zeiger nicht auf einer freiwilligen Erweiterung landen.
+  defp find_active_task_id(submissions) do
+    submissions
+    |> Enum.reject(& &1.task.extended)
+    |> pick_active()
+    |> Kernel.||(pick_active(submissions, fallback: true))
   end
 
-  defp find_active_task_id(submissions) do
+  defp pick_active(submissions, opts \\ []) do
     # Angefangene Arbeit zuerst — eine Rückgabe ist die dringendste davon.
     in_progress =
       Enum.find(submissions, &(&1.status in ["review_denied", "in_revision"])) ||
         Enum.find(submissions, &(&1.status == "in_progress"))
 
-    if in_progress do
-      in_progress.task.id
-    else
-      # Find the first non-completed task
-      next_task =
+    next_task =
+      in_progress ||
         Enum.find(submissions, &(&1.status not in ["completed", "review_approved"]))
 
-      if next_task do
-        next_task.task.id
-      else
-        # If all completed, return the first task id (fallback)
-        case List.first(submissions) do
-          nil -> nil
-          submission -> submission.task.id
-        end
-      end
-    end
+    # Ist alles erledigt, zeigt der Fallback wieder auf die erste Einheit.
+    next_task = next_task || if(opts[:fallback], do: List.first(submissions))
+
+    next_task && next_task.task.id
   end
 end

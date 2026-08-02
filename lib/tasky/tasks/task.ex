@@ -7,6 +7,9 @@ defmodule Tasky.Tasks.Task do
     field :position, :integer
     field :status, :string
     field :locked, :boolean, default: false
+    # An "erweiterte Lerneinheit" is voluntary: students may do it, but it does
+    # not count towards the mandatory progress bar.
+    field :extended, :boolean, default: false
     field :content, :map
     field :user_id, :id
 
@@ -23,8 +26,9 @@ defmodule Tasky.Tasks.Task do
   @doc false
   def changeset(task, attrs, user_scope) do
     task
-    |> cast(attrs, [:name, :position, :status, :course_id, :locked])
-    |> validate_required([:name, :position, :status])
+    |> cast(attrs, [:name, :position, :status, :course_id, :locked, :extended])
+    |> validate_required(:name, message: "Name darf nicht leer sein.")
+    |> validate_required([:position, :status])
     |> validate_inclusion(:status, @statuses)
     |> put_change(:user_id, user_scope.user.id)
   end

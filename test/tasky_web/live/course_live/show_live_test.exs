@@ -74,10 +74,10 @@ defmodule TaskyWeb.CourseLive.ShowTest do
 
       assert has_element?(lv, ~s{label#task-actions-#{task.id}[aria-label="Aktionen"]})
       assert has_element?(lv, ~s{button[phx-click="open_rename"][phx-value-id="#{task.id}"]})
-      assert html =~ "Umbenennen"
+      assert html =~ "Bearbeiten"
 
       # The unit name is the only way into the content editor; the row's old
-      # duplicate "Bearbeiten" link is gone.
+      # duplicate "Bearbeiten" link is gone — the dropdown entry is a button.
       assert has_element?(lv, ~s{a[href="/tasks/#{task.id}/content"]}, "Einheit 1")
       refute has_element?(lv, ~s{a[href="/tasks/#{task.id}/content"]}, "Bearbeiten")
     end
@@ -118,6 +118,64 @@ defmodule TaskyWeb.CourseLive.ShowTest do
 
       assert Tasks.list_tasks_by_course(course.id) == []
       assert render(lv) =~ "Noch keine Lerneinheiten"
+    end
+  end
+
+  describe "erweiterte Lerneinheit" do
+    test "the row marks an extended unit and explains what it means", %{
+      conn: conn,
+      scope: scope,
+      course: course
+    } do
+      task_fixture(scope, %{
+        name: "Vertiefung",
+        position: 1,
+        course_id: course.id,
+        extended: true
+      })
+
+      {:ok, _lv, html} = live(conn, ~p"/courses/#{course}")
+
+      assert html =~ "Erweitert"
+      assert html =~ "zählt nicht zum Pflicht-Fortschritt"
+    end
+
+    test "a mandatory unit shows no extension chip", %{conn: conn, course: course} do
+      {:ok, _lv, html} = live(conn, ~p"/courses/#{course}")
+
+      refute html =~ "Erweitert"
+    end
+
+    test "the edit modal turns a unit into an extension and back", %{
+      conn: conn,
+      course: course,
+      task: task
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      lv
+      |> element(~s{button[phx-click="open_rename"][phx-value-id="#{task.id}"]})
+      |> render_click()
+
+      assert has_element?(lv, "#rename-task-form")
+
+      html =
+        lv
+        |> form("#rename-task-form", task: %{name: "Einheit 1", extended: "true"})
+        |> render_submit()
+
+      assert reload(task).extended
+      assert html =~ "Erweitert"
+
+      lv
+      |> element(~s{button[phx-click="open_rename"][phx-value-id="#{task.id}"]})
+      |> render_click()
+
+      lv
+      |> form("#rename-task-form", task: %{name: "Einheit 1", extended: "false"})
+      |> render_submit()
+
+      refute reload(task).extended
     end
   end
 
