@@ -6,6 +6,10 @@ defmodule Tasky.Courses.Course do
     field :name, :string
     field :description, :string
 
+    # Unguessable slug for the public Markdown export. Never cast from user
+    # input — only `Tasky.Courses.ensure_share_slug/2` sets it.
+    field :share_slug, :string
+
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :tasks, Tasky.Tasks.Task
 

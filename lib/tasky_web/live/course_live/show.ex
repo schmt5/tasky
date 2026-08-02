@@ -20,6 +20,15 @@ defmodule TaskyWeb.CourseLive.Show do
             <div class="flex items-center gap-2">
               <button
                 type="button"
+                id="share-course"
+                phx-click="open_share"
+                class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
+              >
+                <.icon name="hero-sparkles" class="w-4 h-4" /> KI-Link
+              </button>
+
+              <button
+                type="button"
                 id="duplicate-course"
                 phx-click="open_duplicate"
                 class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
@@ -261,6 +270,92 @@ defmodule TaskyWeb.CourseLive.Show do
           </div>
         </div>
       </div>
+      <%!-- KI Share Link Modal --%>
+      <%= if @share_url do %>
+        <dialog
+          id="share-course-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_share"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_share"></div>
+          <div class="modal-box max-w-lg p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-sparkles" class="w-5 h-5 text-violet-600" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">Kursinhalt für KI</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    Alle Lerneinheiten als Text unter einem Link.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-6 space-y-4">
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Geben Sie diesen Link einem KI-Werkzeug, zum Beispiel mit dem Auftrag
+                <span class="italic">
+                  „Lies dir folgenden Kurs durch und erstelle mir Aufgaben für eine Prüfung."
+                </span>
+              </p>
+
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  id="share-course-url"
+                  value={@share_url}
+                  readonly
+                  class="flex-1 text-[13px] font-mono text-stone-700 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5 focus:outline-none focus:border-violet-300"
+                />
+                <button
+                  type="button"
+                  id="copy-share-url"
+                  phx-click="copy_share_url"
+                  phx-value-url={@share_url}
+                  class="inline-flex items-center gap-2 bg-violet-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(139,92,246,0.25)] transition-all duration-150 hover:bg-violet-600 active:scale-[0.98]"
+                >
+                  <.icon name="hero-clipboard-document" class="w-4 h-4" /> Kopieren
+                </button>
+              </div>
+
+              <div class="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                <div class="flex items-start gap-2.5">
+                  <.icon
+                    name="hero-exclamation-triangle"
+                    class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                  />
+                  <p class="text-xs text-amber-700 leading-relaxed">
+                    Jede Person mit diesem Link kann den gesamten Kursinhalt lesen – auch
+                    Entwürfe und noch nicht freigeschaltete Lerneinheiten. Abgaben und
+                    Lernende sind nicht enthalten.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-6 pt-0 flex items-center justify-end gap-3">
+              <.link
+                href={@share_url}
+                target="_blank"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Vorschau öffnen
+              </.link>
+              <button
+                type="button"
+                phx-click="close_share"
+                class="text-sm font-semibold text-stone-600 px-5 py-2.5 rounded-lg border border-stone-200 transition-colors duration-150 hover:bg-stone-50"
+              >
+                Schliessen
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
       <%!-- Duplicate Course Confirmation Modal --%>
       <%= if @duplicating_course do %>
         <dialog
@@ -395,7 +490,35 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:renaming_task, nil)
      |> assign(:rename_form, nil)
      |> assign(:duplicating_course, false)
+     |> assign(:share_url, nil)
      |> stream(:tasks, course.tasks)}
+  end
+
+  @impl true
+  def handle_event("open_share", _params, socket) do
+    case Courses.ensure_share_slug(socket.assigns.current_scope, socket.assigns.course) do
+      {:ok, course} ->
+        {:noreply,
+         socket
+         |> assign(:course, course)
+         |> assign(:share_url, url(~p"/share/course/#{course.share_slug}"))}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Der Link konnte nicht erstellt werden.")}
+    end
+  end
+
+  @impl true
+  def handle_event("close_share", _params, socket) do
+    {:noreply, assign(socket, :share_url, nil)}
+  end
+
+  @impl true
+  def handle_event("copy_share_url", %{"url" => share_url}, socket) do
+    {:noreply,
+     socket
+     |> put_flash(:info, "Link wurde in die Zwischenablage kopiert!")
+     |> push_event("copy-to-clipboard", %{text: share_url})}
   end
 
   @impl true

@@ -84,6 +84,21 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  Lists a course's learning units in display order with everything the public
+  Markdown export needs preloaded (see `Tasky.Courses.CourseExport`).
+  """
+  def list_tasks_for_export(course_id) do
+    attachments = from a in TaskAttachment, order_by: [asc: a.position, asc: a.id]
+    upload_fields = from f in TaskUploadField, order_by: [asc: f.position, asc: f.id]
+
+    Task
+    |> where([t], t.course_id == ^course_id)
+    |> order_by([t], asc: t.position, asc: t.id)
+    |> Repo.all()
+    |> Repo.preload(attachments: attachments, upload_fields: upload_fields)
+  end
+
+  @doc """
   Gets a single task.
 
   Raises `Ecto.NoResultsError` if the Task does not exist.

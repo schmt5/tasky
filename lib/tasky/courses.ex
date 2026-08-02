@@ -159,6 +159,65 @@ defmodule Tasky.Courses do
     Course.changeset(course, attrs)
   end
 
+  # Share link functions
+
+  @doc """
+  Returns the course with a `share_slug`, generating one on first use.
+
+  The slug backs the public Markdown export (`/share/course/:share_slug`),
+  which is readable by anyone holding the link — hence 128 bits of entropy,
+  the same budget as an exam submission token. Idempotent: a course that
+  already has a slug keeps it, so the link a teacher handed to an AI tool
+  stays valid.
+  """
+  def ensure_share_slug(scope, %Course{} = course, attempts \\ 3) do
+    with :ok <- Tasky.Policy.authorize(scope, course.teacher_id) do
+      if is_binary(course.share_slug) and course.share_slug != "" do
+        {:ok, course}
+      else
+        put_fresh_share_slug(course, attempts)
+      end
+    end
+  end
+
+  defp put_fresh_share_slug(%Course{} = course, attempts) when attempts > 0 do
+    result =
+      course
+      |> Ecto.Changeset.change(share_slug: generate_share_slug())
+      |> Ecto.Changeset.unique_constraint(:share_slug)
+      |> Repo.update()
+
+    case result do
+      {:error, %Ecto.Changeset{errors: errors}} = error ->
+        if Keyword.has_key?(errors, :share_slug) do
+          put_fresh_share_slug(course, attempts - 1)
+        else
+          error
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp put_fresh_share_slug(%Course{}, _attempts), do: {:error, :share_slug_collision}
+
+  defp generate_share_slug do
+    :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+  end
+
+  @doc """
+  Gets a course by its share slug, or `nil` if the slug is unknown.
+
+  Deliberately unscoped — the slug itself is the credential, exactly like
+  `Tasky.Exams.get_exam_submission_by_token/1`.
+  """
+  def get_course_by_share_slug(slug) when is_binary(slug) and slug != "" do
+    Repo.get_by(Course, share_slug: slug) |> Repo.preload([:teacher])
+  end
+
+  def get_course_by_share_slug(_slug), do: nil
+
   # Enrollment functions
 
   @doc """

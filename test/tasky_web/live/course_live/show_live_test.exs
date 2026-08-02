@@ -21,6 +21,68 @@ defmodule TaskyWeb.CourseLive.ShowTest do
   # The unit as it is actually stored, ignoring whatever the LiveView renders.
   defp reload(task), do: Tasky.Repo.get!(Tasky.Tasks.Task, task.id)
 
+  describe "KI-Link" do
+    test "the header offers the action", %{conn: conn, course: course} do
+      {:ok, lv, html} = live(conn, ~p"/courses/#{course}")
+
+      assert has_element?(lv, "#share-course")
+      assert html =~ "KI-Link"
+      refute has_element?(lv, "#share-course-modal")
+    end
+
+    test "opening it creates the slug and shows the public URL", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      refute course.share_slug
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      html = lv |> element("#share-course") |> render_click()
+
+      slug = Courses.get_course!(scope, course.id).share_slug
+
+      assert has_element?(lv, "#share-course-modal")
+      assert is_binary(slug)
+      assert html =~ "/share/course/#{slug}"
+      assert html =~ "Jede Person mit diesem Link kann den gesamten Kursinhalt lesen"
+    end
+
+    test "reopening keeps the same link", %{conn: conn, course: course, scope: scope} do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      lv |> element("#share-course") |> render_click()
+      lv |> element("#share-course-modal button[phx-click='close_share']") |> render_click()
+      lv |> element("#share-course") |> render_click()
+
+      {:ok, shared} = Courses.ensure_share_slug(scope, Courses.get_course!(scope, course.id))
+
+      assert has_element?(
+               lv,
+               "#share-course-url[value='#{url(~p"/share/course/#{shared.share_slug}")}']"
+             )
+    end
+
+    test "the copy button pushes the URL to the clipboard", %{conn: conn, course: course} do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element("#share-course") |> render_click()
+
+      lv |> element("#copy-share-url") |> render_click()
+
+      assert_push_event(lv, "copy-to-clipboard", %{text: text})
+      assert text =~ "/share/course/"
+    end
+
+    test "closing it hides the modal", %{conn: conn, course: course} do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element("#share-course") |> render_click()
+
+      lv |> element("#share-course-modal button[phx-click='close_share']") |> render_click()
+
+      refute has_element?(lv, "#share-course-modal")
+    end
+  end
+
   describe "Inhalt duplizieren" do
     test "the header offers the action next to Bearbeiten", %{conn: conn, course: course} do
       {:ok, lv, html} = live(conn, ~p"/courses/#{course}")

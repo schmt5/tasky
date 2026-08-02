@@ -115,6 +115,24 @@ defmodule TaskyWeb.Router do
     put "/tasks/:id/answers", TaskAnswersApiController, :update
   end
 
+  # Public course export. Deliberately no `:accepts` plug: the response is a
+  # fixed text/plain body, and :browser's `accepts ["html"]` would 406 an AI
+  # fetcher that asks for text/plain. Access is gated by the 128-bit share slug
+  # alone, so probing gets the same per-IP cap as the guest exam routes.
+  pipeline :public_share do
+    plug :put_secure_browser_headers, %{
+      "content-security-policy" => "default-src 'none'; sandbox"
+    }
+
+    plug TaskyWeb.Plugs.RateLimit, bucket: :share, limit: 120, window_ms: 60_000
+  end
+
+  scope "/share", TaskyWeb do
+    pipe_through :public_share
+
+    get "/course/:share_slug", CourseShareController, :show
+  end
+
   # Public serving of uploaded exam images (unguessable UUID filenames). Public
   # so the browser and Gotenberg can load <img> sources without an auth token.
   scope "/uploads", TaskyWeb do
