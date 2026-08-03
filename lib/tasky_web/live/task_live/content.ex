@@ -358,7 +358,7 @@ defmodule TaskyWeb.TaskLive.Content do
   def handle_event("delete_attachment", %{"id" => id}, socket) do
     with attachment when not is_nil(attachment) <-
            Tasks.get_task_attachment(socket.assigns.task, id),
-         {:ok, _} <- Tasks.delete_task_attachment(attachment) do
+         {:ok, _} <- Tasks.delete_task_attachment(socket.assigns.current_scope, attachment) do
       {:noreply, assign(socket, :attachments, Tasks.list_task_attachments(socket.assigns.task))}
     else
       _ -> {:noreply, put_flash(socket, :error, "Anhang konnte nicht gelöscht werden.")}
@@ -437,12 +437,16 @@ defmodule TaskyWeb.TaskLive.Content do
     result =
       case socket.assigns.editing_field_id do
         :new ->
-          Tasks.create_task_upload_field(socket.assigns.task, attrs)
+          Tasks.create_task_upload_field(
+            socket.assigns.current_scope,
+            socket.assigns.task,
+            attrs
+          )
 
         id ->
           case Tasks.get_task_upload_field(socket.assigns.task, id) do
             nil -> {:error, :not_found}
-            field -> Tasks.update_task_upload_field(field, attrs)
+            field -> Tasks.update_task_upload_field(socket.assigns.current_scope, field, attrs)
           end
       end
 
@@ -480,7 +484,7 @@ defmodule TaskyWeb.TaskLive.Content do
   def handle_event("delete_upload_field", %{"id" => id}, socket) do
     with field when not is_nil(field) <-
            Tasks.get_task_upload_field(socket.assigns.task, id),
-         {:ok, _} <- Tasks.delete_task_upload_field(field) do
+         {:ok, _} <- Tasks.delete_task_upload_field(socket.assigns.current_scope, field) do
       {:noreply,
        assign(socket, :upload_fields, Tasks.list_task_upload_fields(socket.assigns.task))}
     else
@@ -498,6 +502,7 @@ defmodule TaskyWeb.TaskLive.Content do
             {:ok, meta} ->
               {:ok,
                Tasks.create_task_attachment(
+                 socket.assigns.current_scope,
                  task,
                  Map.put(meta, :original_name, entry.client_name)
                )}
@@ -511,13 +516,8 @@ defmodule TaskyWeb.TaskLive.Content do
         {:ok, _attachment} ->
           {:noreply, assign(socket, :attachments, Tasks.list_task_attachments(task))}
 
-        {:error, _reason} ->
-          {:noreply,
-           put_flash(
-             socket,
-             :error,
-             "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
-           )}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, file_save_error_message(reason))}
       end
     else
       {:noreply, socket}

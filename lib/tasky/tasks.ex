@@ -173,8 +173,8 @@ defmodule Tasky.Tasks do
              course_id: course_id
            }),
          {:ok, task, image_jobs} <- copy_task_content(task, source),
-         {:ok, attachment_jobs} <- copy_task_attachments(task, source),
-         :ok <- copy_task_upload_fields(task, source) do
+         {:ok, attachment_jobs} <- copy_task_attachments(scope, task, source),
+         :ok <- copy_task_upload_fields(scope, task, source) do
       {:ok, task, image_jobs ++ attachment_jobs}
     end
   end
@@ -182,76 +182,26 @@ defmodule Tasky.Tasks do
   defp copy_task_content(task, %Task{content: nil}), do: {:ok, task, []}
 
   defp copy_task_content(task, %Task{content: content} = source) do
-    {content, jobs} = plan_content_image_copies(content, source.id, task.id)
+    {content, jobs} = Tasky.Uploads.plan_content_image_copies(content, :tasks, source.id, task.id)
 
     with {:ok, task} <- task |> Task.content_changeset(content) |> Repo.update() do
       {:ok, task, jobs}
     end
   end
 
-  # Content images live under their own task's upload prefix, so the copy has
-  # to take its own bytes along and point at them — sharing the source's files
-  # would blank the duplicate out as soon as the original unit is deleted
-  # (`delete_task/2` wipes the whole `tasks/<id>` prefix). The new URL is
-  # deterministic, so it is written now and the bytes follow after the commit.
-  defp plan_content_image_copies(content, from_task_id, to_task_id) do
-    ctx = {
-      "/uploads/tasks/#{from_task_id}/",
-      "/uploads/tasks/#{to_task_id}/",
-      from_task_id,
-      to_task_id
-    }
-
-    rewrite_image_refs(content, ctx, [])
-  end
-
-  defp rewrite_image_refs(value, ctx, jobs) when is_map(value) do
-    Enum.reduce(value, {%{}, jobs}, fn {k, v}, {acc, jobs} ->
-      {v, jobs} = rewrite_image_refs(v, ctx, jobs)
-      {Map.put(acc, k, v), jobs}
-    end)
-  end
-
-  defp rewrite_image_refs(value, ctx, jobs) when is_list(value) do
-    {list, jobs} =
-      Enum.reduce(value, {[], jobs}, fn v, {acc, jobs} ->
-        {v, jobs} = rewrite_image_refs(v, ctx, jobs)
-        {[v | acc], jobs}
-      end)
-
-    {Enum.reverse(list), jobs}
-  end
-
-  defp rewrite_image_refs(value, {prefix, new_prefix, from_task_id, to_task_id}, jobs)
-       when is_binary(value) do
-    # Only direct children of the task prefix are content images; anything
-    # deeper (an attachment path, say) is not ours to rewrite. This guard is
-    # now the only thing deciding what counts as a content image, since the
-    # storage copy no longer votes.
-    with true <- String.starts_with?(value, prefix),
-         filename = String.replace_prefix(value, prefix, ""),
-         false <- String.contains?(filename, "/"),
-         {:ok, job} <- Tasky.Uploads.plan_task_image_copy(from_task_id, to_task_id, filename) do
-      {new_prefix <> filename, [job | jobs]}
-    else
-      _ -> {value, jobs}
-    end
-  end
-
-  defp rewrite_image_refs(value, _ctx, jobs), do: {value, jobs}
-
-  defp copy_task_attachments(task, source) do
+  defp copy_task_attachments(scope, task, source) do
     source
     |> list_task_attachments()
     |> Enum.reduce_while({:ok, []}, fn attachment, {:ok, jobs} ->
       with {:ok, stored_filename, job} <-
-             Tasky.Uploads.plan_task_attachment_copy(
+             Tasky.Uploads.plan_attachment_copy(
+               :tasks,
                source.id,
                task.id,
                attachment.stored_filename
              ),
            {:ok, _attachment} <-
-             create_task_attachment(task, %{
+             create_task_attachment(scope, task, %{
                stored_filename: stored_filename,
                original_name: attachment.original_name,
                content_type: attachment.content_type,
@@ -274,11 +224,11 @@ defmodule Tasky.Tasks do
     end
   end
 
-  defp copy_task_upload_fields(task, source) do
+  defp copy_task_upload_fields(scope, task, source) do
     source
     |> list_task_upload_fields()
     |> Enum.reduce_while(:ok, fn field, _acc ->
-      case create_task_upload_field(task, %{
+      case create_task_upload_field(scope, task, %{
              "label" => field.label,
              "instruction" => field.instruction,
              "allowed_types" => field.allowed_types,
@@ -1038,24 +988,37 @@ defmodule Tasky.Tasks do
   Creates an attachment record for a file already stored on disk (see
   `Tasky.Uploads.save_task_attachment/3`).
   """
-  def create_task_attachment(%Task{} = task, attrs) do
-    position =
-      Repo.one(
-        from a in TaskAttachment,
-          where: a.task_id == ^task.id,
-          select: coalesce(max(a.position), -1)
-      ) + 1
+  def create_task_attachment(scope, %Task{} = task, attrs) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      position =
+        Repo.one(
+          from a in TaskAttachment,
+            where: a.task_id == ^task.id,
+            select: coalesce(max(a.position), -1)
+        ) + 1
 
-    %TaskAttachment{task_id: task.id}
-    |> TaskAttachment.changeset(Map.put(attrs, :position, position))
-    |> Repo.insert()
+      %TaskAttachment{task_id: task.id}
+      |> TaskAttachment.changeset(Map.put(attrs, :position, position))
+      |> Repo.insert()
+    end
   end
 
   @doc "Deletes an attachment record and its file on disk."
-  def delete_task_attachment(%TaskAttachment{} = attachment) do
-    with {:ok, deleted} <- Repo.delete(attachment) do
+  def delete_task_attachment(scope, %TaskAttachment{} = attachment) do
+    with :ok <- authorize_task_id(scope, attachment.task_id),
+         {:ok, deleted} <- Repo.delete(attachment) do
       Tasky.Uploads.delete_task_attachment_file(deleted.task_id, deleted.stored_filename)
       {:ok, deleted}
+    end
+  end
+
+  # Writes to anything hanging off a learning unit go through its owner (or an
+  # admin / the :system scope). One indexed lookup resolves the owner from the
+  # child's task_id; a unit that is gone is not an authorization pass.
+  defp authorize_task_id(scope, task_id) do
+    case Repo.one(from t in Task, where: t.id == ^task_id, select: t.user_id) do
+      nil -> {:error, :unauthorized}
+      user_id -> Policy.authorize(scope, user_id)
     end
   end
 
@@ -1078,31 +1041,35 @@ defmodule Tasky.Tasks do
   end
 
   @doc "Creates an upload field, appended at the end."
-  def create_task_upload_field(%Task{} = task, attrs) do
-    position =
-      Repo.one(
-        from f in TaskUploadField,
-          where: f.task_id == ^task.id,
-          select: coalesce(max(f.position), -1)
-      ) + 1
+  def create_task_upload_field(scope, %Task{} = task, attrs) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      position =
+        Repo.one(
+          from f in TaskUploadField,
+            where: f.task_id == ^task.id,
+            select: coalesce(max(f.position), -1)
+        ) + 1
 
-    %TaskUploadField{task_id: task.id}
-    |> TaskUploadField.changeset(Map.put(attrs, "position", position))
-    |> Repo.insert()
+      %TaskUploadField{task_id: task.id}
+      |> TaskUploadField.changeset(Map.put(attrs, "position", position))
+      |> Repo.insert()
+    end
   end
 
   @doc "Updates an upload field."
-  def update_task_upload_field(%TaskUploadField{} = field, attrs) do
-    field
-    |> TaskUploadField.changeset(attrs)
-    |> Repo.update()
+  def update_task_upload_field(scope, %TaskUploadField{} = field, attrs) do
+    with :ok <- authorize_task_id(scope, field.task_id) do
+      field
+      |> TaskUploadField.changeset(attrs)
+      |> Repo.update()
+    end
   end
 
   @doc """
   Deletes an upload field including all student files uploaded into it
   (records via FK cascade, bytes on disk explicitly).
   """
-  def delete_task_upload_field(%TaskUploadField{} = field) do
+  def delete_task_upload_field(scope, %TaskUploadField{} = field) do
     files =
       Repo.all(
         from sf in TaskSubmissionFile,
@@ -1111,7 +1078,8 @@ defmodule Tasky.Tasks do
           select: {s.task_id, sf.task_submission_id, sf.stored_filename}
       )
 
-    with {:ok, deleted} <- Repo.delete(field) do
+    with :ok <- authorize_task_id(scope, field.task_id),
+         {:ok, deleted} <- Repo.delete(field) do
       Enum.each(files, fn {task_id, submission_id, stored} ->
         Tasky.Uploads.delete_task_submission_file_from_disk(task_id, submission_id, stored)
       end)
@@ -1154,7 +1122,8 @@ defmodule Tasky.Tasks do
   def put_submission_file(%TaskSubmission{} = submission, %TaskUploadField{} = field, attrs) do
     result =
       Repo.transaction(fn ->
-        lock_for_file_change!(submission)
+        submission |> lock_for_file_change!() |> ensure_files_editable!()
+
         old = get_submission_file(submission, field.id)
 
         changeset =
@@ -1185,7 +1154,7 @@ defmodule Tasky.Tasks do
   def delete_submission_file(%TaskSubmission{} = submission, %TaskSubmissionFile{} = file) do
     result =
       Repo.transaction(fn ->
-        lock_for_file_change!(submission)
+        submission |> lock_for_file_change!() |> ensure_files_editable!()
 
         case Repo.delete(file) do
           {:ok, deleted} -> deleted
@@ -1206,6 +1175,17 @@ defmodule Tasky.Tasks do
   # submission does not pin rows in task_submission_files.
   defp lock_for_file_change!(%TaskSubmission{} = submission) do
     Repo.lock_one!(TaskSubmission, submission.id)
+  end
+
+  # Rolls the surrounding transaction back unless the student may still edit the
+  # submission. Same reasoning as `save_student_answers/3`, which gates the
+  # answer doc — and the same reason it belongs here rather than in the
+  # LiveView: the socket's struct is from mount and may be stale, so a late or
+  # replayed event would otherwise still change the files of a completed unit.
+  defp ensure_files_editable!(%TaskSubmission{} = submission) do
+    if submission.status in @editable_statuses,
+      do: :ok,
+      else: Repo.rollback(:not_editable)
   end
 
   defp delete_submission_file_bytes(submission, stored_filename) do

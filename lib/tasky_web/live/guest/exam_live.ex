@@ -763,15 +763,24 @@ defmodule TaskyWeb.Guest.ExamLive do
     {:noreply, cancel_upload(socket, field_upload_name(field_id), ref)}
   end
 
+  # Whether files may still change is decided by the context against the locked
+  # rows, not by the `submitted` flag on this socket's struct — that one is from
+  # mount, and it never covered the exam's status at all.
   def handle_event("delete_answer_file", %{"field-id" => field_id}, socket) do
     submission = socket.assigns.submission
 
-    with false <- submission.submitted,
-         file when not is_nil(file) <- Exams.get_submission_file(submission, field_id),
-         {:ok, _} <- Exams.delete_submission_file(submission, file) do
-      {:noreply, refresh_submission_files(socket)}
-    else
-      _ -> {:noreply, put_flash(socket, :error, "Datei konnte nicht gelöscht werden.")}
+    case Exams.get_submission_file(submission, field_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Datei konnte nicht gelöscht werden.")}
+
+      file ->
+        case Exams.delete_submission_file(submission, file) do
+          {:ok, _} ->
+            {:noreply, refresh_submission_files(socket)}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, file_save_error_message(reason))}
+        end
     end
   end
 
@@ -887,13 +896,8 @@ defmodule TaskyWeb.Guest.ExamLive do
           {:ok, _file} ->
             {:noreply, refresh_submission_files(socket)}
 
-          {:error, _reason} ->
-            {:noreply,
-             put_flash(
-               socket,
-               :error,
-               "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
-             )}
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, file_save_error_message(reason))}
         end
       end
     else

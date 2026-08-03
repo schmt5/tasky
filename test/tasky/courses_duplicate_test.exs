@@ -123,7 +123,11 @@ defmodule Tasky.CoursesDuplicateTest do
         Tasky.Uploads.save_task_attachment(task.id, tmp_file("bytes"), "arbeitsblatt.pdf")
 
       {:ok, attachment} =
-        Tasks.create_task_attachment(task, Map.put(stored, :original_name, "arbeitsblatt.pdf"))
+        Tasks.create_task_attachment(
+          scope,
+          task,
+          Map.put(stored, :original_name, "arbeitsblatt.pdf")
+        )
 
       assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
       assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
@@ -145,7 +149,7 @@ defmodule Tasky.CoursesDuplicateTest do
       task = task_fixture(scope, %{name: "Mit Abgabe", position: 0, course_id: course.id})
 
       {:ok, _field} =
-        Tasks.create_task_upload_field(task, %{
+        Tasks.create_task_upload_field(scope, task, %{
           "label" => "Word-Datei",
           "instruction" => "Bearbeitet hochladen",
           "allowed_types" => ["docx"],
@@ -225,7 +229,9 @@ defmodule Tasky.CoursesDuplicateTest do
         })
 
       {:ok, stored} = Tasky.Uploads.save_task_attachment(task.id, tmp_file("bytes"), "a.pdf")
-      {:ok, _} = Tasks.create_task_attachment(task, Map.put(stored, :original_name, "a.pdf"))
+
+      {:ok, _} =
+        Tasks.create_task_attachment(scope, task, Map.put(stored, :original_name, "a.pdf"))
 
       Tasky.ProbeStorage.install()
 
@@ -281,7 +287,11 @@ defmodule Tasky.CoursesDuplicateTest do
         Tasky.Uploads.save_task_attachment(task.id, tmp_file("bytes"), "arbeitsblatt.pdf")
 
       {:ok, attachment} =
-        Tasks.create_task_attachment(task, Map.put(stored, :original_name, "arbeitsblatt.pdf"))
+        Tasks.create_task_attachment(
+          scope,
+          task,
+          Map.put(stored, :original_name, "arbeitsblatt.pdf")
+        )
 
       %{task: task, filename: filename, attachment: attachment}
     end

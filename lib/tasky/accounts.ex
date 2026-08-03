@@ -195,21 +195,44 @@ defmodule Tasky.Accounts do
   end
 
   @doc """
-  Resets a user's password (admin action).
+  Resets a user's password (admin action) and invalidates every session the
+  user has open.
+
+  Returns the deleted tokens alongside the user: a session token is only half
+  revoked once its row is gone — a LiveView socket that is already connected
+  keeps running until it reconnects — so the web layer still has to disconnect
+  them (`TaskyWeb.UserAuth.disconnect_sessions/1`).
 
   ## Examples
 
       iex> admin_reset_password(user, "new_password123")
-      {:ok, %User{}}
+      {:ok, {%User{}, [%UserToken{}]}}
 
       iex> admin_reset_password(user, "short")
       {:error, %Ecto.Changeset{}}
 
   """
-  def admin_reset_password(user, new_password) do
-    user
-    |> User.password_changeset(%{password: new_password})
-    |> Repo.update()
+  def admin_reset_password(scope, user, new_password) do
+    with :ok <- Tasky.Policy.authorize_admin(scope) do
+      do_admin_reset_password(user, new_password)
+    end
+  end
+
+  defp do_admin_reset_password(user, new_password) do
+    Repo.transaction(fn ->
+      case user |> User.password_changeset(%{password: new_password}) |> Repo.update() do
+        {:ok, updated} ->
+          {_count, tokens} =
+            Repo.delete_all(
+              from(t in UserToken.by_user_and_contexts_query(user, :all), select: t)
+            )
+
+          {updated, tokens}
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   ## Session
@@ -377,9 +400,11 @@ defmodule Tasky.Accounts do
   @doc """
   Admin update of a user's firstname, lastname, and email.
   """
-  def admin_update_user(user, attrs) do
-    user
-    |> User.admin_update_changeset(attrs)
-    |> Repo.update()
+  def admin_update_user(scope, user, attrs) do
+    with :ok <- Tasky.Policy.authorize_admin(scope) do
+      user
+      |> User.admin_update_changeset(attrs)
+      |> Repo.update()
+    end
   end
 end

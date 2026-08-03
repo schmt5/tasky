@@ -22,6 +22,15 @@ defmodule TaskyWeb.TaskImageApiController do
       {:error, :too_large} ->
         json_error(conn, :request_entity_too_large, "Bild ist zu gross (max. 10 MB).")
 
+      # A storage outage is transient, so it must not come back as a 4xx the
+      # client treats as final.
+      {:error, :storage_failed} ->
+        json_error(
+          conn,
+          :service_unavailable,
+          "Speicher nicht erreichbar. Bitte erneut versuchen."
+        )
+
       {:error, _} ->
         json_error(conn, :unprocessable_entity, "Bild konnte nicht gespeichert werden.")
     end

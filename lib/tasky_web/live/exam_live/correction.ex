@@ -314,19 +314,27 @@ defmodule TaskyWeb.ExamLive.Correction do
       |> assign(:submissions, submissions)
       |> assign(:summary, correction_summary(socket.assigns.parts, submissions))
 
-    if total == 0 do
-      {:noreply, socket}
-    else
-      msg =
-        case errors do
-          [] ->
-            "Auto-Korrektur abgeschlossen (#{total})."
+    cond do
+      # A crashed run reports no jobs but a non-empty error list; without this
+      # branch it would clear the progress bar and say nothing at all, leaving
+      # the teacher believing the exam had been corrected.
+      total == 0 and errors != [] ->
+        {:noreply,
+         put_flash(socket, :error, "Auto-Korrektur fehlgeschlagen. Bitte erneut versuchen.")}
 
-          _ ->
-            "Auto-Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen."
-        end
+      total == 0 ->
+        {:noreply, socket}
 
-      {:noreply, put_flash(socket, :info, msg)}
+      errors == [] ->
+        {:noreply, put_flash(socket, :info, "Auto-Korrektur abgeschlossen (#{total}).")}
+
+      true ->
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           "Auto-Korrektur abgeschlossen: #{total - length(errors)}/#{total} ok, #{length(errors)} fehlgeschlagen."
+         )}
     end
   end
 

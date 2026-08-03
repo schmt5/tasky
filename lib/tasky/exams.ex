@@ -65,14 +65,45 @@ defmodule Tasky.Exams do
 
   @doc """
   Duplicates an existing exam under the given (caller-provided, localized)
-  name. The copy is always in "draft" status with no enrollment_token. If SEB
-  is enabled, a fresh quit password is generated.
+  name, including its content images, teacher attachments and student upload
+  fields. Submissions and the files students uploaded are deliberately left
+  behind — a duplicate starts without any student data.
+
+  The copy is always in "draft" status with no enrollment_token. If SEB is
+  enabled, a fresh quit password is generated.
   """
   def duplicate_exam(scope, %Exam{} = source, name) do
+    with {:ok, exam, jobs} <- duplicate_exam_records(scope, source, name) do
+      Tasky.Uploads.run_copies(jobs)
+      {:ok, exam}
+    end
+  end
+
+  @doc """
+  Writes a duplicate's records in one transaction and returns
+  `{:ok, exam, copy_jobs}`.
+
+  Performs no storage I/O whatsoever — a DB connection must never be held
+  across object-storage round trips; see `Tasky.Courses.duplicate_course/3`.
+  """
+  def duplicate_exam_records(scope, %Exam{} = source, name) do
+    with :ok <- Policy.authorize(scope, source.teacher_id) do
+      Repo.transaction(fn ->
+        case insert_exam_duplicate(scope, source, name) do
+          {:ok, exam, jobs} -> {exam, jobs}
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+      |> case do
+        {:ok, {exam, jobs}} -> {:ok, exam, jobs}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  defp insert_exam_duplicate(scope, source, name) do
     attrs = %{
       "name" => String.slice(name, 0, 255),
-      "content" => source.content || %{},
-      "sample_solution" => source.sample_solution || %{},
       "sample_solution_points" => source.sample_solution_points || %{},
       "sample_solution_block_points" => source.sample_solution_block_points || %{},
       "seb_enabled" => source.seb_enabled,
@@ -81,9 +112,92 @@ defmodule Tasky.Exams do
       # status defaults to "draft" via schema
       # enrollment_token stays nil
       # teacher_id set from scope via create_changeset
+      # content and sample_solution follow in a second step: the image URLs
+      # they carry can only be rewritten once the copy has an id
     }
 
-    create_exam(scope, attrs)
+    with {:ok, exam} <- create_exam(scope, attrs),
+         {:ok, exam, image_jobs} <- copy_exam_content(exam, source),
+         {:ok, attachment_jobs} <- copy_exam_attachments(scope, exam, source),
+         :ok <- copy_exam_upload_fields(scope, exam, source) do
+      {:ok, exam, image_jobs ++ attachment_jobs}
+    end
+  end
+
+  # Both the exam body and the stored model answers can carry content images (a
+  # teacher can paste one into a model answer), so both go through the
+  # rewriter — otherwise the copy would keep pointing at the source's bytes and
+  # go blank the moment the original is deleted. `run_copies/2` dedups by
+  # destination, so an image referenced from both is still copied once.
+  defp copy_exam_content(exam, %Exam{} = source) do
+    {content, content_jobs} =
+      Tasky.Uploads.plan_content_image_copies(source.content || %{}, :exams, source.id, exam.id)
+
+    {sample_solution, sample_jobs} =
+      Tasky.Uploads.plan_content_image_copies(
+        source.sample_solution || %{},
+        :exams,
+        source.id,
+        exam.id
+      )
+
+    with {:ok, exam} <-
+           exam
+           |> Exam.changeset(%{content: content, sample_solution: sample_solution})
+           |> Repo.update() do
+      {:ok, exam, content_jobs ++ sample_jobs}
+    end
+  end
+
+  defp copy_exam_attachments(scope, exam, source) do
+    source
+    |> list_exam_attachments()
+    |> Enum.reduce_while({:ok, []}, fn attachment, {:ok, jobs} ->
+      with {:ok, stored_filename, job} <-
+             Tasky.Uploads.plan_attachment_copy(
+               :exams,
+               source.id,
+               exam.id,
+               attachment.stored_filename
+             ),
+           {:ok, _attachment} <-
+             create_exam_attachment(scope, exam, %{
+               stored_filename: stored_filename,
+               original_name: attachment.original_name,
+               content_type: attachment.content_type,
+               size: attachment.size
+             }) do
+        {:cont, {:ok, [job | jobs]}}
+      else
+        # A stored filename we cannot build a safe storage key from is the one
+        # case worth skipping outright — there is nothing to point a record at.
+        {:error, :invalid} ->
+          {:cont, {:ok, jobs}}
+
+        {:error, changeset} ->
+          {:halt, {:error, changeset}}
+      end
+    end)
+    |> case do
+      {:ok, jobs} -> {:ok, Enum.reverse(jobs)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp copy_exam_upload_fields(scope, exam, source) do
+    source
+    |> list_upload_fields()
+    |> Enum.reduce_while(:ok, fn field, _acc ->
+      case create_upload_field(scope, exam, %{
+             "label" => field.label,
+             "instruction" => field.instruction,
+             "allowed_types" => field.allowed_types,
+             "required" => field.required
+           }) do
+        {:ok, _field} -> {:cont, :ok}
+        {:error, changeset} -> {:halt, {:error, changeset}}
+      end
+    end)
   end
 
   @doc """
@@ -339,20 +453,20 @@ defmodule Tasky.Exams do
   """
   def update_exam_submission_content(%ExamSubmission{} = submission, content)
       when is_map(content) do
-    submission = Repo.preload(submission, :exam, force: true)
+    # Gate and write run in one transaction against locked rows: an autosave
+    # already in flight when the student hits submit must not land content on a
+    # submission that is by then handed in (TOCTOU). This is the hottest write
+    # path in the app — one keystroke debounce per student — so the transaction
+    # holds nothing but the two locks, the check and the update.
+    Repo.transaction(fn ->
+      {exam, locked} = lock_submission_for_write!(submission)
+      ensure_submission_writable!(exam, locked)
 
-    cond do
-      submission.submitted ->
-        {:error, :already_submitted}
-
-      submission.exam.status != "running" ->
-        {:error, :exam_not_running}
-
-      true ->
-        submission
-        |> ExamSubmission.content_changeset(%{content: content})
-        |> Repo.update()
-    end
+      case locked |> ExamSubmission.content_changeset(%{content: content}) |> Repo.update() do
+        {:ok, updated} -> updated
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc """
@@ -402,6 +516,37 @@ defmodule Tasky.Exams do
     end
   end
 
+  # Locks the rows every student-facing write to a submission needs: the exam
+  # FOR SHARE (its status is only read, as a guard) and the submission FOR
+  # UPDATE. Same order and modes as `submit_exam_submission/1` above, so none of
+  # these writes can deadlock against a submit.
+  #
+  # For file changes the submission lock does double duty: the submit gate
+  # counts this submission's files, and a row lock on the submission does *not*
+  # pin rows in exam_submission_files — so without taking the same lock here, a
+  # required file could be replaced or deleted between that count and the submit
+  # write.
+  defp lock_submission_for_write!(%ExamSubmission{} = submission) do
+    exam = Repo.lock_one!(Exam, submission.exam_id, :share)
+    {exam, Repo.lock_one!(ExamSubmission, submission.id)}
+  end
+
+  # Rolls the surrounding transaction back unless the student may still write to
+  # this submission: only while the exam runs and nothing is handed in. The one
+  # gate behind the answer doc *and* the answer files.
+  #
+  # It is checked here, against the freshly locked rows, rather than in the
+  # LiveView, because a LiveView holds the submission it loaded at mount: a
+  # stale socket, a late autosave or a replayed event would otherwise still
+  # mutate a handed-in submission.
+  defp ensure_submission_writable!(%Exam{} = exam, %ExamSubmission{} = submission) do
+    cond do
+      submission.submitted -> Repo.rollback(:already_submitted)
+      exam.status != "running" -> Repo.rollback(:exam_not_running)
+      true -> :ok
+    end
+  end
+
   # Domain events on the "exam_events" topic — consumed by the correction
   # orchestrator (Tasky.AI.CorrectionOrchestrator), never by this module, so
   # the Exams ↔ BulkCorrectionRunner dependency stays one-way.
@@ -437,15 +582,19 @@ defmodule Tasky.Exams do
     end
   end
 
-  # Grading writes go through the exam owner (or an admin / the :system
-  # scope of a trusted background job); one indexed lookup resolves the
-  # submission's owning teacher.
-  defp authorize_submission(scope, %ExamSubmission{} = submission) do
-    teacher_id =
-      Repo.one!(from e in Exam, where: e.id == ^submission.exam_id, select: e.teacher_id)
-
-    Policy.authorize(scope, teacher_id)
+  # Writes to anything hanging off an exam go through the exam owner (or an
+  # admin / the :system scope of a trusted background job). One indexed lookup
+  # resolves the owning teacher from the child's exam_id; an exam that is gone
+  # is not an authorization pass.
+  defp authorize_exam_id(scope, exam_id) do
+    case Repo.one(from e in Exam, where: e.id == ^exam_id, select: e.teacher_id) do
+      nil -> {:error, :unauthorized}
+      teacher_id -> Policy.authorize(scope, teacher_id)
+    end
   end
+
+  defp authorize_submission(scope, %ExamSubmission{} = submission),
+    do: authorize_exam_id(scope, submission.exam_id)
 
   @doc ~S"""
   Marks a single part of a submission as corrected (idempotent).
@@ -485,6 +634,27 @@ defmodule Tasky.Exams do
     submission
     |> Ecto.Changeset.change(%{corrected_parts: parts})
     |> update_and_broadcast(&broadcast_submission_change/1)
+  end
+
+  # One place for the read-modify-write over the exam's JSON columns
+  # (`sample_solution_points`, `sample_solution_block_points`,
+  # `ai_correction_config`). `fun` gets the row locked FOR UPDATE and returns
+  # the changes map, so the base map it merges into is always the latest
+  # committed one — never the possibly-stale struct a LiveView is holding.
+  # Without the lock, two quick clicks in the Musterlösung tab (or the
+  # "auto-correct all" toggle landing while a single toggle is in flight) both
+  # start from the same base map and one of the writes is lost. This is the
+  # same rule the submission-side setters follow; see the lock-order notes in
+  # ARCHITECTURE.md before adding a second lock in here.
+  defp update_exam_json(%Exam{} = exam, fun) when is_function(fun, 1) do
+    Repo.transaction(fn ->
+      locked = Repo.lock_one!(Exam, exam.id)
+
+      case locked |> Ecto.Changeset.change(fun.(locked)) |> Repo.update() do
+        {:ok, updated} -> updated
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc """
@@ -713,18 +883,18 @@ defmodule Tasky.Exams do
   end
 
   defp do_set_sample_solution_part_points(exam, part_id, points) do
-    current = exam.sample_solution_points || %{}
+    update_exam_json(exam, fn locked ->
+      current = locked.sample_solution_points || %{}
 
-    new_map =
-      if is_nil(points) do
-        Map.delete(current, part_id)
-      else
-        Map.put(current, part_id, points)
-      end
+      new_map =
+        if is_nil(points) do
+          Map.delete(current, part_id)
+        else
+          Map.put(current, part_id, points)
+        end
 
-    exam
-    |> Ecto.Changeset.change(%{sample_solution_points: new_map})
-    |> Repo.update()
+      %{sample_solution_points: new_map}
+    end)
   end
 
   @doc """
@@ -783,12 +953,14 @@ defmodule Tasky.Exams do
   end
 
   defp do_set_sample_solution_block_point(exam, part_id, answer_id, points) do
-    part_map =
-      (exam.sample_solution_block_points || %{})
-      |> Map.get(part_id, %{})
-      |> Map.put(answer_id, normalize_block_points(points))
+    update_exam_json(exam, fn locked ->
+      part_map =
+        (locked.sample_solution_block_points || %{})
+        |> Map.get(part_id, %{})
+        |> Map.put(answer_id, normalize_block_points(points))
 
-    put_custom_block_points(exam, part_id, part_map)
+      custom_block_points_changes(locked, part_id, part_map)
+    end)
   end
 
   @doc """
@@ -803,22 +975,24 @@ defmodule Tasky.Exams do
   end
 
   defp do_enable_custom_block_points(exam, part_id) do
-    blocks = exam_part_blocks(exam, part_id)
-    max_points = Map.get(exam.sample_solution_points || %{}, part_id)
+    update_exam_json(exam, fn locked ->
+      blocks = exam_part_blocks(locked, part_id)
+      max_points = Map.get(locked.sample_solution_points || %{}, part_id)
 
-    share =
-      if is_number(max_points) and blocks != [] do
-        normalize_block_points(max_points / length(blocks))
-      else
-        0
-      end
+      share =
+        if is_number(max_points) and blocks != [] do
+          normalize_block_points(max_points / length(blocks))
+        else
+          0
+        end
 
-    part_map =
-      blocks
-      |> Enum.filter(& &1.answer_id)
-      |> Map.new(fn b -> {b.answer_id, share} end)
+      part_map =
+        blocks
+        |> Enum.filter(& &1.answer_id)
+        |> Map.new(fn b -> {b.answer_id, share} end)
 
-    put_custom_block_points(exam, part_id, part_map)
+      custom_block_points_changes(locked, part_id, part_map)
+    end)
   end
 
   @doc """
@@ -827,25 +1001,27 @@ defmodule Tasky.Exams do
   """
   def clear_custom_block_points(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      block_points = Map.delete(exam.sample_solution_block_points || %{}, part_id)
-
-      exam
-      |> Ecto.Changeset.change(%{sample_solution_block_points: block_points})
-      |> Repo.update()
+      update_exam_json(exam, fn locked ->
+        %{
+          sample_solution_block_points:
+            Map.delete(locked.sample_solution_block_points || %{}, part_id)
+        }
+      end)
     end
   end
 
-  defp put_custom_block_points(%Exam{} = exam, part_id, part_map) do
-    block_points = Map.put(exam.sample_solution_block_points || %{}, part_id, part_map)
+  # Changes that put a part's custom distribution in place. The part's total in
+  # `sample_solution_points` is always the sum of its per-block values, so the
+  # two columns only ever move together. Pure — the caller supplies the locked
+  # exam and writes the result.
+  defp custom_block_points_changes(%Exam{} = exam, part_id, part_map) do
     total = part_map |> Map.values() |> Enum.sum() |> normalize_block_points()
-    points = Map.put(exam.sample_solution_points || %{}, part_id, total)
 
-    exam
-    |> Ecto.Changeset.change(%{
-      sample_solution_block_points: block_points,
-      sample_solution_points: points
-    })
-    |> Repo.update()
+    %{
+      sample_solution_block_points:
+        Map.put(exam.sample_solution_block_points || %{}, part_id, part_map),
+      sample_solution_points: Map.put(exam.sample_solution_points || %{}, part_id, total)
+    }
   end
 
   defp normalize_block_points(n) when is_number(n) do
@@ -995,6 +1171,21 @@ defmodule Tasky.Exams do
 
   # Pure computation of the three-column update for one verdict change.
   defp block_verdict_changes(submission, exam, part_id, index, verdict) do
+    part_verdict_changes(submission, exam, part_id, %{index => verdict})
+  end
+
+  # Same, for any number of blocks of one part at once.
+  #
+  # Doing several blocks together is not just batching: the part total, the
+  # ✅/🟡/❌ markers and the doc reassembly are whole-part operations either
+  # way, and only resolving each index's answerId and normalizing its points is
+  # per-block. So a bulk change costs one split of the doc and one write, where
+  # looping over `block_verdict_changes/5` cost one of each per block.
+  #
+  # `:only_unset` (for the mark-all defaults) keeps blocks the teacher already
+  # judged and silently skips indices with no answer-bearing block, rather than
+  # failing the whole operation over one.
+  defp part_verdict_changes(submission, exam, part_id, verdicts_by_index, opts \\ []) do
     doc = correction_content(submission)
     parts = split_content_into_parts(doc)
     preamble = content_preamble(doc)
@@ -1006,51 +1197,53 @@ defmodule Tasky.Exams do
       part ->
         blocks = NodePatcher.list_answer_blocks(part.nodes)
 
-        # Verdicts are keyed by the block's stable answerId — inserting or
-        # reordering blocks must never shift existing verdicts.
-        case Enum.find(blocks, &(&1.index == index)) do
-          %{answer_id: key} when is_binary(key) ->
-            ctx = %{
-              part_id: part_id,
-              parts: parts,
-              preamble: preamble,
-              part: part,
-              blocks: blocks,
-              index: index,
-              key: key
-            }
-
-            block_verdict_changes_for_key(submission, exam, ctx, verdict)
-
-          _ ->
-            {:error, :unknown_block}
+        with {:ok, keyed} <- key_verdicts(submission, blocks, verdicts_by_index, opts) do
+          ctx = %{part_id: part_id, parts: parts, preamble: preamble, part: part, blocks: blocks}
+          {:ok, part_verdict_changes_for_keys(submission, exam, ctx, keyed)}
         end
     end
   end
 
-  defp block_verdict_changes_for_key(submission, exam, ctx, verdict) do
-    %{
-      part_id: part_id,
-      parts: parts,
-      preamble: preamble,
-      part: part,
-      blocks: blocks,
-      index: index,
-      key: key
-    } = ctx
+  # Resolves each requested block index to the block's stable answerId, so that
+  # inserting or reordering blocks never shifts existing verdicts. Returns
+  # `%{answer_id => {index, verdict}}`.
+  defp key_verdicts(submission, blocks, verdicts_by_index, opts) do
+    only_unset? = Keyword.get(opts, :only_unset, false)
+    explicit = submission.block_verdicts || %{}
+
+    Enum.reduce_while(verdicts_by_index, {:ok, %{}}, fn {index, verdict}, {:ok, acc} ->
+      case Enum.find(blocks, &(&1.index == index)) do
+        %{answer_id: key} when is_binary(key) ->
+          # Under :only_unset a block the teacher has already judged keeps that
+          # verdict — a default must never overwrite an explicit choice.
+          if only_unset? and (is_nil(verdict) or Map.has_key?(explicit, key)) do
+            {:cont, {:ok, acc}}
+          else
+            {:cont, {:ok, Map.put(acc, key, {index, verdict})}}
+          end
+
+        _ ->
+          if only_unset?,
+            do: {:cont, {:ok, acc}},
+            else: {:halt, {:error, :unknown_block}}
+      end
+    end)
+  end
+
+  defp part_verdict_changes_for_keys(_submission, _exam, _ctx, keyed) when keyed == %{}, do: %{}
+
+  defp part_verdict_changes_for_keys(submission, exam, ctx, keyed) do
+    %{part_id: part_id, parts: parts, preamble: preamble, part: part, blocks: blocks} = ctx
 
     points_by_index = resolve_block_points(exam, part_id, blocks)
 
-    verdict = normalize_verdict(verdict, points_by_index && points_by_index[index])
-
-    current_verdicts = submission.block_verdicts || %{}
-
     new_verdicts =
-      if is_nil(verdict) do
-        Map.delete(current_verdicts, key)
-      else
-        Map.put(current_verdicts, key, verdict)
-      end
+      Enum.reduce(keyed, submission.block_verdicts || %{}, fn {key, {index, verdict}}, acc ->
+        case normalize_verdict(verdict, points_by_index && points_by_index[index]) do
+          nil -> Map.delete(acc, key)
+          normalized -> Map.put(acc, key, normalized)
+        end
+      end)
 
     # Effective verdict for each block: explicit teacher choice if any,
     # otherwise fall back to the verdict inferred from the existing
@@ -1076,14 +1269,11 @@ defmodule Tasky.Exams do
         if p.id == part_id, do: %{p | nodes: rewritten_nodes}, else: p
       end)
 
-    new_doc = assemble_parts_into_content(preamble, new_parts)
-
-    {:ok,
-     %{
-       block_verdicts: new_verdicts,
-       corrected_content: new_doc,
-       points_per_part: new_points_per_part
-     }}
+    %{
+      block_verdicts: new_verdicts,
+      corrected_content: assemble_parts_into_content(preamble, new_parts),
+      points_per_part: new_points_per_part
+    }
   end
 
   defp broadcast_submission_change(submission) do
@@ -1195,21 +1385,7 @@ defmodule Tasky.Exams do
           exam = Repo.lock_one!(Exam, exam.id, :share)
 
           for submission <- lock_exam_submissions!(exam) do
-            submission =
-              defaults
-              |> Map.get(submission.id, %{})
-              |> Enum.reduce(submission, fn {index, verdict}, acc ->
-                apply_default_verdict(acc, exam, part_id, index, verdict)
-              end)
-
-            parts = Enum.uniq([part_id | submission.corrected_parts || []])
-
-            case submission
-                 |> Ecto.Changeset.change(%{corrected_parts: parts})
-                 |> Repo.update() do
-              {:ok, updated} -> updated
-              {:error, changeset} -> Repo.rollback(changeset)
-            end
+            mark_one_corrected!(submission, exam, part_id, Map.get(defaults, submission.id, %{}))
           end
         end)
 
@@ -1220,21 +1396,26 @@ defmodule Tasky.Exams do
     end
   end
 
-  # Persists a default verdict only where the teacher made no explicit choice.
-  defp apply_default_verdict(submission, exam, part_id, index, verdict) do
-    if verdict && explicit_block_verdict(submission, part_id, index) == nil do
-      case block_verdict_changes(submission, exam, part_id, index, verdict) do
-        {:ok, changes} ->
-          case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
-            {:ok, updated} -> updated
-            {:error, changeset} -> Repo.rollback(changeset)
-          end
-
-        {:error, _reason} ->
-          submission
+  # One submission, one write: the whole part's default verdicts and the
+  # corrected-parts flag go into a single changeset. This runs while every
+  # submission row of the exam is locked FOR UPDATE, so a write per (submission,
+  # block) — which is what looping over the single-block path amounted to — kept
+  # the whole class's rows locked far longer than it needed to.
+  defp mark_one_corrected!(submission, exam, part_id, defaults) do
+    changes =
+      case part_verdict_changes(submission, exam, part_id, defaults, only_unset: true) do
+        {:ok, changes} -> changes
+        # An unknown part is nothing to fill in, but marking it corrected is
+        # still what the teacher asked for.
+        {:error, _reason} -> %{}
       end
-    else
-      submission
+
+    changes =
+      Map.put(changes, :corrected_parts, Enum.uniq([part_id | submission.corrected_parts || []]))
+
+    case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
+      {:ok, updated} -> updated
+      {:error, changeset} -> Repo.rollback(changeset)
     end
   end
 
@@ -1358,12 +1539,9 @@ defmodule Tasky.Exams do
   def update_ai_correction_config(scope, %Exam{} = exam, part_id, config)
       when is_binary(part_id) and is_map(config) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      current = exam.ai_correction_config || %{}
-      updated = Map.put(current, part_id, config)
-
-      exam
-      |> Ecto.Changeset.change(%{ai_correction_config: updated})
-      |> Repo.update()
+      update_exam_json(exam, fn locked ->
+        %{ai_correction_config: Map.put(locked.ai_correction_config || %{}, part_id, config)}
+      end)
     end
   end
 
@@ -1374,17 +1552,16 @@ defmodule Tasky.Exams do
   """
   def update_ai_correction_config_bulk(scope, %Exam{} = exam, updates) when is_map(updates) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      current = exam.ai_correction_config || %{}
+      update_exam_json(exam, fn locked ->
+        merged =
+          Enum.reduce(updates, locked.ai_correction_config || %{}, fn {part_id, new_config},
+                                                                      acc ->
+            existing = Map.get(acc, part_id, %{})
+            Map.put(acc, part_id, Map.merge(existing, new_config))
+          end)
 
-      merged =
-        Enum.reduce(updates, current, fn {part_id, new_config}, acc ->
-          existing = Map.get(acc, part_id, %{})
-          Map.put(acc, part_id, Map.merge(existing, new_config))
-        end)
-
-      exam
-      |> Ecto.Changeset.change(%{ai_correction_config: merged})
-      |> Repo.update()
+        %{ai_correction_config: merged}
+      end)
     end
   end
 
@@ -1720,22 +1897,25 @@ defmodule Tasky.Exams do
   Creates an attachment record for a file already stored on disk (see
   `Tasky.Uploads.save_exam_attachment/3`).
   """
-  def create_exam_attachment(%Exam{} = exam, attrs) do
-    position =
-      Repo.one(
-        from a in ExamAttachment,
-          where: a.exam_id == ^exam.id,
-          select: coalesce(max(a.position), -1)
-      ) + 1
+  def create_exam_attachment(scope, %Exam{} = exam, attrs) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      position =
+        Repo.one(
+          from a in ExamAttachment,
+            where: a.exam_id == ^exam.id,
+            select: coalesce(max(a.position), -1)
+        ) + 1
 
-    %ExamAttachment{exam_id: exam.id}
-    |> ExamAttachment.changeset(Map.put(attrs, :position, position))
-    |> Repo.insert()
+      %ExamAttachment{exam_id: exam.id}
+      |> ExamAttachment.changeset(Map.put(attrs, :position, position))
+      |> Repo.insert()
+    end
   end
 
   @doc "Deletes an attachment record and its file on disk."
-  def delete_exam_attachment(%ExamAttachment{} = attachment) do
-    with {:ok, deleted} <- Repo.delete(attachment) do
+  def delete_exam_attachment(scope, %ExamAttachment{} = attachment) do
+    with :ok <- authorize_exam_id(scope, attachment.exam_id),
+         {:ok, deleted} <- Repo.delete(attachment) do
       Tasky.Uploads.delete_exam_attachment_file(deleted.exam_id, deleted.stored_filename)
       {:ok, deleted}
     end
@@ -1760,31 +1940,35 @@ defmodule Tasky.Exams do
   end
 
   @doc "Creates an upload field, appended at the end."
-  def create_upload_field(%Exam{} = exam, attrs) do
-    position =
-      Repo.one(
-        from f in ExamUploadField,
-          where: f.exam_id == ^exam.id,
-          select: coalesce(max(f.position), -1)
-      ) + 1
+  def create_upload_field(scope, %Exam{} = exam, attrs) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      position =
+        Repo.one(
+          from f in ExamUploadField,
+            where: f.exam_id == ^exam.id,
+            select: coalesce(max(f.position), -1)
+        ) + 1
 
-    %ExamUploadField{exam_id: exam.id}
-    |> ExamUploadField.changeset(Map.put(attrs, "position", position))
-    |> Repo.insert()
+      %ExamUploadField{exam_id: exam.id}
+      |> ExamUploadField.changeset(Map.put(attrs, "position", position))
+      |> Repo.insert()
+    end
   end
 
   @doc "Updates an upload field."
-  def update_upload_field(%ExamUploadField{} = field, attrs) do
-    field
-    |> ExamUploadField.changeset(attrs)
-    |> Repo.update()
+  def update_upload_field(scope, %ExamUploadField{} = field, attrs) do
+    with :ok <- authorize_exam_id(scope, field.exam_id) do
+      field
+      |> ExamUploadField.changeset(attrs)
+      |> Repo.update()
+    end
   end
 
   @doc """
   Deletes an upload field including all student files uploaded into it
   (records via FK cascade, bytes on disk explicitly).
   """
-  def delete_upload_field(%ExamUploadField{} = field) do
+  def delete_upload_field(scope, %ExamUploadField{} = field) do
     files =
       Repo.all(
         from sf in ExamSubmissionFile,
@@ -1793,7 +1977,8 @@ defmodule Tasky.Exams do
           select: {s.exam_id, sf.exam_submission_id, sf.stored_filename}
       )
 
-    with {:ok, deleted} <- Repo.delete(field) do
+    with :ok <- authorize_exam_id(scope, field.exam_id),
+         {:ok, deleted} <- Repo.delete(field) do
       Enum.each(files, fn {exam_id, submission_id, stored} ->
         Tasky.Uploads.delete_submission_file_from_disk(exam_id, submission_id, stored)
       end)
@@ -1851,7 +2036,9 @@ defmodule Tasky.Exams do
   def put_submission_file(%ExamSubmission{} = submission, %ExamUploadField{} = field, attrs) do
     result =
       Repo.transaction(fn ->
-        lock_for_file_change!(submission)
+        {exam, locked} = lock_submission_for_write!(submission)
+        ensure_submission_writable!(exam, locked)
+
         old = get_submission_file(submission, field.id)
 
         changeset =
@@ -1882,7 +2069,8 @@ defmodule Tasky.Exams do
   def delete_submission_file(%ExamSubmission{} = submission, %ExamSubmissionFile{} = file) do
     result =
       Repo.transaction(fn ->
-        lock_for_file_change!(submission)
+        {exam, locked} = lock_submission_for_write!(submission)
+        ensure_submission_writable!(exam, locked)
 
         case Repo.delete(file) do
           {:ok, deleted} -> deleted
@@ -1894,15 +2082,6 @@ defmodule Tasky.Exams do
       delete_submission_file_bytes(submission, deleted.stored_filename)
       {:ok, deleted}
     end
-  end
-
-  # `submit_exam_submission/1` locks the submission row and then counts this
-  # submission's files to gate the submit. Locking the same row before every file
-  # change makes the two mutually exclusive; without it a required file could be
-  # replaced or deleted between that count and the submit write, since a row lock
-  # on the submission does not pin rows in exam_submission_files.
-  defp lock_for_file_change!(%ExamSubmission{} = submission) do
-    Repo.lock_one!(ExamSubmission, submission.id)
   end
 
   defp delete_submission_file_bytes(submission, stored_filename) do

@@ -49,7 +49,7 @@ defmodule Tasky.CoursesDeleteTest do
     {:ok, stored} = Uploads.save_task_attachment(task.id, tmp_file("bytes"), "auftrag.pdf")
 
     {:ok, attachment} =
-      Tasks.create_task_attachment(task, Map.put(stored, :original_name, "auftrag.pdf"))
+      Tasks.create_task_attachment(scope, task, Map.put(stored, :original_name, "auftrag.pdf"))
 
     %{task: task, image: filename, attachment: attachment}
   end

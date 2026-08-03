@@ -23,4 +23,14 @@ defmodule Tasky.Policy do
   def authorize(scope, owner_id) do
     if can_manage?(scope, owner_id), do: :ok, else: {:error, :unauthorized}
   end
+
+  @doc """
+  `:ok` for admins only.
+
+  For the handful of operations that have no owner to compare against — one
+  user administering another — where `authorize/2` has nothing to work with.
+  """
+  def authorize_admin(:system), do: :ok
+  def authorize_admin(%Scope{user: %{role: "admin"}}), do: :ok
+  def authorize_admin(_scope), do: {:error, :unauthorized}
 end

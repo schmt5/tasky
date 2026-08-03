@@ -798,7 +798,7 @@ defmodule TaskyWeb.ExamLive.Content do
   def handle_event("delete_attachment", %{"id" => id}, socket) do
     with attachment when not is_nil(attachment) <-
            Exams.get_exam_attachment(socket.assigns.exam, id),
-         {:ok, _} <- Exams.delete_exam_attachment(attachment) do
+         {:ok, _} <- Exams.delete_exam_attachment(socket.assigns.current_scope, attachment) do
       {:noreply, assign(socket, :attachments, Exams.list_exam_attachments(socket.assigns.exam))}
     else
       _ -> {:noreply, put_flash(socket, :error, "Anhang konnte nicht gelöscht werden.")}
@@ -877,12 +877,12 @@ defmodule TaskyWeb.ExamLive.Content do
     result =
       case socket.assigns.editing_field_id do
         :new ->
-          Exams.create_upload_field(socket.assigns.exam, attrs)
+          Exams.create_upload_field(socket.assigns.current_scope, socket.assigns.exam, attrs)
 
         id ->
           case Exams.get_upload_field(socket.assigns.exam, id) do
             nil -> {:error, :not_found}
-            field -> Exams.update_upload_field(field, attrs)
+            field -> Exams.update_upload_field(socket.assigns.current_scope, field, attrs)
           end
       end
 
@@ -919,7 +919,7 @@ defmodule TaskyWeb.ExamLive.Content do
 
   def handle_event("delete_upload_field", %{"id" => id}, socket) do
     with field when not is_nil(field) <- Exams.get_upload_field(socket.assigns.exam, id),
-         {:ok, _} <- Exams.delete_upload_field(field) do
+         {:ok, _} <- Exams.delete_upload_field(socket.assigns.current_scope, field) do
       {:noreply, assign(socket, :upload_fields, Exams.list_upload_fields(socket.assigns.exam))}
     else
       _ -> {:noreply, put_flash(socket, :error, "Upload-Feld konnte nicht gelöscht werden.")}
@@ -1014,6 +1014,7 @@ defmodule TaskyWeb.ExamLive.Content do
             {:ok, meta} ->
               {:ok,
                Exams.create_exam_attachment(
+                 socket.assigns.current_scope,
                  exam,
                  Map.put(meta, :original_name, entry.client_name)
                )}
@@ -1027,13 +1028,8 @@ defmodule TaskyWeb.ExamLive.Content do
         {:ok, _attachment} ->
           {:noreply, assign(socket, :attachments, Exams.list_exam_attachments(exam))}
 
-        {:error, _reason} ->
-          {:noreply,
-           put_flash(
-             socket,
-             :error,
-             "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
-           )}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, file_save_error_message(reason))}
       end
     else
       {:noreply, socket}

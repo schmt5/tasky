@@ -179,10 +179,12 @@ defmodule Tasky.Courses do
   @doc """
   Updates a course.
   """
-  def update_course(%Course{} = course, attrs) do
-    course
-    |> Course.changeset(attrs)
-    |> Repo.update()
+  def update_course(scope, %Course{} = course, attrs) do
+    with :ok <- Tasky.Policy.authorize(scope, course.teacher_id) do
+      course
+      |> Course.changeset(attrs)
+      |> Repo.update()
+    end
   end
 
   @doc """

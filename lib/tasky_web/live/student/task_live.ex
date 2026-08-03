@@ -725,15 +725,24 @@ defmodule TaskyWeb.Student.TaskLive do
     {:noreply, cancel_upload(socket, field_upload_name(field_id), ref)}
   end
 
+  # Whether the submission may still be edited is decided by the context against
+  # the locked row, not by `@editable` here — that assign is from mount and a
+  # completed unit must not be mutable through a stale socket.
   def handle_event("delete_answer_file", %{"field-id" => field_id}, socket) do
     submission = socket.assigns.submission
 
-    with true <- socket.assigns.editable,
-         file when not is_nil(file) <- Tasks.get_submission_file(submission, field_id),
-         {:ok, _} <- Tasks.delete_submission_file(submission, file) do
-      {:noreply, refresh_submission_files(socket)}
-    else
-      _ -> {:noreply, put_flash(socket, :error, "Datei konnte nicht gelöscht werden.")}
+    case Tasks.get_submission_file(submission, field_id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Datei konnte nicht gelöscht werden.")}
+
+      file ->
+        case Tasks.delete_submission_file(submission, file) do
+          {:ok, _} ->
+            {:noreply, refresh_submission_files(socket)}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, file_save_error_message(reason))}
+        end
     end
   end
 
@@ -820,13 +829,8 @@ defmodule TaskyWeb.Student.TaskLive do
           {:ok, _file} ->
             {:noreply, refresh_submission_files(socket)}
 
-          {:error, _reason} ->
-            {:noreply,
-             put_flash(
-               socket,
-               :error,
-               "Datei konnte nicht gespeichert werden (Typ oder Grösse nicht erlaubt)."
-             )}
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, file_save_error_message(reason))}
         end
       end
     else

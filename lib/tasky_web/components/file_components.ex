@@ -72,4 +72,26 @@ defmodule TaskyWeb.FileComponents do
   def upload_error_message(:not_accepted), do: "Dieser Dateityp ist nicht erlaubt."
   def upload_error_message(:too_many_files), do: "Zu viele Dateien auf einmal."
   def upload_error_message(_), do: "Upload fehlgeschlagen."
+
+  @doc """
+  German message for a failure reason returned by `Tasky.Uploads` when storing
+  a file. A different vocabulary from `upload_error_message/1`, which covers
+  the client-side `allow_upload` rejections — these come back from the save
+  itself, after the bytes have arrived.
+  """
+  def file_save_error_message(:unsupported_type), do: "Dieser Dateityp ist nicht erlaubt."
+  def file_save_error_message(:too_large), do: "Datei ist zu gross (max. 25 MB)."
+  def file_save_error_message(:invalid_image), do: "Datei ist kein gültiges Bild."
+
+  def file_save_error_message(:storage_failed),
+    do: "Speicher nicht erreichbar. Bitte erneut versuchen."
+
+  def file_save_error_message(:already_submitted),
+    do: "Bereits abgegeben – Dateien können nicht mehr geändert werden."
+
+  def file_save_error_message(:not_editable),
+    do: "Diese Aufgabe ist abgeschlossen – Dateien können nicht mehr geändert werden."
+
+  def file_save_error_message(:exam_not_running), do: "Die Prüfung läuft nicht mehr."
+  def file_save_error_message(_), do: "Datei konnte nicht gespeichert werden."
 end

@@ -259,7 +259,7 @@ defmodule TaskyWeb.Admin.UserEditLive do
   end
 
   def handle_event("update_user", %{"user" => params}, socket) do
-    case Accounts.admin_update_user(socket.assigns.user, params) do
+    case Accounts.admin_update_user(socket.assigns.current_scope, socket.assigns.user, params) do
       {:ok, user} ->
         user = Accounts.reload_user_class(user)
 
@@ -292,8 +292,16 @@ defmodule TaskyWeb.Admin.UserEditLive do
   end
 
   def handle_event("reset_password", %{"password_reset" => %{"password" => password}}, socket) do
-    case Accounts.admin_reset_password(socket.assigns.user, password) do
-      {:ok, _user} ->
+    case Accounts.admin_reset_password(
+           socket.assigns.current_scope,
+           socket.assigns.user,
+           password
+         ) do
+      {:ok, {_user, expired_tokens}} ->
+        # Deleting the token rows stops the *next* request; already-connected
+        # LiveView sockets have to be kicked explicitly.
+        TaskyWeb.UserAuth.disconnect_sessions(expired_tokens)
+
         {:noreply,
          socket
          |> put_flash(:info, "Passwort für #{socket.assigns.user.email} wurde zurückgesetzt.")

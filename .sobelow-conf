@@ -7,6 +7,12 @@
   # fail (non-zero exit) on medium+ findings so CI can gate on it
   exit: "medium",
   threshold: "medium",
-  ignore: [],
+  # Config.Headers: false positive. The :browser pipeline does set secure
+  # browser headers, but through the private `put_csp_secure_browser_headers/2`
+  # plug rather than a direct `put_secure_browser_headers` call — the CSP has to
+  # be built at runtime because it depends on the storage adapter (see
+  # `TaskyWeb.ContentSecurityPolicy`), and sobelow cannot follow the
+  # indirection. Covered by test/tasky_web/content_security_policy_test.exs.
+  ignore: ["Config.Headers"],
   ignore_files: []
 ]

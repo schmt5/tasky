@@ -138,7 +138,11 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       {:ok, stored} = Tasky.Uploads.save_task_attachment(task.id, path, "arbeitsblatt.pdf")
 
       {:ok, _attachment} =
-        Tasks.create_task_attachment(task, Map.put(stored, :original_name, "arbeitsblatt.pdf"))
+        Tasks.create_task_attachment(
+          scope,
+          task,
+          Map.put(stored, :original_name, "arbeitsblatt.pdf")
+        )
 
       {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
       lv |> element("#duplicate-course") |> render_click()

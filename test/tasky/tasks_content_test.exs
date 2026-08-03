@@ -130,11 +130,12 @@ defmodule Tasky.TasksContentTest do
     end
 
     test "is blocked while a required upload is missing", %{
+      teacher_scope: teacher_scope,
       student_scope: scope,
       task: task
     } do
       {:ok, field} =
-        Tasks.create_task_upload_field(task, %{
+        Tasks.create_task_upload_field(teacher_scope, task, %{
           "label" => "Abgabe",
           "allowed_types" => ["pdf"],
           "required" => true
@@ -300,17 +301,24 @@ defmodule Tasky.TasksContentTest do
   end
 
   describe "attachments" do
-    test "create, list in position order, delete removes bytes", %{task: task} do
+    test "create, list in position order, delete removes bytes", %{
+      teacher_scope: scope,
+      task: task
+    } do
       {:ok, stored} =
         Tasky.Uploads.save_task_attachment(task.id, tmp_file("doc"), "arbeitsblatt.pdf")
 
       {:ok, a1} =
-        Tasks.create_task_attachment(task, Map.put(stored, :original_name, "arbeitsblatt.pdf"))
+        Tasks.create_task_attachment(
+          scope,
+          task,
+          Map.put(stored, :original_name, "arbeitsblatt.pdf")
+        )
 
       {:ok, stored2} = Tasky.Uploads.save_task_attachment(task.id, tmp_file("doc2"), "b.pdf")
 
       {:ok, a2} =
-        Tasks.create_task_attachment(task, Map.put(stored2, :original_name, "b.pdf"))
+        Tasks.create_task_attachment(scope, task, Map.put(stored2, :original_name, "b.pdf"))
 
       assert [^a1, ^a2] = Tasks.list_task_attachments(task)
       assert a1.position < a2.position
@@ -318,21 +326,24 @@ defmodule Tasky.TasksContentTest do
       {:ok, {:file, path}} = Tasky.Uploads.fetch_task_attachment(task.id, a1.stored_filename)
       assert File.exists?(path)
 
-      {:ok, _} = Tasks.delete_task_attachment(a1)
+      {:ok, _} = Tasks.delete_task_attachment(scope, a1)
       refute File.exists?(path)
       assert [^a2] = Tasks.list_task_attachments(task)
     end
   end
 
   describe "upload fields" do
-    test "requires at least one known type", %{task: task} do
+    test "requires at least one known type", %{teacher_scope: scope, task: task} do
       assert {:error, changeset} =
-               Tasks.create_task_upload_field(task, %{"label" => "X", "allowed_types" => []})
+               Tasks.create_task_upload_field(scope, task, %{
+                 "label" => "X",
+                 "allowed_types" => []
+               })
 
       assert %{allowed_types: _} = errors_on(changeset)
 
       assert {:error, changeset} =
-               Tasks.create_task_upload_field(task, %{
+               Tasks.create_task_upload_field(scope, task, %{
                  "label" => "X",
                  "allowed_types" => ["exe"]
                })
@@ -341,19 +352,26 @@ defmodule Tasky.TasksContentTest do
     end
 
     test "create appends, update changes, delete removes student files", %{
+      teacher_scope: teacher_scope,
       student_scope: scope,
       task: task
     } do
       {:ok, f1} =
-        Tasks.create_task_upload_field(task, %{"label" => "A", "allowed_types" => ["pdf"]})
+        Tasks.create_task_upload_field(teacher_scope, task, %{
+          "label" => "A",
+          "allowed_types" => ["pdf"]
+        })
 
       {:ok, f2} =
-        Tasks.create_task_upload_field(task, %{"label" => "B", "allowed_types" => ["docx"]})
+        Tasks.create_task_upload_field(teacher_scope, task, %{
+          "label" => "B",
+          "allowed_types" => ["docx"]
+        })
 
       assert f2.position > f1.position
       assert [^f1, ^f2] = Tasks.list_task_upload_fields(task)
 
-      {:ok, f1} = Tasks.update_task_upload_field(f1, %{"required" => true})
+      {:ok, f1} = Tasks.update_task_upload_field(teacher_scope, f1, %{"required" => true})
       assert f1.required
 
       submission = submission(scope, task)
@@ -365,7 +383,7 @@ defmodule Tasky.TasksContentTest do
 
       assert File.exists?(path)
 
-      {:ok, _} = Tasks.delete_task_upload_field(f1)
+      {:ok, _} = Tasks.delete_task_upload_field(teacher_scope, f1)
       refute File.exists?(path)
       assert Tasks.list_submission_files(submission) == []
       assert [^f2] = Tasks.list_task_upload_fields(task)
@@ -374,11 +392,15 @@ defmodule Tasky.TasksContentTest do
 
   describe "put_submission_file/3" do
     test "re-upload replaces the previous file and deletes its bytes", %{
+      teacher_scope: teacher_scope,
       student_scope: scope,
       task: task
     } do
       {:ok, field} =
-        Tasks.create_task_upload_field(task, %{"label" => "A", "allowed_types" => ["pdf"]})
+        Tasks.create_task_upload_field(teacher_scope, task, %{
+          "label" => "A",
+          "allowed_types" => ["pdf"]
+        })
 
       submission = submission(scope, task)
 

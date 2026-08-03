@@ -65,15 +65,13 @@ defmodule Tasky.Uploads do
   def save_exam_image(exam_id, %Plug.Upload{} = upload) do
     with {:ok, ext} <- allowed_extension(upload.content_type),
          :ok <- validate_size(upload.path),
-         :ok <- validate_image_signature(upload.path, ext) do
-      filename = Ecto.UUID.generate() <> ext
-
-      :ok =
-        Tasky.Storage.put(storage_key(["exams", to_string(exam_id)], filename), upload.path,
-          content_type: content_type_for_ext(ext),
-          disposition: "inline"
-        )
-
+         :ok <- validate_image_signature(upload.path, ext),
+         filename = Ecto.UUID.generate() <> ext,
+         :ok <-
+           store_bytes(storage_key(["exams", to_string(exam_id)], filename), upload.path,
+             content_type: content_type_for_ext(ext),
+             disposition: "inline"
+           ) do
       {:ok, "/uploads/exams/#{exam_id}/#{filename}"}
     end
   end
@@ -98,15 +96,13 @@ defmodule Tasky.Uploads do
   def save_task_image(task_id, %Plug.Upload{} = upload) do
     with {:ok, ext} <- allowed_extension(upload.content_type),
          :ok <- validate_size(upload.path),
-         :ok <- validate_image_signature(upload.path, ext) do
-      filename = Ecto.UUID.generate() <> ext
-
-      :ok =
-        Tasky.Storage.put(storage_key(["tasks", to_string(task_id)], filename), upload.path,
-          content_type: content_type_for_ext(ext),
-          disposition: "inline"
-        )
-
+         :ok <- validate_image_signature(upload.path, ext),
+         filename = Ecto.UUID.generate() <> ext,
+         :ok <-
+           store_bytes(storage_key(["tasks", to_string(task_id)], filename), upload.path,
+             content_type: content_type_for_ext(ext),
+             disposition: "inline"
+           ) do
       {:ok, "/uploads/tasks/#{task_id}/#{filename}"}
     end
   end
@@ -130,7 +126,12 @@ defmodule Tasky.Uploads do
   def answer_type_keys, do: Enum.map(@file_types, fn {key, _} -> key end)
 
   @doc "Registry entry (`%{label:, badge:, exts:}`) for a type key, or nil."
-  def file_type(key), do: :proplists.get_value(key, @file_types, nil)
+  def file_type(key) do
+    case List.keyfind(@file_types, key, 0) do
+      {_key, entry} -> entry
+      nil -> nil
+    end
+  end
 
   @doc "Max size in bytes for attachments and answer files."
   def max_file_bytes, do: @max_file_bytes
@@ -213,40 +214,101 @@ defmodule Tasky.Uploads do
   """
   @type copy_job :: %{src: String.t(), dest: String.t()}
 
-  @doc """
-  Plans the copy of a content image between two learning units, keeping the
-  stored filename (the task id in the path already makes the key unique).
-
-  Returns `{:error, :invalid}` for a filename that is not a safe single path
-  segment; the caller must then leave the reference alone.
+  @typedoc """
+  What a set of uploads belongs to. Both kinds own their files under
+  `<kind>/<id>/…`, so duplication works the same way on either side.
   """
-  @spec plan_task_image_copy(term(), term(), String.t()) :: {:ok, copy_job()} | {:error, :invalid}
-  def plan_task_image_copy(from_task_id, to_task_id, filename) do
-    plan_copy(
-      {["tasks", to_string(from_task_id)], filename},
-      {["tasks", to_string(to_task_id)], filename}
-    )
+  @type owner_kind :: :exams | :tasks
+
+  @doc """
+  Rewrites every content-image reference in a Tiptap doc from one owner's
+  upload prefix to the other's and plans the byte copies. Returns
+  `{rewritten_doc, copy_jobs}`.
+
+  Content images live under their own owner's prefix, so a copy has to take its
+  own bytes along and point at them — sharing the source's files would blank
+  the duplicate out as soon as the original is deleted (`delete_exam_files/1` /
+  `delete_task_files/1` wipe the whole `<kind>/<id>` prefix). The new URL is
+  deterministic, so it is written now and the bytes follow after the commit.
+
+  A reference that is not a plain filename directly under the prefix is left
+  alone, so nothing outside the owner's content images is ever touched.
+  """
+  @spec plan_content_image_copies(term(), owner_kind(), term(), term()) ::
+          {term(), [copy_job()]}
+  def plan_content_image_copies(content, kind, from_id, to_id) when kind in [:exams, :tasks] do
+    segment = Atom.to_string(kind)
+
+    ctx = %{
+      segment: segment,
+      from_id: from_id,
+      to_id: to_id,
+      prefix: "/uploads/#{segment}/#{from_id}/",
+      new_prefix: "/uploads/#{segment}/#{to_id}/"
+    }
+
+    rewrite_image_refs(content, ctx, [])
   end
 
+  defp rewrite_image_refs(value, ctx, jobs) when is_map(value) do
+    Enum.reduce(value, {%{}, jobs}, fn {k, v}, {acc, jobs} ->
+      {v, jobs} = rewrite_image_refs(v, ctx, jobs)
+      {Map.put(acc, k, v), jobs}
+    end)
+  end
+
+  defp rewrite_image_refs(value, ctx, jobs) when is_list(value) do
+    {list, jobs} =
+      Enum.reduce(value, {[], jobs}, fn v, {acc, jobs} ->
+        {v, jobs} = rewrite_image_refs(v, ctx, jobs)
+        {[v | acc], jobs}
+      end)
+
+    {Enum.reverse(list), jobs}
+  end
+
+  defp rewrite_image_refs(value, ctx, jobs) when is_binary(value) do
+    # Only direct children of the owner's prefix are content images; anything
+    # deeper (an attachment path, say) is not ours to rewrite. This guard is the
+    # only thing deciding what counts as a content image, since the storage copy
+    # no longer votes.
+    with true <- String.starts_with?(value, ctx.prefix),
+         filename = String.replace_prefix(value, ctx.prefix, ""),
+         false <- String.contains?(filename, "/"),
+         {:ok, job} <-
+           plan_copy(
+             {[ctx.segment, to_string(ctx.from_id)], filename},
+             {[ctx.segment, to_string(ctx.to_id)], filename}
+           ) do
+      {ctx.new_prefix <> filename, [job | jobs]}
+    else
+      _ -> {value, jobs}
+    end
+  end
+
+  defp rewrite_image_refs(value, _ctx, jobs), do: {value, jobs}
+
   @doc """
-  Plans the copy of a teacher attachment between two learning units. The
-  fresh stored filename is minted here rather than after the copy, so the new
-  `task_attachments` row can be written before the bytes exist — the column
-  is globally unique, not unique per task, so reusing the source's name would
-  hit the constraint.
+  Plans the copy of a teacher attachment between two owners of the same kind.
+  The fresh stored filename is minted here rather than after the copy, so the
+  new attachment row can be written before the bytes exist — the column is
+  globally unique, not unique per owner, so reusing the source's name would hit
+  the constraint.
 
   Returns `{:ok, new_stored_filename, copy_job}` or `{:error, :invalid}`.
   """
-  @spec plan_task_attachment_copy(term(), term(), String.t()) ::
+  @spec plan_attachment_copy(owner_kind(), term(), term(), String.t()) ::
           {:ok, String.t(), copy_job()} | {:error, :invalid}
-  def plan_task_attachment_copy(from_task_id, to_task_id, stored_filename) do
+  def plan_attachment_copy(kind, from_id, to_id, stored_filename)
+      when kind in [:exams, :tasks] do
+    segment = Atom.to_string(kind)
     ext = stored_filename |> Path.extname() |> String.downcase()
     new_stored_filename = Ecto.UUID.generate() <> ext
 
     with {:ok, job} <-
            plan_copy(
-             {["tasks", to_string(from_task_id), "attachments"], stored_filename},
-             {["tasks", to_string(to_task_id), "attachments"], new_stored_filename}
+             {[segment, to_string(from_id), "attachments"], stored_filename},
+             {[segment, to_string(to_id), "attachments"], new_stored_filename}
            ) do
       {:ok, new_stored_filename, job}
     end
@@ -396,18 +458,22 @@ defmodule Tasky.Uploads do
   submission files). Called when the exam is deleted so no bytes are
   orphaned.
   """
-  def delete_exam_files(exam_id) do
-    with :ok <- validate_segment(to_string(exam_id)) do
-      Tasky.Storage.delete_prefix("exams/#{exam_id}")
-    end
-
-    :ok
-  end
+  def delete_exam_files(exam_id), do: delete_owner_files("exams", exam_id)
 
   @doc "Removes every stored file of a learning unit (task); see `delete_exam_files/1`."
-  def delete_task_files(task_id) do
-    with :ok <- validate_segment(to_string(task_id)) do
-      Tasky.Storage.delete_prefix("tasks/#{task_id}")
+  def delete_task_files(task_id), do: delete_owner_files("tasks", task_id)
+
+  # Best-effort, always `:ok`: the deletion the caller asked for has already
+  # happened in the database, and a storage hiccup must not fail it. An id that
+  # is not a safe path segment is a caller bug rather than a missing file, so it
+  # is logged instead of quietly doing nothing.
+  defp delete_owner_files(segment, id) do
+    case validate_segment(to_string(id)) do
+      :ok ->
+        Tasky.Storage.delete_prefix("#{segment}/#{id}")
+
+      {:error, :invalid} ->
+        Logger.warning("upload: refusing to clear #{segment} files for invalid id #{inspect(id)}")
     end
 
     :ok
@@ -487,22 +553,36 @@ defmodule Tasky.Uploads do
     ext = original_name |> Path.extname() |> String.downcase()
 
     with :ok <- validate_file_ext(ext, allowed_exts),
-         {:ok, size} <- validate_file_size(src_path) do
-      stored_filename = Ecto.UUID.generate() <> ext
-      content_type = content_type_for_ext(ext) || "application/octet-stream"
-
-      :ok =
-        Tasky.Storage.put(storage_key(segments, stored_filename), src_path,
-          content_type: content_type,
-          disposition: {"attachment", original_name}
-        )
-
+         {:ok, size} <- validate_file_size(src_path),
+         stored_filename = Ecto.UUID.generate() <> ext,
+         content_type = content_type_for_ext(ext) || "application/octet-stream",
+         :ok <-
+           store_bytes(storage_key(segments, stored_filename), src_path,
+             content_type: content_type,
+             disposition: {"attachment", original_name}
+           ) do
       {:ok,
        %{
          stored_filename: stored_filename,
          content_type: content_type,
          size: size
        }}
+    end
+  end
+
+  # A failed write must come back as an error tuple, not a raise: every caller
+  # already renders one, whereas a MatchError here takes the calling process
+  # down — a LiveView, i.e. the student's editor session. Only remote adapters
+  # can actually fail (`Tasky.Storage.R2` returns `{:error, _}` for any non-2xx
+  # or transport error); the local one always succeeds or raises.
+  defp store_bytes(key, src_path, opts) do
+    case Tasky.Storage.put(key, src_path, opts) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("upload: storing #{key} failed: #{inspect(reason)}")
+        {:error, :storage_failed}
     end
   end
 
@@ -531,10 +611,14 @@ defmodule Tasky.Uploads do
     end
   end
 
+  # Idempotent and always `:ok`, for the same reason as `delete_owner_files/2`.
   defp delete_stored(segments, stored_filename) do
-    with :ok <- validate_segments(segments),
-         :ok <- validate_segment(stored_filename) do
+    if validate_segments(segments) == :ok and validate_segment(stored_filename) == :ok do
       Tasky.Storage.delete(storage_key(segments, stored_filename))
+    else
+      Logger.warning(
+        "upload: refusing to delete invalid key #{inspect(segments)}/#{inspect(stored_filename)}"
+      )
     end
 
     :ok

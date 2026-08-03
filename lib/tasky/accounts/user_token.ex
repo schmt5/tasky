@@ -153,4 +153,14 @@ defmodule Tasky.Accounts.UserToken do
   defp by_token_and_context_query(token, context) do
     from UserToken, where: [token: ^token, context: ^context]
   end
+
+  @doc """
+  Every token belonging to the given user, regardless of context.
+
+  Used to invalidate all sessions at once when the password changes — a reset
+  that left the old sessions alive would not lock anybody out.
+  """
+  def by_user_and_contexts_query(user, :all) do
+    from t in UserToken, where: t.user_id == ^user.id
+  end
 end

@@ -40,43 +40,77 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   def start_for_exam(exam, opts \\ []) do
     Task.Supervisor.start_child(
       Tasky.TaskSupervisor,
-      fn ->
-        case Registry.register(Tasky.BulkCorrectionRegistry, exam.id, nil) do
-          {:ok, _} ->
-            run_with_guaranteed_done(exam, opts)
-
-          {:error, {:already_registered, pid}} ->
-            # The active run's jobs may predate the change that triggered us —
-            # ask it to run once more after it finishes.
-            send(pid, :rerun)
-            :ok
-        end
-      end,
+      fn -> claim_or_queue(exam, opts) end,
       restart: :temporary
     )
   end
 
+  # Either we own the run for this exam, or an active run takes our request.
+  defp claim_or_queue(exam, opts) do
+    case Registry.register(Tasky.BulkCorrectionRegistry, exam.id, nil) do
+      {:ok, _} ->
+        run_with_guaranteed_done(exam, opts)
+
+      {:error, {:already_registered, pid}} ->
+        # The active run's jobs may predate the change that triggered us —
+        # ask it to run once more after it finishes.
+        send(pid, :rerun)
+        confirm_queued_or_claim(exam, opts)
+    end
+  end
+
+  # A `:rerun` sent to a process that is already past its final look at the
+  # queue would die in its mailbox, and with it the re-grade the teacher's edit
+  # asked for. The holder therefore hands its registration back *before* that
+  # final look (see `finish_run/1`), which makes this check conclusive: still
+  # finding an entry means the holder has not looked yet and will see the
+  # message we just sent. An empty entry means our request may have been lost,
+  # so we claim the run instead — whoever registers reloads the exam anyway.
+  defp confirm_queued_or_claim(exam, opts) do
+    case Registry.lookup(Tasky.BulkCorrectionRegistry, exam.id) do
+      [] -> claim_or_queue(exam, opts)
+      _ -> :ok
+    end
+  end
+
   defp run_with_guaranteed_done(exam, opts) do
     run(exam, opts)
-    rerun_if_requested(exam)
+    finish_run(exam)
   rescue
     exception ->
       Logger.error("Bulk correction run crashed: #{Exception.message(exception)}")
 
+      # Terminal broadcast so the UI never hangs on a stale progress bar — but
+      # reported as a failure. `%{total: 0, errors: []}` would render as a clean,
+      # silent success and leave the teacher believing the exam was corrected.
       Exams.broadcast_bulk_correction(
         exam.id,
-        {:bulk_correction_done, %{total: 0, errors: []}}
+        {:bulk_correction_done, %{total: 0, errors: [{:crashed, Exception.message(exception)}]}}
       )
   end
 
-  # Collapses any number of queued re-run requests into one full run against
-  # a freshly loaded exam (the struct captured at start may be stale).
-  defp rerun_if_requested(exam) do
+  # Collapses any number of queued re-run requests into one full run against a
+  # freshly loaded exam (the struct captured at start may be stale).
+  #
+  # The registration goes back before the queue is checked, so from here on a
+  # new trigger cannot find us and claims the run itself. If we do find a queued
+  # request we take the registration again; failing that, a fresh run already
+  # owns the exam and will do the work, so there is nothing left for us to do.
+  defp finish_run(exam) do
+    Registry.unregister(Tasky.BulkCorrectionRegistry, exam.id)
+
     receive do
       :rerun ->
         drain_reruns()
-        run(Repo.get!(Tasky.Exams.Exam, exam.id), [])
-        rerun_if_requested(exam)
+
+        case Registry.register(Tasky.BulkCorrectionRegistry, exam.id, nil) do
+          {:ok, _} ->
+            run(Repo.get!(Tasky.Exams.Exam, exam.id), [])
+            finish_run(exam)
+
+          {:error, {:already_registered, _pid}} ->
+            :ok
+        end
     after
       0 -> :ok
     end
