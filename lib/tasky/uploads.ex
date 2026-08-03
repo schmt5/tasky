@@ -413,6 +413,36 @@ defmodule Tasky.Uploads do
     :ok
   end
 
+  @doc """
+  Removes the stored files of several learning units at once, in parallel.
+
+  Used when a whole course goes away: the DB cascade takes the task rows with
+  it, so `Tasky.Tasks.delete_task/2` — the only other place that clears a
+  unit's bytes — never gets a chance to run.
+
+  Best-effort and never raises. Clearing a prefix is a list plus one delete
+  per object on a remote adapter, so doing a course's units one after another
+  would be slow enough to matter; and a storage hiccup must not fail a delete
+  the user already asked for. Like every other storage call, this must not run
+  inside a `Repo.transaction/1`.
+  """
+  @spec delete_task_files_many([term()]) :: :ok
+  def delete_task_files_many(task_ids) do
+    Tasky.TaskSupervisor
+    |> Task.Supervisor.async_stream_nolink(
+      task_ids,
+      &delete_task_files/1,
+      max_concurrency: @copy_concurrency,
+      timeout: @copy_timeout,
+      on_timeout: :kill_task,
+      ordered: false
+    )
+    |> Enum.each(fn
+      {:ok, _} -> :ok
+      {:exit, reason} -> Logger.warning("delete: task file cleanup failed #{inspect(reason)}")
+    end)
+  end
+
   @doc "Canonical content type for an allowed extension, or nil."
   def content_type_for_ext(ext), do: Map.get(@ext_content_types, String.downcase(ext))
 

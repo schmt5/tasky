@@ -17,15 +17,16 @@ defmodule Tasky.ProbeStorage do
 
   @doc """
   Installs the adapter for the current test and restores the previous one on
-  exit. `copy_result` is `:delegate` (default), `{:error, reason}` or
-  `:raise`.
+  exit. `copy_result` and `delete_prefix_result` are `:delegate` (default),
+  `{:error, reason}` or `:raise`.
   """
   def install(opts \\ []) do
     previous = Application.get_env(:tasky, :storage_adapter)
 
     Application.put_env(:tasky, :probe_storage, %{
       owner: Keyword.get(opts, :owner, self()),
-      copy_result: Keyword.get(opts, :copy_result, :delegate)
+      copy_result: Keyword.get(opts, :copy_result, :delegate),
+      delete_prefix_result: Keyword.get(opts, :delete_prefix_result, :delegate)
     })
 
     Application.put_env(:tasky, :storage_adapter, __MODULE__)
@@ -63,5 +64,14 @@ defmodule Tasky.ProbeStorage do
   def delete(key), do: Tasky.Storage.Local.delete(key)
 
   @impl true
-  def delete_prefix(prefix), do: Tasky.Storage.Local.delete_prefix(prefix)
+  def delete_prefix(prefix) do
+    config = Application.fetch_env!(:tasky, :probe_storage)
+    send(config.owner, {:storage_delete_prefix, prefix, Tasky.Repo.in_transaction?()})
+
+    case config.delete_prefix_result do
+      :delegate -> Tasky.Storage.Local.delete_prefix(prefix)
+      :raise -> raise "probe storage: delete_prefix blew up"
+      other -> other
+    end
+  end
 end

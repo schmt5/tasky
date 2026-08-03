@@ -186,10 +186,29 @@ defmodule Tasky.Courses do
   end
 
   @doc """
-  Deletes a course.
+  Deletes a course together with the stored files of every learning unit in
+  it.
+
+  The bytes have to be cleared here explicitly. Tasks go away through the DB
+  cascade (`on_delete: :delete_all`), which means `Tasky.Tasks.delete_task/2`
+  — the only other place that clears a unit's uploads — never runs, and
+  without this every content image and attachment in the course would be
+  orphaned in storage forever.
+
+  Storage is cleared after the row is gone and outside any transaction: on a
+  remote adapter that is a list plus a delete per object, and a DB connection
+  must never be held across those (see `duplicate_course/3`). A cleanup
+  failure is logged, not surfaced — the deletion the caller asked for has
+  already happened.
   """
   def delete_course(%Course{} = course) do
-    Repo.delete(course)
+    # Read the ids before the cascade takes the rows out from under us.
+    task_ids = Repo.all(from t in Task, where: t.course_id == ^course.id, select: t.id)
+
+    with {:ok, deleted} <- Repo.delete(course) do
+      Tasky.Uploads.delete_task_files_many(task_ids)
+      {:ok, deleted}
+    end
   end
 
   @doc """
