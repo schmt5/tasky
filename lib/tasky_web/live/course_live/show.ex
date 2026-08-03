@@ -2,6 +2,7 @@ defmodule TaskyWeb.CourseLive.Show do
   use TaskyWeb, :live_view
 
   alias Tasky.Courses
+  alias Tasky.Courses.DuplicateRunner
   alias Tasky.Tasks
 
   @impl true
@@ -416,6 +417,52 @@ defmodule TaskyWeb.CourseLive.Show do
         </dialog>
       <% end %>
 
+      <%!-- Duplicate Progress Modal — the records are already committed, so
+           there is deliberately no way to cancel or dismiss this. --%>
+      <%= if @duplicate_status do %>
+        <dialog id="duplicate-progress-modal" class="modal modal-open">
+          <div class="modal-backdrop bg-stone-900/50"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                  <.icon
+                    name="hero-arrow-path"
+                    class="w-5 h-5 text-sky-600 motion-safe:animate-spin"
+                  />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">Kurs wird dupliziert</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">Die Dateien werden kopiert.</p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <div class="flex items-center justify-between text-sm text-stone-600">
+                <span>Dateien</span>
+                <span class="font-semibold text-stone-800 tabular-nums">
+                  {@duplicate_status.done}/{@duplicate_status.total}
+                </span>
+              </div>
+              <div
+                class="mt-3 h-2 w-full rounded-full bg-stone-100 overflow-hidden"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax={@duplicate_status.total}
+                aria-valuenow={@duplicate_status.done}
+                aria-label="Fortschritt beim Kopieren der Dateien"
+              >
+                <div
+                  class="h-full rounded-full bg-sky-500 transition-[width] duration-300"
+                  style={"width: #{duplicate_percent(@duplicate_status)}%"}
+                >
+                </div>
+              </div>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
       <%!-- Rename Modal --%>
       <%= if @renaming_task do %>
         <dialog
@@ -490,6 +537,7 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:renaming_task, nil)
      |> assign(:rename_form, nil)
      |> assign(:duplicating_course, false)
+     |> assign(:duplicate_status, nil)
      |> assign(:share_url, nil)
      |> stream(:tasks, course.tasks)}
   end
@@ -533,16 +581,25 @@ defmodule TaskyWeb.CourseLive.Show do
 
   @impl true
   def handle_event("duplicate_course", _params, socket) do
-    case Courses.duplicate_course(
+    case DuplicateRunner.start(
            socket.assigns.current_scope,
            socket.assigns.course,
-           "Kopie von — #{socket.assigns.course.name}"
+           "Kopie von — #{socket.assigns.course.name}",
+           self()
          ) do
-      {:ok, course} ->
+      # Nothing to copy — the duplicate is already complete, so skip the
+      # progress dialog entirely and navigate as this always has.
+      {:ok, course, 0} ->
         {:noreply,
          socket
          |> put_flash(:info, "Inhalt wurde in einen neuen Kurs dupliziert.")
          |> push_navigate(to: ~p"/courses/#{course}")}
+
+      {:ok, course, total} ->
+        {:noreply,
+         socket
+         |> assign(:duplicating_course, false)
+         |> assign(:duplicate_status, %{course_id: course.id, done: 0, total: total})}
 
       {:error, _reason} ->
         {:noreply,
@@ -631,4 +688,34 @@ defmodule TaskyWeb.CourseLive.Show do
   def handle_event("close_rename", _params, socket) do
     {:noreply, socket |> assign(:renaming_task, nil) |> assign(:rename_form, nil)}
   end
+
+  @impl true
+  def handle_info({:duplicate_progress, status}, socket) do
+    {:noreply, update(socket, :duplicate_status, &(&1 && Map.merge(&1, status)))}
+  end
+
+  @impl true
+  def handle_info({:duplicate_done, %{course_id: course_id, failed: failed}}, socket) do
+    # The records are committed either way — a copy failure is reported, not
+    # treated as a failed duplication. `:warning` is not rendered by
+    # `Layouts.flash_group/1`, so the count rides along in the :info text.
+    message =
+      if failed == 0 do
+        "Inhalt wurde in einen neuen Kurs dupliziert."
+      else
+        "Inhalt dupliziert — #{failed} Datei(en) konnten nicht kopiert werden."
+      end
+
+    {:noreply,
+     socket
+     |> assign(:duplicate_status, nil)
+     |> put_flash(:info, message)
+     |> push_navigate(to: ~p"/courses/#{course_id}")}
+  end
+
+  @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp duplicate_percent(%{total: total}) when total <= 0, do: 100
+  defp duplicate_percent(%{done: done, total: total}), do: round(done / total * 100)
 end

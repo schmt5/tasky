@@ -9,6 +9,8 @@ defmodule Tasky.Uploads do
   never from the client-supplied name.
   """
 
+  require Logger
+
   @max_bytes 10 * 1024 * 1024
   @max_file_bytes 25 * 1024 * 1024
 
@@ -194,46 +196,131 @@ defmodule Tasky.Uploads do
 
   ## Copying between learning units (duplication)
 
-  @doc """
-  Copies a content image of one learning unit over to another, keeping the
-  stored filename (the task id in the path already makes the key unique).
-  Returns `:ok` or `{:error, reason}`.
+  # Eight copies in flight: R2 `CopyObject` is server-side, so the only cost
+  # per job is one signed round trip and the concurrency is bounded by the
+  # HTTP pool rather than by bandwidth.
+  @copy_concurrency 8
+
+  # Per-job ceiling, comfortably above the adapter's own worst case (three
+  # attempts at `receive_timeout` plus backoff, see `Tasky.Storage.R2`).
+  @copy_timeout 45_000
+
+  @typedoc """
+  A file copy a duplication still owes storage: two storage keys, no I/O.
+  Planned inside the DB transaction, performed by `run_copies/2` after it
+  commits — see `Tasky.Courses.duplicate_course/3` for why the two must not
+  be interleaved.
   """
-  def copy_task_image(from_task_id, to_task_id, filename) do
-    copy_stored(
+  @type copy_job :: %{src: String.t(), dest: String.t()}
+
+  @doc """
+  Plans the copy of a content image between two learning units, keeping the
+  stored filename (the task id in the path already makes the key unique).
+
+  Returns `{:error, :invalid}` for a filename that is not a safe single path
+  segment; the caller must then leave the reference alone.
+  """
+  @spec plan_task_image_copy(term(), term(), String.t()) :: {:ok, copy_job()} | {:error, :invalid}
+  def plan_task_image_copy(from_task_id, to_task_id, filename) do
+    plan_copy(
       {["tasks", to_string(from_task_id)], filename},
       {["tasks", to_string(to_task_id)], filename}
     )
   end
 
   @doc """
-  Copies a teacher attachment of one learning unit over to another under a
-  fresh stored filename (`task_attachments.stored_filename` is globally
-  unique). Returns `{:ok, new_stored_filename}` or `{:error, reason}`.
+  Plans the copy of a teacher attachment between two learning units. The
+  fresh stored filename is minted here rather than after the copy, so the new
+  `task_attachments` row can be written before the bytes exist — the column
+  is globally unique, not unique per task, so reusing the source's name would
+  hit the constraint.
+
+  Returns `{:ok, new_stored_filename, copy_job}` or `{:error, :invalid}`.
   """
-  def copy_task_attachment_file(from_task_id, to_task_id, stored_filename) do
+  @spec plan_task_attachment_copy(term(), term(), String.t()) ::
+          {:ok, String.t(), copy_job()} | {:error, :invalid}
+  def plan_task_attachment_copy(from_task_id, to_task_id, stored_filename) do
     ext = stored_filename |> Path.extname() |> String.downcase()
     new_stored_filename = Ecto.UUID.generate() <> ext
 
-    case copy_stored(
-           {["tasks", to_string(from_task_id), "attachments"], stored_filename},
-           {["tasks", to_string(to_task_id), "attachments"], new_stored_filename}
-         ) do
-      :ok -> {:ok, new_stored_filename}
-      {:error, reason} -> {:error, reason}
+    with {:ok, job} <-
+           plan_copy(
+             {["tasks", to_string(from_task_id), "attachments"], stored_filename},
+             {["tasks", to_string(to_task_id), "attachments"], new_stored_filename}
+           ) do
+      {:ok, new_stored_filename, job}
     end
   end
 
-  defp copy_stored({src_segments, src_filename}, {dest_segments, dest_filename}) do
+  defp plan_copy({src_segments, src_filename}, {dest_segments, dest_filename}) do
     with :ok <- validate_segments(src_segments),
          :ok <- validate_segment(src_filename),
          :ok <- validate_segments(dest_segments),
          :ok <- validate_segment(dest_filename) do
-      Tasky.Storage.copy(
-        storage_key(src_segments, src_filename),
-        storage_key(dest_segments, dest_filename)
-      )
+      {:ok,
+       %{
+         src: storage_key(src_segments, src_filename),
+         dest: storage_key(dest_segments, dest_filename)
+       }}
+    else
+      _ -> {:error, :invalid}
     end
+  end
+
+  @doc """
+  Performs one planned copy. Never call this from inside a
+  `Repo.transaction/1` — it is a network round trip on every adapter but the
+  local one.
+  """
+  @spec run_copy(copy_job()) :: :ok | {:error, term()}
+  def run_copy(%{src: src, dest: dest}), do: Tasky.Storage.copy(src, dest)
+
+  @doc """
+  Runs planned copies in parallel, outside any transaction.
+
+  Never fails as a whole: a job that errors out (or whose adapter raises) is
+  logged and counted, so the caller can report a partial result instead of
+  discarding a duplicate whose records are already committed.
+
+  Options:
+
+    * `:on_progress` — `fn done, total -> ... end`, called after each job
+    * `:max_concurrency` — defaults to #{@copy_concurrency}
+  """
+  @spec run_copies([copy_job()], keyword()) :: %{copied: non_neg_integer(), failed: list()}
+  def run_copies(jobs, opts \\ []) do
+    on_progress = Keyword.get(opts, :on_progress, fn _done, _total -> :ok end)
+    # The same image can be referenced twice in one Tiptap doc; the second
+    # copy would be a wasted round trip onto an identical key.
+    jobs = Enum.uniq_by(jobs, & &1.dest)
+    total = length(jobs)
+    counter = :counters.new(1, [:atomics])
+
+    Tasky.TaskSupervisor
+    |> Task.Supervisor.async_stream_nolink(
+      jobs,
+      fn job ->
+        result = run_copy(job)
+        :counters.add(counter, 1, 1)
+        on_progress.(:counters.get(counter, 1), total)
+        {job, result}
+      end,
+      max_concurrency: Keyword.get(opts, :max_concurrency, @copy_concurrency),
+      timeout: @copy_timeout,
+      on_timeout: :kill_task,
+      ordered: false
+    )
+    |> Enum.reduce(%{copied: 0, failed: []}, fn
+      {:ok, {_job, :ok}}, acc -> %{acc | copied: acc.copied + 1}
+      {:ok, {job, {:error, reason}}}, acc -> %{acc | failed: [{job, reason} | acc.failed]}
+      # `_nolink` plus this clause is what keeps a raising adapter
+      # (`File.mkdir_p!`, `Application.fetch_env!`) from taking the caller —
+      # often a LiveView — down with it.
+      {:exit, reason}, acc -> %{acc | failed: [{nil, reason} | acc.failed]}
+    end)
+    |> tap(fn %{failed: failed} ->
+      Enum.each(failed, &Logger.warning("duplicate: copy failed #{inspect(&1)}"))
+    end)
   end
 
   ## Student answer files

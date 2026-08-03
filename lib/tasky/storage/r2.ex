@@ -154,8 +154,19 @@ defmodule Tasky.Storage.R2 do
   # R2 endpoint (path-style). It is a ReqS3 option, not an `:aws_sigv4` one —
   # putting it inside `:aws_sigv4` makes Req raise `unknown option
   # :endpoint_url`, and without it every request would go to AWS S3 instead.
+  # Explicit budgets: without them Req falls back to a 15 s receive timeout,
+  # which is the whole checkout limit of a DB connection — one wedged request
+  # was enough to blow up a duplication. Worst case is now 3 attempts × 10 s
+  # plus backoff, under the 45 s per-job cap in `Tasky.Uploads.run_copies/2`.
+  # This bounds `fetch/2` too, which every `/uploads/...` request goes through.
   defp req do
-    Req.new(retry: :transient, max_retries: 2)
+    Req.new(
+      retry: :transient,
+      max_retries: 2,
+      receive_timeout: 10_000,
+      pool_timeout: 5_000,
+      connect_options: [timeout: 5_000]
+    )
     |> ReqS3.attach(
       aws_endpoint_url_s3: endpoint_url(),
       aws_sigv4: [

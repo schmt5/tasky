@@ -150,10 +150,15 @@ defmodule Tasky.Tasks do
   Submissions and the files students uploaded are deliberately left behind —
   a duplicate starts without any student data.
 
+  Writes records only. The file copies are *planned*, not performed, and come
+  back as the third element for the caller to run once the surrounding
+  transaction has committed (see `Tasky.Courses.duplicate_course/3`) — which
+  is what makes this function safe to call inside one.
+
   ## Examples
 
       iex> duplicate_task_into_course(scope, task, course.id)
-      {:ok, %Task{}}
+      {:ok, %Task{}, [%{src: "tasks/1/a.png", dest: "tasks/2/a.png"}]}
 
   """
   def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id) do
@@ -167,25 +172,29 @@ defmodule Tasky.Tasks do
              extended: source.extended,
              course_id: course_id
            }),
-         {:ok, task} <- copy_task_content(task, source),
-         :ok <- copy_task_attachments(task, source),
+         {:ok, task, image_jobs} <- copy_task_content(task, source),
+         {:ok, attachment_jobs} <- copy_task_attachments(task, source),
          :ok <- copy_task_upload_fields(task, source) do
-      {:ok, task}
+      {:ok, task, image_jobs ++ attachment_jobs}
     end
   end
 
-  defp copy_task_content(task, %Task{content: nil}), do: {:ok, task}
+  defp copy_task_content(task, %Task{content: nil}), do: {:ok, task, []}
 
   defp copy_task_content(task, %Task{content: content} = source) do
-    task
-    |> Task.content_changeset(copy_content_images(content, source.id, task.id))
-    |> Repo.update()
+    {content, jobs} = plan_content_image_copies(content, source.id, task.id)
+
+    with {:ok, task} <- task |> Task.content_changeset(content) |> Repo.update() do
+      {:ok, task, jobs}
+    end
   end
 
   # Content images live under their own task's upload prefix, so the copy has
   # to take its own bytes along and point at them — sharing the source's files
-  # would blank the duplicate out as soon as the original unit is deleted.
-  defp copy_content_images(content, from_task_id, to_task_id) do
+  # would blank the duplicate out as soon as the original unit is deleted
+  # (`delete_task/2` wipes the whole `tasks/<id>` prefix). The new URL is
+  # deterministic, so it is written now and the bytes follow after the commit.
+  defp plan_content_image_copies(content, from_task_id, to_task_id) do
     ctx = {
       "/uploads/tasks/#{from_task_id}/",
       "/uploads/tasks/#{to_task_id}/",
@@ -193,58 +202,76 @@ defmodule Tasky.Tasks do
       to_task_id
     }
 
-    rewrite_image_refs(content, ctx)
+    rewrite_image_refs(content, ctx, [])
   end
 
-  defp rewrite_image_refs(value, ctx) when is_map(value),
-    do: Map.new(value, fn {k, v} -> {k, rewrite_image_refs(v, ctx)} end)
+  defp rewrite_image_refs(value, ctx, jobs) when is_map(value) do
+    Enum.reduce(value, {%{}, jobs}, fn {k, v}, {acc, jobs} ->
+      {v, jobs} = rewrite_image_refs(v, ctx, jobs)
+      {Map.put(acc, k, v), jobs}
+    end)
+  end
 
-  defp rewrite_image_refs(value, ctx) when is_list(value),
-    do: Enum.map(value, &rewrite_image_refs(&1, ctx))
+  defp rewrite_image_refs(value, ctx, jobs) when is_list(value) do
+    {list, jobs} =
+      Enum.reduce(value, {[], jobs}, fn v, {acc, jobs} ->
+        {v, jobs} = rewrite_image_refs(v, ctx, jobs)
+        {[v | acc], jobs}
+      end)
 
-  defp rewrite_image_refs(value, {prefix, new_prefix, from_task_id, to_task_id})
+    {Enum.reverse(list), jobs}
+  end
+
+  defp rewrite_image_refs(value, {prefix, new_prefix, from_task_id, to_task_id}, jobs)
        when is_binary(value) do
     # Only direct children of the task prefix are content images; anything
-    # deeper (an attachment path, say) is not ours to rewrite. A file that no
-    # longer exists keeps its old URL rather than failing the duplication.
+    # deeper (an attachment path, say) is not ours to rewrite. This guard is
+    # now the only thing deciding what counts as a content image, since the
+    # storage copy no longer votes.
     with true <- String.starts_with?(value, prefix),
          filename = String.replace_prefix(value, prefix, ""),
          false <- String.contains?(filename, "/"),
-         :ok <- Tasky.Uploads.copy_task_image(from_task_id, to_task_id, filename) do
-      new_prefix <> filename
+         {:ok, job} <- Tasky.Uploads.plan_task_image_copy(from_task_id, to_task_id, filename) do
+      {new_prefix <> filename, [job | jobs]}
     else
-      _ -> value
+      _ -> {value, jobs}
     end
   end
 
-  defp rewrite_image_refs(value, _ctx), do: value
+  defp rewrite_image_refs(value, _ctx, jobs), do: {value, jobs}
 
   defp copy_task_attachments(task, source) do
     source
     |> list_task_attachments()
-    |> Enum.reduce_while(:ok, fn attachment, _acc ->
-      case Tasky.Uploads.copy_task_attachment_file(
-             source.id,
-             task.id,
-             attachment.stored_filename
-           ) do
-        {:ok, stored_filename} ->
-          case create_task_attachment(task, %{
-                 stored_filename: stored_filename,
-                 original_name: attachment.original_name,
-                 content_type: attachment.content_type,
-                 size: attachment.size
-               }) do
-            {:ok, _attachment} -> {:cont, :ok}
-            {:error, changeset} -> {:halt, {:error, changeset}}
-          end
+    |> Enum.reduce_while({:ok, []}, fn attachment, {:ok, jobs} ->
+      with {:ok, stored_filename, job} <-
+             Tasky.Uploads.plan_task_attachment_copy(
+               source.id,
+               task.id,
+               attachment.stored_filename
+             ),
+           {:ok, _attachment} <-
+             create_task_attachment(task, %{
+               stored_filename: stored_filename,
+               original_name: attachment.original_name,
+               content_type: attachment.content_type,
+               size: attachment.size
+             }) do
+        {:cont, {:ok, [job | jobs]}}
+      else
+        # A stored filename we cannot build a safe storage key from is the one
+        # case worth skipping outright — there is nothing to point a record at.
+        {:error, :invalid} ->
+          {:cont, {:ok, jobs}}
 
-        # Bytes that already vanished from storage leave a dangling record
-        # behind; that is not a reason to fail the whole duplication.
-        {:error, _reason} ->
-          {:cont, :ok}
+        {:error, changeset} ->
+          {:halt, {:error, changeset}}
       end
     end)
+    |> case do
+      {:ok, jobs} -> {:ok, Enum.reverse(jobs)}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp copy_task_upload_fields(task, source) do

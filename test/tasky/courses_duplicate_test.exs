@@ -176,6 +176,25 @@ defmodule Tasky.CoursesDuplicateTest do
       assert Tasks.list_task_submissions(scope, copied_task.id) == []
     end
 
+    test "an image referenced twice produces a single copy", %{scope: scope, course: course} do
+      task = task_fixture(scope, %{name: "Zweimal", position: 0, course_id: course.id})
+      {:ok, url} = Tasky.Uploads.save_task_image(task.id, image_upload())
+
+      doc = %{
+        "type" => "doc",
+        "content" => [
+          %{"type" => "image", "attrs" => %{"src" => url}},
+          %{"type" => "image", "attrs" => %{"src" => url}}
+        ]
+      }
+
+      {:ok, _task} = Tasks.save_task_content(scope, task, doc)
+
+      assert {:ok, _copy, jobs} = Courses.duplicate_course_records(scope, course, "Kopie")
+      assert length(jobs) == 2
+      assert %{copied: 1, failed: []} = Tasky.Uploads.run_copies(jobs)
+    end
+
     test "refuses a course of another teacher", %{course: course} do
       other = user_scope_fixture(user_fixture(%{role: "teacher"}))
 
@@ -188,6 +207,118 @@ defmodule Tasky.CoursesDuplicateTest do
 
       assert {:ok, copy} = Courses.duplicate_course(admin, course, "Kopie")
       assert copy.teacher_id == admin.user.id
+    end
+  end
+
+  describe "duplicate_course_records/3 — the storage boundary" do
+    # Regression test for the production crash: the copies used to run inside
+    # the transaction, so a file-heavy course held a DB connection across
+    # dozens of R2 round trips until Postgrex killed it at 15 s.
+    test "performs no storage I/O inside the transaction", %{scope: scope, course: course} do
+      task = task_fixture(scope, %{name: "Mit Dateien", position: 0, course_id: course.id})
+      {:ok, url} = Tasky.Uploads.save_task_image(task.id, image_upload())
+
+      {:ok, _task} =
+        Tasks.save_task_content(scope, task, %{
+          "type" => "doc",
+          "content" => [%{"type" => "image", "attrs" => %{"src" => url}}]
+        })
+
+      {:ok, stored} = Tasky.Uploads.save_task_attachment(task.id, tmp_file("bytes"), "a.pdf")
+      {:ok, _} = Tasks.create_task_attachment(task, Map.put(stored, :original_name, "a.pdf"))
+
+      Tasky.ProbeStorage.install()
+
+      assert {:ok, _copy, jobs} = Courses.duplicate_course_records(scope, course, "Kopie")
+      # The load-bearing assertion: nothing can reach Storage.copy/2 from
+      # inside Repo.transaction and still pass this.
+      refute_receive {:storage_copy, _, _, _}
+      assert length(jobs) == 2
+
+      assert %{copied: 2, failed: []} = Tasky.Uploads.run_copies(jobs)
+      assert_receive {:storage_copy, _, _, false}
+      assert_receive {:storage_copy, _, _, false}
+    end
+
+    test "leaves references outside the task's own prefix untouched", %{
+      scope: scope,
+      course: course
+    } do
+      task = task_fixture(scope, %{name: "Fremde Pfade", position: 0, course_id: course.id})
+
+      # An attachment path (one segment deeper), another unit's image, and an
+      # exam image — none of these are this unit's content images.
+      content = [
+        %{"type" => "text", "text" => "/uploads/tasks/#{task.id}/attachments/x.pdf"},
+        %{"type" => "text", "text" => "/uploads/tasks/999/other.png"},
+        %{"type" => "text", "text" => "/uploads/exams/1/y.png"}
+      ]
+
+      {:ok, _task} =
+        Tasks.save_task_content(scope, task, %{"type" => "doc", "content" => content})
+
+      assert {:ok, copy, jobs} = Courses.duplicate_course_records(scope, course, "Kopie")
+      assert jobs == []
+
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+      assert copied_task.content["content"] == content
+    end
+  end
+
+  describe "duplicate_course/3 when storage fails" do
+    setup %{scope: scope, course: course} do
+      task = task_fixture(scope, %{name: "Mit Dateien", position: 0, course_id: course.id})
+      {:ok, url} = Tasky.Uploads.save_task_image(task.id, image_upload())
+      filename = url |> String.split("/") |> List.last()
+
+      {:ok, _task} =
+        Tasks.save_task_content(scope, task, %{
+          "type" => "doc",
+          "content" => [%{"type" => "image", "attrs" => %{"src" => url}}]
+        })
+
+      {:ok, stored} =
+        Tasky.Uploads.save_task_attachment(task.id, tmp_file("bytes"), "arbeitsblatt.pdf")
+
+      {:ok, attachment} =
+        Tasks.create_task_attachment(task, Map.put(stored, :original_name, "arbeitsblatt.pdf"))
+
+      %{task: task, filename: filename, attachment: attachment}
+    end
+
+    test "still returns the course and keeps every record", %{
+      scope: scope,
+      course: course,
+      filename: filename
+    } do
+      Tasky.ProbeStorage.install(copy_result: {:error, :not_found})
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      # The content URL points at the duplicate's own prefix regardless — the
+      # destination key is deterministic, so it no longer waits on the copy.
+      assert [image_node] = copied_task.content["content"]
+      assert image_node["attrs"]["src"] == "/uploads/tasks/#{copied_task.id}/#{filename}"
+
+      # An attachment whose bytes never arrived is visibly broken rather than
+      # silently missing from the duplicate.
+      assert [copied_attachment] = Tasks.list_task_attachments(copied_task)
+      assert copied_attachment.original_name == "arbeitsblatt.pdf"
+
+      assert {:error, :not_found} =
+               Tasky.Uploads.fetch_task_attachment(
+                 copied_task.id,
+                 copied_attachment.stored_filename
+               )
+    end
+
+    test "an adapter that raises cannot take the caller down", %{scope: scope, course: course} do
+      Tasky.ProbeStorage.install(copy_result: :raise)
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
+      assert Process.alive?(self())
+      assert [_copied_task] = Tasks.list_tasks_by_course(copy.id)
     end
   end
 end

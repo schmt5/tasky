@@ -124,6 +124,34 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
       assert copied_task.name == "Einheit 1"
     end
+
+    test "a course with files shows copy progress before redirecting", %{
+      conn: conn,
+      scope: scope,
+      course: course,
+      task: task
+    } do
+      path = Path.join(System.tmp_dir!(), "src_#{System.unique_integer([:positive])}")
+      File.write!(path, "bytes")
+      on_exit(fn -> File.rm(path) end)
+
+      {:ok, stored} = Tasky.Uploads.save_task_attachment(task.id, path, "arbeitsblatt.pdf")
+
+      {:ok, _attachment} =
+        Tasks.create_task_attachment(task, Map.put(stored, :original_name, "arbeitsblatt.pdf"))
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element("#duplicate-course") |> render_click()
+
+      # The records are committed synchronously, so the copy phase must not
+      # hold up the reply — the dialog is up while the bytes are still moving.
+      html = lv |> element("#confirm-duplicate-course") |> render_click()
+      assert html =~ "Kurs wird dupliziert"
+      assert html =~ "0/1"
+
+      [copy] = Enum.reject(Courses.list_courses(scope), &(&1.id == course.id))
+      assert_redirect(lv, ~p"/courses/#{copy}")
+    end
   end
 
   describe "learning unit actions dropdown" do

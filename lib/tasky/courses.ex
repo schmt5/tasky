@@ -100,11 +100,38 @@ defmodule Tasky.Courses do
   submissions and student files are not copied — the copy starts empty and
   belongs to the duplicating user.
 
-  The records are written in one transaction; the copied file bytes are the
-  one side effect a rollback cannot undo, so a failure can leave orphaned
-  files in storage but never half-linked records.
+  Records first, bytes after. The transaction writes rows only and hands back
+  the file copies it owes storage; those run afterwards, in parallel. A DB
+  connection must never be held open across an object-storage round trip:
+  copying inline used to spend well over the connection's 15 s checkout limit
+  inside the transaction for a course with a few dozen files, and took the
+  calling LiveView down with a `DBConnection.ConnectionError`.
+
+  The tradeoff is therefore the reverse of what it once was: the records are
+  always complete and consistent, while a storage failure can leave a unit
+  pointing at bytes that never arrived (a broken content image, an attachment
+  that 404s). `Tasky.Uploads.run_copies/2` logs and counts those; the fix is
+  to delete the incomplete copy and duplicate again.
+
+  Runs the copies synchronously — fine for scripts and tests, but the web
+  layer should use `duplicate_course_records/3` via
+  `Tasky.Courses.DuplicateRunner` so the LiveView stays responsive.
   """
   def duplicate_course(scope, %Course{} = source, name) do
+    with {:ok, course, jobs} <- duplicate_course_records(scope, source, name) do
+      Tasky.Uploads.run_copies(jobs)
+      {:ok, course}
+    end
+  end
+
+  @doc """
+  Writes a duplicate's records in one transaction and returns
+  `{:ok, course, copy_jobs}`.
+
+  Performs no storage I/O whatsoever — that is the whole point; see
+  `duplicate_course/3`.
+  """
+  def duplicate_course_records(scope, %Course{} = source, name) do
     with :ok <- Tasky.Policy.authorize(scope, source.teacher_id) do
       tasks_query = from t in Task, order_by: [asc: t.position]
       source = Repo.preload(source, tasks: tasks_query)
@@ -114,26 +141,39 @@ defmodule Tasky.Courses do
         "description" => source.description
       }
 
-      Repo.transaction(fn -> insert_duplicate(scope, source, attrs) end)
+      scope
+      |> transact_duplicate(source, attrs)
+      |> unwrap_duplicate()
     end
   end
 
+  defp transact_duplicate(scope, source, attrs),
+    do: Repo.transaction(fn -> insert_duplicate(scope, source, attrs) end)
+
+  defp unwrap_duplicate({:ok, {course, jobs}}), do: {:ok, course, jobs}
+  defp unwrap_duplicate({:error, reason}), do: {:error, reason}
+
   defp insert_duplicate(scope, source, attrs) do
     with {:ok, course} <- create_course(scope, attrs),
-         :ok <- duplicate_tasks(scope, source.tasks, course.id) do
-      course
+         {:ok, jobs} <- duplicate_tasks(scope, source.tasks, course.id) do
+      {course, jobs}
     else
       {:error, reason} -> Repo.rollback(reason)
     end
   end
 
   defp duplicate_tasks(scope, tasks, course_id) do
-    Enum.reduce_while(tasks, :ok, fn task, _acc ->
+    tasks
+    |> Enum.reduce_while({:ok, []}, fn task, {:ok, acc} ->
       case Tasky.Tasks.duplicate_task_into_course(scope, task, course_id) do
-        {:ok, _task} -> {:cont, :ok}
+        {:ok, _task, jobs} -> {:cont, {:ok, [jobs | acc]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+    |> case do
+      {:ok, acc} -> {:ok, acc |> Enum.reverse() |> Enum.concat()}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @doc """
