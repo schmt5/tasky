@@ -124,4 +124,44 @@ defmodule TaskyWeb.AuthorizationTest do
       assert redirected_to(conn) =~ "/users/log-in"
     end
   end
+
+  describe "course feedback mailbox" do
+    setup do
+      owner_scope = Scope.for_user(user_fixture(%{role: "teacher"}))
+      {:ok, course} = Tasky.Courses.create_course(owner_scope, %{name: "Briefkastenkurs"})
+
+      %{course: course}
+    end
+
+    test "a foreign teacher gets 404 for another teacher's mailbox", %{
+      conn: conn,
+      course: course
+    } do
+      conn = log_in_role(conn, "teacher")
+
+      assert_error_sent 404, fn -> get(conn, "/courses/#{course.id}/feedback") end
+    end
+
+    test "students cannot open the teacher mailbox", %{conn: conn, course: course} do
+      conn = conn |> log_in_role("student") |> get("/courses/#{course.id}/feedback")
+      assert redirected_to(conn) == "/"
+    end
+
+    test "teachers cannot open the student feedback form", %{conn: conn, course: course} do
+      conn = conn |> log_in_role("teacher") |> get("/student/courses/#{course.id}/feedback")
+      assert redirected_to(conn) == "/"
+    end
+
+    test "a student who is not enrolled is sent away", %{conn: conn, course: course} do
+      conn = conn |> log_in_role("student") |> get("/student/courses/#{course.id}/feedback")
+      assert redirected_to(conn) == "/student/courses"
+    end
+
+    test "anonymous users cannot reach either side", %{conn: conn, course: course} do
+      assert redirected_to(get(conn, "/courses/#{course.id}/feedback")) =~ "/users/log-in"
+
+      assert redirected_to(get(conn, "/student/courses/#{course.id}/feedback")) =~
+               "/users/log-in"
+    end
+  end
 end

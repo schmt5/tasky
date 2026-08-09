@@ -166,6 +166,7 @@ defmodule TaskyWeb.Router do
       live "/courses/:id/add", CourseLive.Add, :add
       live "/courses/:id/progress", CourseLive.Progress, :progress
       live "/courses/:id/students", CourseLive.Students, :students
+      live "/courses/:id/feedback", CourseLive.Feedback, :feedback
       live "/courses/:id/reorder", CourseLive.Reorder, :reorder
       live "/progress/:task_id", TaskLive.Progress, :task_progress
       live "/tasks/:id/content", TaskLive.Content, :content
@@ -207,6 +208,7 @@ defmodule TaskyWeb.Router do
       on_mount: [{TaskyWeb.UserAuth, :require_student}] do
       live "/courses", CoursesLive, :index
       live "/courses/:id", CourseLive, :show
+      live "/courses/:id/feedback", FeedbackLive, :feedback
       live "/tasks/:id", TaskLive, :show
     end
   end

@@ -85,6 +85,22 @@ defmodule Tasky.Courses do
   end
 
   @doc """
+  Wie `get_course_for_student!/2`, aber ohne Preloads und ohne `raise` — `nil`,
+  wenn der Kurs nicht existiert oder die Person nicht eingeschrieben ist.
+
+  Für Aufrufer, die den Kurs selbst brauchen (nicht nur das Ja/Nein von
+  `enrolled?/2`) und den Fehlerfall als Wert behandeln wollen.
+  """
+  def get_enrolled_course(student_id, course_id) do
+    Repo.one(
+      from c in Course,
+        join: e in CourseEnrollment,
+        on: c.id == e.course_id,
+        where: c.id == ^course_id and e.student_id == ^student_id
+    )
+  end
+
+  @doc """
   Creates a course.
   """
   def create_course(scope, attrs \\ %{}) do

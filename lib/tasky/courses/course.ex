@@ -10,6 +10,10 @@ defmodule Tasky.Courses.Course do
     # input — only `Tasky.Courses.ensure_share_slug/2` sets it.
     field :share_slug, :string
 
+    # Anonymer Feedback-Briefkasten (`Tasky.Feedback`). Startet geschlossen; die
+    # Lehrperson öffnet ihn bewusst im Kursformular.
+    field :feedback_box_enabled, :boolean, default: false
+
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :tasks, Tasky.Tasks.Task
 
@@ -23,7 +27,7 @@ defmodule Tasky.Courses.Course do
   @doc false
   def changeset(course, attrs) do
     course
-    |> cast(attrs, [:name, :description])
+    |> cast(attrs, [:name, :description, :feedback_box_enabled])
     |> validate_required([:name])
     |> validate_length(:name, min: 3, max: 255)
     |> validate_length(:description, max: 1000)

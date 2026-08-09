@@ -66,6 +66,14 @@ defmodule TaskyWeb.CourseLive.Form do
                 placeholder="Gib eine kurze Beschreibung des Kurses ein..."
                 rows="4"
               />
+              <div class="pt-4 border-t border-stone-100">
+                <.checkbox_field
+                  field={@form[:feedback_box_enabled]}
+                  label="Anonymer Feedback-Briefkasten"
+                  description="Lernende können dir eine Nachricht zum Kurs schreiben. Du siehst den Text und das Datum, aber nicht, von wem die Nachricht stammt."
+                  accent="sky"
+                />
+              </div>
               <div class="flex items-center gap-3 pt-4 border-t border-stone-100">
                 <.button
                   phx-disable-with="Speichert..."

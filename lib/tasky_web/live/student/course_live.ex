@@ -21,6 +21,14 @@ defmodule TaskyWeb.Student.CourseLive do
                 %{label: "Meine Kurse", navigate: ~p"/student/courses"},
                 %{label: @course.name}
               ]} />
+
+              <.link
+                :if={@course.feedback_box_enabled}
+                navigate={~p"/student/courses/#{@course}/feedback"}
+                class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
+              >
+                <.icon name="hero-inbox" class="w-4 h-4" /> Feedback geben
+              </.link>
             </div>
 
             <div class="flex items-center gap-3 mb-2">
