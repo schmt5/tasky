@@ -743,6 +743,66 @@ defmodule TaskyWeb.CoreComponents do
   end
 
   @doc """
+  Progress modal for the file-copy phase of a course duplication or a
+  catalog import.
+
+  Deliberately without a close button or backdrop click: the records are
+  already committed when this appears (see `Tasky.Courses.DuplicateRunner`), so
+  there is nothing left to cancel. `@status` is the `%{done:, total:}` map the
+  runner reports.
+  """
+  attr :id, :string, default: "duplicate-progress-modal"
+  attr :status, :map, required: true
+  attr :title, :string, required: true
+  attr :subtitle, :string, required: true
+
+  def duplicate_progress_modal(assigns) do
+    ~H"""
+    <dialog id={@id} class="modal modal-open">
+      <div class="modal-backdrop bg-stone-900/50"></div>
+      <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+        <div class="p-6 border-b border-stone-100">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+              <.icon name="hero-arrow-path" class="w-5 h-5 text-sky-600 motion-safe:animate-spin" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-stone-800">{@title}</h3>
+              <p class="text-xs text-stone-400 mt-0.5">{@subtitle}</p>
+            </div>
+          </div>
+        </div>
+        <div class="p-6">
+          <div class="flex items-center justify-between text-sm text-stone-600">
+            <span>Dateien</span>
+            <span class="font-semibold text-stone-800 tabular-nums">
+              {@status.done}/{@status.total}
+            </span>
+          </div>
+          <div
+            class="mt-3 h-2 w-full rounded-full bg-stone-100 overflow-hidden"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax={@status.total}
+            aria-valuenow={@status.done}
+            aria-label="Fortschritt beim Kopieren der Dateien"
+          >
+            <div
+              class="h-full rounded-full bg-sky-500 transition-[width] duration-300"
+              style={"width: #{copy_percent(@status)}%"}
+            >
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+    """
+  end
+
+  defp copy_percent(%{total: total}) when total <= 0, do: 100
+  defp copy_percent(%{done: done, total: total}), do: round(done / total * 100)
+
+  @doc """
   A checkbox with a bold label and an explanatory description underneath.
 
   `<.input type="checkbox">` renders the label inline and has nowhere to put a

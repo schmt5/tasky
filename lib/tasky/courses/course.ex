@@ -14,6 +14,17 @@ defmodule Tasky.Courses.Course do
     # Lehrperson öffnet ihn bewusst im Kursformular.
     field :feedback_box_enabled, :boolean, default: false
 
+    # Kurs-Katalog: `nil` = nicht im Katalog. Bewusst NICHT in `changeset/2`
+    # gecastet — wie `share_slug`: nur `Tasky.Courses.publish_to_catalog/2` und
+    # `unpublish_from_catalog/2` setzen das Feld. So kann eine Kopie die
+    # Veröffentlichung auch dann nicht erben, wenn irgendwann jemand die
+    # `attrs`-Map in `Tasky.Courses.duplicate_course_records/3` erweitert.
+    field :catalog_published_at, :utc_datetime
+
+    # Nur von `Tasky.Courses.list_catalog_courses/1` gefüllt (COUNT über die
+    # Lerneinheiten): die Katalogliste braucht die Anzahl, nicht die Inhalte.
+    field :unit_count, :integer, virtual: true
+
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :tasks, Tasky.Tasks.Task
 
@@ -23,6 +34,10 @@ defmodule Tasky.Courses.Course do
 
     timestamps(type: :utc_datetime)
   end
+
+  @doc "True, wenn der Kurs im Kurs-Katalog sichtbar ist."
+  def catalog_published?(%__MODULE__{catalog_published_at: nil}), do: false
+  def catalog_published?(%__MODULE__{}), do: true
 
   @doc false
   def changeset(course, attrs) do

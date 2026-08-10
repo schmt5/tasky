@@ -149,39 +149,53 @@ defmodule Tasky.Courses do
   """
   def duplicate_course_records(scope, %Course{} = source, name) do
     with :ok <- Tasky.Policy.authorize(scope, source.teacher_id) do
-      tasks_query = from t in Task, order_by: [asc: t.position]
-      source = Repo.preload(source, tasks: tasks_query)
-
-      attrs = %{
-        "name" => String.slice(name, 0, 255),
-        "description" => source.description
-      }
-
-      scope
-      |> transact_duplicate(source, attrs)
-      |> unwrap_duplicate()
+      do_duplicate_records(scope, source, name, :owner)
     end
   end
 
-  defp transact_duplicate(scope, source, attrs),
-    do: Repo.transaction(fn -> insert_duplicate(scope, source, attrs) end)
+  defp do_duplicate_records(scope, %Course{} = source, name, mode) do
+    tasks_query = from t in Task, order_by: [asc: t.position]
+    source = Repo.preload(source, tasks: tasks_query)
+
+    attrs = %{
+      "name" => String.slice(name, 0, 255),
+      "description" => source.description
+    }
+
+    scope
+    |> transact_duplicate(source, attrs, mode)
+    |> unwrap_duplicate()
+  end
+
+  # Genau zwei Achsen, als ein Atom statt zweier Booleans: so ist an jeder
+  # Aufrufstelle sichtbar, welcher Pfad gemeint ist, und die unsinnige
+  # Kombination "Prüfung überspringen, Freigabe übernehmen" ist nicht bildbar.
+  defp task_copy_opts(:owner), do: []
+
+  defp task_copy_opts(:catalog_import),
+    do: [source_authorized: true, reset_release_state: true]
+
+  defp transact_duplicate(scope, source, attrs, mode),
+    do: Repo.transaction(fn -> insert_duplicate(scope, source, attrs, mode) end)
 
   defp unwrap_duplicate({:ok, {course, jobs}}), do: {:ok, course, jobs}
   defp unwrap_duplicate({:error, reason}), do: {:error, reason}
 
-  defp insert_duplicate(scope, source, attrs) do
+  defp insert_duplicate(scope, source, attrs, mode) do
     with {:ok, course} <- create_course(scope, attrs),
-         {:ok, jobs} <- duplicate_tasks(scope, source.tasks, course.id) do
+         {:ok, jobs} <- duplicate_tasks(scope, source.tasks, course.id, mode) do
       {course, jobs}
     else
       {:error, reason} -> Repo.rollback(reason)
     end
   end
 
-  defp duplicate_tasks(scope, tasks, course_id) do
+  defp duplicate_tasks(scope, tasks, course_id, mode) do
+    opts = task_copy_opts(mode)
+
     tasks
     |> Enum.reduce_while({:ok, []}, fn task, {:ok, acc} ->
-      case Tasky.Tasks.duplicate_task_into_course(scope, task, course_id) do
+      case Tasky.Tasks.duplicate_task_into_course(scope, task, course_id, opts) do
         {:ok, _task, jobs} -> {:cont, {:ok, [jobs | acc]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -294,6 +308,163 @@ defmodule Tasky.Courses do
   end
 
   def get_course_by_share_slug(_slug), do: nil
+
+  # Kurs-Katalog
+
+  @doc """
+  Alle im Katalog veröffentlichten Kurse, neueste Veröffentlichung zuerst.
+
+  Nur für Lehrpersonen und Admins; jeder andere Scope bekommt `[]`. Die Route
+  ist zusätzlich rollengesichert — das hier ist die zweite Linie, analog zu
+  `list_courses/1`.
+
+  Liefert `%Course{}` mit vorgeladener `:teacher`-Assoziation und gefülltem
+  virtuellem `unit_count`. Absichtlich OHNE `:tasks`-Preload: `tasks.content`
+  ist das ganze Tiptap-Dokument (bis 5 MB pro Einheit), und die Liste braucht
+  nur die Anzahl.
+  """
+  def list_catalog_courses(%Scope{} = scope) do
+    if Scope.admin_or_teacher?(scope) do
+      Repo.all(
+        from c in Course,
+          left_join: t in assoc(c, :tasks),
+          where: not is_nil(c.catalog_published_at),
+          group_by: c.id,
+          order_by: [desc: c.catalog_published_at, desc: c.id],
+          select_merge: %{unit_count: count(t.id)}
+      )
+      |> Repo.preload(:teacher)
+    else
+      []
+    end
+  end
+
+  def list_catalog_courses(_scope), do: []
+
+  @doc """
+  Gets a single catalog course for the read-only preview.
+
+  Absichtlich NICHT besitzergebunden — der Katalog ist für alle Lehrpersonen
+  und Admins lesbar. Das Gate ist die Rolle plus `catalog_published_at`: die
+  Veröffentlichung IST hier die Berechtigung, genau wie der Slug es in
+  `get_course_by_share_slug/1` ist.
+
+  Raises `Ecto.NoResultsError`, wenn der Kurs nicht existiert, nicht im Katalog
+  ist oder der Scope keine Lehrperson und kein Admin ist — bewusst 404 statt
+  403, wie `get_course!/2`: die Fehlerseite verrät so nicht, ob es den Kurs
+  gibt.
+
+  Lädt nur `:teacher`. Die Lerneinheiten holt der Aufrufer über
+  `Tasky.Tasks.list_tasks_for_export/1` (Position, Anhänge, Upload-Felder).
+  """
+  def get_catalog_course!(%Scope{} = scope, id) do
+    course =
+      if Scope.admin_or_teacher?(scope) do
+        Repo.one(
+          from c in Course,
+            where: c.id == ^id and not is_nil(c.catalog_published_at),
+            preload: [:teacher]
+        )
+      end
+
+    case course do
+      %Course{} = course -> course
+      nil -> raise Ecto.NoResultsError, queryable: Course
+    end
+  end
+
+  @doc """
+  Stellt den Kurs in den Kurs-Katalog: alle Lehrpersonen und Admins können ihn
+  danach lesen und in ihre eigenen Kurse übernehmen.
+
+  Ein Kurs ohne Lerneinheiten wird abgewiesen (`{:error, :no_units}`) — im
+  Katalog wäre er nur Rauschen. Erneutes Veröffentlichen aktualisiert das
+  Datum, weil die Katalogliste danach sortiert.
+  """
+  def publish_to_catalog(%Scope{} = scope, %Course{} = course) do
+    with :ok <- Tasky.Policy.authorize(scope, course.teacher_id),
+         :ok <- ensure_has_units(course) do
+      course
+      |> Ecto.Changeset.change(catalog_published_at: DateTime.utc_now(:second))
+      |> Repo.update()
+    end
+  end
+
+  defp ensure_has_units(%Course{id: course_id}) do
+    if Repo.exists?(from t in Task, where: t.course_id == ^course_id),
+      do: :ok,
+      else: {:error, :no_units}
+  end
+
+  @doc """
+  Nimmt den Kurs aus dem Katalog.
+
+  Bereits erstellte Importe anderer Lehrpersonen bleiben bestehen — eine Kopie
+  ist ab dem Import eigenständig und hat ihre eigenen Dateien.
+  """
+  def unpublish_from_catalog(%Scope{} = scope, %Course{} = course) do
+    with :ok <- Tasky.Policy.authorize(scope, course.teacher_id) do
+      course
+      |> Ecto.Changeset.change(catalog_published_at: nil)
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  Übernimmt einen Katalog-Kurs in das Konto der aufrufenden Lehrperson und
+  schreibt dessen Records in einer Transaktion; liefert
+  `{:ok, course, copy_jobs}` wie `duplicate_course_records/3`.
+
+  Das ist der einzige Pfad, auf dem eine Lehrperson Inhalte einer *anderen*
+  Lehrperson kopieren darf, und darum liegt die ganze Berechtigung hier:
+  Rolle (Lehrperson oder Admin) plus `catalog_published_at` an der Quelle. Die
+  Veröffentlichung IST die Berechtigung — dieselbe Form wie der Slug in
+  `get_course_by_share_slug/1`. Die Besitzprüfung pro Lerneinheit in
+  `Tasky.Tasks.duplicate_task_into_course/4` wird deshalb bewusst übersprungen;
+  sie kann hier per Definition nicht bestehen.
+
+  Nimmt eine `source_id`, nicht einen `%Course{}`: die Vorschauseite kann
+  minutenlang offen stehen, und ein beim Mount gefangener Struct würde einen
+  Import erlauben, nachdem die Autorin den Kurs aus dem Katalog genommen hat.
+  Bewusst ohne Row-Lock — das Rennen zu verlieren ist harmlos (der Import war
+  eine Millisekunde früher legal), und ein `FOR SHARE` auf `courses` würde eine
+  neue Lock-Order-Frage aufwerfen, ohne etwas zu sichern.
+
+  Jede kopierte Lerneinheit entsteht als unveröffentlichter, offener Entwurf
+  (siehe `Tasky.Tasks.duplicate_task_into_course/4`). Die Kopie ist nicht im
+  Katalog, hat keine Lernenden, keine Abgaben und keinen offenen
+  Feedback-Briefkasten.
+  """
+  def import_catalog_course_records(%Scope{} = scope, source_id, name) do
+    with {:ok, source} <- fetch_importable_course(scope, source_id) do
+      do_duplicate_records(scope, source, name, :catalog_import)
+    end
+  end
+
+  defp fetch_importable_course(scope, source_id) do
+    if Scope.admin_or_teacher?(scope),
+      do: importable(Repo.get(Course, source_id)),
+      else: {:error, :unauthorized}
+  end
+
+  defp importable(%Course{} = course) do
+    if Course.catalog_published?(course), do: {:ok, course}, else: {:error, :not_found}
+  end
+
+  defp importable(nil), do: {:error, :not_found}
+
+  @doc """
+  Wie `import_catalog_course_records/3`, führt die Datei-Kopien aber synchron
+  aus. Für Skripte und Tests; die Web-Schicht nimmt
+  `Tasky.Courses.DuplicateRunner.start_catalog_import/4`, damit die LiveView
+  ansprechbar bleibt.
+  """
+  def import_catalog_course(%Scope{} = scope, source_id, name) do
+    with {:ok, course, jobs} <- import_catalog_course_records(scope, source_id, name) do
+      Tasky.Uploads.run_copies(jobs)
+      {:ok, course}
+    end
+  end
 
   # Enrollment functions
 

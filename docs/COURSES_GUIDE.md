@@ -74,6 +74,46 @@ The course system uses the following database structure:
 - View all courses across all teachers
 - Full access to course management features
 
+## Kurs-Katalog
+
+Der Katalog ist der Weg, einen fertigen Kurs an andere Lehrpersonen
+weiterzugeben. Er teilt nichts — er kopiert.
+
+**Veröffentlichen.** Auf der Kursseite (`/courses/:id`) stellt die Lehrperson
+den Kurs über "Im Katalog veröffentlichen" bereit; ein Chip neben dem Titel
+zeigt danach, seit wann er drin ist, und derselbe Ort nimmt ihn wieder heraus.
+Ein Kurs ohne Lerneinheiten wird abgewiesen. `courses.catalog_published_at`
+trägt den Zustand und wird — wie `share_slug` — nicht aus Formulardaten
+gecastet: nur `Courses.publish_to_catalog/2` und `unpublish_from_catalog/2`
+setzen das Feld, damit eine Kopie die Veröffentlichung nicht erben kann.
+
+**Sehen.** `/catalog` listet alle veröffentlichten Kurse (Autorname, Anzahl
+Lerneinheiten, Datum), `/catalog/:id` zeigt sie als Read-only-Vorschau samt
+gerendertem Inhalt und Anhängen. Beides steht allen Lehrpersonen und Admins
+offen, Lernenden nicht. Im Katalog sind **alle** Lerneinheiten sichtbar, auch
+Entwürfe, archivierte und gesperrte — das Publish-Modal sagt das.
+
+**Übernehmen.** "In meine Kurse übernehmen" legt einen neuen Kurs im Konto der
+importierenden Person an. Kopiert werden Name, Beschreibung und jede
+Lerneinheit mit Inhalt, Bildern, Anhängen und Datei-Abgabefeldern. **Jede
+kopierte Einheit entsteht als Entwurf und entsperrt** (`status: "draft"`,
+`locked: false`) — die importierende Lehrperson gibt selbst frei. `extended`
+bleibt erhalten: ein freiwilliger Zusatzauftrag ist eine inhaltliche
+Eigenschaft, keine Freigabe. Nicht kopiert werden Lernende, Abgaben, der
+Feedback-Briefkasten, der KI-Link und die Katalog-Veröffentlichung selbst.
+
+Die Kopie ist ab dem Import eigenständig und besitzt ihre eigenen Dateien:
+nimmt die Autorin den Kurs später aus dem Katalog oder löscht ihn, bleiben
+bestehende Kopien intakt. Umgekehrt kostet jeder Import den vollen
+Speicherplatz — das ist Absicht, geteilte Objekte würden beim Löschen einer
+Kopie die anderen zerstören.
+
+Autorisierung: `Courses.import_catalog_course_records/3` ist der einzige Pfad,
+auf dem eine Lehrperson Inhalte einer anderen kopieren darf. Die
+Veröffentlichung IST dort die Berechtigung, und sie wird beim Import frisch
+gelesen — eine Vorschauseite, die offen stand, während die Autorin den Kurs
+zurückgezogen hat, bekommt `{:error, :not_found}`.
+
 ## Routes
 
 ### Teacher/Admin Routes
@@ -86,6 +126,8 @@ GET    /courses/:id          # View course details
 GET    /courses/:id/edit     # Edit course form
 PATCH  /courses/:id          # Update course
 DELETE /courses/:id          # Delete course
+GET    /catalog              # Kurs-Katalog: alle veröffentlichten Kurse
+GET    /catalog/:id          # Read-only-Vorschau + Übernehmen
 ```
 
 ### Student Routes
@@ -312,7 +354,6 @@ Potential additions to the course system:
 - Maximum enrollment limits
 - Course completion tracking
 - Bulk student enrollment (CSV import)
-- Course cloning/templates
 - Course archives
 - Student progress reports per course
 - Course-level announcements

@@ -164,4 +164,47 @@ defmodule TaskyWeb.AuthorizationTest do
                "/users/log-in"
     end
   end
+
+  describe "Kurs-Katalog" do
+    setup do
+      owner_scope = Scope.for_user(user_fixture(%{role: "teacher"}))
+      {:ok, course} = Tasky.Courses.create_course(owner_scope, %{name: "Katalogkurs"})
+      task_fixture(owner_scope, %{name: "Einheit", position: 0, course_id: course.id})
+      {:ok, published} = Tasky.Courses.publish_to_catalog(owner_scope, course)
+
+      %{course: course, published: published}
+    end
+
+    # The one positive row in this file: cross-teacher reading IS the feature.
+    test "a foreign teacher may browse the catalog and preview a course", %{
+      conn: conn,
+      published: published
+    } do
+      conn = log_in_role(conn, "teacher")
+
+      assert html_response(get(conn, "/catalog"), 200)
+      assert html_response(get(conn, "/catalog/#{published.id}"), 200)
+    end
+
+    test "a foreign teacher gets 404 for a course that is not in the catalog", %{conn: conn} do
+      private_scope = Scope.for_user(user_fixture(%{role: "teacher"}))
+      {:ok, private} = Tasky.Courses.create_course(private_scope, %{name: "Privat"})
+
+      conn = log_in_role(conn, "teacher")
+
+      assert_error_sent 404, fn -> get(conn, "/catalog/#{private.id}") end
+    end
+
+    test "students cannot reach the catalog", %{conn: conn, published: published} do
+      conn = log_in_role(conn, "student")
+
+      assert redirected_to(get(conn, "/catalog")) == "/"
+      assert redirected_to(get(conn, "/catalog/#{published.id}")) == "/"
+    end
+
+    test "anonymous users are sent to login", %{conn: conn, published: published} do
+      assert redirected_to(get(conn, "/catalog")) =~ "/users/log-in"
+      assert redirected_to(get(conn, "/catalog/#{published.id}")) =~ "/users/log-in"
+    end
+  end
 end

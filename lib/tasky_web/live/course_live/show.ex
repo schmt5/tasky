@@ -2,6 +2,7 @@ defmodule TaskyWeb.CourseLive.Show do
   use TaskyWeb, :live_view
 
   alias Tasky.Courses
+  alias Tasky.Courses.Course
   alias Tasky.Courses.DuplicateRunner
   alias Tasky.Tasks
 
@@ -28,6 +29,27 @@ defmodule TaskyWeb.CourseLive.Show do
                 <.icon name="hero-sparkles" class="w-4 h-4" /> KI-Link
               </button>
 
+              <%= if Course.catalog_published?(@course) do %>
+                <button
+                  type="button"
+                  id="unpublish-course"
+                  phx-click="unpublish_course"
+                  data-confirm="Kurs aus dem Katalog entfernen? Bereits erstellte Kopien anderer Lehrpersonen bleiben bestehen."
+                  class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
+                >
+                  <.icon name="hero-no-symbol" class="w-4 h-4" /> Aus Katalog entfernen
+                </button>
+              <% else %>
+                <button
+                  type="button"
+                  id="publish-course"
+                  phx-click="open_publish"
+                  class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
+                >
+                  <.icon name="hero-building-library" class="w-4 h-4" /> Im Katalog veröffentlichen
+                </button>
+              <% end %>
+
               <button
                 type="button"
                 id="duplicate-course"
@@ -51,6 +73,17 @@ defmodule TaskyWeb.CourseLive.Show do
             <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
               {@course.name}
             </h1>
+
+            <%!-- Der Zustand muss sichtbar sein: weil `catalog_published_at`
+                 nicht gecastet wird, kann das Kursformular nicht aus dem
+                 Katalog nehmen — diese Seite ist der einzige Ort dafür. --%>
+            <span
+              :if={Course.catalog_published?(@course)}
+              class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-sky-100 text-sky-700"
+            >
+              <.icon name="hero-building-library" class="w-3 h-3" />
+              Im Katalog seit {format_date(@course.catalog_published_at)}
+            </span>
           </div>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
@@ -444,51 +477,74 @@ defmodule TaskyWeb.CourseLive.Show do
         </dialog>
       <% end %>
 
-      <%!-- Duplicate Progress Modal — the records are already committed, so
-           there is deliberately no way to cancel or dismiss this. --%>
-      <%= if @duplicate_status do %>
-        <dialog id="duplicate-progress-modal" class="modal modal-open">
-          <div class="modal-backdrop bg-stone-900/50"></div>
+      <%!-- Publish to Catalog Confirmation Modal --%>
+      <%= if @publishing_course do %>
+        <dialog
+          id="publish-course-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_publish"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_publish"></div>
           <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
             <div class="p-6 border-b border-stone-100">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
-                  <.icon
-                    name="hero-arrow-path"
-                    class="w-5 h-5 text-sky-600 motion-safe:animate-spin"
-                  />
+                  <.icon name="hero-building-library" class="w-5 h-5 text-sky-600" />
                 </div>
                 <div>
-                  <h3 class="text-lg font-semibold text-stone-800">Kurs wird dupliziert</h3>
-                  <p class="text-xs text-stone-400 mt-0.5">Die Dateien werden kopiert.</p>
+                  <h3 class="text-lg font-semibold text-stone-800">Im Katalog veröffentlichen</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    Alle Lehrpersonen und Admins sehen diesen Kurs.
+                  </p>
                 </div>
               </div>
             </div>
             <div class="p-6">
-              <div class="flex items-center justify-between text-sm text-stone-600">
-                <span>Dateien</span>
-                <span class="font-semibold text-stone-800 tabular-nums">
-                  {@duplicate_status.done}/{@duplicate_status.total}
-                </span>
-              </div>
-              <div
-                class="mt-3 h-2 w-full rounded-full bg-stone-100 overflow-hidden"
-                role="progressbar"
-                aria-valuemin="0"
-                aria-valuemax={@duplicate_status.total}
-                aria-valuenow={@duplicate_status.done}
-                aria-label="Fortschritt beim Kopieren der Dateien"
-              >
-                <div
-                  class="h-full rounded-full bg-sky-500 transition-[width] duration-300"
-                  style={"width: #{duplicate_percent(@duplicate_status)}%"}
-                >
+              <p class="text-sm text-stone-600 leading-relaxed">
+                <span class="font-semibold text-stone-800">«{@course.name}»</span>
+                mit {length(@course.tasks)} Lerneinheiten für alle Lehrpersonen und Admins freigeben? Sie können den Inhalt lesen und in ihre eigenen Kurse übernehmen.
+              </p>
+              <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
+                <div class="flex items-start gap-2.5">
+                  <.icon
+                    name="hero-exclamation-triangle"
+                    class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                  />
+                  <p class="text-xs text-amber-700 leading-relaxed">
+                    Im Katalog sind alle Lerneinheiten sichtbar – auch Entwürfe und gesperrte. Lernende, Abgaben und der Feedback-Briefkasten bleiben privat.
+                  </p>
                 </div>
               </div>
+            </div>
+            <div class="p-6 pt-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                phx-click="close_publish"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                id="confirm-publish-course"
+                phx-click="publish_course"
+                phx-disable-with="Wird veröffentlicht…"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <.icon name="hero-building-library" class="w-4 h-4" /> Veröffentlichen
+              </button>
             </div>
           </div>
         </dialog>
       <% end %>
+
+      <.duplicate_progress_modal
+        :if={@duplicate_status}
+        status={@duplicate_status}
+        title="Kurs wird dupliziert"
+        subtitle="Die Dateien werden kopiert."
+      />
 
       <%!-- Rename Modal --%>
       <%= if @renaming_task do %>
@@ -565,8 +621,61 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:rename_form, nil)
      |> assign(:duplicating_course, false)
      |> assign(:duplicate_status, nil)
+     |> assign(:publishing_course, false)
      |> assign(:share_url, nil)
      |> stream(:tasks, course.tasks)}
+  end
+
+  @impl true
+  def handle_event("open_publish", _params, socket) do
+    {:noreply, assign(socket, :publishing_course, true)}
+  end
+
+  @impl true
+  def handle_event("close_publish", _params, socket) do
+    {:noreply, assign(socket, :publishing_course, false)}
+  end
+
+  @impl true
+  def handle_event("publish_course", _params, socket) do
+    case Courses.publish_to_catalog(socket.assigns.current_scope, socket.assigns.course) do
+      {:ok, course} ->
+        {:noreply,
+         socket
+         |> assign(:course, %{course | tasks: socket.assigns.course.tasks})
+         |> assign(:publishing_course, false)
+         |> put_flash(:info, "Kurs ist jetzt im Katalog.")}
+
+      {:error, :no_units} ->
+        {:noreply,
+         socket
+         |> assign(:publishing_course, false)
+         |> put_flash(
+           :error,
+           "Der Kurs enthält noch keine Lerneinheiten und kann nicht veröffentlicht werden."
+         )}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:publishing_course, false)
+         |> put_flash(:error, "Kurs konnte nicht veröffentlicht werden.")}
+    end
+  end
+
+  @impl true
+  def handle_event("unpublish_course", _params, socket) do
+    case Courses.unpublish_from_catalog(socket.assigns.current_scope, socket.assigns.course) do
+      {:ok, course} ->
+        {:noreply,
+         socket
+         |> assign(:course, %{course | tasks: socket.assigns.course.tasks})
+         |> put_flash(:info, "Kurs wurde aus dem Katalog entfernt.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Kurs konnte nicht aus dem Katalog entfernt werden.")}
+    end
   end
 
   @impl true
@@ -743,6 +852,6 @@ defmodule TaskyWeb.CourseLive.Show do
   @impl true
   def handle_info(_message, socket), do: {:noreply, socket}
 
-  defp duplicate_percent(%{total: total}) when total <= 0, do: 100
-  defp duplicate_percent(%{done: done, total: total}), do: round(done / total * 100)
+  defp format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%d.%m.%Y")
+  defp format_date(_), do: ""
 end

@@ -212,6 +212,17 @@ defmodule Tasky.CoursesDuplicateTest do
       assert {:ok, copy} = Courses.duplicate_course(admin, course, "Kopie")
       assert copy.teacher_id == admin.user.id
     end
+
+    test "a duplicate of a catalog course is not itself in the catalog", %{
+      scope: scope,
+      course: course
+    } do
+      task_fixture(scope, %{name: "Einheit", position: 0, course_id: course.id})
+      {:ok, published} = Courses.publish_to_catalog(scope, course)
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, published, "Kopie")
+      assert is_nil(copy.catalog_published_at)
+    end
   end
 
   describe "duplicate_course_records/3 — the storage boundary" do

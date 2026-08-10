@@ -31,7 +31,24 @@ defmodule Tasky.Courses.DuplicateRunner do
   any progress UI and treat the duplication as finished.
   """
   def start(scope, course, name, owner_pid) do
-    with {:ok, new_course, jobs} <- Courses.duplicate_course_records(scope, course, name) do
+    run(fn -> Courses.duplicate_course_records(scope, course, name) end, owner_pid)
+  end
+
+  @doc """
+  Wie `start/4`, aber für den Kurs-Katalog: übernimmt einen von einer *anderen*
+  Lehrperson veröffentlichten Kurs.
+
+  Nimmt eine `source_id` statt eines `%Course{}`, weil die Vorschauseite lange
+  offen stehen kann — die Veröffentlichung wird beim Import frisch geprüft
+  (`Tasky.Courses.import_catalog_course_records/3`). Dieselben Nachrichten an
+  `owner_pid`, dieselbe `{:ok, course, total_files}`-Rückgabe.
+  """
+  def start_catalog_import(scope, source_id, name, owner_pid) do
+    run(fn -> Courses.import_catalog_course_records(scope, source_id, name) end, owner_pid)
+  end
+
+  defp run(write_records, owner_pid) do
+    with {:ok, new_course, jobs} <- write_records.() do
       jobs = Enum.uniq_by(jobs, & &1.dest)
       total = length(jobs)
 

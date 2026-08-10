@@ -155,28 +155,58 @@ defmodule Tasky.Tasks do
   transaction has committed (see `Tasky.Courses.duplicate_course/3`) — which
   is what makes this function safe to call inside one.
 
+  ## Options
+
+    * `:source_authorized` — skips the ownership check on the source unit. Set
+      only by `Tasky.Courses.import_catalog_course_records/3`, never from the
+      web layer; see `authorize_duplicate_source/3`.
+    * `:reset_release_state` — writes the copy as an unpublished, unlocked
+      draft instead of carrying the source's release state over.
+
   ## Examples
 
       iex> duplicate_task_into_course(scope, task, course.id)
       {:ok, %Task{}, [%{src: "tasks/1/a.png", dest: "tasks/2/a.png"}]}
 
   """
-  def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id) do
-    with :ok <- Policy.authorize(scope, source.user_id),
-         {:ok, task} <-
-           create_task(scope, %{
-             name: source.name,
-             position: source.position,
-             status: source.status,
-             locked: source.locked,
-             extended: source.extended,
-             course_id: course_id
-           }),
+  def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id, opts \\ []) do
+    with :ok <- authorize_duplicate_source(scope, source, opts),
+         {:ok, task} <- create_task(scope, duplicate_attrs(source, course_id, opts)),
          {:ok, task, image_jobs} <- copy_task_content(task, source),
          {:ok, attachment_jobs} <- copy_task_attachments(scope, task, source),
          :ok <- copy_task_upload_fields(scope, task, source) do
       {:ok, task, image_jobs ++ attachment_jobs}
     end
+  end
+
+  # Der Katalog-Import kann die Besitzprüfung hier nicht bestehen — die Quelle
+  # gehört per Definition einer anderen Lehrperson. Die Berechtigung ist dort
+  # geklärt, wo sie hingehört: `Tasky.Courses.import_catalog_course_records/3`
+  # liest die Quelle frisch und prüft `catalog_published_at`. Diese Option
+  # setzt ausschliesslich `Tasky.Courses` — nie die Web-Schicht.
+  defp authorize_duplicate_source(scope, source, opts) do
+    if Keyword.get(opts, :source_authorized, false),
+      do: :ok,
+      else: Policy.authorize(scope, source.user_id)
+  end
+
+  # `reset_release_state`: status und locked sind Freigabe-Zustände für die
+  # Klasse der Autorin in ihrem Semester, nicht Teil des Inhalts. Beim
+  # Katalog-Import startet jede Einheit darum als unveröffentlichter, offener
+  # Entwurf; die importierende Lehrperson gibt selbst frei. `extended` bleibt:
+  # ein freiwilliger Zusatzauftrag ist eine inhaltliche Eigenschaft, keine
+  # Freigabe.
+  defp duplicate_attrs(source, course_id, opts) do
+    base = %{
+      name: source.name,
+      position: source.position,
+      extended: source.extended,
+      course_id: course_id
+    }
+
+    if Keyword.get(opts, :reset_release_state, false),
+      do: Map.merge(base, %{status: "draft", locked: false}),
+      else: Map.merge(base, %{status: source.status, locked: source.locked})
   end
 
   defp copy_task_content(task, %Task{content: nil}), do: {:ok, task, []}

@@ -158,6 +158,72 @@ defmodule TaskyWeb.CourseLive.ShowTest do
     end
   end
 
+  describe "Kurs-Katalog" do
+    test "the header offers publishing and no modal yet", %{conn: conn, course: course} do
+      {:ok, lv, html} = live(conn, ~p"/courses/#{course}")
+
+      assert has_element?(lv, "#publish-course")
+      refute has_element?(lv, "#unpublish-course")
+      refute has_element?(lv, "#publish-course-modal")
+      assert html =~ "Im Katalog veröffentlichen"
+    end
+
+    test "the confirmation modal spells out what becomes visible", %{conn: conn, course: course} do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      html = lv |> element("#publish-course") |> render_click()
+
+      assert has_element?(lv, "#publish-course-modal")
+      assert html =~ "auch Entwürfe und gesperrte"
+      assert html =~ "Feedback-Briefkasten bleiben privat"
+    end
+
+    test "confirming publishes and swaps the action", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      lv |> element("#publish-course") |> render_click()
+      html = lv |> element("#confirm-publish-course") |> render_click()
+
+      assert Courses.get_course!(scope, course.id).catalog_published_at
+      assert has_element?(lv, "#unpublish-course")
+      refute has_element?(lv, "#publish-course")
+      assert html =~ "Im Katalog seit"
+    end
+
+    test "unpublishing takes it back out and needs a confirmation", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      published = catalog_course_fixture(scope: scope, course: course)
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{published}")
+
+      assert has_element?(lv, "#unpublish-course[data-confirm]")
+
+      lv |> element("#unpublish-course") |> render_click()
+
+      refute Courses.get_course!(scope, published.id).catalog_published_at
+      assert has_element?(lv, "#publish-course")
+    end
+
+    test "a course without learning units cannot be published", %{conn: conn, scope: scope} do
+      empty = course_fixture(scope: scope, attrs: %{name: "Leer"})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{empty}")
+
+      lv |> element("#publish-course") |> render_click()
+      html = lv |> element("#confirm-publish-course") |> render_click()
+
+      assert html =~ "enthält noch keine Lerneinheiten"
+      refute Courses.get_course!(scope, empty.id).catalog_published_at
+    end
+  end
+
   describe "learning unit actions dropdown" do
     test "the row offers a single actions menu instead of a flat button row", %{
       conn: conn,

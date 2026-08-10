@@ -171,6 +171,9 @@ defmodule TaskyWeb.Router do
       live "/progress/:task_id", TaskLive.Progress, :task_progress
       live "/tasks/:id/content", TaskLive.Content, :content
 
+      live "/catalog", CatalogLive.Index, :index
+      live "/catalog/:id", CatalogLive.Show, :show
+
       live "/classes", ClassLive.Index, :index
       live "/classes/new", ClassLive.Form, :new
       live "/classes/:id/edit", ClassLive.Form, :edit
