@@ -65,6 +65,24 @@ export function saveTaskContent(taskId, content, opts = {}) {
   });
 }
 
+// Whole-document payload, unlike the exam endpoint's per-part `nodes`:
+// learning units have no parts.
+export function saveTaskSampleSolution(taskId, content, opts = {}) {
+  return request(`/api/tasks/${taskId}/sample-solution`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+    ...opts,
+  });
+}
+
+export function saveTaskCorrection(taskId, submissionId, content, opts = {}) {
+  return request(`/api/tasks/${taskId}/submissions/${submissionId}/correction`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+    ...opts,
+  });
+}
+
 export function saveTaskAnswers(taskId, content, opts = {}) {
   return request(`/api/student/tasks/${taskId}/answers`, {
     method: "PUT",

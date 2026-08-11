@@ -279,6 +279,72 @@ defmodule Tasky.CoursesCatalogTest do
       assert is_nil(copy.share_slug)
     end
 
+    test "keeps the sample solution but resets its release mode", %{
+      author: author,
+      importer: importer,
+      course: course
+    } do
+      task = task_fixture(author, %{name: "Mit Lösung", position: 0, course_id: course.id})
+
+      doc = %{
+        "type" => "doc",
+        "content" => [
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "a1"},
+            "content" => [%{"type" => "paragraph"}]
+          }
+        ]
+      }
+
+      {:ok, task} = Tasks.save_task_content(author, task, doc)
+      {:ok, task} = Tasks.set_solution_release_mode(author, task, "on_complete")
+
+      filled =
+        put_in(doc, ["content", Access.at(0), "content"], [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
+        ])
+
+      {:ok, _task} = Tasks.save_sample_solution(author, task, filled)
+
+      published = catalog_course_fixture(scope: author, course: course)
+
+      assert {:ok, copy} = Courses.import_catalog_course(importer, published.id, "Übernommen")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      # Die Lösung ist Inhalt und reist mit …
+      assert copied_task.sample_solution["a1"] == [
+               %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
+             ]
+
+      # … der Freigabe-Zeitpunkt ist es nicht: die importierende Lehrperson
+      # entscheidet für ihre Klasse.
+      assert copied_task.solution_release_mode == "never"
+    end
+
+    test "copies solution files", %{author: author, importer: importer, course: course} do
+      task = task_fixture(author, %{name: "Mit Lösungsdatei", position: 0, course_id: course.id})
+
+      {:ok, stored} =
+        Tasky.Uploads.save_task_solution_file(task.id, tmp_file("bytes"), "loesung.docx")
+
+      {:ok, _} =
+        Tasks.create_task_solution_file(
+          author,
+          task,
+          Map.put(stored, :original_name, "loesung.docx")
+        )
+
+      published = catalog_course_fixture(scope: author, course: course)
+
+      assert {:ok, copy} = Courses.import_catalog_course(importer, published.id, "Übernommen")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      assert [copied_file] = Tasks.list_task_solution_files(copied_task)
+      assert copied_file.original_name == "loesung.docx"
+      assert copied_file.stored_filename != stored.stored_filename
+    end
+
     test "copies content images, attachments and upload fields", %{
       author: author,
       importer: importer,

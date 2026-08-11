@@ -116,6 +116,103 @@ defmodule Tasky.CoursesDuplicateTest do
                Tasky.Uploads.fetch_task_image(copied_task.id, filename)
     end
 
+    test "copies the sample solution and its release mode", %{scope: scope, course: course} do
+      task = task_fixture(scope, %{name: "Mit Lösung", position: 0, course_id: course.id})
+
+      doc = %{
+        "type" => "doc",
+        "content" => [
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "a1"},
+            "content" => [%{"type" => "paragraph"}]
+          }
+        ]
+      }
+
+      {:ok, task} = Tasks.save_task_content(scope, task, doc)
+      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "on_complete")
+
+      filled =
+        put_in(doc, ["content", Access.at(0), "content"], [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
+        ])
+
+      {:ok, _task} = Tasks.save_sample_solution(scope, task, filled)
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      assert copied_task.sample_solution["a1"] == [
+               %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
+             ]
+
+      assert copied_task.solution_release_mode == "on_complete"
+    end
+
+    test "rewrites image refs inside the sample solution", %{scope: scope, course: course} do
+      task = task_fixture(scope, %{name: "Lösung mit Bild", position: 0, course_id: course.id})
+
+      {:ok, url} = Tasky.Uploads.save_task_image(task.id, image_upload())
+      filename = url |> String.split("/") |> List.last()
+
+      doc = %{
+        "type" => "doc",
+        "content" => [
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "a1"},
+            "content" => [%{"type" => "paragraph"}]
+          }
+        ]
+      }
+
+      {:ok, task} = Tasks.save_task_content(scope, task, doc)
+
+      filled =
+        put_in(doc, ["content", Access.at(0), "content"], [
+          %{"type" => "image", "attrs" => %{"src" => url}}
+        ])
+
+      {:ok, _task} = Tasks.save_sample_solution(scope, task, filled)
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      assert [%{"attrs" => %{"src" => src}}] = copied_task.sample_solution["a1"]
+      assert src == "/uploads/tasks/#{copied_task.id}/#{filename}"
+
+      # Die Kopie besitzt ihre Bytes: das Löschen der Quelle lässt sie stehen.
+      {:ok, _} = Tasks.delete_task(scope, task)
+
+      assert {:ok, {{:file, _path}, "image/png"}} =
+               Tasky.Uploads.fetch_task_image(copied_task.id, filename)
+    end
+
+    test "never copies per-student release state", %{scope: scope, course: course} do
+      task =
+        task_fixture(scope, %{
+          name: "Mit Freigabe",
+          position: 0,
+          status: "published",
+          course_id: course.id
+        })
+
+      student = user_fixture(%{role: "student"})
+      {:ok, _} = Courses.enroll_student(course.id, student.id)
+      student_scope = user_scope_fixture(student)
+      {:ok, submission} = Tasks.get_or_create_submission(student_scope, task.id)
+      {:ok, _} = Tasks.set_solution_release_mode(scope, task, "manual")
+
+      {:ok, _} =
+        Tasks.release_solution(scope, %{task | solution_release_mode: "manual"}, submission.id)
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      assert Tasks.list_task_submissions(scope, copied_task.id) == []
+    end
+
     test "copies attachments under fresh stored filenames", %{scope: scope, course: course} do
       task = task_fixture(scope, %{name: "Mit Anhang", position: 0, course_id: course.id})
 
@@ -142,6 +239,34 @@ defmodule Tasky.CoursesDuplicateTest do
                Tasky.Uploads.fetch_task_attachment(
                  copied_task.id,
                  copied_attachment.stored_filename
+               )
+    end
+
+    test "copies solution files under fresh stored filenames", %{scope: scope, course: course} do
+      task = task_fixture(scope, %{name: "Mit Lösungsdatei", position: 0, course_id: course.id})
+
+      {:ok, stored} =
+        Tasky.Uploads.save_task_solution_file(task.id, tmp_file("bytes"), "loesung.docx")
+
+      {:ok, file} =
+        Tasks.create_task_solution_file(
+          scope,
+          task,
+          Map.put(stored, :original_name, "loesung.docx")
+        )
+
+      assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
+      assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
+
+      assert [copied_file] = Tasks.list_task_solution_files(copied_task)
+      assert copied_file.original_name == "loesung.docx"
+      assert copied_file.size == file.size
+      assert copied_file.stored_filename != file.stored_filename
+
+      assert {:ok, {:file, _path}} =
+               Tasky.Uploads.fetch_task_solution_file(
+                 copied_task.id,
+                 copied_file.stored_filename
                )
     end
 

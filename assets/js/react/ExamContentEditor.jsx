@@ -51,9 +51,12 @@ export default function ExamContentEditor({
   externalToolbar = false,
   partId = null,
   apiRef = null,
+  lockHintText = null,
 }) {
-  // Mode presets bundle the prop matrix; explicit props still win so callers
-  // can override single flags.
+  // Mode presets bundle the prop matrix. NOTE: the preset WINS over an
+  // explicit prop — `preset.x ?? x` only falls back to the prop when the
+  // preset leaves the flag undefined. To vary a flag, add a preset; do not
+  // try to override one from the call site.
   const preset = (mode && EDITOR_MODES[mode]) || {};
   hideAnswers = preset.hideAnswers ?? hideAnswers;
   lockContent = preset.lockContent ?? lockContent;
@@ -228,6 +231,7 @@ export default function ExamContentEditor({
           uploadImage={uploadImage}
           lockHintVisible={lockContent && lockHintVisible}
           lockHintEnabled={lockContent}
+          lockHintText={lockHintText || undefined}
         />
       )}
       {externalToolbar && status === "error" && (

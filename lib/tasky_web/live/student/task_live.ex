@@ -32,11 +32,22 @@ defmodule TaskyWeb.Student.TaskLive do
           </div>
 
           <div
-            :if={@has_files and (@editable or @preview_mode)}
+            :if={(@has_files or @solution_visible) and (@editable or @preview_mode)}
             class="inline-flex items-center gap-0.5 bg-sky-100/70 rounded-lg p-0.5 shrink-0"
           >
             <.student_tab_button label="Aufgabe" tab="aufgabe" active={@student_tab == "aufgabe"} />
-            <.student_tab_button label="Dateien" tab="dateien" active={@student_tab == "dateien"} />
+            <.student_tab_button
+              :if={@has_files}
+              label="Dateien"
+              tab="dateien"
+              active={@student_tab == "dateien"}
+            />
+            <.student_tab_button
+              :if={@solution_visible}
+              label="Musterlösung"
+              tab="musterloesung"
+              active={@student_tab == "musterloesung"}
+            />
           </div>
 
           <div class="flex items-center gap-3 shrink-0">
@@ -109,14 +120,49 @@ defmodule TaskyWeb.Student.TaskLive do
         <%!-- Aufgabe tab: CSS-hidden (never unmounted) so the phx-update="ignore"
             editor keeps its DOM and state. --%>
         <div class={@student_tab != "aufgabe" && "hidden"}>
-          <div
-            id={"task-answers-editor-#{@submission.id}"}
-            phx-hook="TaskAnswersEditor"
-            phx-update="ignore"
-            data-task-id={@task.id}
-            data-content={@content_json}
-            data-editable={to_string(@editable)}
-          >
+          <%!-- Korrigiertes Dokument. Es ersetzt die Rücklese-Ansicht der
+              eigenen Antworten und steht beim Überarbeiten darüber. Es darf
+              NIE in den editierbaren Editor: der schreibt das ganze Dokument
+              nach `submission.content` zurück. --%>
+          <div :if={@showing_correction} class="bg-stone-100">
+            <div class="max-w-4xl mx-auto px-8 pt-8">
+              <div class="bg-amber-50 border border-amber-200 rounded-[14px] px-5 py-4">
+                <div class="flex items-start gap-3">
+                  <.icon name="hero-pencil-square" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div class="min-w-0">
+                    <p class="text-[14px] font-semibold text-amber-900">
+                      Mit den Anmerkungen deiner Lehrperson
+                    </p>
+                    <p class="text-[13px] text-amber-700 mt-0.5">
+                      Deine Antworten, ergänzt um die Korrektur.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="max-w-4xl mx-auto px-8 py-6">
+              <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07)] overflow-hidden">
+                <div
+                  id={"task-correction-viewer-#{@submission.id}"}
+                  phx-hook="ExamReadOnlyViewer"
+                  phx-update="ignore"
+                  data-content={@correction_json}
+                >
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div :if={@editable or not @showing_correction}>
+            <div
+              id={"task-answers-editor-#{@submission.id}"}
+              phx-hook="TaskAnswersEditor"
+              phx-update="ignore"
+              data-task-id={@task.id}
+              data-content={@content_json}
+              data-editable={to_string(@editable)}
+            >
+            </div>
           </div>
         </div>
 
@@ -324,6 +370,80 @@ defmodule TaskyWeb.Student.TaskLive do
             </div>
           </div>
         </div>
+
+        <%!-- Musterlösung tab: nur im DOM, wenn auch freigegeben. --%>
+        <div
+          :if={@solution_visible}
+          class={[
+            "bg-stone-100 min-h-[calc(100vh-54px)]",
+            @student_tab != "musterloesung" && "hidden"
+          ]}
+        >
+          <div class="max-w-4xl mx-auto px-8 py-8 space-y-6">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-[14px] px-5 py-4">
+              <div class="flex items-start gap-3">
+                <.icon name="hero-key" class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div class="min-w-0">
+                  <p class="text-[14px] font-semibold text-emerald-900">Musterlösung</p>
+                  <p class="text-[13px] text-emerald-700 mt-0.5">
+                    So hätte die Lösung aussehen können. Vergleiche sie mit deinen Antworten.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              :if={@solution_has_doc}
+              class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
+            >
+              <div
+                id={"task-solution-viewer-#{@task.id}"}
+                phx-hook="ExamReadOnlyViewer"
+                phx-update="ignore"
+                data-content={@solution_json}
+              >
+              </div>
+            </div>
+
+            <%!-- Lösungsdateien --%>
+            <div
+              :if={@solution_files != []}
+              class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]"
+            >
+              <div class="p-6">
+                <div class="flex items-center gap-2.5">
+                  <.icon name="hero-document-check" class="w-5 h-5 text-sky-500" />
+                  <h2 class="text-lg font-semibold text-stone-800">Lösungsdateien</h2>
+                </div>
+                <p class="text-sm text-stone-500 mt-1">
+                  Die Lösung zum Herunterladen und Vergleichen.
+                </p>
+              </div>
+              <div class="px-6 pb-6 space-y-2.5">
+                <div
+                  :for={file <- @solution_files}
+                  class="flex items-center gap-4 rounded-xl border border-stone-200 px-4 py-3"
+                >
+                  <.file_badge filename={file.stored_filename} />
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-stone-800 truncate">
+                      {file.original_name}
+                    </p>
+                    <p class="text-xs text-stone-400 mt-0.5">
+                      {file_type_label(file.stored_filename)} · {Uploads.format_size(file.size)}
+                    </p>
+                  </div>
+                  <a
+                    href={~p"/student/tasks/#{@task.id}/solution-files/#{file.id}"}
+                    class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-3.5 py-2 rounded-lg transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 shrink-0"
+                  >
+                    <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Herunterladen
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       <% else %>
         <%!-- Status view (completed / approved) --%>
         <div class="max-w-4xl mx-auto px-8 py-8">
@@ -365,6 +485,13 @@ defmodule TaskyWeb.Student.TaskLive do
                       class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
                     >
                       <.icon name="hero-eye" class="w-4 h-4" /> Antworten ansehen
+                    </.link>
+                    <.link
+                      :if={@solution_visible}
+                      navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
+                      class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+                    >
+                      <.icon name="hero-key" class="w-4 h-4" /> Musterlösung ansehen
                     </.link>
                     <.link
                       navigate={~p"/student/courses/#{@task.course_id}"}
@@ -417,6 +544,13 @@ defmodule TaskyWeb.Student.TaskLive do
                     class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
                   >
                     <.icon name="hero-eye" class="w-4 h-4" /> Antworten ansehen
+                  </.link>
+                  <.link
+                    :if={@solution_visible}
+                    navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
+                    class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+                  >
+                    <.icon name="hero-key" class="w-4 h-4" /> Musterlösung ansehen
                   </.link>
                   <.link
                     navigate={~p"/student/courses/#{@task.course_id}"}
@@ -630,7 +764,11 @@ defmodule TaskyWeb.Student.TaskLive do
         |> assign(:attachments, attachments)
         |> assign(:upload_fields, upload_fields)
         |> assign(:has_files, attachments != [] or upload_fields != [])
-        |> assign(:student_tab, "aufgabe")
+        # Beides hängt nur an der Lerneinheit, nicht an der Abgabe — einmal
+        # laden reicht, `assign_submission/2` läuft bei jedem PubSub-Update.
+        |> assign(:solution_files, Tasks.list_task_solution_files(task))
+        |> assign(:solution_has_doc, Tasks.answer_block_count(task) > 0)
+        |> assign(:student_tab, initial_student_tab(params))
         |> assign(:show_complete_modal, false)
         |> assign(:submit_check, :checking)
         |> assign(:missing_uploads, [])
@@ -652,12 +790,53 @@ defmodule TaskyWeb.Student.TaskLive do
     end
   end
 
-  # Keeps submission-derived assigns (editable flag, uploaded files) in sync.
+  # Keeps submission-derived assigns (editable flag, uploaded files, solution
+  # release) in sync. Weil auch der PubSub-Pfad hier durchläuft, erscheint der
+  # Musterlösungs-Tab live, sobald die Lehrperson freigibt.
   defp assign_submission(socket, submission) do
+    task = socket.assigns.task
+
+    # Das eine Tor für Musterlösung und Korrektur.
+    released = Tasks.solution_visible?(task, submission)
+
+    # Freigegeben ist nicht dasselbe wie zeigenswert: ohne Lösungsdokument und
+    # ohne Lösungsdatei bliebe der Tab leer.
+    visible =
+      released and (socket.assigns.solution_has_doc or socket.assigns.solution_files != [])
+
+    showing_correction = released and Tasks.has_correction?(submission)
+
     socket
     |> assign(:submission, submission)
     |> assign(:editable, Tasks.editable_submission?(submission))
     |> assign(:submission_files, submission_files_by_field(submission))
+    |> assign(:solution_visible, visible)
+    |> assign(:solution_json, solution_json(task, visible))
+    |> assign(:showing_correction, showing_correction)
+    |> assign(:correction_json, correction_json(task, submission, showing_correction))
+  end
+
+  # Das Lösungsdokument wird nur berechnet, wenn es auch freigegeben ist — es
+  # hinter einem CSS-`hidden` ins DOM zu rendern wäre kein Tor.
+  defp solution_json(task, true), do: Jason.encode!(Tasks.sample_solution_doc(task))
+  defp solution_json(_task, false), do: nil
+
+  defp correction_json(task, submission, true) do
+    case Tasks.answer_doc_for_student(task, submission) do
+      {:corrected, doc} -> Jason.encode!(doc)
+      {:own, _doc} -> nil
+    end
+  end
+
+  defp correction_json(_task, _submission, false), do: nil
+
+  # Erlaubt Deeplinks wie `?preview=true&tab=musterloesung` — die Statuskarte
+  # einer erledigten Einheit verlinkt so direkt auf die Musterlösung.
+  defp initial_student_tab(params) do
+    case Map.get(params, "tab") do
+      tab when tab in ["dateien", "musterloesung"] -> tab
+      _ -> "aufgabe"
+    end
   end
 
   defp content_json(task, submission) do
@@ -680,7 +859,7 @@ defmodule TaskyWeb.Student.TaskLive do
 
   @impl true
   def handle_event("switch_student_tab", %{"tab" => tab}, socket)
-      when tab in ["aufgabe", "dateien"] do
+      when tab in ["aufgabe", "dateien", "musterloesung"] do
     {:noreply, assign(socket, :student_tab, tab)}
   end
 

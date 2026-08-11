@@ -86,4 +86,59 @@ defmodule Tasky.UploadsTest do
                Uploads.fetch_exam_image("1", "#{Ecto.UUID.generate()}.png")
     end
   end
+
+  describe "Musterlösungs-Dateien" do
+    test "stores, fetches and deletes a docx" do
+      assert {:ok, meta} =
+               Uploads.save_task_solution_file("42", tmp_file("bytes"), "loesung.docx")
+
+      assert meta.stored_filename =~ ~r/^[0-9a-f-]+\.docx$/
+      assert meta.size == byte_size("bytes")
+
+      assert {:ok, {:file, path}} =
+               Uploads.fetch_task_solution_file("42", meta.stored_filename)
+
+      assert File.exists?(path)
+
+      Uploads.delete_task_solution_file("42", meta.stored_filename)
+
+      assert {:error, :not_found} =
+               Uploads.fetch_task_solution_file("42", meta.stored_filename)
+    end
+
+    test "rejects an extension outside the attachment whitelist" do
+      assert {:error, _} = Uploads.save_task_solution_file("42", tmp_file("x"), "boese.exe")
+    end
+
+    test "rejects path traversal on fetch" do
+      assert {:error, :invalid} = Uploads.fetch_task_solution_file("42", "../../secret.docx")
+    end
+
+    # Der Prefix liegt unter tasks/<id>, damit das Löschen der Lerneinheit die
+    # Bytes mitnimmt — sonst leckt jede gelöschte Einheit ihre Lösungsdateien.
+    test "delete_task_files/1 clears the solution prefix too" do
+      {:ok, meta} = Uploads.save_task_solution_file("77", tmp_file("bytes"), "loesung.docx")
+      assert {:ok, _} = Uploads.fetch_task_solution_file("77", meta.stored_filename)
+
+      Uploads.delete_task_files("77")
+
+      assert {:error, :not_found} =
+               Uploads.fetch_task_solution_file("77", meta.stored_filename)
+    end
+
+    test "plan_solution_file_copy/3 mints a fresh stored filename" do
+      assert {:ok, new_name, job} =
+               Uploads.plan_solution_file_copy("1", "2", "abc.docx")
+
+      assert new_name =~ ~r/^[0-9a-f-]+\.docx$/
+      assert new_name != "abc.docx"
+      assert job.src == "tasks/1/solution/abc.docx"
+      assert job.dest == "tasks/2/solution/#{new_name}"
+    end
+
+    test "plan_solution_file_copy/3 refuses an unsafe filename" do
+      assert {:error, :invalid} =
+               Uploads.plan_solution_file_copy("1", "2", "../../secret.docx")
+    end
+  end
 end

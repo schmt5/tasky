@@ -141,6 +141,210 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
     assert reloaded.feedback == "Zwischenstand notiert"
   end
 
+  describe "Freigabe der Musterlösung" do
+    test "bietet im Modus never keinen Freigeben-Knopf", %{
+      conn: conn,
+      task: task,
+      student: student
+    } do
+      lv = open_review(conn, task, student)
+
+      refute has_element?(lv, "button[phx-click='release_solution']")
+      assert render(lv) =~ "Für diese Lerneinheit ausgeblendet"
+    end
+
+    test "gibt für eine/n Lernende/n frei", %{
+      conn: conn,
+      task: task,
+      student: student,
+      submission: submission
+    } do
+      {:ok, _} =
+        Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "manual")
+
+      lv = open_review(conn, task, student)
+
+      html =
+        lv |> element("button[phx-click='release_solution']") |> render_click()
+
+      assert html =~ "Freigegeben am"
+      refute has_element?(lv, "button[phx-click='release_solution']")
+
+      assert %DateTime{} =
+               Tasky.Repo.reload!(submission).solution_released_at
+    end
+
+    test "meldet eine automatische Freigabe statt eines Knopfes", %{
+      conn: conn,
+      task: task,
+      student: student
+    } do
+      {:ok, _} =
+        Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "on_complete")
+
+      lv = open_review(conn, task, student)
+
+      assert render(lv) =~ "Automatisch freigegeben"
+      refute has_element?(lv, "button[phx-click='release_solution']")
+    end
+  end
+
+  describe "Bulk-Freigabe" do
+    test "zeigt im Modus never keine Bulk-Aktionen", %{conn: conn, task: task} do
+      {:ok, _lv, html} = live(conn, ~p"/progress/#{task.id}")
+
+      assert html =~ "Wird Lernenden nicht angezeigt"
+      assert html =~ "Modus ändern"
+      refute html =~ "phx-click=\"release_selected\""
+      refute html =~ "phx-click=\"open_release_all_confirm\""
+    end
+
+    test "gibt nach Bestätigung für alle frei", %{
+      conn: conn,
+      task: task,
+      submission: submission
+    } do
+      {:ok, _} = Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "manual")
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      lv |> element("button[phx-click='open_release_all_confirm']") |> render_click()
+      assert has_element?(lv, "#release-all-modal")
+
+      html = lv |> element("#confirm-release-all") |> render_click()
+
+      assert html =~ "freigegeben"
+      assert %DateTime{} = Tasky.Repo.reload!(submission).solution_released_at
+    end
+
+    test "gibt nur die Auswahl frei", %{
+      conn: conn,
+      task: task,
+      student: student,
+      submission: submission
+    } do
+      teacher_scope = Scope.for_user(user_of(task))
+      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+
+      other = user_fixture(%{role: "student"})
+      {:ok, _} = Courses.enroll_student(task.course_id, other.id)
+      {:ok, other_submission} = Tasks.get_or_create_submission(Scope.for_user(other), task.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      # Nichts ausgewählt → Knopf ist gesperrt.
+      assert lv
+             |> element("button[phx-click='release_selected']")
+             |> render() =~ "disabled"
+
+      lv
+      |> element("input[phx-value-submission-id='#{submission.id}']")
+      |> render_click()
+
+      lv |> element("button[phx-click='release_selected']") |> render_click()
+
+      assert %DateTime{} = Tasky.Repo.reload!(submission).solution_released_at
+      refute Tasky.Repo.reload!(other_submission).solution_released_at
+
+      _ = student
+    end
+
+    test "ist idempotent — der erste Zeitstempel bleibt", %{
+      conn: conn,
+      task: task,
+      submission: submission
+    } do
+      teacher_scope = Scope.for_user(user_of(task))
+      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, _} = Tasks.release_solution(teacher_scope, task, submission.id)
+      first = Tasky.Repo.reload!(submission).solution_released_at
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+      lv |> element("button[phx-click='open_release_all_confirm']") |> render_click()
+      lv |> element("#confirm-release-all") |> render_click()
+
+      assert Tasky.Repo.reload!(submission).solution_released_at == first
+    end
+
+    test "zeigt den Freigabestatus in der Tabelle", %{conn: conn, task: task} do
+      teacher_scope = Scope.for_user(user_of(task))
+      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+
+      {:ok, lv, html} = live(conn, ~p"/progress/#{task.id}")
+      assert html =~ "Nicht freigegeben"
+
+      lv |> element("button[phx-click='open_release_all_confirm']") |> render_click()
+      html = lv |> element("#confirm-release-all") |> render_click()
+
+      assert html =~ "Freigegeben"
+    end
+  end
+
+  describe "Korrektur-Seite" do
+    test "ist aus dem Review-Modal erreichbar", %{
+      conn: conn,
+      task: task,
+      student: student,
+      submission: submission
+    } do
+      lv = open_review(conn, task, student)
+
+      assert has_element?(
+               lv,
+               "a[href='/progress/#{task.id}/correction/#{submission.id}']"
+             )
+    end
+
+    test "zeigt die Antworten der/des Lernenden im Korrektur-Editor", %{
+      conn: conn,
+      task: task,
+      submission: submission
+    } do
+      {:ok, _lv, html} = live(conn, ~p"/progress/#{task.id}/correction/#{submission.id}")
+
+      assert html =~ "task-correction-editor-#{submission.id}"
+      assert html =~ "Mia Muster"
+      assert html =~ "Noch nicht freigegeben" or html =~ "ausgeblendet"
+    end
+
+    test "gibt von der Korrektur-Seite aus frei", %{
+      conn: conn,
+      task: task,
+      submission: submission
+    } do
+      {:ok, _} = Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "manual")
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}/correction/#{submission.id}")
+
+      html = lv |> element("button[phx-click='release_solution']") |> render_click()
+
+      assert html =~ "Freigegeben am"
+      assert %DateTime{} = Tasky.Repo.reload!(submission).solution_released_at
+    end
+
+    test "leitet bei unbekannter Abgabe zurück", %{conn: conn, task: task} do
+      assert {:error, {:live_redirect, %{to: path}}} =
+               live(conn, ~p"/progress/#{task.id}/correction/999999")
+
+      assert path == "/progress/#{task.id}"
+    end
+
+    test "eine fremde Lehrperson kommt nicht hinein", %{
+      conn: conn,
+      task: task,
+      submission: submission
+    } do
+      other = user_fixture(%{role: "teacher"})
+      conn = conn |> Phoenix.ConnTest.recycle() |> log_in_user(other)
+
+      assert_raise Ecto.NoResultsError, fn ->
+        live(conn, ~p"/progress/#{task.id}/correction/#{submission.id}")
+      end
+    end
+  end
+
+  defp user_of(task), do: Tasky.Repo.get!(Tasky.Accounts.User, task.user_id)
+
   test "a foreign teacher gets no access to the unit's progress", %{
     conn: conn,
     task: task

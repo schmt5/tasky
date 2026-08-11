@@ -195,6 +195,34 @@ defmodule Tasky.Uploads do
   def delete_task_attachment_file(task_id, stored_filename),
     do: delete_stored(["tasks", to_string(task_id), "attachments"], stored_filename)
 
+  ## Musterlösungs-Dateien
+  #
+  # Liegen unter `tasks/<id>/solution/`, also innerhalb von `tasks/<id>` —
+  # damit räumt `delete_task_files/1` sie beim Löschen der Lerneinheit mit auf.
+  # Ausgeliefert werden sie nie über die öffentlichen `/uploads/...`-Routen,
+  # sondern nur durch die beiden Download-Controller.
+
+  @doc """
+  Stores a solution file for a learning unit. Same whitelist and size limit as
+  teacher attachments — a correctly formatted Word document is the `docx` case
+  the registry already covers.
+  """
+  def save_task_solution_file(task_id, src_path, original_name) do
+    save_file(src_path, original_name, attachment_accept_exts(), [
+      "tasks",
+      to_string(task_id),
+      "solution"
+    ])
+  end
+
+  @doc "Serveable source of a stored solution file, or an error tuple."
+  def fetch_task_solution_file(task_id, stored_filename, opts \\ []),
+    do: fetch_stored(["tasks", to_string(task_id), "solution"], stored_filename, opts)
+
+  @doc "Removes a stored solution file (idempotent)."
+  def delete_task_solution_file(task_id, stored_filename),
+    do: delete_stored(["tasks", to_string(task_id), "solution"], stored_filename)
+
   ## Copying between learning units (duplication)
 
   # Eight copies in flight: R2 `CopyObject` is server-side, so the only cost
@@ -309,6 +337,30 @@ defmodule Tasky.Uploads do
            plan_copy(
              {[segment, to_string(from_id), "attachments"], stored_filename},
              {[segment, to_string(to_id), "attachments"], new_stored_filename}
+           ) do
+      {:ok, new_stored_filename, job}
+    end
+  end
+
+  @doc """
+  Plans the copy of a solution file into another learning unit, minting a
+  fresh `stored_filename` (the column is globally unique).
+
+  Eigene Funktion statt eines Parameters an `plan_attachment_copy/4`, damit
+  dessen bestehende Aufrufstellen unangetastet bleiben.
+
+  Returns `{:ok, new_stored_filename, copy_job}` or `{:error, :invalid}`.
+  """
+  @spec plan_solution_file_copy(term(), term(), String.t()) ::
+          {:ok, String.t(), copy_job()} | {:error, :invalid}
+  def plan_solution_file_copy(from_id, to_id, stored_filename) do
+    ext = stored_filename |> Path.extname() |> String.downcase()
+    new_stored_filename = Ecto.UUID.generate() <> ext
+
+    with {:ok, job} <-
+           plan_copy(
+             {["tasks", to_string(from_id), "solution"], stored_filename},
+             {["tasks", to_string(to_id), "solution"], new_stored_filename}
            ) do
       {:ok, new_stored_filename, job}
     end

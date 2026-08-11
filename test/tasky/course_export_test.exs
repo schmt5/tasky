@@ -91,6 +91,29 @@ defmodule Tasky.CourseExportTest do
     end
   end
 
+  # Der Export hängt am öffentlichen Share-Slug. Die Musterlösung dort
+  # mitzurendern hiesse, jede Modellantwort zu veröffentlichen.
+  test "never leaks the sample solution" do
+    unit =
+      task(%{
+        name: "A",
+        content: content("Aufgabe"),
+        sample_solution: %{
+          "a1" => [
+            %{
+              "type" => "paragraph",
+              "content" => [%{"type" => "text", "text" => "GEHEIME LÖSUNG"}]
+            }
+          ]
+        }
+      })
+
+    markdown = CourseExport.to_markdown(course(), [unit])
+
+    assert markdown =~ "Aufgabe"
+    refute markdown =~ "GEHEIME LÖSUNG"
+  end
+
   test "lists attachments and upload fields, flagging required ones" do
     unit =
       task(%{

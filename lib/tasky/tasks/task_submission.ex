@@ -10,6 +10,17 @@ defmodule Tasky.Tasks.TaskSubmission do
   Lerneinheiten werden nicht bewertet: es gibt nur einen Feedbacktext, und
   `feedback_at`/`feedback_by_id` sind ausschliesslich gesetzt, wenn dieser Text
   auch Inhalt hat — daran hängt der Feedback-Hinweis für Lernende.
+
+  `corrected_content` ist das von der Lehrperson annotierte Antwortdokument
+  (Rot-Text, `teacherComment`). Es gehört zur eingereichten Runde und wird
+  beim Wiedereinreichen geleert — gleiche Begründung wie beim Feedback, es
+  gibt keinen Korrektur-Verlauf.
+
+  `solution_released_at` ist die manuelle Freigabe von Musterlösung *und*
+  Korrektur für genau diesen Lernenden. Sie wird nie zurückgenommen, auch
+  nicht bei einer Rückgabe — den Not-Aus für alle liefert der Modus `never`
+  auf der Lerneinheit. Ausgewertet wird sie ausschliesslich in
+  `Tasky.Tasks.solution_visible?/2`.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -26,6 +37,8 @@ defmodule Tasky.Tasks.TaskSubmission do
 
     field :feedback_at, :utc_datetime
     field :content, :map
+    field :corrected_content, :map, default: %{}
+    field :solution_released_at, :utc_datetime
 
     belongs_to :task, Tasky.Tasks.Task
     belongs_to :student, Tasky.Accounts.User
@@ -76,7 +89,12 @@ defmodule Tasky.Tasks.TaskSubmission do
 
   Sets status to "completed", sets completed_at and drops the feedback of the
   previous round: die Begründung einer Rückgabe darf nicht am neu eingereichten
-  Stand kleben (es gibt keinen Feedback-Verlauf).
+  Stand kleben (es gibt keinen Feedback-Verlauf). Aus demselben Grund fällt
+  auch die Korrektur weg — sie annotiert einen Antwortstand, den es nicht mehr
+  gibt.
+
+  `solution_released_at` wird bewusst NICHT angefasst: eine erteilte Freigabe
+  bleibt bestehen, auch über eine Rückgabe und ein erneutes Einreichen hinweg.
   """
   def complete_changeset(submission) do
     submission
@@ -85,7 +103,8 @@ defmodule Tasky.Tasks.TaskSubmission do
       completed_at: DateTime.utc_now(:second),
       feedback: nil,
       feedback_at: nil,
-      feedback_by_id: nil
+      feedback_by_id: nil,
+      corrected_content: %{}
     )
   end
 
@@ -101,6 +120,19 @@ defmodule Tasky.Tasks.TaskSubmission do
     |> validate_change(:content, fn :content, doc ->
       if :erlang.external_size(doc) > @max_content_bytes,
         do: [content: "Inhalt ist zu gross"],
+        else: []
+    end)
+  end
+
+  @doc """
+  Changeset für das von der Lehrperson annotierte Antwortdokument.
+  """
+  def correction_changeset(submission, content) when is_map(content) do
+    submission
+    |> change(corrected_content: content)
+    |> validate_change(:corrected_content, fn :corrected_content, doc ->
+      if :erlang.external_size(doc) > @max_content_bytes,
+        do: [corrected_content: "Inhalt ist zu gross"],
         else: []
     end)
   end

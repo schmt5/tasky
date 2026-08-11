@@ -56,6 +56,46 @@ defmodule TaskyWeb.AuthorizationTest do
       end
     end
 
+    test "students cannot reach the sample solution API", %{conn: conn, task: task} do
+      conn =
+        conn
+        |> log_in_role("student")
+        |> put("/api/tasks/#{task.id}/sample-solution", @doc_body)
+
+      assert conn.status in [302, 401, 403]
+    end
+
+    test "a foreign teacher gets 404 for another teacher's sample solution", %{
+      conn: conn,
+      task: task
+    } do
+      conn = log_in_role(conn, "teacher")
+
+      assert_error_sent 404, fn ->
+        put(conn, "/api/tasks/#{task.id}/sample-solution", @doc_body)
+      end
+    end
+
+    test "a foreign teacher gets 404 for another teacher's task correction", %{
+      conn: conn,
+      task: task
+    } do
+      conn = log_in_role(conn, "teacher")
+
+      assert_error_sent 404, fn ->
+        put(conn, "/api/tasks/#{task.id}/submissions/1/correction", @doc_body)
+      end
+    end
+
+    test "students cannot reach the task correction API", %{conn: conn, task: task} do
+      conn =
+        conn
+        |> log_in_role("student")
+        |> put("/api/tasks/#{task.id}/submissions/1/correction", @doc_body)
+
+      assert conn.status in [302, 401, 403]
+    end
+
     test "an admin may edit any teacher's exam content", %{conn: conn, exam: exam} do
       conn = conn |> log_in_role("admin") |> put("/api/exams/#{exam.id}/content", @doc_body)
       assert json_response(conn, 200)["ok"] == true

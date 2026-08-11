@@ -12,6 +12,7 @@ defmodule Tasky.Tasks do
   alias Tasky.Policy
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskAttachment
+  alias Tasky.Tasks.TaskSolutionFile
   alias Tasky.Tasks.TaskSubmission
   alias Tasky.Tasks.TaskSubmissionFile
   alias Tasky.Tasks.TaskUploadField
@@ -172,10 +173,11 @@ defmodule Tasky.Tasks do
   def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id, opts \\ []) do
     with :ok <- authorize_duplicate_source(scope, source, opts),
          {:ok, task} <- create_task(scope, duplicate_attrs(source, course_id, opts)),
-         {:ok, task, image_jobs} <- copy_task_content(task, source),
+         {:ok, task, image_jobs} <- copy_task_content(task, source, opts),
          {:ok, attachment_jobs} <- copy_task_attachments(scope, task, source),
+         {:ok, solution_jobs} <- copy_task_solution_files(scope, task, source),
          :ok <- copy_task_upload_fields(scope, task, source) do
-      {:ok, task, image_jobs ++ attachment_jobs}
+      {:ok, task, image_jobs ++ attachment_jobs ++ solution_jobs}
     end
   end
 
@@ -190,12 +192,14 @@ defmodule Tasky.Tasks do
       else: Policy.authorize(scope, source.user_id)
   end
 
-  # `reset_release_state`: status und locked sind Freigabe-Zustände für die
-  # Klasse der Autorin in ihrem Semester, nicht Teil des Inhalts. Beim
-  # Katalog-Import startet jede Einheit darum als unveröffentlichter, offener
-  # Entwurf; die importierende Lehrperson gibt selbst frei. `extended` bleibt:
-  # ein freiwilliger Zusatzauftrag ist eine inhaltliche Eigenschaft, keine
-  # Freigabe.
+  # `reset_release_state`: status, locked und der Freigabe-Modus der
+  # Musterlösung sind Freigabe-Zustände für die Klasse der Autorin in ihrem
+  # Semester, nicht Teil des Inhalts. Beim Katalog-Import startet jede Einheit
+  # darum als unveröffentlichter, offener Entwurf mit ausgeblendeter
+  # Musterlösung; die importierende Lehrperson gibt selbst frei. `extended`
+  # bleibt: ein freiwilliger Zusatzauftrag ist eine inhaltliche Eigenschaft,
+  # keine Freigabe. (Der Modus reist in `copy_task_content/2` mit — `changeset/3`
+  # castet ihn bewusst nicht.)
   defp duplicate_attrs(source, course_id, opts) do
     base = %{
       name: source.name,
@@ -209,14 +213,40 @@ defmodule Tasky.Tasks do
       else: Map.merge(base, %{status: source.status, locked: source.locked})
   end
 
-  defp copy_task_content(task, %Task{content: nil}), do: {:ok, task, []}
+  # Musterlösung und Freigabe-Modus reisen hier mit, weil `Task.changeset/3`
+  # sie bewusst nicht castet. Die Antwortmap läuft ebenfalls durch
+  # `plan_content_image_copies/4`: klebt ein Screenshot in einem Antwortfeld,
+  # zeigt seine URL sonst auf das Präfix der Quelleinheit und läuft ins Leere,
+  # sobald die Quelle gelöscht wird.
+  defp copy_task_content(task, %Task{} = source, opts) do
+    {content, content_jobs} =
+      Tasky.Uploads.plan_content_image_copies(source.content || %{}, :tasks, source.id, task.id)
 
-  defp copy_task_content(task, %Task{content: content} = source) do
-    {content, jobs} = Tasky.Uploads.plan_content_image_copies(content, :tasks, source.id, task.id)
+    {answers, answer_jobs} =
+      Tasky.Uploads.plan_content_image_copies(
+        source.sample_solution || %{},
+        :tasks,
+        source.id,
+        task.id
+      )
 
-    with {:ok, task} <- task |> Task.content_changeset(content) |> Repo.update() do
-      {:ok, task, jobs}
+    with {:ok, task} <-
+           task
+           |> Task.content_changeset(content)
+           |> Ecto.Changeset.put_change(:sample_solution, answers)
+           |> Ecto.Changeset.put_change(
+             :solution_release_mode,
+             duplicate_release_mode(source, opts)
+           )
+           |> Repo.update() do
+      {:ok, task, content_jobs ++ answer_jobs}
     end
+  end
+
+  defp duplicate_release_mode(source, opts) do
+    if Keyword.get(opts, :reset_release_state, false),
+      do: "never",
+      else: source.solution_release_mode
   end
 
   defp copy_task_attachments(scope, task, source) do
@@ -246,6 +276,36 @@ defmodule Tasky.Tasks do
 
         {:error, changeset} ->
           {:halt, {:error, changeset}}
+      end
+    end)
+    |> case do
+      {:ok, jobs} -> {:ok, Enum.reverse(jobs)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Lösungsdateien sind Inhalt und reisen auch beim Katalog-Import mit — nur
+  # der Zeitpunkt ihrer Freigabe tut das nicht.
+  defp copy_task_solution_files(scope, task, source) do
+    source
+    |> list_task_solution_files()
+    |> Enum.reduce_while({:ok, []}, fn file, {:ok, jobs} ->
+      with {:ok, stored_filename, job} <-
+             Tasky.Uploads.plan_solution_file_copy(source.id, task.id, file.stored_filename),
+           {:ok, _file} <-
+             create_task_solution_file(scope, task, %{
+               stored_filename: stored_filename,
+               original_name: file.original_name,
+               content_type: file.content_type,
+               size: file.size
+             }) do
+        {:cont, {:ok, [job | jobs]}}
+      else
+        # Wie bei den Anhängen: aus einem unsicheren Dateinamen lässt sich
+        # kein Storage-Key bauen, also gibt es nichts, worauf ein Datensatz
+        # zeigen könnte.
+        {:error, :invalid} -> {:cont, {:ok, jobs}}
+        {:error, changeset} -> {:halt, {:error, changeset}}
       end
     end)
     |> case do
@@ -833,28 +893,41 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Returns a map of %{student_id => %{status, has_content}} for all
-  given students on a single task. Used by the task progress LiveView.
+  Returns a map of `%{student_id => entry}` for all given students on a single
+  task, where each entry carries the submission id, its status, whether there
+  is content, and the two fields `solution_visible_for_entry?/2` needs. Used by
+  the task progress LiveView.
   """
   def get_progress_map_for_task(task_id, student_ids) do
-    submissions =
-      Repo.all(
-        from s in TaskSubmission,
-          where: s.student_id in ^student_ids and s.task_id == ^task_id,
-          select: %{
-            student_id: s.student_id,
-            status: s.status,
-            has_content: not is_nil(s.content)
-          }
-      )
-
-    Enum.reduce(submissions, %{}, fn submission, acc ->
-      Map.put(acc, submission.student_id, %{
-        status: submission.status,
-        has_content: submission.has_content
-      })
-    end)
+    Repo.all(
+      from s in TaskSubmission,
+        where: s.student_id in ^student_ids and s.task_id == ^task_id,
+        select: %{
+          student_id: s.student_id,
+          submission_id: s.id,
+          status: s.status,
+          has_content: not is_nil(s.content),
+          completed_at: s.completed_at,
+          solution_released_at: s.solution_released_at
+        }
+    )
+    |> Map.new(&{&1.student_id, Map.delete(&1, :student_id)})
   end
+
+  @doc """
+  `solution_visible?/2` für einen Eintrag aus `get_progress_map_for_task/2`.
+
+  Existiert, damit die Fortschrittsansicht das Prädikat nicht nachbaut — es
+  gibt genau eine Wahrheit darüber, wer die Lösung sehen darf.
+  """
+  def solution_visible_for_entry?(%Task{} = task, %{} = entry) do
+    solution_visible?(task, %TaskSubmission{
+      solution_released_at: entry.solution_released_at,
+      completed_at: entry.completed_at
+    })
+  end
+
+  def solution_visible_for_entry?(%Task{}, nil), do: false
 
   @doc """
   Gets a task preloaded with its associated course. Used by progress views
@@ -932,15 +1005,261 @@ defmodule Tasky.Tasks do
   Saves the learning unit's Tiptap content doc from the authoring editor.
   Assigns stable `answerId`s to all answer-bearing nodes (see
   `Tasky.Correction.AnswerKey`). Only the owning teacher may save.
+
+  Entfernt die Lehrperson im Inhalt ein Antwortfeld, verliert der zugehörige
+  Eintrag in `sample_solution` seinen Anker — er wird hier mit gepruned, sonst
+  bleibt er für immer als Waise liegen. Weil das ein Read-Modify-Write über
+  beide Spalten ist, läuft es gegen die gesperrte Zeile (ein gleichzeitiger
+  Speichervorgang im Musterlösungs-Tab würde sich sonst damit überschreiben).
   """
   def save_task_content(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      new_content = AnswerKey.ensure_ids(doc)
+
+      result =
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(Task, task.id)
+          pruned = prune_orphan_answers(new_content, locked.sample_solution || %{})
+
+          locked
+          |> Task.content_changeset(new_content)
+          |> Ecto.Changeset.put_change(:sample_solution, pruned)
+          |> Repo.update()
+          |> case do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_task(scope, {:updated, updated})
+        {:ok, updated}
+      end
+    end
+  end
+
+  ## Musterlösung
+
+  @doc """
+  Die Musterlösung als vollständiges, antwortgefülltes Dokument — das, was der
+  Musterlösungs-Editor lädt und Lernende nach der Freigabe zu sehen bekommen.
+  """
+  def sample_solution_doc(%Task{} = task),
+    do: AnswerKey.merge(task.content || %{}, task.sample_solution || %{})
+
+  @doc """
+  Speichert die Musterlösung aus dem Musterlösungs-Tab.
+
+  `doc` ist das ganze antwortgefüllte Dokument. Wir splitten es und behalten
+  nur die Antworten: `content` wird hier bewusst nicht geschrieben. Der Editor
+  läuft mit gesperrtem Inhalt, das Skelett kann sich also gar nicht ändern —
+  und der Musterlösungs-Tab darf unter keinen Umständen das Dokument
+  überschreiben, an dem die Lernenden arbeiten.
+
+  Ersetzen statt Mergen ist hier richtig: es gibt genau einen Editor, der das
+  ganze Dokument hält. Ein Merge würde Antworten wieder auferstehen lassen,
+  die die Lehrperson gerade gelöscht hat.
+  """
+  def save_sample_solution(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      {_blanked, answers} = AnswerKey.split(doc)
+
+      result =
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(Task, task.id)
+          pruned = prune_orphan_answers(locked.content || %{}, answers)
+
+          case locked |> Task.sample_solution_changeset(pruned) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_task(scope, {:updated, updated})
+        {:ok, updated}
+      end
+    end
+  end
+
+  # Antworten ohne Anker im Inhalt fliegen raus — sonst wächst die Map mit
+  # jedem gelöschten Antwortfeld weiter.
+  defp prune_orphan_answers(content, answers) do
+    Map.take(answers, MapSet.to_list(AnswerKey.block_ids(content)))
+  end
+
+  @doc "Anzahl Antwortfelder im Inhalt — steuert den Leerzustand des Musterlösungs-Tabs."
+  def answer_block_count(%Task{} = task),
+    do: task.content |> Kernel.||(%{}) |> AnswerKey.block_ids() |> MapSet.size()
+
+  ## Freigabe von Musterlösung und Korrektur
+
+  @doc "Die gültigen Freigabe-Modi (`never` | `manual` | `on_complete`)."
+  defdelegate release_modes(), to: Task
+
+  @doc """
+  Setzt den Freigabe-Modus der Musterlösung für die ganze Lerneinheit.
+  """
+  def set_solution_release_mode(%Scope{} = scope, %Task{} = task, mode) when is_binary(mode) do
     with :ok <- Policy.authorize(scope, task.user_id),
-         {:ok, task = %Task{}} <-
-           task
-           |> Task.content_changeset(AnswerKey.ensure_ids(doc))
-           |> Repo.update() do
-      broadcast_task(scope, {:updated, task})
-      {:ok, task}
+         {:ok, updated} <-
+           task |> Task.solution_release_mode_changeset(mode) |> Repo.update() do
+      broadcast_task(scope, {:updated, updated})
+      {:ok, updated}
+    end
+  end
+
+  @doc """
+  Darf dieser Lernende Musterlösung und Korrektur dieser Lerneinheit sehen?
+
+  Genau ein Tor für beides, und die einzige Stelle, an der die Frage
+  beantwortet wird — LiveViews, Controller und die Fortschrittsansicht rufen
+  alle hier an.
+
+  Zwei bewusste Eigenschaften:
+
+    * `never` ist ein harter Riegel und überstimmt auch eine bereits erteilte
+      Einzelfreigabe. Damit hat die Lehrperson einen Not-Aus, ohne dass wir
+      Freigaben löschen müssen.
+    * `on_complete` wird an `completed_at` gelesen, nicht beim Abschliessen
+      gestempelt. `completed_at` wird nie wieder geräumt (auch
+      `review_submission/4` fasst es nicht an), heisst also dauerhaft "hat
+      mindestens einmal eingereicht" — genau die Klebrigkeit, die "Freigabe
+      bleibt bestehen" verlangt, ohne einen zweiten Schreibpfad.
+  """
+  def solution_visible?(%Task{solution_release_mode: "never"}, _submission), do: false
+  def solution_visible?(%Task{}, nil), do: false
+  def solution_visible?(%Task{}, %TaskSubmission{solution_released_at: %DateTime{}}), do: true
+
+  def solution_visible?(%Task{solution_release_mode: "on_complete"}, %TaskSubmission{
+        completed_at: %DateTime{}
+      }),
+      do: true
+
+  def solution_visible?(%Task{}, %TaskSubmission{}), do: false
+
+  @doc """
+  Gibt Musterlösung und Korrektur für einen einzelnen Lernenden frei.
+
+  Idempotent: eine bestehende Freigabe wird nicht neu gestempelt, der
+  Zeitstempel ist das Datum der *ersten* Freigabe.
+  """
+  def release_solution(%Scope{} = scope, %Task{} = task, submission_id) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      result =
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(TaskSubmission, submission_id)
+          if locked.task_id != task.id, do: Repo.rollback(:not_found)
+          stamp_release!(locked)
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_submission_updated(updated, task.course_id)
+        {:ok, updated}
+      end
+    end
+  end
+
+  @doc """
+  Gibt Musterlösung und Korrektur für viele Lernende einer Lerneinheit frei.
+
+  `target` ist `:all` oder eine Liste von Submission-Ids. Alles läuft in einer
+  Transaktion; die Sperrreihenfolge folgt ARCHITECTURE.md: erst `tasks`, dann
+  `task_submissions` aufsteigend nach `id` (das `order_by` ist tragend — ohne
+  es können zwei überlappende Bulk-Freigaben verklemmen).
+
+  Auf `tasks` bewusst FOR SHARE statt FOR UPDATE: jedes Öffnen einer
+  Lerneinheit fügt über `get_or_create_submission/2` eine Zeile ein und nimmt
+  dabei FOR KEY SHARE auf die Elternzeile. FOR UPDATE würde die ganze Klasse
+  blockieren, solange die Lehrperson freigibt.
+
+  Wie die Einzelfreigabe idempotent: bereits freigegebene Abgaben behalten
+  ihren ursprünglichen Zeitstempel.
+  """
+  def release_solution_bulk(%Scope{} = scope, %Task{} = task, target \\ :all) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      result =
+        Repo.transaction(fn ->
+          _guard = Repo.lock_one!(Task, task.id, :share)
+
+          task
+          |> lock_task_submissions!(target)
+          |> Enum.map(&stamp_release!/1)
+        end)
+
+      with {:ok, updated} <- result do
+        Enum.each(updated, &broadcast_submission_updated(&1, task.course_id))
+        {:ok, updated}
+      end
+    end
+  end
+
+  defp lock_task_submissions!(%Task{} = task, :all) do
+    ensure_submissions_for_enrolled!(task)
+
+    Repo.all(
+      from s in TaskSubmission,
+        where: s.task_id == ^task.id,
+        order_by: [asc: s.id],
+        lock: "FOR UPDATE"
+    )
+  end
+
+  defp lock_task_submissions!(%Task{} = task, ids) when is_list(ids) do
+    Repo.all(
+      from s in TaskSubmission,
+        where: s.task_id == ^task.id and s.id in ^ids,
+        order_by: [asc: s.id],
+        lock: "FOR UPDATE"
+    )
+  end
+
+  # "Für alle freigeben" heisst: für alle eingeschriebenen Lernenden — auch für
+  # die, welche die Lerneinheit noch nie geöffnet haben. Deren Abgabezeile
+  # entsteht sonst erst beim Öffnen (`get_or_create_submission/2`), und die
+  # Freigabe würde sie schlicht verfehlen: die Lehrperson bekäme eine
+  # Erfolgsmeldung, und die Lösung bliebe unsichtbar.
+  #
+  # Der Insert nimmt FOR KEY SHARE auf die `tasks`-Zeile, die wir hier schon
+  # FOR SHARE halten — das verträgt sich.
+  defp ensure_submissions_for_enrolled!(%Task{} = task) do
+    existing =
+      Repo.all(from s in TaskSubmission, where: s.task_id == ^task.id, select: s.student_id)
+
+    missing =
+      task.course_id
+      |> Tasky.Courses.list_enrolled_students()
+      |> Enum.map(& &1.id)
+      |> Kernel.--(existing)
+
+    now = DateTime.utc_now(:second)
+
+    rows =
+      Enum.map(missing, fn student_id ->
+        %{
+          task_id: task.id,
+          student_id: student_id,
+          status: "not_started",
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    Repo.insert_all(TaskSubmission, rows, on_conflict: :nothing)
+  end
+
+  # Überschreibt nie einen bestehenden Zeitstempel: hier — und nur hier —
+  # steckt die Regel "eine erteilte Freigabe bleibt bestehen".
+  defp stamp_release!(%TaskSubmission{solution_released_at: %DateTime{}} = submission),
+    do: submission
+
+  defp stamp_release!(%TaskSubmission{} = submission) do
+    submission
+    |> Ecto.Changeset.change(solution_released_at: DateTime.utc_now(:second))
+    |> Repo.update()
+    |> case do
+      {:ok, updated} -> updated
+      {:error, changeset} -> Repo.rollback(changeset)
     end
   end
 
@@ -993,6 +1312,76 @@ defmodule Tasky.Tasks do
     if status in @reviewable_statuses, do: :ok, else: {:error, :not_reviewable}
   end
 
+  ## Korrektur (annotiertes Antwortdokument)
+
+  @doc """
+  Das Dokument, das die Lehrperson korrigiert: die Korrektur, sobald es eine
+  gibt, sonst die Antworten der/des Lernenden.
+
+  `corrected_content` wird nie explizit initialisiert — der erste
+  Speichervorgang des Korrektur-Editors legt es an. Genauso macht es
+  `Tasky.Exams.correction_content/1`.
+  """
+  def correction_content(%TaskSubmission{corrected_content: corrected})
+      when is_map(corrected) and map_size(corrected) > 0,
+      do: corrected
+
+  def correction_content(%TaskSubmission{content: content}), do: content || %{}
+
+  @doc "True, wenn die Lehrperson an dieser Abgabe schon annotiert hat."
+  def has_correction?(%TaskSubmission{corrected_content: corrected}) when is_map(corrected),
+    do: map_size(corrected) > 0
+
+  def has_correction?(_submission), do: false
+
+  @doc """
+  Das Dokument, das die/der Lernende zurückgelesen bekommt.
+
+  `{:corrected, doc}`, sobald es eine Korrektur gibt *und* die Lösung
+  freigegeben ist — sonst `{:own, doc}`.
+
+  Achtung: das korrigierte Dokument darf ausschliesslich in den
+  Read-only-Viewer. Der editierbare `TaskAnswersEditor` schreibt das ganze
+  Dokument nach `submission.content` zurück, eine zurückgegebene Einheit würde
+  also die Anmerkungen der Lehrperson als eigene Antwort speichern.
+  """
+  def answer_doc_for_student(%Task{} = task, %TaskSubmission{} = submission) do
+    if solution_visible?(task, submission) and has_correction?(submission),
+      do: {:corrected, submission.corrected_content},
+      else: {:own, submission.content || %{}}
+  end
+
+  @doc """
+  Speichert die Anmerkungen der Lehrperson am Antwortdokument.
+
+  Nur für eingereichte Einheiten: an einem Stand, an dem gerade gearbeitet
+  wird, gibt es nichts zu korrigieren.
+  """
+  def save_correction_content(%Scope{} = scope, %Task{} = task, submission_id, doc)
+      when is_map(doc) do
+    with :ok <- Policy.authorize(scope, task.user_id),
+         %TaskSubmission{} = submission <- get_submission(task, submission_id),
+         :ok <- ensure_reviewable(submission) do
+      result =
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(TaskSubmission, submission.id)
+
+          case locked |> TaskSubmission.correction_changeset(doc) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_submission_updated(updated, task.course_id)
+        {:ok, updated}
+      end
+    else
+      nil -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   ## Attachments (teacher-provided files)
 
   @doc "Lists a task's attachments in display order."
@@ -1041,6 +1430,71 @@ defmodule Tasky.Tasks do
       {:ok, deleted}
     end
   end
+
+  ## Musterlösungs-Dateien
+
+  @doc "Lists a task's solution files in display order."
+  def list_task_solution_files(%Task{} = task) do
+    Repo.all(
+      from f in TaskSolutionFile,
+        where: f.task_id == ^task.id,
+        order_by: [asc: f.position, asc: f.id]
+    )
+  end
+
+  @doc "Gets a solution file of the given task, or nil."
+  def get_task_solution_file(%Task{} = task, id) do
+    Repo.get_by(TaskSolutionFile, id: id, task_id: task.id)
+  end
+
+  @doc "Creates a solution file record, appending it to the list."
+  def create_task_solution_file(scope, %Task{} = task, attrs) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      position =
+        Repo.one(
+          from f in TaskSolutionFile,
+            where: f.task_id == ^task.id,
+            select: coalesce(max(f.position), -1)
+        ) + 1
+
+      %TaskSolutionFile{task_id: task.id}
+      |> TaskSolutionFile.changeset(Map.put(attrs, :position, position))
+      |> Repo.insert()
+    end
+  end
+
+  @doc "Deletes a solution file record and its file on disk."
+  def delete_task_solution_file(scope, %TaskSolutionFile{} = file) do
+    with :ok <- authorize_task_id(scope, file.task_id),
+         {:ok, deleted} <- Repo.delete(file) do
+      Tasky.Uploads.delete_task_solution_file(deleted.task_id, deleted.stored_filename)
+      {:ok, deleted}
+    end
+  end
+
+  @doc """
+  Löst eine Lösungsdatei für eine/n Lernende/n auf — aber nur, wenn die Lösung
+  für sie/ihn auch freigegeben ist.
+
+  Gibt `{:ok, task, file}` oder `nil` zurück (nicht `{:error, :forbidden}`):
+  der Controller antwortet damit 404 statt 403 und verrät nicht, dass es
+  überhaupt eine Lösungsdatei gibt. Die ganze Zugriffslogik steckt hier, nicht
+  im Controller.
+  """
+  def get_solution_file_for_student(%Scope{user: user} = scope, task_id, file_id)
+      when user.role == "student" do
+    with %Task{} = task <- get_task_for_student(scope, task_id),
+         submission when not is_nil(submission) <-
+           get_submission_for_student(task.id, user.id),
+         true <- solution_visible?(task, submission),
+         %TaskSolutionFile{} = file <- get_task_solution_file(task, file_id) do
+      {:ok, task, file}
+    else
+      _ -> nil
+    end
+  end
+
+  def get_solution_file_for_student(_scope, _task_id, _file_id), do: nil
 
   # Writes to anything hanging off a learning unit go through its owner (or an
   # admin / the :system scope). One indexed lookup resolves the owner from the

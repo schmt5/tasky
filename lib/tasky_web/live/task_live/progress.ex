@@ -49,6 +49,52 @@ defmodule TaskyWeb.TaskLive.Progress do
       </div>
 
       <div class="max-w-7xl mx-auto px-8 pb-8">
+        <%!-- Bulk-Freigabe der Musterlösung --%>
+        <div
+          :if={@has_data}
+          class="mb-4 bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07)] px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-3"
+        >
+          <div class="flex items-center gap-2.5 min-w-0">
+            <.icon name="hero-key" class="w-5 h-5 text-sky-500 shrink-0" />
+            <div class="min-w-0">
+              <p class="text-[14px] font-semibold text-stone-800">Musterlösung</p>
+              <p class="text-[13px] text-stone-500">
+                {release_mode_label(@task.solution_release_mode)}
+              </p>
+            </div>
+          </div>
+
+          <%= if @task.solution_release_mode == "never" do %>
+            <.link
+              navigate={~p"/tasks/#{@task.id}/content?tab=musterloesung"}
+              class="ml-auto inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+            >
+              <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Modus ändern
+            </.link>
+          <% else %>
+            <div class="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                phx-click="release_selected"
+                disabled={MapSet.size(@selected_submission_ids) == 0}
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-sky-300 text-sky-700 text-[13px] font-semibold rounded-[10px] hover:bg-sky-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+              >
+                <.icon name="hero-lock-open" class="w-4 h-4" /> Für Auswahl freigeben
+                <span :if={MapSet.size(@selected_submission_ids) > 0}>
+                  ({MapSet.size(@selected_submission_ids)})
+                </span>
+              </button>
+              <button
+                type="button"
+                phx-click="open_release_all_confirm"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-500 text-white text-[13px] font-semibold rounded-[10px] hover:bg-sky-600 transition-colors shadow-sm"
+              >
+                <.icon name="hero-users" class="w-4 h-4" /> Für alle freigeben
+              </button>
+            </div>
+          <% end %>
+        </div>
+
         <%!-- Progress Grid --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @has_data do %>
@@ -61,24 +107,34 @@ defmodule TaskyWeb.TaskLive.Progress do
                         scope="col"
                         class="sticky left-0 z-10 bg-stone-50 px-6 py-4 text-left text-xs font-semibold text-stone-700 uppercase tracking-wider border-r border-stone-200"
                       >
-                        <button
-                          type="button"
-                          phx-click="toggle_anonymize"
-                          class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
-                          title={
-                            if @anonymized,
-                              do: "Namen anzeigen",
-                              else: "Namen ausblenden"
-                          }
-                        >
-                          <.icon
-                            name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
-                            class="w-4 h-4 text-stone-600"
+                        <div class="flex items-center gap-2">
+                          <input
+                            :if={@task.solution_release_mode != "never"}
+                            type="checkbox"
+                            phx-click="toggle_select_all"
+                            checked={all_selected?(@selected_submission_ids, @progress_map)}
+                            aria-label="Alle auswählen"
+                            class="checkbox checkbox-sm"
                           />
-                          <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
-                            Lernende
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            phx-click="toggle_anonymize"
+                            class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
+                            title={
+                              if @anonymized,
+                                do: "Namen anzeigen",
+                                else: "Namen ausblenden"
+                            }
+                          >
+                            <.icon
+                              name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
+                              class="w-4 h-4 text-stone-600"
+                            />
+                            <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                              Lernende
+                            </span>
+                          </button>
+                        </div>
                       </th>
 
                       <th
@@ -94,6 +150,13 @@ defmodule TaskyWeb.TaskLive.Progress do
                       >
                         Antworten
                       </th>
+
+                      <th
+                        scope="col"
+                        class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[160px]"
+                      >
+                        Musterlösung
+                      </th>
                     </tr>
                   </thead>
 
@@ -104,6 +167,21 @@ defmodule TaskyWeb.TaskLive.Progress do
                     >
                       <td class="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap border-r border-stone-200">
                         <div class="flex items-center gap-3">
+                          <input
+                            :if={@task.solution_release_mode != "never"}
+                            type="checkbox"
+                            phx-click="toggle_select"
+                            phx-value-submission-id={submission_id(@progress_map, student.id)}
+                            checked={
+                              MapSet.member?(
+                                @selected_submission_ids,
+                                submission_id(@progress_map, student.id)
+                              )
+                            }
+                            disabled={is_nil(submission_id(@progress_map, student.id))}
+                            aria-label="Für Freigabe auswählen"
+                            class="checkbox checkbox-sm"
+                          />
                           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
                             {if @anonymized, do: "?", else: initials(student)}
                           </div>
@@ -135,6 +213,15 @@ defmodule TaskyWeb.TaskLive.Progress do
                           <% else %>
                             <span class="text-[12px] text-stone-400">-</span>
                           <% end %>
+                        </div>
+                      </td>
+
+                      <td class="px-4 py-4">
+                        <div class="flex justify-center">
+                          <.solution_cell
+                            task={@task}
+                            entry={Map.get(@progress_map, student.id)}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -330,6 +417,35 @@ defmodule TaskyWeb.TaskLive.Progress do
               <%!-- Modal Footer: Feedback + Verdict --%>
               <div class="bg-stone-50 px-8 py-5 border-t border-stone-200">
                 <div class="max-w-4xl mx-auto">
+                  <%!-- Freigabe von Musterlösung und Korrektur für diese/n Lernende/n --%>
+                  <div
+                    :if={@selected_submission_record}
+                    class="flex items-center gap-2 flex-wrap mb-4 pb-4 border-b border-stone-200"
+                  >
+                    <.icon name="hero-key" class="w-4 h-4 text-stone-500" />
+                    <span class="text-[13px] font-semibold text-stone-700">Musterlösung</span>
+                    <span class="text-[12px] text-stone-500">
+                      {solution_release_label(@task, @selected_submission_record)}
+                    </span>
+                    <div class="ml-auto flex items-center gap-2">
+                      <.link
+                        navigate={
+                          ~p"/progress/#{@task.id}/correction/#{@selected_submission_record.id}"
+                        }
+                        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-stone-200 text-stone-600 text-[12px] font-semibold rounded-[8px] hover:bg-stone-50 hover:border-stone-300 transition-colors"
+                      >
+                        <.icon name="hero-pencil-square" class="w-3.5 h-3.5" /> Korrigieren
+                      </.link>
+                      <button
+                        :if={releasable?(@task, @selected_submission_record)}
+                        type="button"
+                        phx-click="release_solution"
+                        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-sky-300 text-sky-700 text-[12px] font-semibold rounded-[8px] hover:bg-sky-50 transition-colors"
+                      >
+                        <.icon name="hero-lock-open" class="w-3.5 h-3.5" /> Freigeben
+                      </button>
+                    </div>
+                  </div>
                   <div class="flex items-center gap-2 mb-3">
                     <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4 text-stone-500" />
                     <span class="text-[13px] font-semibold text-stone-700">
@@ -396,6 +512,70 @@ defmodule TaskyWeb.TaskLive.Progress do
             </div>
           </dialog>
         <% end %>
+        <%!-- Bulk-Freigabe: Bestätigung, weil sie die ganze Klasse betrifft --%>
+        <%= if @confirming_release_all do %>
+          <dialog
+            id="release-all-modal"
+            class="modal modal-open z-[1000]"
+            phx-window-keydown="close_release_all_confirm"
+            phx-key="escape"
+          >
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_release_all_confirm"></div>
+            <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+              <div class="p-6 border-b border-stone-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                    <.icon name="hero-users" class="w-5 h-5 text-sky-600" />
+                  </div>
+                  <div>
+                    <h3 class="text-lg font-semibold text-stone-800">
+                      Musterlösung für alle freigeben
+                    </h3>
+                    <p class="text-xs text-stone-400 mt-0.5">Gilt auch für die Korrektur.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="p-6">
+                <p class="text-sm text-stone-600 leading-relaxed">
+                  Alle {length(@students)} Lernenden dieses Kurses sehen die Musterlösung
+                  danach sofort.
+                </p>
+                <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
+                  <div class="flex items-start gap-2.5">
+                    <.icon
+                      name="hero-exclamation-triangle"
+                      class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                    />
+                    <p class="text-xs text-amber-700 leading-relaxed">
+                      Eine Freigabe bleibt bestehen – auch wenn du eine Einheit später
+                      zurückgibst. Zurücknehmen lässt sie sich nur, indem du den Modus im
+                      Tab «Musterlösung» auf «Nie anzeigen» stellst.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="p-6 pt-0 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  phx-click="close_release_all_confirm"
+                  class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  id="confirm-release-all"
+                  phx-click="release_all"
+                  phx-disable-with="Wird freigegeben…"
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <.icon name="hero-lock-open" class="w-4 h-4" /> Für alle freigeben
+                </button>
+              </div>
+            </div>
+          </dialog>
+        <% end %>
+
         <%!-- Return-for-revision Confirmation Modal (stacks on top of the submission modal) --%>
         <%= if @confirming_return do %>
           <dialog id="return-submission-modal" class="modal modal-open z-[1000]">
@@ -474,6 +654,37 @@ defmodule TaskyWeb.TaskLive.Progress do
     >
       <.icon name={@meta.icon} class={["w-5 h-5", @meta.fg]} />
     </div>
+    """
+  end
+
+  attr :task, :map, required: true
+  attr :entry, :map, default: nil
+
+  defp solution_cell(assigns) do
+    ~H"""
+    <span
+      :if={@task.solution_release_mode == "never"}
+      class="text-[12px] text-stone-400"
+      title="Für diese Lerneinheit ausgeblendet"
+    >
+      Ausgeblendet
+    </span>
+    <span
+      :if={@task.solution_release_mode != "never" && Tasks.solution_visible_for_entry?(@task, @entry)}
+      class="inline-flex items-center gap-1 text-[12px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5"
+    >
+      <.icon name="hero-check" class="w-3.5 h-3.5" />
+      {if @entry && @entry.solution_released_at, do: "Freigegeben", else: "Automatisch"}
+    </span>
+    <span
+      :if={
+        @task.solution_release_mode != "never" &&
+          !Tasks.solution_visible_for_entry?(@task, @entry)
+      }
+      class="text-[12px] text-stone-400"
+    >
+      Nicht freigegeben
+    </span>
     """
   end
 
@@ -592,6 +803,8 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:progress_map, progress_map)
      |> assign(:has_data, has_data)
      |> assign(:anonymized, false)
+     |> assign(:selected_submission_ids, MapSet.new())
+     |> assign(:confirming_release_all, false)
      |> reset_modal_assigns()}
   end
 
@@ -628,6 +841,82 @@ defmodule TaskyWeb.TaskLive.Progress do
        |> select_student(student)}
     else
       {:noreply, socket}
+    end
+  end
+
+  ## Bulk-Freigabe
+
+  def handle_event("toggle_select", %{"submission-id" => raw_id}, socket) do
+    case TaskyWeb.Params.int(raw_id) do
+      nil ->
+        {:noreply, socket}
+
+      id ->
+        selected = socket.assigns.selected_submission_ids
+
+        selected =
+          if MapSet.member?(selected, id),
+            do: MapSet.delete(selected, id),
+            else: MapSet.put(selected, id)
+
+        {:noreply, assign(socket, :selected_submission_ids, selected)}
+    end
+  end
+
+  def handle_event("toggle_select_all", _params, socket) do
+    all = selectable_submission_ids(socket.assigns.progress_map)
+
+    selected =
+      if MapSet.equal?(socket.assigns.selected_submission_ids, all),
+        do: MapSet.new(),
+        else: all
+
+    {:noreply, assign(socket, :selected_submission_ids, selected)}
+  end
+
+  def handle_event("release_selected", _params, socket) do
+    ids = MapSet.to_list(socket.assigns.selected_submission_ids)
+
+    if ids == [] do
+      {:noreply, socket}
+    else
+      {:noreply, do_release_bulk(socket, ids)}
+    end
+  end
+
+  def handle_event("open_release_all_confirm", _params, socket) do
+    {:noreply, assign(socket, :confirming_release_all, true)}
+  end
+
+  def handle_event("close_release_all_confirm", _params, socket) do
+    {:noreply, assign(socket, :confirming_release_all, false)}
+  end
+
+  def handle_event("release_all", _params, socket) do
+    {:noreply, socket |> assign(:confirming_release_all, false) |> do_release_bulk(:all)}
+  end
+
+  def handle_event("release_solution", _params, socket) do
+    %{task: task, selected_submission_record: record} = socket.assigns
+
+    case record do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Keine Einreichung gefunden")}
+
+      record ->
+        case Tasks.release_solution(socket.assigns.current_scope, task, record.id) do
+          {:ok, updated} ->
+            {:noreply,
+             socket
+             |> assign(:selected_submission_record, updated)
+             |> put_flash(
+               :info,
+               "Musterlösung für #{socket.assigns.selected_student_name} freigegeben."
+             )}
+
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Freigabe fehlgeschlagen.")}
+        end
     end
   end
 
@@ -898,4 +1187,72 @@ defmodule TaskyWeb.TaskLive.Progress do
   end
 
   defp format_datetime(_), do: "Unbekannt"
+
+  ## Freigabe von Musterlösung und Korrektur
+
+  # Freigeben lohnt sich nur, wenn es überhaupt etwas zu zeigen gibt und der
+  # Modus es zulässt: bei `never` bliebe der Klick wirkungslos, und was schon
+  # sichtbar ist, muss nicht nochmals freigegeben werden.
+  defp do_release_bulk(socket, target) do
+    %{task: task, current_scope: scope} = socket.assigns
+
+    case Tasks.release_solution_bulk(scope, task, target) do
+      {:ok, updated} ->
+        socket
+        |> assign(:progress_map, build_progress_map(task.id, socket.assigns.students))
+        |> assign(:selected_submission_ids, MapSet.new())
+        |> put_flash(:info, release_flash(length(updated)))
+
+      {:error, _reason} ->
+        put_flash(socket, :error, "Freigabe fehlgeschlagen.")
+    end
+  end
+
+  defp release_flash(1), do: "Musterlösung für eine/n Lernende/n freigegeben."
+  defp release_flash(count), do: "Musterlösung für #{count} Lernende freigegeben."
+
+  defp release_mode_label("never"),
+    do: "Wird Lernenden nicht angezeigt."
+
+  defp release_mode_label("manual"),
+    do: "Wird angezeigt, sobald du für eine/n Lernende/n freigibst."
+
+  defp release_mode_label("on_complete"),
+    do: "Wird automatisch angezeigt, sobald die Einheit als erledigt markiert ist."
+
+  defp release_mode_label(_), do: ""
+
+  defp submission_id(progress_map, student_id) do
+    case Map.get(progress_map, student_id) do
+      %{submission_id: id} -> id
+      nil -> nil
+    end
+  end
+
+  defp selectable_submission_ids(progress_map) do
+    progress_map |> Map.values() |> MapSet.new(& &1.submission_id)
+  end
+
+  # Ohne Zeilen gibt es nichts auszuwählen — dann darf die Kopf-Checkbox auch
+  # nicht als "alles ausgewählt" dastehen.
+  defp all_selected?(selected, progress_map) do
+    all = selectable_submission_ids(progress_map)
+    MapSet.size(all) > 0 and MapSet.equal?(selected, all)
+  end
+
+  defp releasable?(task, record) do
+    task.solution_release_mode != "never" and not Tasks.solution_visible?(task, record)
+  end
+
+  defp solution_release_label(%{solution_release_mode: "never"}, _record),
+    do: "Für diese Lerneinheit ausgeblendet – Modus im Tab «Musterlösung» ändern"
+
+  defp solution_release_label(_task, %{solution_released_at: %DateTime{} = at}),
+    do: "Freigegeben am #{format_datetime(at)}"
+
+  defp solution_release_label(task, record) do
+    if Tasks.solution_visible?(task, record),
+      do: "Automatisch freigegeben (als erledigt markiert)",
+      else: "Noch nicht freigegeben"
+  end
 end

@@ -90,6 +90,12 @@ defmodule TaskyWeb.Router do
 
     post "/tasks/:id/images", TaskImageApiController, :create
 
+    put "/tasks/:id/sample-solution", TaskSampleSolutionApiController, :update
+
+    put "/tasks/:id/submissions/:submission_id/correction",
+        TaskCorrectionContentApiController,
+        :update
+
     put "/exams/:id/sample-solution/parts/:part_id/content",
         ExamSampleSolutionApiController,
         :update_part
@@ -157,6 +163,8 @@ defmodule TaskyWeb.Router do
         TaskSubmissionFileController,
         :download
 
+    get "/tasks/:id/solution-files/:file_id", TaskSolutionFileController, :download
+
     live_session :tasks,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
       live "/courses", CourseLive.Index, :index
@@ -169,6 +177,8 @@ defmodule TaskyWeb.Router do
       live "/courses/:id/feedback", CourseLive.Feedback, :feedback
       live "/courses/:id/reorder", CourseLive.Reorder, :reorder
       live "/progress/:task_id", TaskLive.Progress, :task_progress
+
+      live "/progress/:task_id/correction/:submission_id", TaskLive.Correction, :correction
       live "/tasks/:id/content", TaskLive.Content, :content
 
       live "/catalog", CatalogLive.Index, :index
@@ -206,6 +216,8 @@ defmodule TaskyWeb.Router do
     pipe_through [:browser, :require_authenticated_user, :require_student]
 
     get "/tasks/:task_id/files/:field_id", FileController, :download
+
+    get "/tasks/:task_id/solution-files/:file_id", SolutionFileController, :download
 
     live_session :student,
       on_mount: [{TaskyWeb.UserAuth, :require_student}] do
