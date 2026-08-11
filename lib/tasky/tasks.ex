@@ -173,7 +173,7 @@ defmodule Tasky.Tasks do
   def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id, opts \\ []) do
     with :ok <- authorize_duplicate_source(scope, source, opts),
          {:ok, task} <- create_task(scope, duplicate_attrs(source, course_id, opts)),
-         {:ok, task, image_jobs} <- copy_task_content(task, source, opts),
+         {:ok, task, image_jobs} <- copy_task_content(task, source),
          {:ok, attachment_jobs} <- copy_task_attachments(scope, task, source),
          {:ok, solution_jobs} <- copy_task_solution_files(scope, task, source),
          :ok <- copy_task_upload_fields(scope, task, source) do
@@ -198,8 +198,7 @@ defmodule Tasky.Tasks do
   # darum als unveröffentlichter, offener Entwurf mit ausgeblendeter
   # Musterlösung; die importierende Lehrperson gibt selbst frei. `extended`
   # bleibt: ein freiwilliger Zusatzauftrag ist eine inhaltliche Eigenschaft,
-  # keine Freigabe. (Der Modus reist in `copy_task_content/2` mit — `changeset/3`
-  # castet ihn bewusst nicht.)
+  # keine Freigabe.
   defp duplicate_attrs(source, course_id, opts) do
     base = %{
       name: source.name,
@@ -208,17 +207,23 @@ defmodule Tasky.Tasks do
       course_id: course_id
     }
 
-    if Keyword.get(opts, :reset_release_state, false),
-      do: Map.merge(base, %{status: "draft", locked: false}),
-      else: Map.merge(base, %{status: source.status, locked: source.locked})
+    if Keyword.get(opts, :reset_release_state, false) do
+      Map.merge(base, %{status: "draft", locked: false, solution_release_mode: "never"})
+    else
+      Map.merge(base, %{
+        status: source.status,
+        locked: source.locked,
+        solution_release_mode: source.solution_release_mode
+      })
+    end
   end
 
-  # Musterlösung und Freigabe-Modus reisen hier mit, weil `Task.changeset/3`
-  # sie bewusst nicht castet. Die Antwortmap läuft ebenfalls durch
+  # Die Musterlösung reist hier mit, weil `Task.changeset/3` die JSON-Spalte
+  # bewusst nicht castet. Die Antwortmap läuft ebenfalls durch
   # `plan_content_image_copies/4`: klebt ein Screenshot in einem Antwortfeld,
   # zeigt seine URL sonst auf das Präfix der Quelleinheit und läuft ins Leere,
   # sobald die Quelle gelöscht wird.
-  defp copy_task_content(task, %Task{} = source, opts) do
+  defp copy_task_content(task, %Task{} = source) do
     {content, content_jobs} =
       Tasky.Uploads.plan_content_image_copies(source.content || %{}, :tasks, source.id, task.id)
 
@@ -234,19 +239,9 @@ defmodule Tasky.Tasks do
            task
            |> Task.content_changeset(content)
            |> Ecto.Changeset.put_change(:sample_solution, answers)
-           |> Ecto.Changeset.put_change(
-             :solution_release_mode,
-             duplicate_release_mode(source, opts)
-           )
            |> Repo.update() do
       {:ok, task, content_jobs ++ answer_jobs}
     end
-  end
-
-  defp duplicate_release_mode(source, opts) do
-    if Keyword.get(opts, :reset_release_state, false),
-      do: "never",
-      else: source.solution_release_mode
   end
 
   defp copy_task_attachments(scope, task, source) do
@@ -1097,17 +1092,9 @@ defmodule Tasky.Tasks do
   @doc "Die gültigen Freigabe-Modi (`never` | `manual` | `on_complete`)."
   defdelegate release_modes(), to: Task
 
-  @doc """
-  Setzt den Freigabe-Modus der Musterlösung für die ganze Lerneinheit.
-  """
-  def set_solution_release_mode(%Scope{} = scope, %Task{} = task, mode) when is_binary(mode) do
-    with :ok <- Policy.authorize(scope, task.user_id),
-         {:ok, updated} <-
-           task |> Task.solution_release_mode_changeset(mode) |> Repo.update() do
-      broadcast_task(scope, {:updated, updated})
-      {:ok, updated}
-    end
-  end
+  # Gesetzt wird der Modus über `update_task/3` — er ist ein Feld des
+  # Lerneinheit-Formulars wie `name` oder `extended`. Ein zweiter Setter hier
+  # wäre ein zweiter Schreibpfad auf dasselbe Feld.
 
   @doc """
   Darf dieser Lernende Musterlösung und Korrektur dieser Lerneinheit sehen?

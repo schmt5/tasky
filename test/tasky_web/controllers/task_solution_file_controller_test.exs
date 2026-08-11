@@ -108,7 +108,7 @@ defmodule TaskyWeb.TaskSolutionFileControllerTest do
       task: task,
       solution_file: file
     } do
-      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} = Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
       {:ok, submission} = Tasks.get_or_create_submission(Scope.for_user(student), task.id)
       {:ok, _} = Tasks.release_solution(teacher_scope, task, submission.id)
 
@@ -127,10 +127,14 @@ defmodule TaskyWeb.TaskSolutionFileControllerTest do
       task: task,
       solution_file: file
     } do
-      {:ok, released_task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, released_task} =
+        Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
+
       {:ok, submission} = Tasks.get_or_create_submission(Scope.for_user(student), task.id)
       {:ok, _} = Tasks.release_solution(teacher_scope, released_task, submission.id)
-      {:ok, _} = Tasks.set_solution_release_mode(teacher_scope, released_task, "never")
+
+      {:ok, _} =
+        Tasks.update_task(teacher_scope, released_task, %{solution_release_mode: "never"})
 
       conn =
         conn
@@ -146,7 +150,9 @@ defmodule TaskyWeb.TaskSolutionFileControllerTest do
       task: task,
       solution_file: file
     } do
-      {:ok, _task} = Tasks.set_solution_release_mode(teacher_scope, task, "on_complete")
+      {:ok, _task} =
+        Tasks.update_task(teacher_scope, task, %{solution_release_mode: "on_complete"})
+
       outsider = user_fixture(%{role: "student"})
 
       conn =

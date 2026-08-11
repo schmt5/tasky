@@ -803,6 +803,62 @@ defmodule TaskyWeb.CoreComponents do
   defp copy_percent(%{done: done, total: total}), do: round(done / total * 100)
 
   @doc """
+  A vertical radio group where every option carries a label and a description.
+
+  Das Gegenstück zu `checkbox_field/1` für Felder mit mehr als zwei Zuständen:
+  `<.input type="select">` versteckt die Erklärung der einzelnen Optionen hinter
+  dem Aufklappen, hier steht sie neben der Auswahl.
+
+  `options` ist eine Liste von `%{value:, label:, description:}` — die
+  Beschreibung ist optional.
+  """
+  attr :field, Phoenix.HTML.FormField, required: true
+  attr :legend, :string, default: nil
+  attr :accent, :string, default: "sky", values: ~w(sky violet)
+  attr :options, :list, required: true
+
+  def radio_group(assigns) do
+    ~H"""
+    <fieldset>
+      <legend :if={@legend} class="text-sm font-medium text-stone-700 mb-2">{@legend}</legend>
+      <div class="space-y-2">
+        <label
+          :for={option <- @options}
+          class={[
+            "flex items-start gap-3 cursor-pointer rounded-lg border px-3.5 py-3 transition-colors duration-150",
+            "border-stone-200 hover:bg-stone-50",
+            @accent == "sky" && "has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/60",
+            @accent == "violet" && "has-[:checked]:border-violet-300 has-[:checked]:bg-violet-50/60"
+          ]}
+        >
+          <input
+            type="radio"
+            id={"#{@field.id}-#{option.value}"}
+            name={@field.name}
+            value={option.value}
+            checked={to_string(@field.value) == to_string(option.value)}
+            class={[
+              "mt-0.5 w-[18px] h-[18px] border-stone-300 cursor-pointer transition-colors duration-150 shrink-0 focus:ring-offset-0",
+              @accent == "violet" && "text-violet-500 focus:ring-violet-500/30",
+              @accent == "sky" && "text-sky-500 focus:ring-sky-500/30"
+            ]}
+          />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-stone-700">{option.label}</span>
+            <span
+              :if={Map.get(option, :description)}
+              class="block text-xs text-stone-500 mt-0.5 leading-relaxed"
+            >
+              {option.description}
+            </span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+    """
+  end
+
+  @doc """
   A checkbox with a bold label and an explanatory description underneath.
 
   `<.input type="checkbox">` renders the label inline and has nowhere to put a

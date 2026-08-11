@@ -582,6 +582,16 @@ defmodule TaskyWeb.CourseLive.Show do
                   label="Erweiterte Lerneinheit"
                   description="Markiert die Lerneinheit für Lernende als freiwillige Erweiterung."
                 />
+
+                <div class="pt-1 border-t border-stone-100">
+                  <div class="pt-5">
+                    <.radio_group
+                      field={@rename_form[:solution_release_mode]}
+                      legend="Musterlösung anzeigen"
+                      options={TaskyWeb.TaskComponents.solution_release_options()}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div class="flex items-center justify-end gap-3 px-6 pb-6">
@@ -625,6 +635,19 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:share_url, nil)
      |> stream(:tasks, course.tasks)}
   end
+
+  # `?edit=<task_id>` öffnet das Bearbeiten-Modal direkt. Andere Seiten
+  # verlinken damit auf den Freigabe-Modus, ohne dass die Lehrperson erst das
+  # ⋯-Menü suchen muss.
+  @impl true
+  def handle_params(%{"edit" => raw_id}, _uri, socket) do
+    case TaskyWeb.Params.int(raw_id) do
+      nil -> {:noreply, socket}
+      id -> {:noreply, open_rename(socket, id)}
+    end
+  end
+
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("open_publish", _params, socket) do
@@ -780,13 +803,7 @@ defmodule TaskyWeb.CourseLive.Show do
 
   @impl true
   def handle_event("open_rename", %{"id" => id}, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
-    changeset = Tasks.change_task(socket.assigns.current_scope, task)
-
-    {:noreply,
-     socket
-     |> assign(:renaming_task, task)
-     |> assign(:rename_form, to_form(changeset, as: :task))}
+    {:noreply, open_rename(socket, id)}
   end
 
   @impl true
@@ -803,7 +820,8 @@ defmodule TaskyWeb.CourseLive.Show do
 
     attrs = %{
       name: params |> Map.get("name", "") |> String.trim(),
-      extended: params["extended"] == "true"
+      extended: params["extended"] == "true",
+      solution_release_mode: params["solution_release_mode"]
     }
 
     case Tasks.update_task(socket.assigns.current_scope, task, attrs) do
@@ -811,8 +829,7 @@ defmodule TaskyWeb.CourseLive.Show do
         {:noreply,
          socket
          |> put_flash(:info, "Lerneinheit «#{updated_task.name}» gespeichert.")
-         |> assign(:renaming_task, nil)
-         |> assign(:rename_form, nil)
+         |> close_rename()
          |> stream_insert(:tasks, updated_task)}
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -822,7 +839,24 @@ defmodule TaskyWeb.CourseLive.Show do
 
   @impl true
   def handle_event("close_rename", _params, socket) do
-    {:noreply, socket |> assign(:renaming_task, nil) |> assign(:rename_form, nil)}
+    {:noreply, close_rename(socket)}
+  end
+
+  defp open_rename(socket, id) do
+    task = Tasks.get_task!(socket.assigns.current_scope, id)
+    changeset = Tasks.change_task(socket.assigns.current_scope, task)
+
+    socket
+    |> assign(:renaming_task, task)
+    |> assign(:rename_form, to_form(changeset, as: :task))
+  end
+
+  # Räumt `?edit=` mit weg, sonst öffnet ein Reload das Modal erneut.
+  defp close_rename(socket) do
+    socket
+    |> assign(:renaming_task, nil)
+    |> assign(:rename_form, nil)
+    |> push_patch(to: ~p"/courses/#{socket.assigns.course}", replace: true)
   end
 
   @impl true

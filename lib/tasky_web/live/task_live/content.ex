@@ -84,34 +84,6 @@ defmodule TaskyWeb.TaskLive.Content do
       <%!-- Musterlösung tab: dieselbe Struktur wie «Inhalt», aber gesperrter
            Aufgabentext — die Lehrperson füllt nur die Antwortfelder. --%>
       <div :if={@tab == "musterloesung"} class="min-w-0">
-        <div class="border-b border-stone-100 bg-white px-8 py-4">
-          <div class="max-w-7xl mx-auto w-full flex flex-wrap items-center justify-between gap-4">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2.5">
-                <.icon name="hero-key" class="w-5 h-5 text-sky-500" />
-                <h2 class="text-base font-semibold text-stone-800">Musterlösung anzeigen</h2>
-              </div>
-              <p class="text-sm text-stone-500 mt-1">
-                Gilt für die Musterlösung und die Korrektur der Antworten.
-              </p>
-            </div>
-            <form phx-change="set_release_mode" class="shrink-0">
-              <.input
-                type="select"
-                id="solution-release-mode"
-                name="mode"
-                value={@task.solution_release_mode}
-                options={[
-                  {"Nie anzeigen", "never"},
-                  {"Nach manueller Freigabe pro Lernendem", "manual"},
-                  {"Automatisch, sobald die Lerneinheit als erledigt markiert ist", "on_complete"}
-                ]}
-                class="select select-sm w-full sm:w-[26rem]"
-              />
-            </form>
-          </div>
-        </div>
-
         <div
           :if={@answer_block_count > 0}
           id={"task-sample-solution-editor-#{@task.id}"}
@@ -122,7 +94,7 @@ defmodule TaskyWeb.TaskLive.Content do
         >
         </div>
 
-        <div :if={@answer_block_count == 0} class="bg-stone-100 min-h-[calc(100vh-160px)]">
+        <div :if={@answer_block_count == 0} class="bg-stone-100 min-h-[calc(100vh-54px)]">
           <div class="max-w-4xl mx-auto px-8 py-16 text-center">
             <.icon name="hero-key" class="w-10 h-10 text-stone-300" />
             <h3 class="mt-3 text-base font-semibold text-stone-700">Noch keine Antwortfelder</h3>
@@ -136,111 +108,6 @@ defmodule TaskyWeb.TaskLive.Content do
             >
               <.icon name="hero-pencil-square" class="w-4 h-4" /> Zum Inhalt
             </.link>
-          </div>
-        </div>
-
-        <%!-- Lösungsdateien: z. B. das korrekt formatierte Word-Dokument --%>
-        <div class="bg-stone-100 border-t border-stone-200">
-          <div class="max-w-4xl mx-auto px-8 py-8">
-            <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-              <div class="p-6 flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-2.5">
-                    <.icon name="hero-document-check" class="w-5 h-5 text-sky-500" />
-                    <h2 class="text-lg font-semibold text-stone-800">Lösungsdateien</h2>
-                  </div>
-                  <p class="text-sm text-stone-500 mt-1">
-                    Dateien, welche die Lernenden zusammen mit der Musterlösung herunterladen
-                    können – etwa das korrekt formatierte Word-Dokument.
-                  </p>
-                </div>
-                <form
-                  id="solution-file-upload-form"
-                  phx-change="validate_solution_file"
-                  class="shrink-0"
-                >
-                  <label class="inline-flex items-center gap-2 border border-stone-200 text-stone-700 text-sm font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]">
-                    <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Datei hochladen
-                    <.live_file_input upload={@uploads.solution_file} class="hidden" />
-                  </label>
-                </form>
-              </div>
-
-              <div class="px-6 pb-6 space-y-2.5">
-                <div
-                  :for={entry <- @uploads.solution_file.entries}
-                  class="rounded-xl border border-stone-200 px-4 py-3"
-                >
-                  <div class="flex items-center gap-3">
-                    <p class="flex-1 min-w-0 text-sm font-medium text-stone-700 truncate">
-                      {entry.client_name}
-                    </p>
-                    <%= if upload_errors(@uploads.solution_file, entry) == [] do %>
-                      <progress class="progress progress-info w-32" value={entry.progress} max="100">
-                      </progress>
-                    <% end %>
-                    <button
-                      type="button"
-                      phx-click="cancel_solution_file_upload"
-                      phx-value-ref={entry.ref}
-                      aria-label="Upload abbrechen"
-                      class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-150 shrink-0"
-                    >
-                      <.icon name="hero-x-mark" class="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p
-                    :for={err <- upload_errors(@uploads.solution_file, entry)}
-                    class="text-xs text-red-600 mt-1.5"
-                  >
-                    {upload_error_message(err)}
-                  </p>
-                </div>
-                <p :for={err <- upload_errors(@uploads.solution_file)} class="text-xs text-red-600">
-                  {upload_error_message(err)}
-                </p>
-
-                <div
-                  :if={@solution_files == [] and @uploads.solution_file.entries == []}
-                  class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center"
-                >
-                  <p class="text-sm text-stone-400">
-                    Noch keine Lösungsdateien.
-                  </p>
-                </div>
-
-                <div
-                  :for={file <- @solution_files}
-                  class="flex items-center gap-4 rounded-xl border border-stone-200 px-4 py-3"
-                >
-                  <.file_badge filename={file.stored_filename} />
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-semibold text-stone-800 truncate">
-                      {file.original_name}
-                    </p>
-                    <p class="text-xs text-stone-400 mt-0.5">
-                      {file_type_label(file.stored_filename)} · {Uploads.format_size(file.size)}
-                    </p>
-                  </div>
-                  <a
-                    href={~p"/tasks/#{@task.id}/solution-files/#{file.id}"}
-                    class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-3.5 py-2 rounded-lg transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 shrink-0"
-                  >
-                    <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Herunterladen
-                  </a>
-                  <button
-                    type="button"
-                    phx-click="delete_solution_file"
-                    phx-value-id={file.id}
-                    data-confirm={"«#{file.original_name}» wirklich löschen?"}
-                    aria-label="Lösungsdatei löschen"
-                    class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-150 shrink-0"
-                  >
-                    <.icon name="hero-trash" class="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -460,6 +327,107 @@ defmodule TaskyWeb.TaskLive.Content do
               </div>
             </div>
           </div>
+
+          <%!-- Lösungsdateien: z. B. das korrekt formatierte Word-Dokument --%>
+          <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <div class="p-6 flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2.5">
+                  <.icon name="hero-document-check" class="w-5 h-5 text-sky-500" />
+                  <h2 class="text-lg font-semibold text-stone-800">Lösungsdateien</h2>
+                </div>
+                <p class="text-sm text-stone-500 mt-1">
+                  Dateien, welche die Lernenden zusammen mit der Musterlösung herunterladen
+                  können – etwa das korrekt formatierte Word-Dokument.
+                </p>
+              </div>
+              <form
+                id="solution-file-upload-form"
+                phx-change="validate_solution_file"
+                class="shrink-0"
+              >
+                <label class="inline-flex items-center gap-2 border border-stone-200 text-stone-700 text-sm font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]">
+                  <.icon name="hero-arrow-up-tray" class="w-4 h-4" /> Datei hochladen
+                  <.live_file_input upload={@uploads.solution_file} class="hidden" />
+                </label>
+              </form>
+            </div>
+
+            <div class="px-6 pb-6 space-y-2.5">
+              <div
+                :for={entry <- @uploads.solution_file.entries}
+                class="rounded-xl border border-stone-200 px-4 py-3"
+              >
+                <div class="flex items-center gap-3">
+                  <p class="flex-1 min-w-0 text-sm font-medium text-stone-700 truncate">
+                    {entry.client_name}
+                  </p>
+                  <%= if upload_errors(@uploads.solution_file, entry) == [] do %>
+                    <progress class="progress progress-info w-32" value={entry.progress} max="100">
+                    </progress>
+                  <% end %>
+                  <button
+                    type="button"
+                    phx-click="cancel_solution_file_upload"
+                    phx-value-ref={entry.ref}
+                    aria-label="Upload abbrechen"
+                    class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-150 shrink-0"
+                  >
+                    <.icon name="hero-x-mark" class="w-4 h-4" />
+                  </button>
+                </div>
+                <p
+                  :for={err <- upload_errors(@uploads.solution_file, entry)}
+                  class="text-xs text-red-600 mt-1.5"
+                >
+                  {upload_error_message(err)}
+                </p>
+              </div>
+              <p :for={err <- upload_errors(@uploads.solution_file)} class="text-xs text-red-600">
+                {upload_error_message(err)}
+              </p>
+
+              <div
+                :if={@solution_files == [] and @uploads.solution_file.entries == []}
+                class="rounded-xl border border-dashed border-stone-200 px-4 py-8 text-center"
+              >
+                <p class="text-sm text-stone-400">
+                  Noch keine Lösungsdateien.
+                </p>
+              </div>
+
+              <div
+                :for={file <- @solution_files}
+                class="flex items-center gap-4 rounded-xl border border-stone-200 px-4 py-3"
+              >
+                <.file_badge filename={file.stored_filename} />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-stone-800 truncate">
+                    {file.original_name}
+                  </p>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    {file_type_label(file.stored_filename)} · {Uploads.format_size(file.size)}
+                  </p>
+                </div>
+                <a
+                  href={~p"/tasks/#{@task.id}/solution-files/#{file.id}"}
+                  class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-3.5 py-2 rounded-lg transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 shrink-0"
+                >
+                  <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Herunterladen
+                </a>
+                <button
+                  type="button"
+                  phx-click="delete_solution_file"
+                  phx-value-id={file.id}
+                  data-confirm={"«#{file.original_name}» wirklich löschen?"}
+                  aria-label="Lösungsdatei löschen"
+                  class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600 transition-colors duration-150 shrink-0"
+                >
+                  <.icon name="hero-trash" class="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Layouts.app>
@@ -515,32 +483,22 @@ defmodule TaskyWeb.TaskLive.Content do
         {:noreply,
          socket
          |> assign(:solution_json, Jason.encode!(Tasks.sample_solution_doc(task)))
-         |> assign(:answer_block_count, Tasks.answer_block_count(task))
-         |> assign(:solution_files, Tasks.list_task_solution_files(task))}
+         |> assign(:answer_block_count, Tasks.answer_block_count(task))}
 
       "dateien" ->
         {:noreply,
          socket
          |> assign(:attachments, Tasks.list_task_attachments(task))
          |> assign(:upload_fields, Tasks.list_task_upload_fields(task))
+         |> assign(:solution_files, Tasks.list_task_solution_files(task))
          |> assign(:editing_field_id, nil)
          |> assign(:field_draft, nil)}
     end
   end
 
-  ## Musterlösung tab
+  ## Dateien tab: Lösungsdateien
 
   @impl true
-  def handle_event("set_release_mode", %{"mode" => mode}, socket) do
-    case Tasks.set_solution_release_mode(socket.assigns.current_scope, socket.assigns.task, mode) do
-      {:ok, task} ->
-        {:noreply, assign(socket, :task, task)}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Freigabe-Modus konnte nicht gespeichert werden.")}
-    end
-  end
-
   def handle_event("validate_solution_file", _params, socket) do
     # auto_upload does the work; this handler just accepts the phx-change.
     {:noreply, socket}

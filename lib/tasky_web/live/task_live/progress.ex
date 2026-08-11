@@ -66,7 +66,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
           <%= if @task.solution_release_mode == "never" do %>
             <.link
-              navigate={~p"/tasks/#{@task.id}/content?tab=musterloesung"}
+              navigate={~p"/courses/#{@task.course_id}?edit=#{@task.id}"}
               class="ml-auto inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
             >
               <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Modus ändern
@@ -391,7 +391,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                             <p class="text-xs text-stone-400 mt-0.5">
                               {field.label}
                               <span :if={field.required} class="text-amber-600">· Pflicht</span>
-                              <span :if={file}> ·      {Uploads.format_size(file.size)}</span>
+                              <span :if={file}> ·     {Uploads.format_size(file.size)}</span>
                             </p>
                           </div>
                           <a
@@ -548,8 +548,8 @@ defmodule TaskyWeb.TaskLive.Progress do
                     />
                     <p class="text-xs text-amber-700 leading-relaxed">
                       Eine Freigabe bleibt bestehen – auch wenn du eine Einheit später
-                      zurückgibst. Zurücknehmen lässt sie sich nur, indem du den Modus im
-                      Tab «Musterlösung» auf «Nie anzeigen» stellst.
+                      zurückgibst. Zurücknehmen lässt sie sich nur, indem du den Modus beim
+                      Bearbeiten der Lerneinheit auf «Nie anzeigen» stellst.
                     </p>
                   </div>
                 </div>
@@ -1245,7 +1245,7 @@ defmodule TaskyWeb.TaskLive.Progress do
   end
 
   defp solution_release_label(%{solution_release_mode: "never"}, _record),
-    do: "Für diese Lerneinheit ausgeblendet – Modus im Tab «Musterlösung» ändern"
+    do: "Für diese Lerneinheit ausgeblendet – Modus beim Bearbeiten der Lerneinheit ändern"
 
   defp solution_release_label(_task, %{solution_released_at: %DateTime{} = at}),
     do: "Freigegeben am #{format_datetime(at)}"

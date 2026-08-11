@@ -160,7 +160,7 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       submission: submission
     } do
       {:ok, _} =
-        Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "manual")
+        Tasks.update_task(Scope.for_user(user_of(task)), task, %{solution_release_mode: "manual"})
 
       lv = open_review(conn, task, student)
 
@@ -180,7 +180,9 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       student: student
     } do
       {:ok, _} =
-        Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "on_complete")
+        Tasks.update_task(Scope.for_user(user_of(task)), task, %{
+          solution_release_mode: "on_complete"
+        })
 
       lv = open_review(conn, task, student)
 
@@ -204,7 +206,8 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       task: task,
       submission: submission
     } do
-      {:ok, _} = Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "manual")
+      {:ok, _} =
+        Tasks.update_task(Scope.for_user(user_of(task)), task, %{solution_release_mode: "manual"})
 
       {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
 
@@ -224,7 +227,7 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       submission: submission
     } do
       teacher_scope = Scope.for_user(user_of(task))
-      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} = Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
 
       other = user_fixture(%{role: "student"})
       {:ok, _} = Courses.enroll_student(task.course_id, other.id)
@@ -255,7 +258,7 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       submission: submission
     } do
       teacher_scope = Scope.for_user(user_of(task))
-      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} = Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
       {:ok, _} = Tasks.release_solution(teacher_scope, task, submission.id)
       first = Tasky.Repo.reload!(submission).solution_released_at
 
@@ -268,7 +271,7 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
 
     test "zeigt den Freigabestatus in der Tabelle", %{conn: conn, task: task} do
       teacher_scope = Scope.for_user(user_of(task))
-      {:ok, task} = Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} = Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
 
       {:ok, lv, html} = live(conn, ~p"/progress/#{task.id}")
       assert html =~ "Nicht freigegeben"
@@ -312,7 +315,8 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       task: task,
       submission: submission
     } do
-      {:ok, _} = Tasks.set_solution_release_mode(Scope.for_user(user_of(task)), task, "manual")
+      {:ok, _} =
+        Tasks.update_task(Scope.for_user(user_of(task)), task, %{solution_release_mode: "manual"})
 
       {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}/correction/#{submission.id}")
 

@@ -80,6 +80,16 @@ defmodule TaskyWeb.CourseLive.Add do
               </div>
             </div>
 
+            <div class="pt-1 border-t border-stone-100">
+              <div class="pt-5">
+                <.radio_group
+                  field={@form[:solution_release_mode]}
+                  legend="Musterlösung anzeigen"
+                  options={TaskyWeb.TaskComponents.solution_release_options()}
+                />
+              </div>
+            </div>
+
             <div class="flex items-center justify-end gap-3">
               <.link
                 navigate={~p"/courses/#{@course}"}

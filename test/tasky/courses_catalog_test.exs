@@ -298,7 +298,7 @@ defmodule Tasky.CoursesCatalogTest do
       }
 
       {:ok, task} = Tasks.save_task_content(author, task, doc)
-      {:ok, task} = Tasks.set_solution_release_mode(author, task, "on_complete")
+      {:ok, task} = Tasks.update_task(author, task, %{solution_release_mode: "on_complete"})
 
       filled =
         put_in(doc, ["content", Access.at(0), "content"], [

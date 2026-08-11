@@ -131,7 +131,7 @@ defmodule Tasky.CoursesDuplicateTest do
       }
 
       {:ok, task} = Tasks.save_task_content(scope, task, doc)
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "on_complete")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "on_complete"})
 
       filled =
         put_in(doc, ["content", Access.at(0), "content"], [
@@ -202,7 +202,7 @@ defmodule Tasky.CoursesDuplicateTest do
       {:ok, _} = Courses.enroll_student(course.id, student.id)
       student_scope = user_scope_fixture(student)
       {:ok, submission} = Tasks.get_or_create_submission(student_scope, task.id)
-      {:ok, _} = Tasks.set_solution_release_mode(scope, task, "manual")
+      {:ok, _} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
 
       {:ok, _} =
         Tasks.release_solution(scope, %{task | solution_release_mode: "manual"}, submission.id)

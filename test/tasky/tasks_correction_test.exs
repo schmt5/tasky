@@ -112,7 +112,7 @@ defmodule Tasky.TasksCorrectionTest do
     setup %{teacher_scope: scope, task: task, submission: submission, student_scope: student} do
       {:ok, _} = Tasks.save_student_answers(student, submission, doc("Meine Antwort"))
       {:ok, submission} = Tasks.complete_task(student, submission.id)
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "manual")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
 
       %{task: task, submission: submission}
     end
@@ -144,7 +144,7 @@ defmodule Tasky.TasksCorrectionTest do
       submission: submission,
       student_scope: student_scope
     } do
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "manual")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
       {:ok, _} = Tasks.complete_task(student_scope, submission.id)
       {:ok, _} = Tasks.save_correction_content(scope, task, submission.id, doc("Anmerkung"))
       {:ok, released} = Tasks.release_solution(scope, task, submission.id)

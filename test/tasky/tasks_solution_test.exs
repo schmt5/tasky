@@ -176,21 +176,25 @@ defmodule Tasky.TasksSolutionTest do
     end
   end
 
-  describe "set_solution_release_mode/3" do
+  describe "Freigabe-Modus über update_task/3" do
     test "setzt einen gültigen Modus", %{teacher_scope: scope, task: task} do
       assert task.solution_release_mode == "never"
-      assert {:ok, task} = Tasks.set_solution_release_mode(scope, task, "on_complete")
+      assert {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "on_complete"})
       assert task.solution_release_mode == "on_complete"
     end
 
     test "weist einen unbekannten Modus ab", %{teacher_scope: scope, task: task} do
-      assert {:error, changeset} = Tasks.set_solution_release_mode(scope, task, "vielleicht")
+      assert {:error, changeset} =
+               Tasks.update_task(scope, task, %{solution_release_mode: "vielleicht"})
+
       assert errors_on(changeset).solution_release_mode != []
     end
 
     test "weist eine fremde Lehrperson ab", %{task: task} do
       other = user_scope_fixture(user_fixture(%{role: "teacher"}))
-      assert {:error, :unauthorized} = Tasks.set_solution_release_mode(other, task, "manual")
+
+      assert {:error, :unauthorized} =
+               Tasks.update_task(other, task, %{solution_release_mode: "manual"})
     end
   end
 
@@ -257,7 +261,7 @@ defmodule Tasky.TasksSolutionTest do
 
   describe "release_solution/3" do
     setup %{teacher_scope: scope, task: task} do
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "manual")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
       %{task: task}
     end
 
@@ -324,7 +328,7 @@ defmodule Tasky.TasksSolutionTest do
 
   describe "release_solution_bulk/3" do
     setup %{teacher_scope: scope, task: task, course: course} do
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "manual")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
 
       others =
         for _ <- 1..2 do
@@ -442,7 +446,7 @@ defmodule Tasky.TasksSolutionTest do
       task: task,
       student_scope: student_scope
     } do
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "manual")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
       submission = submission(student_scope, task)
 
       {:ok, _} = Tasks.complete_task(student_scope, submission.id)
@@ -463,7 +467,7 @@ defmodule Tasky.TasksSolutionTest do
       task: task,
       student_scope: student_scope
     } do
-      {:ok, task} = Tasks.set_solution_release_mode(scope, task, "on_complete")
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "on_complete"})
       submission = submission(student_scope, task)
 
       {:ok, completed} = Tasks.complete_task(student_scope, submission.id)

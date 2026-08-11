@@ -27,6 +27,35 @@ defmodule TaskyWeb.CourseLive.AddTest do
     assert task.name == "Kapitel 1"
     assert task.status == "draft"
     refute task.extended
+    assert task.solution_release_mode == "never"
+  end
+
+  test "offers the solution release mode as a radio group", %{conn: conn, course: course} do
+    {:ok, _lv, html} = live(conn, ~p"/courses/#{course}/add")
+
+    assert html =~ "Musterlösung anzeigen"
+
+    for {value, label} <- [
+          {"never", "Nie anzeigen"},
+          {"manual", "Nach manueller Freigabe"},
+          {"on_complete", "Automatisch nach der Abgabe"}
+        ] do
+      assert html =~ ~s(value="#{value}")
+      assert html =~ label
+    end
+
+    # Die vorsichtigste Wahl ist vorausgewählt.
+    assert html =~ ~r/value="never"[^>]*checked/
+  end
+
+  test "creates a unit with the chosen release mode", %{conn: conn, course: course} do
+    {:ok, lv, _html} = live(conn, ~p"/courses/#{course}/add")
+
+    lv
+    |> form("#add-task-form", task: %{name: "Mit Lösung", solution_release_mode: "on_complete"})
+    |> render_submit()
+
+    assert created_task(course.id).solution_release_mode == "on_complete"
   end
 
   test "creates an extended unit when the checkbox is ticked", %{conn: conn, course: course} do

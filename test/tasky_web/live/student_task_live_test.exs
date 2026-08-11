@@ -87,7 +87,8 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       teacher_scope: teacher_scope,
       student: student
     } do
-      {:ok, task} = Tasky.Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} =
+        Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
 
       {:ok, _lv, html} = live(conn, ~p"/student/tasks/#{task.id}")
       refute html =~ "MUSTERLOESUNG"
@@ -106,7 +107,8 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       teacher_scope: teacher_scope,
       student: student
     } do
-      {:ok, task} = Tasky.Tasks.set_solution_release_mode(teacher_scope, task, "on_complete")
+      {:ok, task} =
+        Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "on_complete"})
 
       {:ok, _lv, html} = live(conn, ~p"/student/tasks/#{task.id}")
       refute html =~ "MUSTERLOESUNG"
@@ -146,7 +148,8 @@ defmodule TaskyWeb.Student.TaskLiveTest do
           Map.put(meta, :original_name, "loesung.docx")
         )
 
-      {:ok, task} = Tasky.Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} =
+        Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
 
       {:ok, _lv, html} = live(conn, ~p"/student/tasks/#{task.id}")
       refute html =~ "loesung.docx"
@@ -165,7 +168,8 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       teacher_scope: teacher_scope,
       student: student
     } do
-      {:ok, task} = Tasky.Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} =
+        Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
 
       {:ok, submission} =
         Tasky.Tasks.get_or_create_submission(Scope.for_user(student), task.id)
@@ -201,7 +205,8 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       teacher_scope: teacher_scope,
       student: student
     } do
-      {:ok, task} = Tasky.Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} =
+        Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
 
       {:ok, submission} =
         Tasky.Tasks.get_or_create_submission(Scope.for_user(student), task.id)
@@ -241,7 +246,9 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       teacher_scope: teacher_scope,
       student: student
     } do
-      {:ok, task} = Tasky.Tasks.set_solution_release_mode(teacher_scope, task, "manual")
+      {:ok, task} =
+        Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
+
       {:ok, lv, html} = live(conn, ~p"/student/tasks/#{task.id}")
       refute html =~ "MUSTERLOESUNG"
 

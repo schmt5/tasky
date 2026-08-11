@@ -363,6 +363,43 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       refute has_element?(lv, "#rename-task-form")
     end
 
+    test "the modal carries the solution release mode", %{
+      conn: conn,
+      course: course,
+      task: task
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      html =
+        lv
+        |> element(~s{button[phx-click="open_rename"][phx-value-id="#{task.id}"]})
+        |> render_click()
+
+      assert html =~ "Musterlösung anzeigen"
+      assert html =~ "Automatisch nach der Abgabe"
+
+      lv
+      |> form("#rename-task-form",
+        task: %{name: "Einheit 1", solution_release_mode: "manual"}
+      )
+      |> render_submit()
+
+      assert reload(task).solution_release_mode == "manual"
+    end
+
+    test "?edit= opens the modal directly", %{conn: conn, course: course, task: task} do
+      {:ok, lv, html} = live(conn, ~p"/courses/#{course}?edit=#{task.id}")
+
+      assert html =~ "Lerneinheit bearbeiten"
+      assert has_element?(lv, "#rename-task-form")
+    end
+
+    test "?edit= with garbage is ignored", %{conn: conn, course: course} do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}?edit=nonsense")
+
+      refute has_element?(lv, "#rename-task-form")
+    end
+
     test "a blank name keeps the modal open and the name unchanged", %{
       conn: conn,
       course: course,

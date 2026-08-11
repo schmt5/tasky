@@ -9,10 +9,10 @@ defmodule Tasky.Tasks.Task do
   darum bewusst **nicht** aus `changeset/3` castbar.
 
   `solution_release_mode` steuert, wann Lernende Musterlösung und Korrektur
-  sehen (`never` | `manual` | `on_complete`). Es ist eine Freigabe-Steuerung
-  und gehört nicht ins generische Formular — dafür gibt es
-  `solution_release_mode_changeset/2`. Ausgewertet wird der Modus an genau
-  einer Stelle: `Tasky.Tasks.solution_visible?/2`.
+  sehen (`never` | `manual` | `on_complete`). Er wird beim Erstellen und
+  Bearbeiten der Lerneinheit gesetzt und ist darum — anders als die beiden
+  JSON-Spalten — regulär castbar. Ausgewertet wird der Modus an genau einer
+  Stelle: `Tasky.Tasks.solution_visible?/2`.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -48,10 +48,19 @@ defmodule Tasky.Tasks.Task do
   @doc false
   def changeset(task, attrs, user_scope) do
     task
-    |> cast(attrs, [:name, :position, :status, :course_id, :locked, :extended])
+    |> cast(attrs, [
+      :name,
+      :position,
+      :status,
+      :course_id,
+      :locked,
+      :extended,
+      :solution_release_mode
+    ])
     |> validate_required(:name, message: "Name darf nicht leer sein.")
     |> validate_required([:position, :status])
     |> validate_inclusion(:status, @statuses)
+    |> validate_inclusion(:solution_release_mode, @release_modes)
     |> put_change(:user_id, user_scope.user.id)
   end
 
@@ -85,12 +94,5 @@ defmodule Tasky.Tasks.Task do
         do: [sample_solution: "Musterlösung ist zu gross"],
         else: []
     end)
-  end
-
-  @doc "Changeset für den Freigabe-Modus der Musterlösung."
-  def solution_release_mode_changeset(task, mode) do
-    task
-    |> change(solution_release_mode: mode)
-    |> validate_inclusion(:solution_release_mode, @release_modes)
   end
 end

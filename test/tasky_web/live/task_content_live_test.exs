@@ -60,26 +60,59 @@ defmodule TaskyWeb.TaskLive.ContentTest do
       refute html =~ "Noch keine Antwortfelder"
     end
 
-    test "speichert den Freigabe-Modus", %{conn: conn, task: task} do
-      {:ok, lv, _html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
+    # Der Freigabe-Modus wird beim Erstellen/Bearbeiten der Lerneinheit gesetzt,
+    # nicht hier.
+    test "enthält keine Modus-Auswahl mehr", %{conn: conn, task: task} do
+      {:ok, _lv, html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
 
-      lv
-      |> element("form[phx-change='set_release_mode']")
-      |> render_change(%{"mode" => "on_complete"})
+      refute html =~ "set_release_mode"
+      refute html =~ "solution-release-mode"
+    end
+  end
 
-      assert Tasky.Repo.reload!(task).solution_release_mode == "on_complete"
+  describe "Dateien tab" do
+    test "beherbergt die Lösungsdateien unterhalb der Datei-Abgaben", %{
+      conn: conn,
+      scope: scope,
+      task: task
+    } do
+      dir =
+        Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
+
+      prev = Application.get_env(:tasky, :uploads_dir)
+      Application.put_env(:tasky, :uploads_dir, dir)
+
+      on_exit(fn ->
+        File.rm_rf(dir)
+        if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
+      end)
+
+      src = Path.join(System.tmp_dir!(), "sol_#{System.unique_integer([:positive])}")
+      File.write!(src, "bytes")
+      {:ok, meta} = Tasky.Uploads.save_task_solution_file(task.id, src, "loesung.docx")
+
+      {:ok, _} =
+        Tasks.create_task_solution_file(
+          scope,
+          task,
+          Map.put(meta, :original_name, "loesung.docx")
+        )
+
+      {:ok, _lv, html} = live(conn, ~p"/tasks/#{task}/content?tab=dateien")
+
+      assert html =~ "Lösungsdateien"
+      assert html =~ "loesung.docx"
+      assert html =~ "solution-file-upload-form"
+
+      # Reihenfolge: Anhänge, Datei-Abgaben, dann Lösungsdateien.
+      assert :binary.match(html, "Datei-Abgaben") < :binary.match(html, "Lösungsdateien")
     end
 
-    test "weist einen unbekannten Modus ab", %{conn: conn, task: task} do
-      {:ok, lv, _html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
+    test "die Lösungsdateien stehen nicht mehr im Musterlösungs-Tab", %{conn: conn, task: task} do
+      {:ok, _lv, html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
 
-      html =
-        lv
-        |> element("form[phx-change='set_release_mode']")
-        |> render_change(%{"mode" => "irgendwas"})
-
-      assert html =~ "Freigabe-Modus konnte nicht gespeichert werden"
-      assert Tasky.Repo.reload!(task).solution_release_mode == "never"
+      refute html =~ "solution-file-upload-form"
+      refute html =~ "Lösungsdateien"
     end
   end
 end
