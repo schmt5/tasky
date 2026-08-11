@@ -391,7 +391,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                             <p class="text-xs text-stone-400 mt-0.5">
                               {field.label}
                               <span :if={field.required} class="text-amber-600">· Pflicht</span>
-                              <span :if={file}> ·     {Uploads.format_size(file.size)}</span>
+                              <span :if={file}> ·      {Uploads.format_size(file.size)}</span>
                             </p>
                           </div>
                           <a
