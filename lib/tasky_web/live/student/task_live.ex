@@ -12,6 +12,7 @@ defmodule TaskyWeb.Student.TaskLive do
 
   alias Tasky.Tasks
   alias Tasky.Uploads
+  alias TaskyWeb.Params
 
   @impl true
   def render(assigns) do
@@ -857,6 +858,19 @@ defmodule TaskyWeb.Student.TaskLive do
 
   defp field_upload_name(field_id), do: :"answer_field_#{field_id}"
 
+  # See the twin in `TaskyWeb.Guest.ExamLive`: interpolating the client's
+  # `field-id` into an atom mints one permanent atom per distinct value, and
+  # `cancel_upload/3` raises on a name that was never `allow_upload`ed. Resolve
+  # against the fields registered at mount and use the trusted id.
+  defp registered_upload_name(socket, field_id) do
+    with id when is_integer(id) <- Params.int(field_id),
+         %{} = field <- Enum.find(socket.assigns.upload_fields, &(&1.id == id)) do
+      {:ok, field_upload_name(field.id)}
+    else
+      _ -> :error
+    end
+  end
+
   @impl true
   def handle_event("switch_student_tab", %{"tab" => tab}, socket)
       when tab in ["aufgabe", "dateien", "musterloesung"] do
@@ -901,7 +915,10 @@ defmodule TaskyWeb.Student.TaskLive do
   end
 
   def handle_event("cancel_answer_upload", %{"ref" => ref, "field-id" => field_id}, socket) do
-    {:noreply, cancel_upload(socket, field_upload_name(field_id), ref)}
+    case registered_upload_name(socket, field_id) do
+      {:ok, name} -> {:noreply, cancel_upload(socket, name, ref)}
+      :error -> {:noreply, socket}
+    end
   end
 
   # Whether the submission may still be edited is decided by the context against
@@ -910,7 +927,7 @@ defmodule TaskyWeb.Student.TaskLive do
   def handle_event("delete_answer_file", %{"field-id" => field_id}, socket) do
     submission = socket.assigns.submission
 
-    case Tasks.get_submission_file(submission, field_id) do
+    case field_id |> Params.int() |> then(&(&1 && Tasks.get_submission_file(submission, &1))) do
       nil ->
         {:noreply, put_flash(socket, :error, "Datei konnte nicht gelöscht werden.")}
 
@@ -984,24 +1001,7 @@ defmodule TaskyWeb.Student.TaskLive do
       else
         result =
           consume_uploaded_entry(socket, entry, fn %{path: path} ->
-            case Uploads.save_task_submission_file(
-                   task.id,
-                   submission.id,
-                   path,
-                   entry.client_name,
-                   field.allowed_types
-                 ) do
-              {:ok, meta} ->
-                {:ok,
-                 Tasks.put_submission_file(
-                   submission,
-                   field,
-                   Map.put(meta, :original_name, entry.client_name)
-                 )}
-
-              {:error, reason} ->
-                {:ok, {:error, reason}}
-            end
+            {:ok, store_answer_file(task, submission, field, entry, path)}
           end)
 
         case result do
@@ -1021,6 +1021,42 @@ defmodule TaskyWeb.Student.TaskLive do
     socket
     |> assign(:submission_files, submission_files_by_field(socket.assigns.submission))
     |> assign(:missing_uploads, Tasks.missing_required_uploads(socket.assigns.submission))
+  end
+
+  # Stores the bytes, then upserts the per-field file record. The bytes land in
+  # storage first, so a refused DB write — the unit was completed from another
+  # tab, say — has to take them back out; nothing else ever would. See the twin
+  # in `Guest.ExamLive`.
+  defp store_answer_file(task, submission, field, entry, path) do
+    with {:ok, meta} <-
+           Uploads.save_task_submission_file(
+             task.id,
+             submission.id,
+             path,
+             entry.client_name,
+             field.allowed_types
+           ) do
+      case Tasks.put_submission_file(
+             submission,
+             field,
+             Map.put(meta, :original_name, entry.client_name)
+           ) do
+        {:ok, file} ->
+          {:ok, file}
+
+        {:error, reason} ->
+          discard_stored_bytes(task.id, submission.id, meta)
+          {:error, reason}
+      end
+    end
+  end
+
+  # Best-effort: the upload has already failed for the student either way, so a
+  # failing cleanup must not turn into a second error on top of it.
+  defp discard_stored_bytes(task_id, submission_id, %{stored_filename: stored_filename}) do
+    Uploads.delete_task_submission_file_from_disk(task_id, submission_id, stored_filename)
+  rescue
+    _ -> :ok
   end
 
   defp format_date(datetime) do

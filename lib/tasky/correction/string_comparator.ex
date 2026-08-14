@@ -32,7 +32,7 @@ defmodule Tasky.Correction.StringComparator do
   @fuzzy_min_length 4
 
   @doc """
-  Returns `{:ok, %{verdicts: %{"id" => "correct" | "incorrect"}, points: number}}`.
+  Returns `{:ok, %{verdicts: %{"id" => "correct" | "wrong"}, points: number}}`.
 
   `annotated_submission_nodes` must have already been annotated by
   `Tasky.AI.NodePatcher.annotate/1` (each answer node carries
@@ -61,10 +61,10 @@ defmodule Tasky.Correction.StringComparator do
     {:ok, %{verdicts: verdicts, points: points}}
   end
 
-  defp verdict_for(_sub, nil, _opts), do: "incorrect"
+  defp verdict_for(_sub, nil, _opts), do: "wrong"
 
   defp verdict_for(%{type: "taskItem", checked: s}, %{type: "taskItem", checked: t}, _opts) do
-    if s == t, do: "correct", else: "incorrect"
+    if s == t, do: "correct", else: "wrong"
   end
 
   defp verdict_for(%{type: type, text: student}, %{type: type, text: sample_text}, opts)
@@ -72,7 +72,7 @@ defmodule Tasky.Correction.StringComparator do
     student_trimmed = String.trim(student || "")
 
     if student_trimmed == "" do
-      "incorrect"
+      "wrong"
     else
       accepted =
         (sample_text || "")
@@ -82,11 +82,11 @@ defmodule Tasky.Correction.StringComparator do
 
       if Enum.any?(accepted, &text_match?(student_trimmed, &1, opts)),
         do: "correct",
-        else: "incorrect"
+        else: "wrong"
     end
   end
 
-  defp verdict_for(_sub, _sample, _opts), do: "incorrect"
+  defp verdict_for(_sub, _sample, _opts), do: "wrong"
 
   @doc """
   Returns true if a single `student` answer matches a single `accepted`

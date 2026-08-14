@@ -7,7 +7,20 @@ defmodule Tasky.PDF.Gotenberg do
   considered unavailable and `enabled?/0` returns false.
   """
 
-  @timeout 90_000
+  @timeout 60_000
+  @max_retries 2
+
+  @doc """
+  Worst-case wall time of one `url_to_pdf/2` call: every attempt can burn the
+  full receive timeout, plus Req's backoff between them.
+
+  `Tasky.Exams.ExportRunner` derives its per-submission task timeout from this
+  so the two cannot disagree. They did: the client could spend ~273 s while the
+  runner killed the task at 120 s, meaning a render that actually needed its
+  retries could never finish — and the kill lost the submission's identity, so
+  the failure manifest could only say "Unbekannte Abgabe".
+  """
+  def max_attempt_time_ms, do: (@max_retries + 1) * @timeout + 10_000
 
   @doc """
   Returns true when a Gotenberg base URL is configured.
@@ -49,7 +62,7 @@ defmodule Tasky.PDF.Gotenberg do
                # Transient failures (429/5xx/timeouts) get a couple of
                # backed-off retries instead of failing the whole export.
                retry: :transient,
-               max_retries: 2
+               max_retries: @max_retries
              ) do
           {:ok, %Req.Response{status: 200, body: pdf_binary}} ->
             {:ok, pdf_binary}

@@ -206,4 +206,18 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
   test "a course that is not in the catalog is a 404", %{conn: conn, course: course} do
     assert_raise Ecto.NoResultsError, fn -> live(conn, ~p"/catalog/#{course}") end
   end
+
+  test "a malformed toggle_unit id does not take the LiveView down", %{
+    conn: conn,
+    author: author,
+    course: course
+  } do
+    published = catalog_course_fixture(scope: author, course: course)
+    {:ok, lv, _html} = live(conn, ~p"/catalog/#{published}")
+
+    # `String.to_integer/1` raised here, so anything a client can push from the
+    # console killed the process — a cheap self-DoS and log flood.
+    assert render_click(lv, "toggle_unit", %{"id" => "not-a-number"})
+    assert render(lv) =~ "Geteilter Kurs"
+  end
 end

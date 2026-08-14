@@ -9,9 +9,13 @@ defmodule TaskyWeb.Guest.FileController do
 
   alias Tasky.Exams
   alias Tasky.Uploads
+  alias TaskyWeb.Params
 
   def download(conn, %{"exam_token" => exam_token, "field_id" => field_id}) do
-    with submission when not is_nil(submission) <-
+    # `field_id` reaches an integer column, so a non-numeric path segment raises
+    # an Ecto.Query.CastError — a 500 where a 404 is the honest answer.
+    with field_id when is_integer(field_id) <- Params.int(field_id),
+         submission when not is_nil(submission) <-
            Exams.get_exam_submission_by_token(exam_token),
          file when not is_nil(file) <- Exams.get_submission_file(submission, field_id),
          {:ok, source} <-

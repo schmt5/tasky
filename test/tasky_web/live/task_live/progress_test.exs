@@ -358,4 +358,34 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
 
     assert_raise Ecto.NoResultsError, fn -> live(conn, ~p"/progress/#{task.id}") end
   end
+
+  describe "navigate_submission robustness" do
+    test "navigating before a submission is selected does not crash", %{conn: conn, task: task} do
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      # `Enum.find_index/2` returns nil here, and `nil - 1` raised.
+      assert render_click(lv, "navigate_submission", %{"direction" => "prev"})
+      assert render_click(lv, "navigate_submission", %{"direction" => "next"})
+      assert render(lv) =~ "Testaufgabe"
+    end
+
+    test "selecting a student without a submission does not crash the view", %{
+      conn: conn,
+      task: task,
+      student: student
+    } do
+      # `show_submission` accepts any enrolled student, but the navigation list
+      # only holds those *with* a submission — so the selected id can be absent
+      # from it, and both the handler and `render/1` did `index + 1` on nil.
+      other = user_fixture(%{role: "student", firstname: "Ohne", lastname: "Abgabe"})
+      course_id = Tasky.Repo.get!(Tasky.Tasks.Task, task.id).course_id
+      {:ok, _} = Courses.enroll_student(course_id, other.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      assert render_click(lv, "show_submission", %{"student-id" => to_string(other.id)})
+      assert render_click(lv, "navigate_submission", %{"direction" => "next"})
+      assert render(lv) =~ student.lastname
+    end
+  end
 end

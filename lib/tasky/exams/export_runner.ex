@@ -25,7 +25,9 @@ defmodule Tasky.Exams.ExportRunner do
   # shared instance per Gotenberg process; concurrent renders race to start it
   # and wedge it in "already started". Serialize.
   @max_concurrency 1
-  @gotenberg_timeout 120_000
+  # Derived from the client's own retry budget so the task can never be killed
+  # mid-retry — see `Tasky.PDF.Gotenberg.max_attempt_time_ms/0`.
+  @gotenberg_timeout Gotenberg.max_attempt_time_ms()
 
   @doc "Directory the export ZIPs are written to (scanned by the janitor)."
   def export_dir, do: Path.join(System.tmp_dir!(), "tasky_exports")
@@ -98,7 +100,7 @@ defmodule Tasky.Exams.ExportRunner do
       )
       |> Enum.to_list()
 
-    case partition_results(results) do
+    case partition_results(Enum.zip(submissions, results)) do
       {:ok, pdfs, failures} ->
         case build_zip(exam, pdfs, failures) do
           {:ok, export_id, filename} ->
@@ -121,20 +123,26 @@ defmodule Tasky.Exams.ExportRunner do
 
   # One failed render must not throw away the other N-1 good PDFs: split
   # into successes and failures; only a run with zero PDFs fails outright.
-  defp partition_results(results) do
+  #
+  # Takes `{submission, result}` pairs rather than bare results: `Task.async_stream`
+  # yields in input order but a crashed or timed-out task yields `{:exit, reason}`
+  # with no payload, so the submission has to be carried in from the outside.
+  # Without it the manifest said "Unbekannte Abgabe" — and the whole point of the
+  # manifest is telling the teacher which student to re-export.
+  defp partition_results(pairs) do
     {oks, errors} =
-      Enum.split_with(results, fn
-        {:ok, {_sub, {:ok, _pdf}}} -> true
+      Enum.split_with(pairs, fn
+        {_submission, {:ok, {_sub, {:ok, _pdf}}}} -> true
         _ -> false
       end)
 
-    pdfs = Enum.map(oks, fn {:ok, {sub, {:ok, pdf}}} -> {sub, pdf} end)
+    pdfs = Enum.map(oks, fn {_submission, {:ok, {sub, {:ok, pdf}}}} -> {sub, pdf} end)
 
     failures =
       Enum.map(errors, fn
-        {:ok, {sub, {:error, reason}}} -> {sub, {:render_error, reason}}
-        {:exit, reason} -> {nil, {:render_crashed, reason}}
-        other -> {nil, {:unknown_error, other}}
+        {_submission, {:ok, {sub, {:error, reason}}}} -> {sub, {:render_error, reason}}
+        {submission, {:exit, reason}} -> {submission, {:render_crashed, reason}}
+        {submission, other} -> {submission, {:unknown_error, other}}
       end)
 
     case pdfs do

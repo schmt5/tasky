@@ -60,7 +60,12 @@ defmodule TaskyWeb.Router do
   # Guest exam tokens are short strings — cap probing per IP (generous enough
   # for a whole class behind one school NAT).
   pipeline :guest_rate_limit do
-    plug TaskyWeb.Plugs.RateLimit, bucket: :guest, limit: 300, window_ms: 60_000
+    plug TaskyWeb.Plugs.RateLimit,
+      bucket: :guest,
+      limit: 300,
+      window_ms: 60_000,
+      # So the live_session hook can bill the same IP over the websocket.
+      stash_ip: true
   end
 
   ## Guest exam routes (no authentication required)
@@ -72,7 +77,9 @@ defmodule TaskyWeb.Router do
     get "/exam/:exam_token/seb-quit", SebController, :quit
     get "/exam/:exam_token/files/:field_id", FileController, :download
 
-    live_session :guest do
+    # The hook is not redundant with the pipeline above: a live_redirect inside
+    # this live_session joins over the open websocket and never touches a plug.
+    live_session :guest, on_mount: [{TaskyWeb.GuestRateLimit, :default}] do
       live "/enroll/:enrollment_token", EnrollLive, :enroll
       live "/exam/:exam_token", ExamLive, :show
     end

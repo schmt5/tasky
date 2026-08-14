@@ -22,7 +22,7 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 | `Tasky.Correction.AnswerKey` | Splits an answer-filled doc into answer-free `content` + an answers map keyed by `answerId`; merges them back. |
 | `Tasky.Correction.StringComparator` | Deterministic auto-correction of one part (no AI; an AI client can be swapped in behind the same contract). |
 | `Tasky.AI.NodePatcher` | Lists answer blocks of a doc, applies/rewrites ✅/🟡/❌ markers. |
-| `Tasky.AI.BulkCorrectionRunner` | Auto-corrects all eligible (submission, part) pairs of an exam. **Singleton per exam** (Registry); overlapping triggers queue a re-run; the terminal `:bulk_correction_done` broadcast is crash-safe. |
+| `Tasky.AI.BulkCorrectionRunner` | Auto-corrects all eligible (submission, part) pairs of an exam. **Singleton per exam** (Registry); overlapping triggers queue a re-run; the terminal `:bulk_correction_done` broadcast survives an exception via `try/after`, but **not** a brutal kill or node shutdown — a job lost that way is re-triggered by the teacher (the "no job queue" decision). |
 | `Tasky.AI.CorrectionOrchestrator` | Subscribes to `"exam_events"` and starts runner jobs — the only link between `Exams` and the runner (no cycle). |
 | `Tasky.Uploads` | Validation + key building for stored files (type whitelists, size caps, magic-byte sniffing for images). Physical IO goes through `Tasky.Storage`. |
 | `Tasky.Storage` (+ `Local`, `R2`) | Storage behaviour (`put/fetch/delete/delete_prefix`). `Local` serves files from `UPLOADS_DIR` (dev/test); `R2` keeps a private bucket and serves via presigned URLs (prod). Selected by `STORAGE_ADAPTER` at boot. |
@@ -45,10 +45,20 @@ server-side JSON→HTML rendering.
   points per part) uses these ids, so reordering questions re-keys nothing.
 - **Verdicts** live in `exam_submissions.block_verdicts`, keyed by the
   block's `answerId`: `"correct"`, `"wrong"`, legacy `"half"`, or a number
-  (manual points, clamped/quarter-rounded). The ✅/🟡/❌ markers inside
-  `corrected_content` are still written server-side on verdict changes and
-  read back as an inference fallback for AI-corrected parts (making them
-  fully render-only is the one open Phase-3 item, 3.3).
+  (manual points, quarter-rounded then clamped — in that order, because
+  equal-split block maxima are not on the 0.25 grid). This vocabulary is
+  binding for **every** writer including `Correction.StringComparator`; a
+  verdict outside it silently loses its marker and reads as ungraded.
+  The ✅/🟡/❌ markers inside `corrected_content` are still written
+  server-side on verdict changes and read back as an inference fallback for
+  AI-corrected parts (making them fully render-only is the one open Phase-3
+  item, 3.3).
+- **The auto-corrector never overwrites the teacher.** `auto_block_verdicts`
+  records what the runner last wrote; a block whose current verdict differs
+  from that is the teacher's and survives every re-run, markers included.
+  This matters because a part stays eligible for auto-correction until it is
+  marked corrected — so editing any model answer re-runs parts the teacher is
+  midway through grading.
 - **Grading writes are transactional and row-locked**: every read-modify-write
   over the JSON columns runs in a transaction that first takes a row lock via
   `Repo.lock_one!/3`; bulk operations (grouped verdicts, mark-all) are single
@@ -98,7 +108,12 @@ binding:
   `TaskyWeb.StorageServing` (local `send_file`/`send_download` vs. presigned
   302).
 - Client params are parsed via `TaskyWeb.Params.int/1` and explicit atom
-  whitelists — malformed input never crashes a LiveView.
+  whitelists — malformed input never crashes a LiveView. Two rules behind
+  that: never interpolate a client value into an atom (`:"field_#{id}"` mints
+  one permanent atom per distinct value, and the VM's atom table is a
+  node-wide limit), and never hand a raw param to a query on an integer
+  column (`Ecto.Query.CastError` is a 500 where a 404 is the honest answer).
+  Resolve ids against what the mount actually registered instead.
 
 ## Frontend (`assets/js/`)
 

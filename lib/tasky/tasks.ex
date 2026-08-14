@@ -950,14 +950,19 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Gets a task by id for a student, or `nil` when the task does not exist or
-  the student is not enrolled in the task's course. This is the single entry
-  point for student-facing task access — enrollment is checked here, not in
-  the callers.
+  Gets a task by id for a student, or `nil` when the task does not exist, is
+  not published, or the student is not enrolled in the task's course. This is
+  the single entry point for student-facing task access — enrollment and
+  visibility are checked here, not in the callers.
+
+  The `status` check belongs here and not only in `list_tasks_for_course/1`:
+  task ids are sequential, so without it any enrolled student could open a
+  draft or archived unit of their course by URL, answer it, and reach its
+  solution files.
   """
   def get_task_for_student(%Scope{user: user} = _scope, task_id)
       when user.role == "student" do
-    with %Task{} = task <- Repo.get(Task, task_id),
+    with %Task{status: "published"} = task <- Repo.get(Task, task_id),
          true <- Tasky.Courses.enrolled?(task.course_id, user.id) do
       task
     else
@@ -1169,8 +1174,13 @@ defmodule Tasky.Tasks do
         Repo.transaction(fn ->
           _guard = Repo.lock_one!(Task, task.id, :share)
 
+          # Only newly stamped rows count. `stamp_release!/1` returns an
+          # already-released submission unchanged, so returning every locked row
+          # made a second "Für alle freigeben" click report the full class as
+          # freshly released when it had released nobody.
           task
           |> lock_task_submissions!(target)
+          |> Enum.reject(&released?/1)
           |> Enum.map(&stamp_release!/1)
         end)
 
@@ -1180,6 +1190,9 @@ defmodule Tasky.Tasks do
       end
     end
   end
+
+  defp released?(%TaskSubmission{solution_released_at: %DateTime{}}), do: true
+  defp released?(%TaskSubmission{}), do: false
 
   defp lock_task_submissions!(%Task{} = task, :all) do
     ensure_submissions_for_enrolled!(task)
@@ -1257,18 +1270,32 @@ defmodule Tasky.Tasks do
   """
   def save_student_answers(%Scope{user: user} = _scope, %TaskSubmission{} = submission, doc)
       when user.role == "student" and is_map(doc) do
-    cond do
-      submission.student_id != user.id ->
-        {:error, :unauthorized}
+    # Gate and write run in one transaction against the locked row, exactly as
+    # `Exams.update_exam_submission_content/2` does on the other surface.
+    # Checking `status` on the caller's struct (read unlocked by the controller)
+    # and then issuing an UPDATE without a status predicate let an autosave that
+    # was already in flight land *after* `complete_task/2` committed — the
+    # student's answers changed after hand-in, and after teacher approval.
+    # `Repo.transaction/1` already yields {:ok, submission} or {:error, reason},
+    # with a rolled-back changeset coming back as {:error, changeset} — the
+    # caller's contract is unchanged.
+    Repo.transaction(fn ->
+      locked = Repo.lock_one!(TaskSubmission, submission.id)
 
-      submission.status not in @editable_statuses ->
-        {:error, :not_editable}
+      cond do
+        locked.student_id != user.id ->
+          Repo.rollback(:unauthorized)
 
-      true ->
-        submission
-        |> TaskSubmission.answers_changeset(doc)
-        |> Repo.update()
-    end
+        locked.status not in @editable_statuses ->
+          Repo.rollback(:not_editable)
+
+        true ->
+          case locked |> TaskSubmission.answers_changeset(doc) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+      end
+    end)
   end
 
   @doc """

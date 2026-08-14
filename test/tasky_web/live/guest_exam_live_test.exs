@@ -106,4 +106,32 @@ defmodule TaskyWeb.GuestExamLiveTest do
       assert html =~ "Prüfung abgegeben"
     end
   end
+
+  describe "malformed upload params" do
+    setup %{conn: conn} do
+      %{submission: submission} = running_exam_with_submission()
+      {:ok, view, _html} = open_exam(conn, submission)
+      %{view: view}
+    end
+
+    test "an unknown field-id on cancel does not take the LiveView down", %{view: view} do
+      # `:"answer_field_#{field_id}"` minted an atom per distinct value — a
+      # guest holding only an exam token could walk the VM to its atom limit —
+      # and `cancel_upload/3` raises for a name that was never allowed.
+      before = :erlang.system_info(:atom_count)
+
+      for id <- ["not-a-number", "999999", "<script>", ""] do
+        assert render_click(view, "cancel_answer_upload", %{"ref" => "0", "field-id" => id})
+      end
+
+      assert :erlang.system_info(:atom_count) == before
+      assert render(view) =~ "Live Prüfung"
+    end
+
+    test "an unknown field-id on delete does not take the LiveView down", %{view: view} do
+      # A non-numeric id reached an integer column and raised Ecto.Query.CastError.
+      assert render_click(view, "delete_answer_file", %{"field-id" => "not-a-number"})
+      assert render(view) =~ "Live Prüfung"
+    end
+  end
 end

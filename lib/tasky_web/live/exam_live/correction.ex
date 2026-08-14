@@ -4,6 +4,7 @@ defmodule TaskyWeb.ExamLive.Correction do
   import TaskyWeb.FileComponents
 
   alias Tasky.Exams
+  alias Tasky.Grading
 
   @impl true
   def render(assigns) do
@@ -338,35 +339,19 @@ defmodule TaskyWeb.ExamLive.Correction do
     end
   end
 
-  defp total_points(submission) do
-    (submission.points_per_part || %{})
-    |> Map.values()
-    |> Enum.reduce(0, fn
-      v, acc when is_number(v) -> acc + v
-      _, acc -> acc
-    end)
-  end
+  # All three delegate to `Tasky.Grading`, the single source of truth for
+  # points math on screen and in the PDF. The local copies rendered 5.25 as
+  # "5.3" — rounding away exactly the quarter-point precision the domain is
+  # built on — and showed a genuine 0 as "—", i.e. indistinguishable from
+  # ungraded.
+  defp total_points(submission), do: Grading.sum_points(submission.points_per_part)
 
-  defp total_max_points(exam) do
-    (exam.sample_solution_points || %{})
-    |> Map.values()
-    |> Enum.reduce(0, fn
-      v, acc when is_number(v) -> acc + v
-      _, acc -> acc
-    end)
-  end
+  defp total_max_points(exam), do: Grading.sum_points(exam.sample_solution_points)
 
   defp progress_percent(_done, 0), do: 0
   defp progress_percent(done, total), do: round(done * 100 / total)
 
-  defp format_points(0), do: "—"
-  defp format_points(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_points(n) when is_float(n) do
-    if n == trunc(n),
-      do: Integer.to_string(trunc(n)),
-      else: :erlang.float_to_binary(n, decimals: 1)
-  end
+  defp format_points(n), do: Grading.format_points(n)
 
   defp correction_summary(parts, submissions) do
     total = length(parts) * length(submissions)

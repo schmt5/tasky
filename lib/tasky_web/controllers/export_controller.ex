@@ -1,10 +1,15 @@
 defmodule TaskyWeb.ExportController do
   @moduledoc """
-  Serves one-time downloads of exported ZIPs produced by
-  `Tasky.Exams.ExportRunner`.
+  Serves downloads of exported ZIPs produced by `Tasky.Exams.ExportRunner`.
 
   Access is gated by a `token` query param signed via
-  `Tasky.Exams.ExportDownloadToken`. After serving, the file is deleted.
+  `Tasky.Exams.ExportDownloadToken`: it resolves an opaque export id, carries a
+  15-minute max age, and is not bound to a user — anyone holding it can download
+  within that window.
+
+  The download is **not** one-time. Deleting the file here would have to happen
+  in `register_before_send`, which fires before the body is streamed and would
+  corrupt the download; `Tasky.Exams.ExportJanitor` sweeps stale ZIPs instead.
   """
 
   use TaskyWeb, :controller

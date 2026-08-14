@@ -284,6 +284,73 @@ defmodule Tasky.ExamsBlockPointsTest do
       refute Map.has_key?(exam.sample_solution_block_points, "q-1")
       assert exam.sample_solution_points["q-1"] == 4
     end
+
+    test "deleting a whole question drops its points from the exam total" do
+      # The bug this pins: `sample_solution_points` was never pruned by part id,
+      # so a deleted question kept inflating the grading denominator — silently
+      # depressing every student's mark on screen and in the PDF.
+      exam =
+        exam_fixture(%{
+          sample_solution_points: %{"q-1" => 6, "q-2" => 4}
+        })
+
+      {:ok, exam} = Exams.save_exam_structure(:system, exam, question_doc())
+
+      assert Map.keys(exam.sample_solution_points) == ["q-1"]
+      assert Tasky.Grading.sum_points(exam.sample_solution_points) == 6
+    end
+
+    test "deleting a question also drops its custom block points" do
+      exam =
+        exam_fixture(%{
+          sample_solution_points: %{"q-1" => 6, "q-2" => 4},
+          sample_solution_block_points: %{"q-2" => %{"77" => 4}}
+        })
+
+      {:ok, exam} = Exams.save_exam_structure(:system, exam, question_doc())
+
+      refute Map.has_key?(exam.sample_solution_block_points, "q-2")
+      refute Map.has_key?(exam.sample_solution_points, "q-2")
+    end
+  end
+
+  describe "enable/clear custom block points round trip" do
+    test "enabling then clearing leaves the part total untouched" do
+      # Rounding each equal share independently (2 / 3 → 3 × 0.75 = 2.25) and
+      # then setting the total to that sum let a no-op UI round trip ratchet the
+      # exam's max points up by 0.25 every time.
+      exam =
+        exam_fixture(%{
+          content: question_doc([11, 22, 33]),
+          sample_solution_points: %{"q-1" => 2}
+        })
+
+      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
+      assert exam.sample_solution_points["q-1"] == 2
+
+      {:ok, exam} = Exams.clear_custom_block_points(:system, exam, "q-1")
+      assert exam.sample_solution_points["q-1"] == 2
+
+      # And again, to prove it does not creep across repeated toggles.
+      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
+      {:ok, exam} = Exams.clear_custom_block_points(:system, exam, "q-1")
+      assert exam.sample_solution_points["q-1"] == 2
+    end
+
+    test "seeded shares sum to exactly the part total" do
+      exam =
+        exam_fixture(%{
+          content: question_doc([11, 22, 33]),
+          sample_solution_points: %{"q-1" => 2}
+        })
+
+      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
+
+      shares = exam.sample_solution_block_points["q-1"]
+      assert shares |> Map.values() |> Enum.sum() == 2
+      # Every share stays on the 0.25 grid.
+      assert Enum.all?(Map.values(shares), &(&1 * 4 == trunc(&1 * 4)))
+    end
   end
 
   describe "list_part_answer_groups/2 block max points" do
@@ -301,6 +368,38 @@ defmodule Tasky.ExamsBlockPointsTest do
       blocks = Exams.list_part_answer_groups(exam, "q-1")
 
       assert Enum.map(blocks, & &1.max_points) == [1.5, 1.5, 0.5, 0.5]
+    end
+  end
+
+  describe "set_part_points/4 validation" do
+    setup do
+      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
+      %{exam: exam, submission: submission_fixture(exam)}
+    end
+
+    test "clamps to the part's max points", %{submission: submission} do
+      # `step`/`max` on the number input are client-side only; a crafted event
+      # used to store the raw value straight into the exam total.
+      {:ok, updated} = Exams.set_part_points(:system, submission, "q-1", 1000)
+      assert updated.points_per_part["q-1"] == 4
+    end
+
+    test "rejects negative points", %{submission: submission} do
+      {:ok, updated} = Exams.set_part_points(:system, submission, "q-1", -5)
+      assert updated.points_per_part["q-1"] == 0
+    end
+
+    test "quarter-rounds the stored value", %{submission: submission} do
+      {:ok, updated} = Exams.set_part_points(:system, submission, "q-1", 1.3)
+      assert updated.points_per_part["q-1"] == 1.25
+    end
+
+    test "nil still clears the entry", %{submission: submission} do
+      {:ok, updated} = Exams.set_part_points(:system, submission, "q-1", 2)
+      assert updated.points_per_part["q-1"] == 2
+
+      {:ok, updated} = Exams.set_part_points(:system, updated, "q-1", nil)
+      refute Map.has_key?(updated.points_per_part, "q-1")
     end
   end
 end

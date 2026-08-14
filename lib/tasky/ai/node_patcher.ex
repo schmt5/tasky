@@ -163,7 +163,8 @@ defmodule Tasky.AI.NodePatcher do
 
   @doc """
   Applies the verdict map back to annotated nodes.
-  `verdicts` is `%{"1" => "correct", "2" => "incorrect", ...}`.
+  `verdicts` is `%{"1" => "correct", "2" => "wrong", ...}` — the same verdict
+  vocabulary `Tasky.Grading` and `block_verdicts` use.
   Returns the corrected nodes with markers appended and `__ai_id`
   attributes removed.
   """
@@ -215,7 +216,7 @@ defmodule Tasky.AI.NodePatcher do
 
   defp apply_to_node(%{"type" => type, "attrs" => %{"__ai_id" => id} = attrs} = node, verdicts)
        when type in @answer_types do
-    marker = verdict_marker(Map.get(verdicts, id))
+    marker = power_marker(Map.get(verdicts, id))
 
     content = Map.get(node, "content")
 
@@ -238,10 +239,6 @@ defmodule Tasky.AI.NodePatcher do
   end
 
   defp apply_to_node(node, _verdicts), do: node
-
-  defp verdict_marker("correct"), do: "✅"
-  defp verdict_marker("incorrect"), do: "❌"
-  defp verdict_marker(_), do: nil
 
   defp append_marker_to_last_text(content, marker) do
     {new_reversed, _found} =

@@ -638,16 +638,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
       ids = Enum.map(group.students, & &1.submission_id)
 
-      Exams.set_block_verdict_bulk(
-        socket.assigns.current_scope,
-        socket.assigns.exam,
-        part_id,
-        idx,
-        new_verdict,
-        ids
-      )
+      result =
+        Exams.set_block_verdict_bulk(
+          socket.assigns.current_scope,
+          socket.assigns.exam,
+          part_id,
+          idx,
+          new_verdict,
+          ids
+        )
 
-      {:noreply, refresh_assigns(socket)}
+      {:noreply, socket |> flash_bulk_verdict_result(result) |> refresh_assigns()}
     else
       _ -> {:noreply, socket}
     end
@@ -692,18 +693,20 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          %{} = group <- Enum.find(block.groups, &(&1.text == group_text)) do
       ids = Enum.map(group.students, & &1.submission_id)
 
-      Exams.set_block_verdict_bulk(
-        socket.assigns.current_scope,
-        socket.assigns.exam,
-        part_id,
-        idx,
-        points,
-        ids
-      )
+      result =
+        Exams.set_block_verdict_bulk(
+          socket.assigns.current_scope,
+          socket.assigns.exam,
+          part_id,
+          idx,
+          points,
+          ids
+        )
 
       {:noreply,
        socket
        |> assign(:manual_input, nil)
+       |> flash_bulk_verdict_result(result)
        |> refresh_assigns()}
     else
       _ -> {:noreply, assign(socket, :manual_input, nil)}
@@ -752,6 +755,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   def handle_info({:bulk_correction_progress, _}, socket), do: {:noreply, socket}
   def handle_info({:bulk_correction_done, _}, socket), do: {:noreply, refresh_assigns(socket)}
   def handle_info({:bulk_correction_cancelled, _}, socket), do: {:noreply, socket}
+
+  # The return value used to be discarded outright, so a failed batch showed the
+  # teacher nothing but a flicker back to the previous state.
+  defp flash_bulk_verdict_result(socket, {:ok, _updated}), do: socket
+
+  defp flash_bulk_verdict_result(socket, {:error, reason}) do
+    put_flash(socket, :error, "Bewertung konnte nicht gespeichert werden (#{inspect(reason)}).")
+  end
 
   defp refresh_assigns(socket) do
     %{exam: exam, current_part: part, parts: parts} = socket.assigns

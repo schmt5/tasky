@@ -14,6 +14,7 @@ defmodule TaskyWeb.CatalogLive.Show do
   alias Tasky.Courses.DuplicateRunner
   alias Tasky.Tasks
   alias Tasky.Uploads
+  alias TaskyWeb.Params
 
   @impl true
   def render(assigns) do
@@ -275,13 +276,18 @@ defmodule TaskyWeb.CatalogLive.Show do
 
   @impl true
   def handle_event("toggle_unit", %{"id" => id}, socket) do
-    unit_id = String.to_integer(id)
-    expanded = socket.assigns.expanded_units
+    case Params.int(id) do
+      nil ->
+        {:noreply, socket}
 
-    expanded =
-      if unit_id in expanded, do: List.delete(expanded, unit_id), else: [unit_id | expanded]
+      unit_id ->
+        expanded = socket.assigns.expanded_units
 
-    {:noreply, assign(socket, :expanded_units, expanded)}
+        expanded =
+          if unit_id in expanded, do: List.delete(expanded, unit_id), else: [unit_id | expanded]
+
+        {:noreply, assign(socket, :expanded_units, expanded)}
+    end
   end
 
   @impl true

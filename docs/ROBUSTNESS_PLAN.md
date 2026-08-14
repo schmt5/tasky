@@ -2,6 +2,36 @@
 
 Status: **in progress** · Date: 2026-07-17 · Based on a full code audit (contexts, web layer, frontend, tests/tooling/config).
 
+Bug-fix & robustness pass (2026-08-14) — a full audit of the newest features, the grading
+pipeline and the student surface. Two findings mattered most and both were invisible:
+
+- **CI had been permanently red**, so none of the gates below were actually gating.
+  `mix format --check-formatted` could never pass (a HEEx line with a literal `·` before an
+  inline `{expr}` was a formatter non-fixpoint — the space count grew by one on every run), and
+  `mix dialyzer` exited 2 on an unreachable clause. It went unnoticed because `mix precommit`
+  ran the *mutating* `mix format` and skipped dialyzer. Both fixed; `precommit` is now identical
+  to `.github/workflows/ci.yml`, which Phase 0 had required all along.
+- **Deleting an exam question silently depressed every student's mark.**
+  `prune_orphan_block_points/3` never pruned `sample_solution_points` by surviving part id, so a
+  deleted question kept inflating the grading denominator — a student scoring 8/8 got 4.25
+  instead of 6.0, on screen and in the PDF.
+
+Also fixed: the auto-corrector wrote `"incorrect"`, a verdict nothing downstream understood
+(blocks rendered as ungraded and lost their ❌ on the next edit); a re-run overwrote verdicts the
+teacher had entered by hand (now tracked via `auto_block_verdicts`); manual points were clamped
+*before* rounding, so a value could exceed the block max and read as fully correct; `set_part_points/4`
+stored unvalidated points (`"-5"`, `"1e3"`); enabling then clearing custom block points ratcheted the
+part total up by 0.25 each round; three read-modify-writes ran without a row lock
+(`save_exam_structure/3`, `Tasks.save_student_answers/3` — which let an autosave land *after*
+hand-in — and `update_corrected_parts/2`); students could open draft and archived units of their
+course by URL; the guest per-IP cap was bypassable over the websocket and the enrolment token was
+only ~30 bits; several handlers crashed on crafted params (client-supplied `field-id` interpolated
+into an atom, `String.to_integer/1`, a nil navigation index, a nil `solution_release_mode` hitting a
+NOT NULL column); a bulk verdict rolled the whole batch back for one empty submission with nothing
+shown to the teacher; partial exports were announced as clean successes and their timed-out
+submissions lost their identity in the manifest; and a rejected answer upload left orphaned bytes in
+storage. `Exams.apply_auto_correction/5` had no test coverage at all — it does now.
+
 Progress (2026-07-19):
 - **Phase 0 — done.** Green suite, CI (GitHub Actions), credo/dialyzer/sobelow/excoveralls wired, npm in `assets.setup`, repo hygiene, real README.
 - **Phase 1 — done.** All 8 hotfixes implemented with regression tests: student-task IDOR (enrollment checked in `Tasks.get_task_for_student/2`), autosave permanent-failure classifier + keepalive unload flush + beforeunload guard, `crypto.randomUUID()` answer ids + paste dedupe (`withFreshAnswerIds`), SEB quit password via `:crypto` in one place, `ExamUploadField` validation fix, email-disabled documented (dead confirm-email route removed), `/uploads` pipeline hardening (nosniff, `default-src 'none'; sandbox`, CORP) + magic-byte sniffing + site-wide CSP (print-ready script moved into the bundle for it). Not yet deployed.

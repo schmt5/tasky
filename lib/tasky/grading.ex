@@ -28,14 +28,19 @@ defmodule Tasky.Grading do
   def round_quarter(n) when is_number(n), do: Float.round(n * 4.0) / 4
 
   @doc """
-  Normalizes a manual points verdict: non-negative, clamped to the block's
-  max points (when known), rounded to 0.25 steps.
+  Normalizes a manual points verdict: non-negative, rounded to 0.25 steps, then
+  clamped to the block's max points (when known).
+
+  Rounding must happen *before* the clamp. Equal-split block maxima are not on
+  the 0.25 grid (2 points over 3 blocks → 0.666…), so clamping first lets
+  `round_quarter/1` push the value back above the max — and a 0.75 on a 0.666
+  block then reads as `"correct"`, putting a ✅ on a partly wrong answer.
   """
   def normalize_manual_points(points, block_max) when is_number(points) do
     points
     |> max(0)
-    |> then(&if is_number(block_max), do: min(&1, block_max), else: &1)
     |> round_quarter()
+    |> then(&if is_number(block_max), do: min(&1, block_max), else: &1)
   end
 
   ## Verdict semantics
@@ -173,9 +178,9 @@ defmodule Tasky.Grading do
   defp points_value(n) when is_number(n), do: n
   defp points_value(_), do: 0
 
+  # Only ever called with `round_quarter/1` output or `Float.parse/1` output,
+  # both of which are floats — a catch-all clause here would be unreachable.
   defp integerize(n) when is_float(n) do
     if n == trunc(n), do: trunc(n), else: n
   end
-
-  defp integerize(n), do: n
 end

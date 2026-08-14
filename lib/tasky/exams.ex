@@ -287,10 +287,14 @@ defmodule Tasky.Exams do
     end
   end
 
+  # 10 base32 chars ≈ 50 bits. The token is never typed by hand — the cockpit
+  # only offers the full enrol URL as copy-to-clipboard — so length costs
+  # nothing, and the previous 6 chars (~30 bits) were thin for a credential
+  # that grants access to an exam.
   defp generate_enrollment_token do
-    :crypto.strong_rand_bytes(4)
+    :crypto.strong_rand_bytes(10)
     |> Base.encode32(case: :lower, padding: false)
-    |> String.slice(0, 6)
+    |> String.slice(0, 10)
     |> String.upcase()
   end
 
@@ -407,13 +411,25 @@ defmodule Tasky.Exams do
   The exam must be in "open" or "running" status.
   """
   def create_exam_submission(%Exam{} = exam, attrs) do
-    if exam.status in ["open", "running"] do
-      %ExamSubmission{exam_id: exam.id}
-      |> ExamSubmission.changeset(attrs)
-      |> Repo.insert()
-    else
-      {:error, :exam_not_open}
-    end
+    # The status is re-read from the locked row, not taken from the caller's
+    # struct: `EnrollLive` loads the exam once in `mount` and subscribes to
+    # nothing, so someone who opened the enrol page while the exam was open
+    # could otherwise still enrol hours after the teacher closed it. FOR SHARE
+    # excludes `update_exam_status/3` without blocking concurrent enrolments.
+    Repo.transaction(fn ->
+      locked = Repo.lock_one!(Exam, exam.id, :share)
+
+      if locked.status in ["open", "running"] do
+        case %ExamSubmission{exam_id: locked.id}
+             |> ExamSubmission.changeset(attrs)
+             |> Repo.insert() do
+          {:ok, submission} -> submission
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      else
+        Repo.rollback(:exam_not_open)
+      end
+    end)
   end
 
   @doc """
@@ -604,8 +620,9 @@ defmodule Tasky.Exams do
   def mark_part_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
     with :ok <- authorize_submission(scope, submission) do
-      parts = Enum.uniq([part_id | submission.corrected_parts || []])
-      update_corrected_parts(submission, parts)
+      update_submission_json(submission, fn locked ->
+        %{corrected_parts: Enum.uniq([part_id | locked.corrected_parts || []])}
+      end)
     end
   end
 
@@ -615,8 +632,9 @@ defmodule Tasky.Exams do
   def unmark_part_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
     with :ok <- authorize_submission(scope, submission) do
-      parts = Enum.reject(submission.corrected_parts || [], &(&1 == part_id))
-      update_corrected_parts(submission, parts)
+      update_submission_json(submission, fn locked ->
+        %{corrected_parts: Enum.reject(locked.corrected_parts || [], &(&1 == part_id))}
+      end)
     end
   end
 
@@ -630,10 +648,27 @@ defmodule Tasky.Exams do
     end
   end
 
-  defp update_corrected_parts(submission, parts) do
-    submission
-    |> Ecto.Changeset.change(%{corrected_parts: parts})
-    |> update_and_broadcast(&broadcast_submission_change/1)
+  # The submission-side twin of `update_exam_json/2`: `fun` gets the row locked
+  # FOR UPDATE and returns the changes map, so the list it appends to is always
+  # the latest committed one. Without the lock, marking two different parts of
+  # the same student corrected from two tabs silently drops one of the flags —
+  # and the dropped part then re-enters `list_bulk_correction_jobs/2`, so the
+  # next auto-run overwrites the verdicts the teacher just entered there.
+  defp update_submission_json(%ExamSubmission{} = submission, fun) when is_function(fun, 1) do
+    result =
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(ExamSubmission, submission.id)
+
+        case locked |> Ecto.Changeset.change(fun.(locked)) |> Repo.update() do
+          {:ok, updated} -> updated
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+    with {:ok, updated} <- result do
+      broadcast_submission_change(updated)
+      {:ok, updated}
+    end
   end
 
   # One place for the read-modify-write over the exam's JSON columns
@@ -664,8 +699,9 @@ defmodule Tasky.Exams do
   def mark_part_auto_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
     with :ok <- authorize_submission(scope, submission) do
-      parts = Enum.uniq([part_id | submission.auto_corrected_parts || []])
-      update_auto_corrected_parts(submission, parts)
+      update_submission_json(submission, fn locked ->
+        %{auto_corrected_parts: Enum.uniq([part_id | locked.auto_corrected_parts || []])}
+      end)
     end
   end
 
@@ -675,15 +711,10 @@ defmodule Tasky.Exams do
   def unmark_part_auto_corrected(scope, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
     with :ok <- authorize_submission(scope, submission) do
-      parts = Enum.reject(submission.auto_corrected_parts || [], &(&1 == part_id))
-      update_auto_corrected_parts(submission, parts)
+      update_submission_json(submission, fn locked ->
+        %{auto_corrected_parts: Enum.reject(locked.auto_corrected_parts || [], &(&1 == part_id))}
+      end)
     end
-  end
-
-  defp update_auto_corrected_parts(submission, parts) do
-    submission
-    |> Ecto.Changeset.change(%{auto_corrected_parts: parts})
-    |> update_and_broadcast(&broadcast_submission_change/1)
   end
 
   @doc """
@@ -739,9 +770,32 @@ defmodule Tasky.Exams do
   def save_exam_structure(scope, %Exam{} = exam, doc) when is_map(doc) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
       new_content = doc |> AnswerKey.ensure_ids() |> Tasky.ExamDoc.ensure_part_ids()
-      pruned_answers = prune_orphan_answers(new_content, exam.sample_solution || %{})
 
-      persist_content_and_answers(exam, new_content, pruned_answers)
+      # The sample-solution columns must be read from the *locked* row. Reading
+      # them off the caller's struct (loaded in the controller, outside any
+      # transaction) let a concurrent "Musterlösung" autosave commit in between,
+      # and this write then resurrected the stale map — losing a model answer.
+      result =
+        update_exam_json(exam, fn locked ->
+          {pruned_block_points, synced_points} =
+            prune_orphan_block_points(
+              new_content,
+              locked.sample_solution_block_points || %{},
+              locked.sample_solution_points || %{}
+            )
+
+          %{
+            content: new_content,
+            sample_solution: prune_orphan_answers(new_content, locked.sample_solution || %{}),
+            sample_solution_block_points: pruned_block_points,
+            sample_solution_points: synced_points
+          }
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_exam_event({:exam_answers_changed, updated})
+        {:ok, updated}
+      end
     end
   end
 
@@ -825,24 +879,6 @@ defmodule Tasky.Exams do
     end
   end
 
-  defp persist_content_and_answers(exam, content, answers) do
-    {pruned_block_points, synced_points} =
-      prune_orphan_block_points(
-        content,
-        exam.sample_solution_block_points || %{},
-        exam.sample_solution_points || %{}
-      )
-
-    exam
-    |> Exam.changeset(%{
-      content: content,
-      sample_solution: answers,
-      sample_solution_block_points: pruned_block_points,
-      sample_solution_points: synced_points
-    })
-    |> update_and_broadcast(&broadcast_exam_event({:exam_answers_changed, &1}))
-  end
-
   defp prune_orphan_answers(content, answers) do
     keep_ids = AnswerKey.block_ids(content)
     Map.take(answers, MapSet.to_list(keep_ids))
@@ -852,9 +888,15 @@ defmodule Tasky.Exams do
   # exists in `content`, and re-syncs each surviving custom part's total in
   # `points` to the (possibly shrunk) sum. A part whose custom map becomes
   # empty falls back to equal split, keeping its previous total.
+  #
+  # `points` must be pruned by the surviving part ids too: it is the exam's max
+  # points, and an entry left behind for a deleted question inflates the grading
+  # denominator forever — silently depressing every student's mark on screen and
+  # in the PDF.
   defp prune_orphan_block_points(content, block_points, points) do
     keep_ids = AnswerKey.block_ids(content)
     part_ids = content |> split_content_into_parts() |> MapSet.new(& &1.id)
+    part_id_list = MapSet.to_list(part_ids)
 
     pruned =
       block_points
@@ -864,7 +906,7 @@ defmodule Tasky.Exams do
       |> Map.new()
 
     synced_points =
-      Enum.reduce(pruned, points, fn {pid, m}, acc ->
+      Enum.reduce(pruned, Map.take(points, part_id_list), fn {pid, m}, acc ->
         Map.put(acc, pid, normalize_block_points(Enum.sum(Map.values(m))))
       end)
 
@@ -976,24 +1018,39 @@ defmodule Tasky.Exams do
 
   defp do_enable_custom_block_points(exam, part_id) do
     update_exam_json(exam, fn locked ->
-      blocks = exam_part_blocks(locked, part_id)
+      blocks = locked |> exam_part_blocks(part_id) |> Enum.filter(& &1.answer_id)
       max_points = Map.get(locked.sample_solution_points || %{}, part_id)
-
-      share =
-        if is_number(max_points) and blocks != [] do
-          normalize_block_points(max_points / length(blocks))
-        else
-          0
-        end
 
       part_map =
         blocks
-        |> Enum.filter(& &1.answer_id)
-        |> Map.new(fn b -> {b.answer_id, share} end)
+        |> Enum.map(& &1.answer_id)
+        |> equal_block_shares(max_points)
 
       custom_block_points_changes(locked, part_id, part_map)
     end)
   end
+
+  # Splits `max_points` over `answer_ids` on the 0.25 grid so the shares sum to
+  # *exactly* the part's total. Rounding each share independently would not:
+  # 2 points over 3 blocks would give 3 × 0.75 = 2.25, and since the part total
+  # is then set to the sum of the shares, merely enabling and clearing custom
+  # points again would ratchet the exam's max points up by 0.25 every round.
+  defp equal_block_shares(answer_ids, max_points)
+       when is_number(max_points) and answer_ids != [] do
+    count = length(answer_ids)
+    quarters = round(max(max_points, 0) * 4)
+    base = div(quarters, count)
+    remainder = rem(quarters, count)
+
+    answer_ids
+    |> Enum.with_index()
+    |> Map.new(fn {answer_id, idx} ->
+      share = if idx < remainder, do: base + 1, else: base
+      {answer_id, normalize_block_points(share / 4)}
+    end)
+  end
+
+  defp equal_block_shares(answer_ids, _max_points), do: Map.new(answer_ids, &{&1, 0})
 
   @doc """
   Disables custom distribution for a part. The part keeps its current total
@@ -1054,14 +1111,22 @@ defmodule Tasky.Exams do
   defp do_set_part_points(submission, part_id, points) do
     result =
       Repo.transaction(fn ->
+        # Exam first (FOR SHARE — only its max points are read), then the
+        # submission, matching the order of every other grading write.
+        exam = Repo.lock_one!(Exam, submission.exam_id, :share)
         locked = Repo.lock_one!(ExamSubmission, submission.id)
         current = locked.points_per_part || %{}
+
+        # `step`/`max` on the number input are client-side only: without this a
+        # crafted event stores a negative or absurd value ("1e3" parses to 1000)
+        # straight into the exam total.
+        part_max = Map.get(exam.sample_solution_points || %{}, part_id)
 
         new_map =
           if is_nil(points) do
             Map.delete(current, part_id)
           else
-            Map.put(current, part_id, points)
+            Map.put(current, part_id, Grading.normalize_manual_points(points, part_max))
           end
 
         case locked
@@ -1301,6 +1366,10 @@ defmodule Tasky.Exams do
     with :ok <- authorize_submission(scope, submission) do
       result =
         Repo.transaction(fn ->
+          # Exam first (FOR SHARE — only its block points are read), then the
+          # submission (FOR UPDATE): the same order every other grading write
+          # takes, so this cannot deadlock against them.
+          exam = Repo.lock_one!(Exam, submission.exam_id, :share)
           locked = Repo.lock_one!(ExamSubmission, submission.id)
           doc = correction_content(locked)
           parts = split_content_into_parts(doc)
@@ -1310,21 +1379,43 @@ defmodule Tasky.Exams do
             Repo.rollback(:unknown_part)
           end
 
+          current = locked.block_verdicts || %{}
+          prev_auto = locked.auto_block_verdicts || %{}
+          manual_keys = manual_verdict_keys(current, prev_auto, Map.keys(verdicts))
+
+          {merged_verdicts, merged_auto} =
+            merge_auto_verdicts(current, prev_auto, verdicts, manual_keys)
+
+          blocks = NodePatcher.list_answer_blocks(part_nodes)
+          points_by_index = resolve_block_points(exam, part_id, blocks)
+
+          # The markers must follow the verdicts we actually store — otherwise a
+          # block the teacher already judged keeps the machine's ✅/❌.
+          marked_nodes =
+            NodePatcher.rewrite_markers(
+              part_nodes,
+              marker_verdicts_by_index(blocks, merged_verdicts, points_by_index)
+            )
+
           new_parts =
             Enum.map(parts, fn p ->
-              if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
+              if p.id == part_id, do: %{p | nodes: marked_nodes}, else: p
             end)
 
           new_points =
-            if is_nil(points) do
-              Map.delete(locked.points_per_part || %{}, part_id)
-            else
-              Map.put(locked.points_per_part || %{}, part_id, points)
+            cond do
+              # The teacher has judged at least one block here, so the runner's
+              # total is computed from verdicts that were partly rejected. The
+              # manual path already keeps this part's points correct.
+              manual_keys != [] -> locked.points_per_part || %{}
+              is_nil(points) -> Map.delete(locked.points_per_part || %{}, part_id)
+              true -> Map.put(locked.points_per_part || %{}, part_id, points)
             end
 
           changes = %{
             corrected_content: assemble_parts_into_content(preamble, new_parts),
-            block_verdicts: Map.merge(locked.block_verdicts || %{}, verdicts),
+            block_verdicts: merged_verdicts,
+            auto_block_verdicts: merged_auto,
             points_per_part: new_points,
             auto_corrected_parts: Enum.uniq([part_id | locked.auto_corrected_parts || []])
           }
@@ -1340,6 +1431,36 @@ defmodule Tasky.Exams do
         {:ok, updated}
       end
     end
+  end
+
+  # A block whose stored verdict still equals what the auto-corrector last wrote
+  # is the machine's own and may be refreshed. Anything else — a verdict the
+  # teacher set, or changed — is theirs, and a re-run must not touch it.
+  defp manual_verdict_keys(current, prev_auto, keys) do
+    Enum.filter(keys, fn key ->
+      Map.has_key?(current, key) and Map.get(current, key) != Map.get(prev_auto, key)
+    end)
+  end
+
+  defp merge_auto_verdicts(current, prev_auto, incoming, manual_keys) do
+    manual = MapSet.new(manual_keys)
+
+    Enum.reduce(incoming, {current, prev_auto}, fn {key, verdict}, {verdicts, auto} ->
+      if MapSet.member?(manual, key) do
+        {verdicts, auto}
+      else
+        {Map.put(verdicts, key, verdict), Map.put(auto, key, verdict)}
+      end
+    end)
+  end
+
+  defp marker_verdicts_by_index(blocks, verdicts, points_by_index) do
+    Map.new(blocks, fn block ->
+      verdict = Map.get(verdicts, block.answer_id)
+
+      {block.index,
+       Grading.marker_verdict(verdict, points_by_index && points_by_index[block.index])}
+    end)
   end
 
   @doc """
@@ -1423,6 +1544,13 @@ defmodule Tasky.Exams do
   Sets the same block verdict on many submissions of the exam at once (the
   grouped bulk-correction view) — one transaction instead of N racy writes.
   Unknown submission ids are ignored; returns `{:ok, updated_submissions}`.
+
+  A submission in which the part or block cannot be resolved is **skipped**,
+  not fatal. The grouped view builds its groups over every submission of the
+  exam, so one student who enrolled and never opened the exam lands in the
+  "keine Antwort" group with an empty document — and rolling the batch back for
+  them left every other student in the group ungraded, with nothing on screen to
+  say why. `mark_part_corrected_bulk/3` already tolerates exactly this.
   """
   def set_block_verdict_bulk(scope, %Exam{} = exam, part_id, index, verdict, submission_ids)
       when is_binary(part_id) and is_integer(index) and is_list(submission_ids) do
@@ -1431,16 +1559,12 @@ defmodule Tasky.Exams do
         Repo.transaction(fn ->
           exam = Repo.lock_one!(Exam, exam.id, :share)
 
-          for submission <- lock_submissions_by_ids!(exam, submission_ids) do
-            case block_verdict_changes(submission, exam, part_id, index, verdict) do
-              {:ok, changes} ->
-                case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
-                  {:ok, updated} -> updated
-                  {:error, changeset} -> Repo.rollback(changeset)
-                end
-
-              {:error, reason} ->
-                Repo.rollback(reason)
+          for submission <- lock_submissions_by_ids!(exam, submission_ids),
+              {:ok, changes} <-
+                [block_verdict_changes(submission, exam, part_id, index, verdict)] do
+            case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
+              {:ok, updated} -> updated
+              {:error, changeset} -> Repo.rollback(changeset)
             end
           end
         end)

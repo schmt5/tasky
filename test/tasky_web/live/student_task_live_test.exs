@@ -12,10 +12,48 @@ defmodule TaskyWeb.Student.TaskLiveTest do
     teacher = user_fixture(%{role: "teacher"})
     student = user_fixture(%{role: "student"})
     {:ok, course} = Courses.create_course(Scope.for_user(teacher), %{name: "Testkurs"})
-    task = task_fixture(teacher, %{name: "Testaufgabe", course_id: course.id})
+    # Published on purpose: the student surface only ever shows published units,
+    # and the fixture default is "draft".
+    task =
+      task_fixture(teacher, %{
+        name: "Testaufgabe",
+        course_id: course.id,
+        status: "published"
+      })
 
     %{conn: log_in_user(conn, student), student: student, course: course, task: task}
   end
+
+  test "enrolled student cannot open a draft unit of their course", %{
+    conn: conn,
+    student: student,
+    course: course,
+    task: task
+  } do
+    {:ok, _} = Courses.enroll_student(course.id, student.id)
+    {:ok, draft} = Tasky.Tasks.update_task(teacher_scope(task), task, %{status: "draft"})
+
+    assert {:error, {:live_redirect, %{to: "/student/courses"}}} =
+             live(conn, ~p"/student/tasks/#{draft.id}")
+
+    refute Tasky.Tasks.get_submission_for_student(draft.id, student.id)
+  end
+
+  test "enrolled student cannot open an archived unit of their course", %{
+    conn: conn,
+    student: student,
+    course: course,
+    task: task
+  } do
+    {:ok, _} = Courses.enroll_student(course.id, student.id)
+    {:ok, archived} = Tasky.Tasks.update_task(teacher_scope(task), task, %{status: "archived"})
+
+    assert {:error, {:live_redirect, %{to: "/student/courses"}}} =
+             live(conn, ~p"/student/tasks/#{archived.id}")
+  end
+
+  defp teacher_scope(task),
+    do: Scope.for_user(Tasky.Repo.get!(Tasky.Accounts.User, task.user_id))
 
   test "enrolled student can open the task", %{
     conn: conn,

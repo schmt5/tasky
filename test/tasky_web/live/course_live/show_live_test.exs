@@ -337,6 +337,27 @@ defmodule TaskyWeb.CourseLive.ShowTest do
 
       refute reload(task).extended
     end
+
+    test "a submit without solution_release_mode is rejected, not a 500", %{
+      conn: conn,
+      course: course,
+      task: task
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      lv
+      |> element(~s{button[phx-click="open_rename"][phx-value-id="#{task.id}"]})
+      |> render_click()
+
+      # The key is absent, so the changeset saw a nil change — and
+      # `validate_inclusion` skips those, sending NULL into a NOT NULL column
+      # and raising a Postgrex error past the caller's `case`.
+      html = render_submit(lv, "save_rename", %{"task" => %{"name" => "Umbenannt"}})
+
+      assert html =~ "rename-task-form"
+      assert reload(task).name == "Einheit 1"
+      assert reload(task).solution_release_mode
+    end
   end
 
   describe "renaming a learning unit" do

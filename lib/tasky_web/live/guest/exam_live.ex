@@ -6,6 +6,7 @@ defmodule TaskyWeb.Guest.ExamLive do
 
   alias Tasky.Exams
   alias Tasky.Uploads
+  alias TaskyWeb.Params
 
   @impl true
   def render(assigns) do
@@ -736,6 +737,21 @@ defmodule TaskyWeb.Guest.ExamLive do
 
   defp field_upload_name(field_id), do: :"answer_field_#{field_id}"
 
+  # `field-id` comes off the wire. Interpolating it straight into an atom mints
+  # a permanent atom per distinct value — a guest holding nothing but a valid
+  # exam token could walk the VM to its atom limit — and `cancel_upload/3`
+  # raises on a name that was never `allow_upload`ed, taking a student's
+  # LiveView down mid-exam. Resolve against the fields registered at mount and
+  # build the name from the trusted id instead.
+  defp registered_upload_name(socket, field_id) do
+    with id when is_integer(id) <- Params.int(field_id),
+         %{} = field <- Enum.find(socket.assigns.upload_fields, &(&1.id == id)) do
+      {:ok, field_upload_name(field.id)}
+    else
+      _ -> :error
+    end
+  end
+
   @impl true
   def handle_event("show_submit_modal", _params, socket) do
     # Opening the modal freezes the editor behind it, so once the client
@@ -760,7 +776,10 @@ defmodule TaskyWeb.Guest.ExamLive do
   end
 
   def handle_event("cancel_answer_upload", %{"ref" => ref, "field-id" => field_id}, socket) do
-    {:noreply, cancel_upload(socket, field_upload_name(field_id), ref)}
+    case registered_upload_name(socket, field_id) do
+      {:ok, name} -> {:noreply, cancel_upload(socket, name, ref)}
+      :error -> {:noreply, socket}
+    end
   end
 
   # Whether files may still change is decided by the context against the locked
@@ -769,7 +788,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   def handle_event("delete_answer_file", %{"field-id" => field_id}, socket) do
     submission = socket.assigns.submission
 
-    case Exams.get_submission_file(submission, field_id) do
+    case field_id |> Params.int() |> then(&(&1 && Exams.get_submission_file(submission, &1))) do
       nil ->
         {:noreply, put_flash(socket, :error, "Datei konnte nicht gelöscht werden.")}
 
@@ -872,24 +891,7 @@ defmodule TaskyWeb.Guest.ExamLive do
       else
         result =
           consume_uploaded_entry(socket, entry, fn %{path: path} ->
-            case Uploads.save_submission_file(
-                   exam.id,
-                   submission.id,
-                   path,
-                   entry.client_name,
-                   field.allowed_types
-                 ) do
-              {:ok, meta} ->
-                {:ok,
-                 Exams.put_submission_file(
-                   submission,
-                   field,
-                   Map.put(meta, :original_name, entry.client_name)
-                 )}
-
-              {:error, reason} ->
-                {:ok, {:error, reason}}
-            end
+            {:ok, store_answer_file(exam, submission, field, entry, path)}
           end)
 
         case result do
@@ -909,5 +911,41 @@ defmodule TaskyWeb.Guest.ExamLive do
     socket
     |> assign(:submission_files, submission_files_by_field(socket.assigns.submission))
     |> assign(:missing_uploads, Exams.missing_required_uploads(socket.assigns.submission))
+  end
+
+  # Stores the bytes, then upserts the per-field file record. The bytes land in
+  # storage first, so a refused DB write — the submission was handed in from
+  # another tab, the exam stopped running — has to take them back out; nothing
+  # else ever would, leaving an unreferenced object in the bucket forever.
+  defp store_answer_file(exam, submission, field, entry, path) do
+    with {:ok, meta} <-
+           Uploads.save_submission_file(
+             exam.id,
+             submission.id,
+             path,
+             entry.client_name,
+             field.allowed_types
+           ) do
+      case Exams.put_submission_file(
+             submission,
+             field,
+             Map.put(meta, :original_name, entry.client_name)
+           ) do
+        {:ok, file} ->
+          {:ok, file}
+
+        {:error, reason} ->
+          discard_stored_bytes(exam.id, submission.id, meta)
+          {:error, reason}
+      end
+    end
+  end
+
+  # Best-effort: the upload has already failed for the student either way, so a
+  # failing cleanup must not turn into a second error on top of it.
+  defp discard_stored_bytes(exam_id, submission_id, %{stored_filename: stored_filename}) do
+    Uploads.delete_submission_file_from_disk(exam_id, submission_id, stored_filename)
+  rescue
+    _ -> :ok
   end
 end

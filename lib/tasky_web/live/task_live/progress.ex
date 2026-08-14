@@ -294,9 +294,12 @@ defmodule TaskyWeb.TaskLive.Progress do
                     <% end %>
                   </div>
                   <%!-- Compact nav group --%>
-                  <%= if length(@students_with_submissions) > 1 do %>
-                    <% current_nav_index =
-                      Enum.find_index(@students_with_submissions, &(&1.id == @selected_student_id)) %>
+                  <%!-- `current_nav_index` is nil when the selected student has
+                        no submission (they are not in this list), which used to
+                        raise on `current_nav_index + 1` in render. --%>
+                  <% current_nav_index =
+                    Enum.find_index(@students_with_submissions, &(&1.id == @selected_student_id)) %>
+                  <%= if length(@students_with_submissions) > 1 and current_nav_index do %>
                     <div class="flex items-center gap-1 bg-stone-100 rounded-[8px] px-1 py-1 shrink-0">
                       <button
                         type="button"
@@ -391,7 +394,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                             <p class="text-xs text-stone-400 mt-0.5">
                               {field.label}
                               <span :if={field.required} class="text-amber-600">· Pflicht</span>
-                              <span :if={file}> ·     {Uploads.format_size(file.size)}</span>
+                              <span :if={file}>&middot; {Uploads.format_size(file.size)}</span>
                             </p>
                           </div>
                           <a
@@ -997,19 +1000,27 @@ defmodule TaskyWeb.TaskLive.Progress do
     students = socket.assigns.students_with_submissions
     current_id = socket.assigns.selected_student_id
 
-    current_index = Enum.find_index(students, &(&1.id == current_id))
+    # `nil` whenever the selected student is not in the navigation list — which
+    # includes the initial state (no modal open yet) and any enrolled student
+    # without a submission, since `select_student/2` accepts those but
+    # `students_with_submissions` filters them out. `nil - 1` raised.
+    case Enum.find_index(students, &(&1.id == current_id)) do
+      nil ->
+        {:noreply, socket}
 
-    next_index =
-      case direction do
-        "prev" -> current_index - 1
-        "next" -> current_index + 1
-        _ -> current_index
-      end
+      current_index ->
+        next_index =
+          case direction do
+            "prev" -> current_index - 1
+            "next" -> current_index + 1
+            _ -> current_index
+          end
 
-    case Enum.at(students, next_index) do
-      nil -> {:noreply, socket}
-      next_student when next_index >= 0 -> {:noreply, select_student(socket, next_student)}
-      _ -> {:noreply, socket}
+        case Enum.at(students, next_index) do
+          nil -> {:noreply, socket}
+          next_student when next_index >= 0 -> {:noreply, select_student(socket, next_student)}
+          _ -> {:noreply, socket}
+        end
     end
   end
 

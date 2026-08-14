@@ -479,4 +479,70 @@ defmodule Tasky.TasksSolutionTest do
       assert Tasks.solution_visible?(task, denied)
     end
   end
+
+  describe "get_task_for_student/2 Sichtbarkeit" do
+    test "gibt eine publizierte Einheit zurück", %{student_scope: scope, task: task} do
+      assert %Tasky.Tasks.Task{id: id} = Tasks.get_task_for_student(scope, task.id)
+      assert id == task.id
+    end
+
+    for status <- ["draft", "archived"] do
+      test "verweigert eine Einheit im Status #{status}", %{
+        teacher_scope: teacher_scope,
+        student_scope: scope,
+        task: task
+      } do
+        {:ok, task} = Tasks.update_task(teacher_scope, task, %{status: unquote(status)})
+
+        # Task-Ids sind fortlaufend: ohne diese Prüfung könnte jede
+        # eingeschriebene Person Entwürfe des Kurses per URL öffnen.
+        refute Tasks.get_task_for_student(scope, task.id)
+      end
+    end
+  end
+
+  describe "save_student_answers/3 Sperre" do
+    test "eine bereits laufende Speicherung landet nicht nach der Abgabe", %{
+      student_scope: scope,
+      task: task
+    } do
+      submission = submission(scope, task)
+
+      # Der Autosave hält die Struktur von *vor* dem Abschluss — genau das
+      # TOCTOU-Fenster: die Prüfung lief gegen diesen veralteten Status, der
+      # Schreibvorgang hatte kein Status-Prädikat.
+      stale = submission
+      {:ok, _completed} = Tasks.complete_task(scope, submission.id)
+
+      assert {:error, :not_editable} =
+               Tasks.save_student_answers(scope, stale, %{"type" => "doc", "content" => []})
+    end
+
+    test "speichert solange die Einheit bearbeitbar ist", %{student_scope: scope, task: task} do
+      submission = submission(scope, task)
+      doc = %{"type" => "doc", "content" => []}
+
+      assert {:ok, updated} = Tasks.save_student_answers(scope, submission, doc)
+      assert updated.content == doc
+    end
+  end
+
+  describe "release_solution_bulk/3 Zählung" do
+    test "meldet beim zweiten Klick niemanden mehr", %{
+      teacher_scope: scope,
+      task: task,
+      student_scope: student_scope
+    } do
+      {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
+      _mine = submission(student_scope, task)
+
+      {:ok, first} = Tasks.release_solution_bulk(scope, task)
+      assert first != []
+
+      # Bereits freigegebene Abgaben wurden mitgezählt, also meldete der zweite
+      # Klick „für 25 Lernende freigegeben“, obwohl niemand dazukam.
+      {:ok, second} = Tasks.release_solution_bulk(scope, task)
+      assert second == []
+    end
+  end
 end

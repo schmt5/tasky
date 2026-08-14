@@ -32,6 +32,24 @@ defmodule Tasky.GradingTest do
       assert Grading.normalize_manual_points(99, nil) == 99.0
       assert Grading.normalize_manual_points(-5, nil) == 0.0
     end
+
+    test "never exceeds an off-grid block max" do
+      # Equal-split maxima are not on the 0.25 grid (2 points over 3 blocks).
+      # Clamping before rounding let `round_quarter/1` push the value back
+      # above the max: 0.7 → min(0.7, 0.666…) → 0.75.
+      block_max = 2 / 3
+
+      assert Grading.normalize_manual_points(0.7, block_max) == block_max
+      refute Grading.normalize_manual_points(0.7, block_max) > block_max
+    end
+
+    test "a value at an off-grid max does not read as fully correct" do
+      block_max = 2 / 3
+      normalized = Grading.normalize_manual_points(0.6, block_max)
+
+      assert normalized == 0.5
+      assert Grading.marker_verdict(normalized, block_max) == "half"
+    end
   end
 
   describe "awarded_points/2" do

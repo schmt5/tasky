@@ -58,8 +58,12 @@ defmodule Tasky.Tasks.Task do
       :solution_release_mode
     ])
     |> validate_required(:name, message: "Name darf nicht leer sein.")
-    |> validate_required([:position, :status])
+    |> validate_required([:position, :status, :solution_release_mode])
     |> validate_inclusion(:status, @statuses)
+    # `validate_inclusion` alone is not enough: Ecto skips `validate_change` for
+    # a nil change, so a form that omits the field (or a crafted submit) sent
+    # NULL into a `null: false` column and raised a Postgrex error past the
+    # caller's `case`.
     |> validate_inclusion(:solution_release_mode, @release_modes)
     |> put_change(:user_id, user_scope.user.id)
   end

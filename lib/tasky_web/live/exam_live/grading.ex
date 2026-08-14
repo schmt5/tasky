@@ -520,13 +520,14 @@ defmodule TaskyWeb.ExamLive.Grading do
     {:noreply, assign(socket, :export_status, %{done: done, total: total})}
   end
 
-  def handle_info({:export_done, %{download_token: token, filename: filename}}, socket) do
+  def handle_info({:export_done, %{download_token: token, filename: filename} = payload}, socket) do
     url = ~p"/exports/download?token=#{token}"
+    failed = Map.get(payload, :failed, 0)
 
     {:noreply,
      socket
      |> assign(:export_status, nil)
-     |> put_flash(:info, "Export bereit: #{filename}")
+     |> flash_export_result(filename, failed)
      |> push_event("download-file", %{url: url})}
   end
 
@@ -540,6 +541,23 @@ defmodule TaskyWeb.ExamLive.Grading do
   # Ignore stray DOWN messages from the Task (async_nolink).
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket), do: {:noreply, socket}
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  # A partial export used to be announced as a clean success — the only trace of
+  # the missing PDFs was FEHLER.txt inside the ZIP.
+  defp flash_export_result(socket, filename, 0),
+    do: put_flash(socket, :info, "Export bereit: #{filename}")
+
+  defp flash_export_result(socket, filename, failed) do
+    put_flash(
+      socket,
+      :error,
+      "Export bereit: #{filename} — #{failed} #{pdf_word(failed)} konnten nicht erstellt werden. " <>
+        "Details stehen in FEHLER.txt im ZIP."
+    )
+  end
+
+  defp pdf_word(1), do: "PDF"
+  defp pdf_word(_), do: "PDFs"
 
   defp save_max_points(socket, value) do
     case Exams.update_grading_max_points(socket.assigns.current_scope, socket.assigns.exam, value) do

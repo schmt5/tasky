@@ -109,12 +109,17 @@ defmodule Tasky.MixProject do
         "esbuild tasky --minify",
         "phx.digest"
       ],
+      # Must stay identical to .github/workflows/ci.yml — a precommit that runs
+      # the *mutating* `format` (instead of `--check-formatted`) or skips
+      # dialyzer passes locally while CI is red, which is exactly how the build
+      # gate rotted unnoticed.
       precommit: [
         "compile --warnings-as-errors",
-        "deps.unlock --unused",
-        "format",
+        "deps.unlock --check-unused",
+        "format --check-formatted",
         "credo --strict",
         "sobelow --config",
+        "dialyzer",
         "test"
       ]
     ]
