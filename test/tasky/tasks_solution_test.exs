@@ -45,6 +45,12 @@ defmodule Tasky.TasksSolutionTest do
     submission
   end
 
+  # Die Auswahl in der Fortschrittsansicht ist eine Liste von Lernenden; "alle"
+  # heisst schlicht: alle Eingeschriebenen.
+  defp enrolled_ids(course) do
+    course.id |> Tasky.Courses.list_enrolled_students() |> Enum.map(& &1.id)
+  end
+
   # Ein Dokument mit zwei Antwortfeldern und stabilen ids.
   defp doc_with_answers(ids, filled \\ %{}) do
     %{
@@ -335,21 +341,22 @@ defmodule Tasky.TasksSolutionTest do
           student = user_fixture(%{role: "student"})
           :ok = ensure_enrolled(course, student)
           {:ok, submission} = Tasks.get_or_create_submission(user_scope_fixture(student), task.id)
-          submission
+          {student, submission}
         end
 
       %{task: task, others: others}
     end
 
-    test "gibt für alle frei", %{
+    test "gibt für die ganze Auswahl frei", %{
       teacher_scope: scope,
       task: task,
+      course: course,
       student_scope: student_scope,
       others: others
     } do
       mine = submission(student_scope, task)
 
-      assert {:ok, updated} = Tasks.release_solution_bulk(scope, task, :all)
+      assert {:ok, updated} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
       assert length(updated) == length(others) + 1
       assert Enum.all?(updated, &match?(%DateTime{}, &1.solution_released_at))
 
@@ -368,7 +375,7 @@ defmodule Tasky.TasksSolutionTest do
       :ok = ensure_enrolled(course, neuling)
       refute Tasks.get_submission_for_student(task.id, neuling.id)
 
-      assert {:ok, updated} = Tasks.release_solution_bulk(scope, task, :all)
+      assert {:ok, updated} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
 
       submission = Tasks.get_submission_for_student(task.id, neuling.id)
       assert %DateTime{} = submission.solution_released_at
@@ -377,15 +384,15 @@ defmodule Tasky.TasksSolutionTest do
       assert Tasks.solution_visible?(task, submission)
     end
 
-    test "gibt nur die genannten Abgaben frei", %{
+    test "gibt nur die genannten Lernenden frei", %{
       teacher_scope: scope,
       task: task,
       student_scope: student_scope,
-      others: [first, second]
+      others: [{first_student, first}, {_, second}]
     } do
       mine = submission(student_scope, task)
 
-      assert {:ok, updated} = Tasks.release_solution_bulk(scope, task, [first.id])
+      assert {:ok, updated} = Tasks.release_solution_bulk(scope, task, [first_student.id])
       assert length(updated) == 1
 
       assert %DateTime{} = Repo.reload!(first).solution_released_at
@@ -393,26 +400,27 @@ defmodule Tasky.TasksSolutionTest do
       refute Repo.reload!(mine).solution_released_at
     end
 
-    test "ist idempotent", %{teacher_scope: scope, task: task, student_scope: student_scope} do
-      mine = submission(student_scope, task)
-      {:ok, _} = Tasks.release_solution_bulk(scope, task, :all)
-      first = Repo.reload!(mine).solution_released_at
-
-      {:ok, _} = Tasks.release_solution_bulk(scope, task, :all)
-      assert Repo.reload!(mine).solution_released_at == first
-    end
-
-    test "ignoriert Abgaben einer anderen Lerneinheit", %{
+    test "ist idempotent", %{
       teacher_scope: scope,
       task: task,
       course: course,
       student_scope: student_scope
     } do
-      other_task = task_fixture(scope, %{status: "published", course_id: course.id, position: 99})
-      foreign = submission(student_scope, other_task)
+      mine = submission(student_scope, task)
+      {:ok, _} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
+      first = Repo.reload!(mine).solution_released_at
 
-      assert {:ok, []} = Tasks.release_solution_bulk(scope, task, [foreign.id])
-      refute Repo.reload!(foreign).solution_released_at
+      {:ok, _} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
+      assert Repo.reload!(mine).solution_released_at == first
+    end
+
+    # Eine manipulierte Auswahl darf weder freigeben noch — schlimmer — für
+    # Kursfremde überhaupt erst eine Abgabezeile anlegen.
+    test "ignoriert Lernende ausserhalb des Kurses", %{teacher_scope: scope, task: task} do
+      fremd = user_fixture(%{role: "student"})
+
+      assert {:ok, []} = Tasks.release_solution_bulk(scope, task, [fremd.id])
+      refute Tasks.get_submission_for_student(task.id, fremd.id)
     end
 
     test "sendet pro Abgabe auf beide Topics", %{
@@ -427,16 +435,123 @@ defmodule Tasky.TasksSolutionTest do
       Phoenix.PubSub.subscribe(Tasky.PubSub, "student:#{student.id}:submissions")
       Phoenix.PubSub.subscribe(Tasky.PubSub, "course:#{course.id}:progress")
 
-      {:ok, updated} = Tasks.release_solution_bulk(scope, task, :all)
+      {:ok, updated} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
 
       # Ein Broadcast pro Abgabe auf dem Kurs-Topic, plus einer auf dem
       # eigenen Topic der/des Lernenden.
       for _ <- 1..(length(updated) + 1), do: assert_receive({:submission_updated, _})
     end
 
-    test "weist eine fremde Lehrperson ab", %{task: task} do
+    test "weist eine fremde Lehrperson ab", %{task: task, course: course} do
       other = user_scope_fixture(user_fixture(%{role: "teacher"}))
-      assert {:error, :unauthorized} = Tasks.release_solution_bulk(other, task, :all)
+
+      assert {:error, :unauthorized} =
+               Tasks.release_solution_bulk(other, task, enrolled_ids(course))
+    end
+  end
+
+  describe "approve_submissions_bulk/3" do
+    test "genehmigt die eingereichten Einheiten der Auswahl", %{
+      teacher_scope: scope,
+      task: task,
+      student: student,
+      student_scope: student_scope
+    } do
+      mine = submission(student_scope, task)
+      {:ok, _} = Tasks.complete_task(student_scope, mine.id)
+
+      assert {:ok, %{approved: [approved], skipped: 0}} =
+               Tasks.approve_submissions_bulk(scope, task, [student.id])
+
+      assert approved.id == mine.id
+      assert Repo.reload!(mine).status == "review_approved"
+    end
+
+    # Wer nie eingereicht hat, kann nicht genehmigt werden — und bekommt auch
+    # keine Abgabezeile untergeschoben.
+    test "überspringt nicht eingereichte Einheiten", %{
+      teacher_scope: scope,
+      task: task,
+      course: course,
+      student: student,
+      student_scope: student_scope
+    } do
+      mine = submission(student_scope, task)
+
+      neuling = user_fixture(%{role: "student"})
+      :ok = ensure_enrolled(course, neuling)
+
+      assert {:ok, %{approved: [], skipped: 2}} =
+               Tasks.approve_submissions_bulk(scope, task, [student.id, neuling.id])
+
+      assert Repo.reload!(mine).status == "not_started"
+      refute Tasks.get_submission_for_student(task.id, neuling.id)
+    end
+
+    # Sonst meldete ein zweiter Klick die ganze Klasse als frisch genehmigt.
+    test "zählt bereits Genehmigte als übersprungen", %{
+      teacher_scope: scope,
+      task: task,
+      student: student,
+      student_scope: student_scope
+    } do
+      mine = submission(student_scope, task)
+      {:ok, _} = Tasks.complete_task(student_scope, mine.id)
+      {:ok, _} = Tasks.approve_submissions_bulk(scope, task, [student.id])
+
+      assert {:ok, %{approved: [], skipped: 1}} =
+               Tasks.approve_submissions_bulk(scope, task, [student.id])
+    end
+
+    test "lässt Feedback einer früheren Runde stehen", %{
+      teacher_scope: scope,
+      task: task,
+      student: student,
+      student_scope: student_scope
+    } do
+      mine = submission(student_scope, task)
+      {:ok, _} = Tasks.complete_task(student_scope, mine.id)
+      {:ok, _} = Tasks.save_feedback(scope, mine.id, %{feedback: "Fast!"})
+
+      {:ok, _} = Tasks.approve_submissions_bulk(scope, task, [student.id])
+
+      reloaded = Repo.reload!(mine)
+      assert reloaded.status == "review_approved"
+      assert reloaded.feedback == "Fast!"
+      assert %DateTime{} = reloaded.feedback_at
+    end
+
+    test "ignoriert Lernende ausserhalb des Kurses", %{teacher_scope: scope, task: task} do
+      fremd = user_fixture(%{role: "student"})
+
+      assert {:ok, %{approved: [], skipped: 0}} =
+               Tasks.approve_submissions_bulk(scope, task, [fremd.id])
+    end
+
+    test "sendet auf beide Topics", %{
+      teacher_scope: scope,
+      task: task,
+      student: student,
+      student_scope: student_scope,
+      course: course
+    } do
+      mine = submission(student_scope, task)
+      {:ok, _} = Tasks.complete_task(student_scope, mine.id)
+
+      Phoenix.PubSub.subscribe(Tasky.PubSub, "student:#{student.id}:submissions")
+      Phoenix.PubSub.subscribe(Tasky.PubSub, "course:#{course.id}:progress")
+
+      {:ok, _} = Tasks.approve_submissions_bulk(scope, task, [student.id])
+
+      assert_receive {:submission_updated, _}
+      assert_receive {:submission_updated, _}
+    end
+
+    test "weist eine fremde Lehrperson ab", %{task: task, student: student} do
+      other = user_scope_fixture(user_fixture(%{role: "teacher"}))
+
+      assert {:error, :unauthorized} =
+               Tasks.approve_submissions_bulk(other, task, [student.id])
     end
   end
 
@@ -531,17 +646,18 @@ defmodule Tasky.TasksSolutionTest do
     test "meldet beim zweiten Klick niemanden mehr", %{
       teacher_scope: scope,
       task: task,
+      course: course,
       student_scope: student_scope
     } do
       {:ok, task} = Tasks.update_task(scope, task, %{solution_release_mode: "manual"})
       _mine = submission(student_scope, task)
 
-      {:ok, first} = Tasks.release_solution_bulk(scope, task)
+      {:ok, first} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
       assert first != []
 
       # Bereits freigegebene Abgaben wurden mitgezählt, also meldete der zweite
       # Klick „für 25 Lernende freigegeben“, obwohl niemand dazukam.
-      {:ok, second} = Tasks.release_solution_bulk(scope, task)
+      {:ok, second} = Tasks.release_solution_bulk(scope, task, enrolled_ids(course))
       assert second == []
     end
   end

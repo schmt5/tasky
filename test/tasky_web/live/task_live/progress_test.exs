@@ -191,17 +191,28 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
     end
   end
 
-  describe "Bulk-Freigabe" do
-    test "zeigt im Modus never keine Bulk-Aktionen", %{conn: conn, task: task} do
+  describe "Bulk-Aktionen" do
+    # "Alle auswählen" ersetzt den früheren Knopf "Für alle freigeben".
+    defp select_all(lv) do
+      lv |> element("input[phx-click='toggle_select_all']") |> render_click()
+      lv
+    end
+
+    defp select_student(lv, student) do
+      lv |> element("input[phx-value-student-id='#{student.id}']") |> render_click()
+      lv
+    end
+
+    test "zeigt im Modus never keine Freigabe, aber Genehmigen", %{conn: conn, task: task} do
       {:ok, _lv, html} = live(conn, ~p"/progress/#{task.id}")
 
       assert html =~ "Wird Lernenden nicht angezeigt"
       assert html =~ "Modus ändern"
       refute html =~ "phx-click=\"release_selected\""
-      refute html =~ "phx-click=\"open_release_all_confirm\""
+      assert html =~ "phx-click=\"approve_selected\""
     end
 
-    test "gibt nach Bestätigung für alle frei", %{
+    test "gibt über die Kopf-Checkbox für alle frei", %{
       conn: conn,
       task: task,
       submission: submission
@@ -211,13 +222,32 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
 
       {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
 
-      lv |> element("button[phx-click='open_release_all_confirm']") |> render_click()
-      assert has_element?(lv, "#release-all-modal")
-
-      html = lv |> element("#confirm-release-all") |> render_click()
+      html =
+        lv
+        |> select_all()
+        |> element("button[phx-click='release_selected']")
+        |> render_click()
 
       assert html =~ "freigegeben"
       assert %DateTime{} = Tasky.Repo.reload!(submission).solution_released_at
+    end
+
+    # Ohne Abgabezeile war die Checkbox früher gesperrt; "alle auswählen" muss
+    # diese Lernenden trotzdem erreichen, sonst fehlt die Freigabe genau dort.
+    test "erreicht auch Lernende ohne Abgabezeile", %{conn: conn, task: task} do
+      teacher_scope = Scope.for_user(user_of(task))
+      {:ok, task} = Tasks.update_task(teacher_scope, task, %{solution_release_mode: "manual"})
+
+      neuling = user_fixture(%{role: "student"})
+      {:ok, _} = Courses.enroll_student(task.course_id, neuling.id)
+      refute Tasks.get_submission_for_student(task.id, neuling.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      lv |> select_all() |> element("button[phx-click='release_selected']") |> render_click()
+
+      assert %DateTime{} =
+               Tasks.get_submission_for_student(task.id, neuling.id).solution_released_at
     end
 
     test "gibt nur die Auswahl frei", %{
@@ -235,21 +265,17 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
 
       {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
 
-      # Nichts ausgewählt → Knopf ist gesperrt.
-      assert lv
-             |> element("button[phx-click='release_selected']")
-             |> render() =~ "disabled"
+      # Nichts ausgewählt → beide Knöpfe sind gesperrt.
+      assert lv |> element("button[phx-click='release_selected']") |> render() =~ "disabled"
+      assert lv |> element("button[phx-click='approve_selected']") |> render() =~ "disabled"
 
       lv
-      |> element("input[phx-value-submission-id='#{submission.id}']")
+      |> select_student(student)
+      |> element("button[phx-click='release_selected']")
       |> render_click()
-
-      lv |> element("button[phx-click='release_selected']") |> render_click()
 
       assert %DateTime{} = Tasky.Repo.reload!(submission).solution_released_at
       refute Tasky.Repo.reload!(other_submission).solution_released_at
-
-      _ = student
     end
 
     test "ist idempotent — der erste Zeitstempel bleibt", %{
@@ -263,8 +289,7 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       first = Tasky.Repo.reload!(submission).solution_released_at
 
       {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
-      lv |> element("button[phx-click='open_release_all_confirm']") |> render_click()
-      lv |> element("#confirm-release-all") |> render_click()
+      lv |> select_all() |> element("button[phx-click='release_selected']") |> render_click()
 
       assert Tasky.Repo.reload!(submission).solution_released_at == first
     end
@@ -276,10 +301,43 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       {:ok, lv, html} = live(conn, ~p"/progress/#{task.id}")
       assert html =~ "Nicht freigegeben"
 
-      lv |> element("button[phx-click='open_release_all_confirm']") |> render_click()
-      html = lv |> element("#confirm-release-all") |> render_click()
+      html =
+        lv |> select_all() |> element("button[phx-click='release_selected']") |> render_click()
 
       assert html =~ "Freigegeben"
+    end
+
+    test "genehmigt die Auswahl", %{
+      conn: conn,
+      task: task,
+      student: student,
+      submission: submission
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      html =
+        lv
+        |> select_student(student)
+        |> element("button[phx-click='approve_selected']")
+        |> render_click()
+
+      assert html =~ "Eine Lerneinheit genehmigt."
+      assert Tasky.Repo.reload!(submission).status == "review_approved"
+    end
+
+    test "meldet übersprungene Lernende", %{conn: conn, task: task, submission: submission} do
+      neuling = user_fixture(%{role: "student"})
+      {:ok, _} = Courses.enroll_student(task.course_id, neuling.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/progress/#{task.id}")
+
+      html =
+        lv |> select_all() |> element("button[phx-click='approve_selected']") |> render_click()
+
+      assert html =~ "Eine Lerneinheit genehmigt."
+      assert html =~ "1 übersprungen"
+      assert Tasky.Repo.reload!(submission).status == "review_approved"
+      refute Tasks.get_submission_for_student(task.id, neuling.id)
     end
   end
 

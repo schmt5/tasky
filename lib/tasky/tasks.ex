@@ -1153,12 +1153,17 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Gibt Musterlösung und Korrektur für viele Lernende einer Lerneinheit frei.
+  Gibt Musterlösung und Korrektur für die ausgewählten Lernenden einer
+  Lerneinheit frei.
 
-  `target` ist `:all` oder eine Liste von Submission-Ids. Alles läuft in einer
-  Transaktion; die Sperrreihenfolge folgt ARCHITECTURE.md: erst `tasks`, dann
-  `task_submissions` aufsteigend nach `id` (das `order_by` ist tragend — ohne
-  es können zwei überlappende Bulk-Freigaben verklemmen).
+  Ausgewählt wird über `student_ids`, nicht über Submission-Ids: die Auswahl in
+  der Fortschrittsansicht umfasst auch Lernende, die die Einheit nie geöffnet
+  haben und darum noch gar keine Abgabezeile besitzen — deren Zeile entsteht
+  hier.
+
+  Alles läuft in einer Transaktion; die Sperrreihenfolge folgt ARCHITECTURE.md:
+  erst `tasks`, dann `task_submissions` aufsteigend nach `id` (das `order_by`
+  ist tragend — ohne es können zwei überlappende Bulk-Freigaben verklemmen).
 
   Auf `tasks` bewusst FOR SHARE statt FOR UPDATE: jedes Öffnen einer
   Lerneinheit fügt über `get_or_create_submission/2` eine Zeile ein und nimmt
@@ -1168,18 +1173,22 @@ defmodule Tasky.Tasks do
   Wie die Einzelfreigabe idempotent: bereits freigegebene Abgaben behalten
   ihren ursprünglichen Zeitstempel.
   """
-  def release_solution_bulk(%Scope{} = scope, %Task{} = task, target \\ :all) do
+  def release_solution_bulk(%Scope{} = scope, %Task{} = task, student_ids)
+      when is_list(student_ids) do
     with :ok <- Policy.authorize(scope, task.user_id) do
       result =
         Repo.transaction(fn ->
           _guard = Repo.lock_one!(Task, task.id, :share)
 
+          ids = enrolled_student_ids(task, student_ids)
+          ensure_submissions_for_students!(task, ids)
+
           # Only newly stamped rows count. `stamp_release!/1` returns an
           # already-released submission unchanged, so returning every locked row
-          # made a second "Für alle freigeben" click report the full class as
-          # freshly released when it had released nobody.
+          # made a second Freigabe der ganzen Klasse report everyone as freshly
+          # released when it had released nobody.
           task
-          |> lock_task_submissions!(target)
+          |> lock_task_submissions!(ids)
           |> Enum.reject(&released?/1)
           |> Enum.map(&stamp_release!/1)
         end)
@@ -1191,51 +1200,105 @@ defmodule Tasky.Tasks do
     end
   end
 
+  @doc """
+  Genehmigt die eingereichten Lerneinheiten der ausgewählten Lernenden.
+
+  Bulk-Gegenstück zu `review_submission/4`, ohne Feedbacktext. Es werden nur
+  Abgaben angefasst, die überhaupt beurteilbar sind (`@reviewable_statuses`)
+  und noch nicht genehmigt sind; alles andere zählt als übersprungen. Anders
+  als die Freigabe legt die Genehmigung *keine* fehlenden Abgabezeilen an — wer
+  nie eingereicht hat, kann nicht genehmigt werden.
+
+  Sperrreihenfolge wie bei `release_solution_bulk/3`.
+
+  Gibt `{:ok, %{approved: [%TaskSubmission{}], skipped: count}}` zurück.
+  """
+  def approve_submissions_bulk(%Scope{} = scope, %Task{} = task, student_ids)
+      when is_list(student_ids) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      result =
+        Repo.transaction(fn ->
+          _guard = Repo.lock_one!(Task, task.id, :share)
+
+          ids = enrolled_student_ids(task, student_ids)
+
+          approved =
+            task
+            |> lock_task_submissions!(ids)
+            |> Enum.filter(&approvable?/1)
+            |> Enum.map(&approve!/1)
+
+          %{approved: approved, skipped: length(ids) - length(approved)}
+        end)
+
+      with {:ok, %{approved: approved}} <- result do
+        Enum.each(approved, &broadcast_submission_updated(&1, task.course_id))
+        result
+      end
+    end
+  end
+
   defp released?(%TaskSubmission{solution_released_at: %DateTime{}}), do: true
   defp released?(%TaskSubmission{}), do: false
 
-  defp lock_task_submissions!(%Task{} = task, :all) do
-    ensure_submissions_for_enrolled!(task)
+  # Schon Genehmigtes wäre ein No-Op und würde die Erfolgsmeldung aufblähen —
+  # dieselbe Überlegung wie `released?/1` bei der Freigabe.
+  defp approvable?(%TaskSubmission{status: "review_approved"}), do: false
+  defp approvable?(%TaskSubmission{status: status}), do: status in @reviewable_statuses
 
+  # Setzt nur den Status: es gibt hier keinen Feedbacktext, und
+  # `feedback_changeset/3` würde `feedback_at`/`feedback_by_id` einer früheren
+  # Rückmeldung wegräumen.
+  defp approve!(%TaskSubmission{} = submission) do
+    submission
+    |> Ecto.Changeset.change(status: "review_approved")
+    |> Repo.update()
+    |> case do
+      {:ok, updated} -> updated
+      {:error, changeset} -> Repo.rollback(changeset)
+    end
+  end
+
+  # Eine manipulierte Auswahl darf nicht über den Kurs hinausreichen: sonst
+  # legte die Freigabe Abgabezeilen für kursfremde Nutzer an.
+  defp enrolled_student_ids(%Task{} = task, student_ids) do
+    enrolled =
+      task.course_id
+      |> Tasky.Courses.list_enrolled_students()
+      |> MapSet.new(& &1.id)
+
+    student_ids |> Enum.uniq() |> Enum.filter(&MapSet.member?(enrolled, &1))
+  end
+
+  defp lock_task_submissions!(%Task{} = task, student_ids) when is_list(student_ids) do
     Repo.all(
       from s in TaskSubmission,
-        where: s.task_id == ^task.id,
+        where: s.task_id == ^task.id and s.student_id in ^student_ids,
         order_by: [asc: s.id],
         lock: "FOR UPDATE"
     )
   end
 
-  defp lock_task_submissions!(%Task{} = task, ids) when is_list(ids) do
-    Repo.all(
-      from s in TaskSubmission,
-        where: s.task_id == ^task.id and s.id in ^ids,
-        order_by: [asc: s.id],
-        lock: "FOR UPDATE"
-    )
-  end
-
-  # "Für alle freigeben" heisst: für alle eingeschriebenen Lernenden — auch für
-  # die, welche die Lerneinheit noch nie geöffnet haben. Deren Abgabezeile
-  # entsteht sonst erst beim Öffnen (`get_or_create_submission/2`), und die
-  # Freigabe würde sie schlicht verfehlen: die Lehrperson bekäme eine
-  # Erfolgsmeldung, und die Lösung bliebe unsichtbar.
+  # Die Freigabe soll auch Lernende erreichen, welche die Lerneinheit noch nie
+  # geöffnet haben. Deren Abgabezeile entsteht sonst erst beim Öffnen
+  # (`get_or_create_submission/2`), und die Freigabe würde sie schlicht
+  # verfehlen: die Lehrperson bekäme eine Erfolgsmeldung, und die Lösung bliebe
+  # unsichtbar.
   #
   # Der Insert nimmt FOR KEY SHARE auf die `tasks`-Zeile, die wir hier schon
   # FOR SHARE halten — das verträgt sich.
-  defp ensure_submissions_for_enrolled!(%Task{} = task) do
+  defp ensure_submissions_for_students!(%Task{} = task, student_ids) do
     existing =
-      Repo.all(from s in TaskSubmission, where: s.task_id == ^task.id, select: s.student_id)
-
-    missing =
-      task.course_id
-      |> Tasky.Courses.list_enrolled_students()
-      |> Enum.map(& &1.id)
-      |> Kernel.--(existing)
+      Repo.all(
+        from s in TaskSubmission,
+          where: s.task_id == ^task.id and s.student_id in ^student_ids,
+          select: s.student_id
+      )
 
     now = DateTime.utc_now(:second)
 
     rows =
-      Enum.map(missing, fn student_id ->
+      Enum.map(student_ids -- existing, fn student_id ->
         %{
           task_id: task.id,
           student_id: student_id,

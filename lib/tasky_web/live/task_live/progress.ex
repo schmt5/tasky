@@ -49,50 +49,50 @@ defmodule TaskyWeb.TaskLive.Progress do
       </div>
 
       <div class="max-w-7xl mx-auto px-8 pb-8">
-        <%!-- Bulk-Freigabe der Musterlösung --%>
+        <%!-- Bulk-Aktionen auf der Auswahl --%>
         <div
           :if={@has_data}
           class="mb-4 bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07)] px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-3"
         >
           <div class="flex items-center gap-2.5 min-w-0">
-            <.icon name="hero-key" class="w-5 h-5 text-sky-500 shrink-0" />
+            <.icon name="hero-check-circle" class="w-5 h-5 text-sky-500 shrink-0" />
             <div class="min-w-0">
-              <p class="text-[14px] font-semibold text-stone-800">Musterlösung</p>
+              <p class="text-[14px] font-semibold text-stone-800">
+                {selection_label(@bulk_student_ids)}
+              </p>
               <p class="text-[13px] text-stone-500">
-                {release_mode_label(@task.solution_release_mode)}
+                Musterlösung: {release_mode_label(@task.solution_release_mode)}
               </p>
             </div>
           </div>
 
-          <%= if @task.solution_release_mode == "never" do %>
-            <.link
-              navigate={~p"/courses/#{@task.course_id}?edit=#{@task.id}"}
-              class="ml-auto inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-            >
-              <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Modus ändern
-            </.link>
-          <% else %>
-            <div class="ml-auto flex items-center gap-2">
+          <div class="ml-auto flex items-center gap-2">
+            <%= if @task.solution_release_mode == "never" do %>
+              <.link
+                navigate={~p"/courses/#{@task.course_id}?edit=#{@task.id}"}
+                class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+              >
+                <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Modus ändern
+              </.link>
+            <% else %>
               <button
                 type="button"
                 phx-click="release_selected"
-                disabled={MapSet.size(@selected_submission_ids) == 0}
+                disabled={MapSet.size(@bulk_student_ids) == 0}
                 class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-sky-300 text-sky-700 text-[13px] font-semibold rounded-[10px] hover:bg-sky-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
               >
-                <.icon name="hero-lock-open" class="w-4 h-4" /> Für Auswahl freigeben
-                <span :if={MapSet.size(@selected_submission_ids) > 0}>
-                  ({MapSet.size(@selected_submission_ids)})
-                </span>
+                <.icon name="hero-lock-open" class="w-4 h-4" /> Musterlösung freigeben
               </button>
-              <button
-                type="button"
-                phx-click="open_release_all_confirm"
-                class="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-500 text-white text-[13px] font-semibold rounded-[10px] hover:bg-sky-600 transition-colors shadow-sm"
-              >
-                <.icon name="hero-users" class="w-4 h-4" /> Für alle freigeben
-              </button>
-            </div>
-          <% end %>
+            <% end %>
+            <button
+              type="button"
+              phx-click="approve_selected"
+              disabled={MapSet.size(@bulk_student_ids) == 0}
+              class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-emerald-300 text-emerald-700 text-[13px] font-semibold rounded-[10px] hover:bg-emerald-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+            >
+              <.icon name="hero-check-badge" class="w-4 h-4" /> Genehmigen
+            </button>
+          </div>
         </div>
 
         <%!-- Progress Grid --%>
@@ -109,10 +109,9 @@ defmodule TaskyWeb.TaskLive.Progress do
                       >
                         <div class="flex items-center gap-2">
                           <input
-                            :if={@task.solution_release_mode != "never"}
                             type="checkbox"
                             phx-click="toggle_select_all"
-                            checked={all_selected?(@selected_submission_ids, @progress_map)}
+                            checked={all_selected?(@bulk_student_ids, @students)}
                             aria-label="Alle auswählen"
                             class="checkbox checkbox-sm"
                           />
@@ -168,18 +167,11 @@ defmodule TaskyWeb.TaskLive.Progress do
                       <td class="sticky left-0 z-10 bg-white px-6 py-4 whitespace-nowrap border-r border-stone-200">
                         <div class="flex items-center gap-3">
                           <input
-                            :if={@task.solution_release_mode != "never"}
                             type="checkbox"
                             phx-click="toggle_select"
-                            phx-value-submission-id={submission_id(@progress_map, student.id)}
-                            checked={
-                              MapSet.member?(
-                                @selected_submission_ids,
-                                submission_id(@progress_map, student.id)
-                              )
-                            }
-                            disabled={is_nil(submission_id(@progress_map, student.id))}
-                            aria-label="Für Freigabe auswählen"
+                            phx-value-student-id={student.id}
+                            checked={MapSet.member?(@bulk_student_ids, student.id)}
+                            aria-label="Lernende auswählen"
                             class="checkbox checkbox-sm"
                           />
                           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
@@ -515,69 +507,6 @@ defmodule TaskyWeb.TaskLive.Progress do
             </div>
           </dialog>
         <% end %>
-        <%!-- Bulk-Freigabe: Bestätigung, weil sie die ganze Klasse betrifft --%>
-        <%= if @confirming_release_all do %>
-          <dialog
-            id="release-all-modal"
-            class="modal modal-open z-[1000]"
-            phx-window-keydown="close_release_all_confirm"
-            phx-key="escape"
-          >
-            <div class="modal-backdrop bg-stone-900/50" phx-click="close_release_all_confirm"></div>
-            <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
-              <div class="p-6 border-b border-stone-100">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
-                    <.icon name="hero-users" class="w-5 h-5 text-sky-600" />
-                  </div>
-                  <div>
-                    <h3 class="text-lg font-semibold text-stone-800">
-                      Musterlösung für alle freigeben
-                    </h3>
-                    <p class="text-xs text-stone-400 mt-0.5">Gilt auch für die Korrektur.</p>
-                  </div>
-                </div>
-              </div>
-              <div class="p-6">
-                <p class="text-sm text-stone-600 leading-relaxed">
-                  Alle {length(@students)} Lernenden dieses Kurses sehen die Musterlösung
-                  danach sofort.
-                </p>
-                <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
-                  <div class="flex items-start gap-2.5">
-                    <.icon
-                      name="hero-exclamation-triangle"
-                      class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
-                    />
-                    <p class="text-xs text-amber-700 leading-relaxed">
-                      Eine Freigabe bleibt bestehen – auch wenn du eine Einheit später
-                      zurückgibst. Zurücknehmen lässt sie sich nur, indem du den Modus beim
-                      Bearbeiten der Lerneinheit auf «Nie anzeigen» stellst.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div class="p-6 pt-0 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  phx-click="close_release_all_confirm"
-                  class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="button"
-                  id="confirm-release-all"
-                  phx-click="release_all"
-                  phx-disable-with="Wird freigegeben…"
-                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <.icon name="hero-lock-open" class="w-4 h-4" /> Für alle freigeben
-                </button>
-              </div>
-            </div>
-          </dialog>
-        <% end %>
 
         <%!-- Return-for-revision Confirmation Modal (stacks on top of the submission modal) --%>
         <%= if @confirming_return do %>
@@ -806,8 +735,7 @@ defmodule TaskyWeb.TaskLive.Progress do
      |> assign(:progress_map, progress_map)
      |> assign(:has_data, has_data)
      |> assign(:anonymized, false)
-     |> assign(:selected_submission_ids, MapSet.new())
-     |> assign(:confirming_release_all, false)
+     |> assign(:bulk_student_ids, MapSet.new())
      |> reset_modal_assigns()}
   end
 
@@ -847,56 +775,48 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
-  ## Bulk-Freigabe
+  ## Bulk-Aktionen
 
-  def handle_event("toggle_select", %{"submission-id" => raw_id}, socket) do
+  def handle_event("toggle_select", %{"student-id" => raw_id}, socket) do
     case TaskyWeb.Params.int(raw_id) do
       nil ->
         {:noreply, socket}
 
       id ->
-        selected = socket.assigns.selected_submission_ids
+        selected = socket.assigns.bulk_student_ids
 
         selected =
           if MapSet.member?(selected, id),
             do: MapSet.delete(selected, id),
             else: MapSet.put(selected, id)
 
-        {:noreply, assign(socket, :selected_submission_ids, selected)}
+        {:noreply, assign(socket, :bulk_student_ids, selected)}
     end
   end
 
   def handle_event("toggle_select_all", _params, socket) do
-    all = selectable_submission_ids(socket.assigns.progress_map)
+    all = selectable_student_ids(socket.assigns.students)
 
     selected =
-      if MapSet.equal?(socket.assigns.selected_submission_ids, all),
+      if MapSet.equal?(socket.assigns.bulk_student_ids, all),
         do: MapSet.new(),
         else: all
 
-    {:noreply, assign(socket, :selected_submission_ids, selected)}
+    {:noreply, assign(socket, :bulk_student_ids, selected)}
   end
 
   def handle_event("release_selected", _params, socket) do
-    ids = MapSet.to_list(socket.assigns.selected_submission_ids)
-
-    if ids == [] do
-      {:noreply, socket}
-    else
-      {:noreply, do_release_bulk(socket, ids)}
+    case MapSet.to_list(socket.assigns.bulk_student_ids) do
+      [] -> {:noreply, socket}
+      ids -> {:noreply, do_release_bulk(socket, ids)}
     end
   end
 
-  def handle_event("open_release_all_confirm", _params, socket) do
-    {:noreply, assign(socket, :confirming_release_all, true)}
-  end
-
-  def handle_event("close_release_all_confirm", _params, socket) do
-    {:noreply, assign(socket, :confirming_release_all, false)}
-  end
-
-  def handle_event("release_all", _params, socket) do
-    {:noreply, socket |> assign(:confirming_release_all, false) |> do_release_bulk(:all)}
+  def handle_event("approve_selected", _params, socket) do
+    case MapSet.to_list(socket.assigns.bulk_student_ids) do
+      [] -> {:noreply, socket}
+      ids -> {:noreply, do_approve_bulk(socket, ids)}
+    end
   end
 
   def handle_event("release_solution", _params, socket) do
@@ -1199,19 +1119,18 @@ defmodule TaskyWeb.TaskLive.Progress do
 
   defp format_datetime(_), do: "Unbekannt"
 
-  ## Freigabe von Musterlösung und Korrektur
+  ## Bulk-Aktionen auf der Auswahl
 
   # Freigeben lohnt sich nur, wenn es überhaupt etwas zu zeigen gibt und der
   # Modus es zulässt: bei `never` bliebe der Klick wirkungslos, und was schon
   # sichtbar ist, muss nicht nochmals freigegeben werden.
-  defp do_release_bulk(socket, target) do
+  defp do_release_bulk(socket, student_ids) do
     %{task: task, current_scope: scope} = socket.assigns
 
-    case Tasks.release_solution_bulk(scope, task, target) do
+    case Tasks.release_solution_bulk(scope, task, student_ids) do
       {:ok, updated} ->
         socket
-        |> assign(:progress_map, build_progress_map(task.id, socket.assigns.students))
-        |> assign(:selected_submission_ids, MapSet.new())
+        |> refresh_after_bulk()
         |> put_flash(:info, release_flash(length(updated)))
 
       {:error, _reason} ->
@@ -1219,8 +1138,43 @@ defmodule TaskyWeb.TaskLive.Progress do
     end
   end
 
+  defp do_approve_bulk(socket, student_ids) do
+    %{task: task, current_scope: scope} = socket.assigns
+
+    case Tasks.approve_submissions_bulk(scope, task, student_ids) do
+      {:ok, %{approved: approved, skipped: skipped}} ->
+        socket
+        |> refresh_after_bulk()
+        |> put_flash(:info, approve_flash(length(approved), skipped))
+
+      {:error, _reason} ->
+        put_flash(socket, :error, "Genehmigen fehlgeschlagen.")
+    end
+  end
+
+  defp refresh_after_bulk(socket) do
+    socket
+    |> assign(:progress_map, build_progress_map(socket.assigns.task.id, socket.assigns.students))
+    |> assign(:bulk_student_ids, MapSet.new())
+  end
+
   defp release_flash(1), do: "Musterlösung für eine/n Lernende/n freigegeben."
   defp release_flash(count), do: "Musterlösung für #{count} Lernende freigegeben."
+
+  defp approve_flash(0, _skipped),
+    do:
+      "Keine der ausgewählten Lerneinheiten konnte genehmigt werden – " <>
+        "sie sind noch nicht eingereicht oder bereits genehmigt."
+
+  defp approve_flash(1, skipped), do: "Eine Lerneinheit genehmigt." <> skipped_note(skipped)
+
+  defp approve_flash(count, skipped),
+    do: "#{count} Lerneinheiten genehmigt." <> skipped_note(skipped)
+
+  defp skipped_note(0), do: ""
+
+  defp skipped_note(count),
+    do: " #{count} übersprungen (noch nicht eingereicht oder bereits genehmigt)."
 
   defp release_mode_label("never"),
     do: "Wird Lernenden nicht angezeigt."
@@ -1233,22 +1187,24 @@ defmodule TaskyWeb.TaskLive.Progress do
 
   defp release_mode_label(_), do: ""
 
-  defp submission_id(progress_map, student_id) do
-    case Map.get(progress_map, student_id) do
-      %{submission_id: id} -> id
-      nil -> nil
-    end
-  end
-
-  defp selectable_submission_ids(progress_map) do
-    progress_map |> Map.values() |> MapSet.new(& &1.submission_id)
-  end
+  # Auswählbar sind alle Lernenden des Kurses — auch die ohne Abgabezeile:
+  # `Tasks.release_solution_bulk/3` legt sie beim Freigeben an, und nur so
+  # entspricht "alle auswählen" der früheren Freigabe für alle.
+  defp selectable_student_ids(students), do: MapSet.new(students, & &1.id)
 
   # Ohne Zeilen gibt es nichts auszuwählen — dann darf die Kopf-Checkbox auch
   # nicht als "alles ausgewählt" dastehen.
-  defp all_selected?(selected, progress_map) do
-    all = selectable_submission_ids(progress_map)
+  defp all_selected?(selected, students) do
+    all = selectable_student_ids(students)
     MapSet.size(all) > 0 and MapSet.equal?(selected, all)
+  end
+
+  defp selection_label(selected) do
+    case MapSet.size(selected) do
+      0 -> "Keine Lernenden ausgewählt"
+      1 -> "1 Lernende/r ausgewählt"
+      count -> "#{count} Lernende ausgewählt"
+    end
   end
 
   defp releasable?(task, record) do
