@@ -163,6 +163,10 @@ defmodule Tasky.Tasks do
       web layer; see `authorize_duplicate_source/3`.
     * `:reset_release_state` — writes the copy as an unpublished, unlocked
       draft instead of carrying the source's release state over.
+    * `:position` — where the copy lands in the target course. Defaults to the
+      source's own position, which is what duplicating a whole course wants;
+      copying a single unit into an *existing* course passes
+      `next_task_position/1` so the copy appends instead of colliding.
 
   ## Examples
 
@@ -202,7 +206,7 @@ defmodule Tasky.Tasks do
   defp duplicate_attrs(source, course_id, opts) do
     base = %{
       name: source.name,
-      position: source.position,
+      position: Keyword.get(opts, :position, source.position),
       extended: source.extended,
       course_id: course_id
     }
@@ -423,6 +427,27 @@ defmodule Tasky.Tasks do
   """
   def change_new_task(%Scope{} = scope, attrs \\ %{}) do
     Task.changeset(%Task{}, attrs, scope)
+  end
+
+  @doc """
+  The position a newly added learning unit should take in a course: one past
+  the highest position in use, `0` for an empty course.
+
+  `reorder_tasks/3` writes dense `0..n-1` positions, while this appends after
+  the maximum — the two only have to agree on the *order*, not on the exact
+  numbers, and a gap is harmless.
+
+  ## Examples
+
+      iex> next_task_position(course.id)
+      3
+
+  """
+  def next_task_position(course_id) do
+    case Repo.one(from t in Task, where: t.course_id == ^course_id, select: max(t.position)) do
+      nil -> 0
+      max -> max + 1
+    end
   end
 
   @doc """

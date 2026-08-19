@@ -178,7 +178,10 @@ defmodule Tasky.Courses do
   defp transact_duplicate(scope, source, attrs, mode),
     do: Repo.transaction(fn -> insert_duplicate(scope, source, attrs, mode) end)
 
-  defp unwrap_duplicate({:ok, {course, jobs}}), do: {:ok, course, jobs}
+  # Trägt für `duplicate_course_records/3` einen `%Course{}` und für
+  # `copy_task_into_courses/3` die Liste der Kopien — beide Male "die
+  # geschriebenen Datensätze plus die geschuldeten Datei-Kopien".
+  defp unwrap_duplicate({:ok, {records, jobs}}), do: {:ok, records, jobs}
   defp unwrap_duplicate({:error, reason}), do: {:error, reason}
 
   defp insert_duplicate(scope, source, attrs, mode) do
@@ -203,6 +206,87 @@ defmodule Tasky.Courses do
     |> case do
       {:ok, acc} -> {:ok, acc |> Enum.reverse() |> Enum.concat()}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Kopiert **eine** Lerneinheit in einen oder mehrere *bestehende* Kurse und
+  liefert `{:ok, kopien, copy_jobs}`.
+
+  Das Gegenstück zu `duplicate_course/3`: dort entsteht ein neuer Kurs, hier
+  wandert eine einzelne Einheit in Kurse, die es schon gibt — der Fall
+  "dieselbe Lerneinheit, zwei Klassen". Jede Kopie landet **am Schluss** des
+  Zielkurses (`Tasky.Tasks.next_task_position/1`) und kommt als
+  unveröffentlichter, offener Entwurf mit versteckter Musterlösung an
+  (`reset_release_state: true`): wann die andere Klasse etwas sieht, entscheidet
+  die Lehrperson dort selbst.
+
+  Es gibt keine Verknüpfung zur Quelle. Ein zweiter Aufruf legt eine zweite
+  Kopie an; ein Abgleich bestehender Kopien findet nicht statt.
+
+  Alles oder nichts: ein Zielkurs, der nicht existiert oder nicht der
+  aufrufenden Person gehört, rollt die ganze Transaktion zurück — eine halb
+  ausgeführte Kopie über mehrere Kurse wäre schlimmer als keine.
+
+  Schreibt wie `duplicate_course_records/3` nur Datensätze und gibt die
+  geschuldeten Datei-Kopien zurück, statt sie auszuführen; die Begründung steht
+  bei `duplicate_course/3`. Die Web-Schicht ruft das über
+  `Tasky.Courses.DuplicateRunner.start_task_copy/4` auf.
+  """
+  def copy_task_into_courses(%Scope{} = scope, %Task{} = source, course_ids)
+      when is_list(course_ids) do
+    with :ok <- Tasky.Policy.authorize(scope, source.user_id),
+         {:ok, courses} <- fetch_copy_targets(scope, course_ids) do
+      Repo.transaction(fn -> insert_task_copies(scope, source, courses) end)
+      |> unwrap_duplicate()
+    end
+  end
+
+  # Die Ziele werden *vor* der Transaktion vollständig geprüft: so scheitert ein
+  # fremder Kurs, bevor irgendetwas geschrieben wurde, und `:unauthorized` bleibt
+  # ein gewöhnlicher Fehlerwert statt eines Rollback-Grunds.
+  defp fetch_copy_targets(scope, course_ids) do
+    course_ids
+    |> Enum.uniq()
+    |> Enum.reduce_while({:ok, []}, fn course_id, {:ok, acc} ->
+      case fetch_copy_target(scope, course_id) do
+        {:ok, course} -> {:cont, {:ok, [course | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, courses} -> {:ok, Enum.reverse(courses)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Ein Kurs, den es nicht gibt, und einer, der einer anderen Lehrperson gehört,
+  # sind für die Aufrufende dasselbe: nicht ihr Kurs.
+  defp fetch_copy_target(scope, course_id) do
+    with %Course{} = course <- Repo.get(Course, course_id),
+         :ok <- Tasky.Policy.authorize(scope, course.teacher_id) do
+      {:ok, course}
+    else
+      _ -> {:error, :unauthorized}
+    end
+  end
+
+  defp insert_task_copies(scope, source, courses) do
+    courses
+    |> Enum.reduce_while({[], []}, fn course, {tasks, jobs} ->
+      opts = [reset_release_state: true, position: Tasky.Tasks.next_task_position(course.id)]
+
+      case Tasky.Tasks.duplicate_task_into_course(scope, source, course.id, opts) do
+        {:ok, task, new_jobs} -> {:cont, {[task | tasks], [new_jobs | jobs]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:error, reason} ->
+        Repo.rollback(reason)
+
+      {tasks, jobs} ->
+        {Enum.reverse(tasks), jobs |> Enum.reverse() |> Enum.concat()}
     end
   end
 

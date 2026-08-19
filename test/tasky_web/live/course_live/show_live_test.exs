@@ -281,6 +281,136 @@ defmodule TaskyWeb.CourseLive.ShowTest do
     end
   end
 
+  describe "Lerneinheit kopieren nach…" do
+    test "the dropdown offers the action", %{conn: conn, course: course, task: task} do
+      {:ok, lv, html} = live(conn, ~p"/courses/#{course}")
+
+      assert has_element?(lv, ~s{button[phx-click="open_copy"][phx-value-id="#{task.id}"]})
+      assert html =~ "Kopieren nach…"
+      refute has_element?(lv, "#copy-task-modal")
+    end
+
+    test "the dialog lists the teacher's other courses only", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      target = course_fixture(scope: scope, attrs: %{name: "Klasse 2b"})
+      foreign = course_fixture(attrs: %{name: "Fremder Kurs"})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      html = lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+
+      assert has_element?(lv, "dialog#copy-task-modal.modal-open")
+      assert has_element?(lv, "#copy-target-#{target.id}")
+      assert html =~ "Klasse 2b"
+
+      # Nicht der Kurs, in dem man steht — und keine fremden Kurse.
+      refute has_element?(lv, "#copy-target-#{course.id}")
+      refute has_element?(lv, "#copy-target-#{foreign.id}")
+      refute html =~ "Fremder Kurs"
+
+      # Ohne Auswahl ist der Kopieren-Knopf gesperrt.
+      assert has_element?(lv, "#confirm-copy-task[disabled]")
+
+      lv |> element("#copy-task-modal button", "Abbrechen") |> render_click()
+      refute has_element?(lv, "#copy-task-modal")
+    end
+
+    test "a target course with a same-named unit is flagged", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      target = course_fixture(scope: scope, attrs: %{name: "Klasse 2b"})
+      task_fixture(scope, %{name: "Einheit 1", position: 0, course_id: target.id})
+      course_fixture(scope: scope, attrs: %{name: "Klasse 2c"})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      html = lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+
+      assert html =~ "Enthält bereits «Einheit 1»"
+      assert [_one] = Regex.scan(~r/Enthält bereits/, html)
+    end
+
+    test "copies the unit into every selected course and stays put", %{
+      conn: conn,
+      course: course,
+      task: task,
+      scope: scope
+    } do
+      first = course_fixture(scope: scope, attrs: %{name: "Klasse 2b"})
+      second = course_fixture(scope: scope, attrs: %{name: "Klasse 2c"})
+      task_fixture(scope, %{name: "Bestehend", position: 0, course_id: first.id})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+
+      render_click(lv, "toggle_copy_target", %{"id" => first.id})
+      render_click(lv, "toggle_copy_target", %{"id" => second.id})
+      refute has_element?(lv, "#confirm-copy-task[disabled]")
+
+      html = lv |> element("#confirm-copy-task") |> render_click()
+
+      assert html =~ "wurde nach 2 Kurse kopiert"
+      refute has_element?(lv, "#copy-task-modal")
+
+      assert ["Bestehend", "Einheit 1"] =
+               first.id |> Tasks.list_tasks_by_course() |> Enum.map(& &1.name)
+
+      assert [copy] = Tasks.list_tasks_by_course(second.id)
+      assert copy.name == "Einheit 1"
+      assert copy.status == "draft"
+
+      # Der Ausgangskurs bleibt, wie er war — auch die Liste auf dem Bildschirm.
+      assert [%{id: id}] = Tasks.list_tasks_by_course(course.id)
+      assert id == task.id
+      assert render(lv) =~ "Einheit 1"
+    end
+
+    test "deselecting a target takes it out again", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      target = course_fixture(scope: scope, attrs: %{name: "Klasse 2b"})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+
+      render_click(lv, "toggle_copy_target", %{"id" => target.id})
+      refute has_element?(lv, "#confirm-copy-task[disabled]")
+
+      render_click(lv, "toggle_copy_target", %{"id" => target.id})
+      assert has_element?(lv, "#confirm-copy-task[disabled]")
+    end
+
+    test "a teacher with no other course sees the empty state", %{conn: conn, course: course} do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      html = lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+
+      assert html =~ "noch keinen weiteren Kurs"
+      refute has_element?(lv, "#confirm-copy-task")
+    end
+
+    test "names a single target course in the flash", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      target = course_fixture(scope: scope, attrs: %{name: "Klasse 2b"})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+      render_click(lv, "toggle_copy_target", %{"id" => target.id})
+
+      html = lv |> element("#confirm-copy-task") |> render_click()
+
+      assert html =~ "«Einheit 1» wurde nach «Klasse 2b» kopiert"
+      assert html =~ "als Entwurf am Schluss"
+    end
+  end
+
   describe "erweiterte Lerneinheit" do
     test "the row marks an extended unit and explains what it means", %{
       conn: conn,

@@ -1,7 +1,8 @@
 defmodule Tasky.Courses.DuplicateRunner do
   @moduledoc """
-  Duplicates a course in two phases: the records synchronously in the caller
-  (one short transaction), then the file bytes in a supervised Task.
+  Duplicates a course — or copies a single learning unit into existing courses —
+  in two phases: the records synchronously in the caller (one short
+  transaction), then the file bytes in a supervised Task.
 
   The split is the point. Object-storage copies must not run inside the
   transaction — see `Tasky.Courses.duplicate_course/3` — and they take long
@@ -9,10 +10,18 @@ defmodule Tasky.Courses.DuplicateRunner do
   either. Doing the records inline keeps authorization and changeset errors
   surfacing as an ordinary `{:error, reason}`, exactly as before.
 
-  The owner LiveView receives plain messages — no PubSub topic involved:
+  The owner LiveView receives plain messages — no PubSub topic involved.
+  Duplicating a course (`start/4`, `start_catalog_import/4`) reports:
 
     * `{:duplicate_progress, %{done: n, total: t}}`
     * `{:duplicate_done, %{course_id: id, failed: n}}`
+
+  Copying a unit (`start_task_copy/4`) reports its own pair, because the caller
+  reacts differently — it stays on the course it is already showing instead of
+  navigating to the duplicate:
+
+    * `{:copy_progress, %{done: n, total: t}}`
+    * `{:copy_done, %{failed: n}}`
 
   The Task is unlinked from the caller, so a LiveView that navigates away or
   disconnects neither kills the copy phase nor is killed by it. There is no
@@ -31,7 +40,7 @@ defmodule Tasky.Courses.DuplicateRunner do
   any progress UI and treat the duplication as finished.
   """
   def start(scope, course, name, owner_pid) do
-    run(fn -> Courses.duplicate_course_records(scope, course, name) end, owner_pid)
+    run(fn -> Courses.duplicate_course_records(scope, course, name) end, owner_pid, :duplicate)
   end
 
   @doc """
@@ -44,30 +53,65 @@ defmodule Tasky.Courses.DuplicateRunner do
   `owner_pid`, dieselbe `{:ok, course, total_files}`-Rückgabe.
   """
   def start_catalog_import(scope, source_id, name, owner_pid) do
-    run(fn -> Courses.import_catalog_course_records(scope, source_id, name) end, owner_pid)
+    run(
+      fn -> Courses.import_catalog_course_records(scope, source_id, name) end,
+      owner_pid,
+      :duplicate
+    )
   end
 
-  defp run(write_records, owner_pid) do
-    with {:ok, new_course, jobs} <- write_records.() do
+  @doc """
+  Kopiert eine Lerneinheit in bestehende Kurse
+  (`Tasky.Courses.copy_task_into_courses/3`) und startet die Kopierphase.
+
+  Returns `{:ok, tasks, total_files}`, sobald die Datensätze committed sind —
+  `tasks` in der Reihenfolge der übergebenen `course_ids`. `total_files` ist 0,
+  wenn die Einheit keine Dateien hat; der Aufrufer kann dann auf jede
+  Fortschrittsanzeige verzichten.
+  """
+  def start_task_copy(scope, source_task, course_ids, owner_pid) do
+    run(
+      fn -> Courses.copy_task_into_courses(scope, source_task, course_ids) end,
+      owner_pid,
+      :copy
+    )
+  end
+
+  defp run(write_records, owner_pid, kind) do
+    with {:ok, records, jobs} <- write_records.() do
       jobs = Enum.uniq_by(jobs, & &1.dest)
       total = length(jobs)
 
-      if total > 0, do: start_copy_phase(jobs, new_course.id, owner_pid)
+      if total > 0, do: start_copy_phase(jobs, records, owner_pid, kind)
 
-      {:ok, new_course, total}
+      {:ok, records, total}
     end
   end
 
   # `start_child` rather than `async_nolink`: nobody awaits the result, so the
   # owner should not have to swallow a stray reply and `:DOWN` afterwards.
-  defp start_copy_phase(jobs, course_id, owner_pid) do
+  defp start_copy_phase(jobs, records, owner_pid, kind) do
     Task.Supervisor.start_child(Tasky.TaskSupervisor, fn ->
-      %{failed: failed} = Uploads.run_copies(jobs, on_progress: progress_fun(owner_pid))
-      send(owner_pid, {:duplicate_done, %{course_id: course_id, failed: length(failed)}})
+      %{failed: failed} =
+        Uploads.run_copies(jobs, on_progress: progress_fun(owner_pid, kind))
+
+      send(owner_pid, done_message(kind, records, length(failed)))
     end)
   end
 
-  defp progress_fun(owner_pid) do
-    fn done, total -> send(owner_pid, {:duplicate_progress, %{done: done, total: total}}) end
+  defp progress_fun(owner_pid, kind) do
+    tag = progress_tag(kind)
+    fn done, total -> send(owner_pid, {tag, %{done: done, total: total}}) end
   end
+
+  defp progress_tag(:duplicate), do: :duplicate_progress
+  defp progress_tag(:copy), do: :copy_progress
+
+  # Der Kurs-Pfad nennt den Zielkurs, weil die aufrufende LiveView dorthin
+  # navigiert; beim Kopieren einer Einheit gibt es kein einzelnes Ziel — und
+  # die LiveView bleibt ohnehin, wo sie ist.
+  defp done_message(:duplicate, course, failed),
+    do: {:duplicate_done, %{course_id: course.id, failed: failed}}
+
+  defp done_message(:copy, _tasks, failed), do: {:copy_done, %{failed: failed}}
 end

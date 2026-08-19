@@ -157,18 +157,9 @@ defmodule TaskyWeb.CourseLive.Add do
   defp task_attrs(course, params) do
     Map.merge(params, %{
       "name" => params |> Map.get("name", "") |> String.trim(),
-      "position" => next_position(course),
+      "position" => Tasks.next_task_position(course.id),
       "status" => "draft",
       "course_id" => course.id
     })
-  end
-
-  defp next_position(course) do
-    course.id
-    |> Tasks.list_tasks_by_course()
-    |> Enum.map(& &1.position)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max(fn -> 0 end)
-    |> Kernel.+(1)
   end
 end

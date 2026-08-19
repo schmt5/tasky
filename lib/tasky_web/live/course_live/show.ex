@@ -271,6 +271,17 @@ defmodule TaskyWeb.CourseLive.Show do
                   <li>
                     <button
                       type="button"
+                      phx-click="open_copy"
+                      phx-value-id={task.id}
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <.icon name="hero-document-duplicate" class="w-4 h-4 text-stone-400" />
+                      Kopieren nach…
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      type="button"
                       phx-click="toggle_status"
                       phx-value-id={task.id}
                       class="flex items-center gap-2 text-sm text-stone-700"
@@ -546,6 +557,116 @@ defmodule TaskyWeb.CourseLive.Show do
         subtitle="Die Dateien werden kopiert."
       />
 
+      <%!-- Copy Learning Unit To Other Courses --%>
+      <%= if @copying_task do %>
+        <dialog
+          id="copy-task-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_copy"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_copy"></div>
+          <div class="modal-box max-w-lg p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-document-duplicate" class="w-5 h-5 text-sky-600" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">Lerneinheit kopieren</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    «{@copying_task.name}» in andere Kurse übernehmen.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-6">
+              <%= if @copy_targets == [] do %>
+                <p class="text-sm text-stone-500 leading-relaxed">
+                  Sie haben noch keinen weiteren Kurs, in den Sie kopieren könnten. Erstellen Sie
+                  zuerst einen zweiten Kurs.
+                </p>
+              <% else %>
+                <p class="text-sm text-stone-600 leading-relaxed mb-4">
+                  In welche Kurse soll die Lerneinheit kopiert werden?
+                </p>
+
+                <div class="space-y-2 max-h-64 overflow-y-auto">
+                  <label
+                    :for={target <- @copy_targets}
+                    id={"copy-target-#{target.course.id}"}
+                    class="flex items-start gap-3 p-3 rounded-[10px] border border-stone-200 cursor-pointer transition-colors duration-150 hover:bg-stone-50 has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/60"
+                  >
+                    <input
+                      type="checkbox"
+                      class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
+                      checked={MapSet.member?(@copy_selection, target.course.id)}
+                      phx-click="toggle_copy_target"
+                      phx-value-id={target.course.id}
+                    />
+                    <span class="min-w-0">
+                      <span class="block text-sm font-semibold text-stone-800">
+                        {target.course.name}
+                      </span>
+                      <span class="block text-xs text-stone-400 mt-0.5">
+                        {length(target.course.tasks)} Lerneinheiten
+                      </span>
+                      <span :if={target.conflict} class="block text-xs text-amber-700 mt-1">
+                        Enthält bereits «{@copying_task.name}» — es entsteht eine zweite Kopie.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div class="bg-stone-50 rounded-lg p-3 mt-4 border border-stone-100">
+                  <div class="flex items-start gap-2.5">
+                    <.icon
+                      name="hero-information-circle"
+                      class="w-4 h-4 text-stone-400 shrink-0 mt-0.5"
+                    />
+                    <p class="text-xs text-stone-500 leading-relaxed">
+                      Die Kopie wird am Schluss eingefügt und ist ein Entwurf — Lernende sehen sie
+                      erst, wenn Sie sie dort veröffentlichen. Abgaben und Fortschritt werden nicht
+                      kopiert.
+                    </p>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+
+            <div class="p-6 pt-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                phx-click="close_copy"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                :if={@copy_targets != []}
+                type="button"
+                id="confirm-copy-task"
+                phx-click="copy_task"
+                phx-disable-with="Wird kopiert…"
+                disabled={Enum.empty?(@copy_selection)}
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <.icon name="hero-document-duplicate" class="w-4 h-4" /> Kopieren
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
+      <.duplicate_progress_modal
+        :if={@copy_status}
+        id="copy-task-progress-modal"
+        status={@copy_status}
+        title="Lerneinheit wird kopiert"
+        subtitle="Die Dateien werden kopiert."
+      />
+
       <%!-- Rename Modal --%>
       <%= if @renaming_task do %>
         <dialog
@@ -631,6 +752,10 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:rename_form, nil)
      |> assign(:duplicating_course, false)
      |> assign(:duplicate_status, nil)
+     |> assign(:copying_task, nil)
+     |> assign(:copy_targets, [])
+     |> assign(:copy_selection, MapSet.new())
+     |> assign(:copy_status, nil)
      |> assign(:publishing_course, false)
      |> assign(:share_url, nil)
      |> stream(:tasks, course.tasks)}
@@ -769,6 +894,81 @@ defmodule TaskyWeb.CourseLive.Show do
   end
 
   @impl true
+  def handle_event("open_copy", %{"id" => id}, socket) do
+    task = Tasks.get_task!(socket.assigns.current_scope, id)
+
+    {:noreply,
+     socket
+     |> assign(:copying_task, task)
+     |> assign(:copy_targets, copy_targets(socket, task))
+     |> assign(:copy_selection, MapSet.new())}
+  end
+
+  @impl true
+  def handle_event("close_copy", _params, socket) do
+    {:noreply, close_copy(socket)}
+  end
+
+  @impl true
+  def handle_event("toggle_copy_target", %{"id" => raw_id}, socket) do
+    case TaskyWeb.Params.int(raw_id) do
+      nil ->
+        {:noreply, socket}
+
+      id ->
+        selection = socket.assigns.copy_selection
+
+        selection =
+          if MapSet.member?(selection, id),
+            do: MapSet.delete(selection, id),
+            else: MapSet.put(selection, id)
+
+        {:noreply, assign(socket, :copy_selection, selection)}
+    end
+  end
+
+  @impl true
+  def handle_event("copy_task", _params, socket) do
+    task = socket.assigns.copying_task
+    course_ids = MapSet.to_list(socket.assigns.copy_selection)
+    names = selected_course_names(socket, course_ids)
+
+    case DuplicateRunner.start_task_copy(
+           socket.assigns.current_scope,
+           task,
+           course_ids,
+           self()
+         ) do
+      # Eine Einheit ohne Dateien ist mit den Datensätzen fertig — kein
+      # Fortschrittsdialog für nichts.
+      {:ok, _tasks, 0} ->
+        {:noreply,
+         socket
+         |> close_copy()
+         |> put_flash(:info, copy_success_message(task.name, names, 0))}
+
+      # Name und Ziele reisen im Status mit: `close_copy/1` räumt den Dialog ab,
+      # die Erfolgsmeldung braucht beides aber erst, wenn die Bytes durch sind.
+      {:ok, _tasks, total} ->
+        {:noreply,
+         socket
+         |> close_copy()
+         |> assign(:copy_status, %{
+           done: 0,
+           total: total,
+           task_name: task.name,
+           targets: names
+         })}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> close_copy()
+         |> put_flash(:error, "Lerneinheit konnte nicht kopiert werden.")}
+    end
+  end
+
+  @impl true
   def handle_event("delete_task", %{"id" => id}, socket) do
     task = Tasks.get_task!(socket.assigns.current_scope, id)
     {:ok, _} = Tasks.delete_task(socket.assigns.current_scope, task)
@@ -842,6 +1042,56 @@ defmodule TaskyWeb.CourseLive.Show do
     {:noreply, close_rename(socket)}
   end
 
+  # Erst beim Öffnen des Dialogs geladen — die Zielliste kostet eine Query mit
+  # Preloads und wird auf der Kursseite sonst nie gebraucht.
+  #
+  # Nur eigene Kurse: `list_courses/1` gibt Admins *alle* Kurse zurück, und eine
+  # Kopie im Kurs einer anderen Lehrperson würde `user_id` des Admins tragen —
+  # die Lehrperson käme über `Tasks.get_task!/2` nicht mehr an ihre eigene
+  # Einheit heran.
+  defp copy_targets(socket, task) do
+    scope = socket.assigns.current_scope
+
+    scope
+    |> Courses.list_courses()
+    |> Enum.filter(&(&1.teacher_id == scope.user.id))
+    |> Enum.reject(&(&1.id == socket.assigns.course.id))
+    |> Enum.map(fn course ->
+      %{course: course, conflict: Enum.any?(course.tasks, &(&1.name == task.name))}
+    end)
+  end
+
+  defp selected_course_names(socket, course_ids) do
+    selected = MapSet.new(course_ids)
+
+    socket.assigns.copy_targets
+    |> Enum.filter(&MapSet.member?(selected, &1.course.id))
+    |> Enum.map(& &1.course.name)
+  end
+
+  defp close_copy(socket) do
+    socket
+    |> assign(:copying_task, nil)
+    |> assign(:copy_targets, [])
+    |> assign(:copy_selection, MapSet.new())
+  end
+
+  defp copy_success_message(task_name, names, failed) do
+    target =
+      case names do
+        [name] -> "«#{name}»"
+        names -> "#{length(names)} Kurse"
+      end
+
+    base = "«#{task_name}» wurde nach #{target} kopiert — als Entwurf am Schluss."
+
+    # `:warning` wird von `Layouts.flash_group/1` nicht gerendert, darum fährt
+    # die Zahl im :info-Text mit.
+    if failed == 0,
+      do: base,
+      else: base <> " #{failed} Datei(en) konnten nicht kopiert werden."
+  end
+
   defp open_rename(socket, id) do
     task = Tasks.get_task!(socket.assigns.current_scope, id)
     changeset = Tasks.change_task(socket.assigns.current_scope, task)
@@ -881,6 +1131,32 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:duplicate_status, nil)
      |> put_flash(:info, message)
      |> push_navigate(to: ~p"/courses/#{course_id}")}
+  end
+
+  @impl true
+  def handle_info({:copy_progress, status}, socket) do
+    {:noreply, update(socket, :copy_status, &(&1 && Map.merge(&1, status)))}
+  end
+
+  @impl true
+  def handle_info({:copy_done, %{failed: failed}}, socket) do
+    # Die Datensätze stehen ohnehin; ein Fehlschlag beim Kopieren der Bytes ist
+    # zu berichten, nicht als gescheiterte Kopie zu behandeln. Anders als beim
+    # Duplizieren eines Kurses wird hier *nicht* navigiert — die Lehrperson
+    # bleibt in dem Kurs, aus dem sie kopiert hat.
+    # Live-Navigation behält den Prozess: die Nachricht kann in einer LiveView
+    # landen, die den Kopiervorgang nie gestartet hat. Dann gibt es nichts zu
+    # melden — wie beim Fortschritt oben.
+    case socket.assigns.copy_status do
+      %{task_name: task_name, targets: targets} ->
+        {:noreply,
+         socket
+         |> assign(:copy_status, nil)
+         |> put_flash(:info, copy_success_message(task_name, targets, failed))}
+
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   @impl true

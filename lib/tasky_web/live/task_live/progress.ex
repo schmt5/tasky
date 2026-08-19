@@ -113,7 +113,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                             phx-click="toggle_select_all"
                             checked={all_selected?(@bulk_student_ids, @students)}
                             aria-label="Alle auswählen"
-                            class="checkbox checkbox-sm"
+                            class="w-[18px] h-[18px] rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
                           />
                           <button
                             type="button"
@@ -172,7 +172,7 @@ defmodule TaskyWeb.TaskLive.Progress do
                             phx-value-student-id={student.id}
                             checked={MapSet.member?(@bulk_student_ids, student.id)}
                             aria-label="Lernende auswählen"
-                            class="checkbox checkbox-sm"
+                            class="w-[18px] h-[18px] rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
                           />
                           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 text-[11px] font-semibold">
                             {if @anonymized, do: "?", else: initials(student)}
