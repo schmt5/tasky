@@ -18,34 +18,49 @@ defmodule TaskyWeb.ExamComponents do
   Die beiden Durchführungsmodi, in der Reihenfolge, in der sie auf der
   Config-Seite stehen. `assigned` ist die Vorauswahl.
 
-  "Angemeldet" ist absichtlich vermieden: im Prüfungskontext heisst "anmelden"
-  schon das Einschreiben ("Melde dich für die Prüfung an").
+  Vokabular, das über die Prüfungsflächen hinweg gilt: **Lernende** ist der
+  Pool, aus dem ausgewählt wird (Konto in LearningLine, gehört zu einer
+  Klasse) — **Teilnehmende** sind die Leute in dieser Durchführung, in beiden
+  Modi und auch ohne Konto.
+
+  Drei Wörter sind bewusst vermieden:
+
+  * "Angemeldet" — im Prüfungskontext heisst "anmelden" schon das Einschreiben
+    ("Melde dich für die Prüfung an").
+  * "Anonym" — Teilnehmende geben Vorname, Nachname und E-Mail an; anonym sind
+    sie nicht. Der Unterschied ist Benutzerkonto vs. Einschreibelink, und
+    genau das sagen die Titel.
+  * "Zugewiesen" als Titel — ein Partizip beschreibt einen Zustand, hier ist
+    aber eine Entscheidung zu treffen. Die Titel sind deshalb Verben: sie
+    sagen, was die Lehrperson als Nächstes tut.
   """
   def participation_mode_options do
     [
       %{
         value: "assigned",
-        label: "Zugewiesene Teilnehmende",
-        sublabel: "Lernende mit Benutzerkonto",
+        label: "Lernende zuweisen",
+        sublabel: "Teilnahme mit eigenem Benutzerkonto",
+        state_label: "Zuweisung an Lernende",
         icon: "hero-user-group",
         summary:
-          "Du weist die Prüfung bestimmten Lernenden zu. Sie nehmen mit ihrem eigenen Konto teil — kein Einschreibelink nötig.",
+          "Du wählst aus, wer die Prüfung schreibt. Die Lernenden nehmen mit ihrem eigenen Konto teil — kein Einschreibelink nötig.",
         points: [
-          "Teilnehmende sehen die Prüfung auf ihrem Dashboard",
-          "Die Prüfung kann nach der Korrektur an die Teilnehmenden zurückgegeben werden",
+          "Zugewiesene Lernende sehen die Prüfung auf ihrem Dashboard",
+          "Nach der Korrektur kannst du die Prüfung zurückgeben",
           "Nur zugewiesene Lernende können teilnehmen"
         ]
       },
       %{
         value: "anonymous",
-        label: "Anonyme Teilnehmende",
-        sublabel: "Teilnahme per Einschreibelink",
+        label: "Einschreibelink teilen",
+        sublabel: "Teilnahme ohne Benutzerkonto",
+        state_label: "Einschreibelink",
         icon: "hero-link",
         summary:
-          "Du teilst einen Einschreibelink. Teilnehmende geben nur Vorname, Nachname und E-Mail an und brauchen kein Konto.",
+          "Du teilst einen Link. Wer teilnimmt, gibt nur Vorname, Nachname und E-Mail an und braucht kein Konto in LearningLine.",
         points: [
           "Auch für Personen ohne Konto in LearningLine",
-          "Teilnehmende sehen die Prüfung nicht auf einem Dashboard",
+          "Die Prüfung erscheint auf keinem Dashboard",
           "Keine Rückgabe möglich — Resultate teilst du z.B. per PDF-Export"
         ]
       }
@@ -64,6 +79,10 @@ defmodule TaskyWeb.ExamComponents do
   @doc """
   Single-Choice-Auswahl des Durchführungsmodus: links die gestapelten
   Optionskarten, rechts die Beschreibung der gewählten Option.
+
+  `label` ist die Handlung und steht nur auf der Optionskarte. Kopfzeile und
+  Readonly-Box zeigen `state_label`, die Nominalform: dort ist der Modus eine
+  Feststellung, und ein Verb liest sich an diesen Stellen wie ein Button.
 
   Bewusst **keine** Erweiterung von `CoreComponents.radio_group/1`: der Modus
   ist kein Formularfeld (er ist nicht castable und wird nur von
@@ -88,7 +107,7 @@ defmodule TaskyWeb.ExamComponents do
       <div class="md:col-span-2 space-y-2.5">
         <%= if @readonly do %>
           <div class="rounded-lg border border-stone-200 bg-stone-50 px-3.5 py-3">
-            <p class="text-sm font-medium text-stone-700">{@selected.label}</p>
+            <p class="text-sm font-medium text-stone-700">{@selected.state_label}</p>
             <p class="text-xs text-stone-500 mt-0.5">{@selected.sublabel}</p>
           </div>
           <div
@@ -130,7 +149,7 @@ defmodule TaskyWeb.ExamComponents do
           <div class="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center shrink-0">
             <.icon name={@selected.icon} class="w-4 h-4 text-sky-500" />
           </div>
-          <p class="text-sm font-semibold text-stone-800">{@selected.label}</p>
+          <p class="text-sm font-semibold text-stone-800">{@selected.state_label}</p>
         </div>
         <p class="text-sm text-stone-600 leading-relaxed">{@selected.summary}</p>
         <ul class="mt-4 space-y-2">

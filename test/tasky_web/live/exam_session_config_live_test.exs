@@ -24,8 +24,8 @@ defmodule TaskyWeb.ExamSessionConfigLiveTest do
       {:ok, _view, html} = open_config(conn, teacher, exam)
 
       assert html =~ "Durchführung eröffnen"
-      assert html =~ "Zugewiesene Teilnehmende"
-      assert html =~ "Anonyme Teilnehmende"
+      assert html =~ "Lernende zuweisen"
+      assert html =~ "Einschreibelink teilen"
       assert html =~ ~s(id="participation-mode-assigned")
       refute html =~ ~s(id="save-seb-config-btn")
     end
@@ -34,7 +34,7 @@ defmodule TaskyWeb.ExamSessionConfigLiveTest do
       %{teacher: teacher, exam: exam} = teacher_and_exam()
       {:ok, _view, html} = open_config(conn, teacher, exam)
 
-      assert html =~ "Teilnehmende sehen die Prüfung auf ihrem Dashboard"
+      assert html =~ "Zugewiesene Lernende sehen die Prüfung auf ihrem Dashboard"
       refute html =~ "Auch für Personen ohne Konto"
     end
 
@@ -48,7 +48,7 @@ defmodule TaskyWeb.ExamSessionConfigLiveTest do
         |> render_click()
 
       assert html =~ "Auch für Personen ohne Konto"
-      refute html =~ "Teilnehmende sehen die Prüfung auf ihrem Dashboard"
+      refute html =~ "Zugewiesene Lernende sehen die Prüfung auf ihrem Dashboard"
     end
 
     test "opening in assigned mode leaves the enrollment token unset", %{conn: conn} do
@@ -104,7 +104,7 @@ defmodule TaskyWeb.ExamSessionConfigLiveTest do
 
       refute html =~ ~s(name="participation_mode")
       assert html =~ "Nach dem Eröffnen nicht mehr änderbar"
-      assert html =~ "Zugewiesene Teilnehmende"
+      assert html =~ "Zuweisung an Lernende"
       assert html =~ ~s(id="save-seb-config-btn")
       refute html =~ "Durchführung eröffnen"
     end
@@ -116,7 +116,7 @@ defmodule TaskyWeb.ExamSessionConfigLiveTest do
       {:ok, view, _html} = open_config(conn, teacher, exam)
       render_hook_result = render_click(view, "select_mode", %{"mode" => "anonymous"})
 
-      assert render_hook_result =~ "Zugewiesene Teilnehmende"
+      assert render_hook_result =~ "Zuweisung an Lernende"
 
       reloaded = Exams.get_exam!(user_scope_fixture(teacher), exam.id)
       assert reloaded.participation_mode == "assigned"

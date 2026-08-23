@@ -4,6 +4,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   import TaskyWeb.FileComponents
   import TaskyWeb.StudentComponents
 
+  alias Tasky.Accounts.Scope
   alias Tasky.Exams
   alias Tasky.Uploads
   alias TaskyWeb.Params
@@ -165,33 +166,24 @@ defmodule TaskyWeb.Guest.ExamLive do
           <% @exam.status == "running" and @submission.submitted -> %>
             <%!-- Already Submitted --%>
             <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
-              <div class="text-center">
-                <div class="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-4">
-                  <.icon name="hero-check-circle" class="w-8 h-8 text-emerald-500" />
-                </div>
-                <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
-                  Prüfung abgegeben
-                </h1>
-                <p class="text-stone-500 text-sm">
-                  Du hast deine Prüfung <span class="font-semibold text-stone-700">{@exam.name}</span>
-                  erfolgreich abgegeben.
-                </p>
-                <p class="text-stone-500 text-sm mt-1">
-                  Abgegeben am {Calendar.strftime(@submission.updated_at, "%d.%m.%Y um %H:%M")} Uhr.
-                </p>
-                <p class="text-stone-400 text-xs mt-2">
-                  Du kannst diese Seite jetzt schliessen.
-                </p>
-                <%= if @exam.seb_enabled and @in_seb do %>
-                  <a
-                    href={~p"/guest/exam/#{@submission.exam_token}/seb-quit"}
-                    id="quit-seb-btn"
-                    class="mt-6 inline-flex items-center gap-2 bg-stone-800 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-md transition-all duration-150 hover:bg-stone-900 active:scale-[0.98]"
-                  >
-                    <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> SEB beenden
-                  </a>
-                <% end %>
-              </div>
+              <.completion_panel emoji={@success_emoji} class="w-full max-w-[560px]">
+                <:title>
+                  Prüfung <em class="italic text-emerald-500">abgegeben.</em>
+                </:title>
+                <:subtitle>
+                  Sehr gute Arbeit — deine Prüfung
+                  <span class="font-semibold text-stone-600">{@exam.name}</span>
+                  ist bei deiner Lehrperson eingegangen.
+                </:subtitle>
+                <:actions>
+                  <.exam_end_actions
+                    exam={@exam}
+                    submission={@submission}
+                    current_scope={@current_scope}
+                    in_seb={@in_seb}
+                  />
+                </:actions>
+              </.completion_panel>
             </div>
           <% @exam.status == "running" -> %>
             <%!-- Running Exam --%>
@@ -568,29 +560,26 @@ defmodule TaskyWeb.Guest.ExamLive do
               <% end %>
             </div>
           <% @exam.status in ["finished", "archived"] -> %>
-            <%!-- Finished --%>
+            <%!-- Finished. Not necessarily a success for this participant — they
+                  may never have submitted — so the flag, not a celebration. --%>
             <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
-              <div class="text-center">
-                <div class="w-16 h-16 rounded-2xl bg-purple-50 flex items-center justify-center mx-auto mb-4">
-                  <.icon name="hero-check-circle" class="w-8 h-8 text-purple-500" />
-                </div>
-                <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
-                  Prüfung beendet
-                </h1>
-                <p class="text-stone-500 text-sm">
-                  Die Prüfung <span class="font-semibold text-stone-700">{@exam.name}</span>
+              <.completion_panel emoji="🏁" class="w-full max-w-[560px]">
+                <:title>
+                  Prüfung <em class="italic text-emerald-500">beendet.</em>
+                </:title>
+                <:subtitle>
+                  Die Prüfung <span class="font-semibold text-stone-600">{@exam.name}</span>
                   wurde beendet.
-                </p>
-                <%= if @exam.seb_enabled and @in_seb do %>
-                  <a
-                    href={~p"/guest/exam/#{@submission.exam_token}/seb-quit"}
-                    id="quit-seb-btn"
-                    class="mt-6 inline-flex items-center gap-2 bg-stone-800 text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-md transition-all duration-150 hover:bg-stone-900 active:scale-[0.98]"
-                  >
-                    <.icon name="hero-arrow-right-on-rectangle" class="w-5 h-5" /> SEB beenden
-                  </a>
-                <% end %>
-              </div>
+                </:subtitle>
+                <:actions>
+                  <.exam_end_actions
+                    exam={@exam}
+                    submission={@submission}
+                    current_scope={@current_scope}
+                    in_seb={@in_seb}
+                  />
+                </:actions>
+              </.completion_panel>
             </div>
           <% true -> %>
             <%!-- Fallback (draft or other) --%>
@@ -638,6 +627,37 @@ defmodule TaskyWeb.Guest.ExamLive do
         }
       </script>
     </Layouts.guest>
+    """
+  end
+
+  @doc false
+  # The way onward from an exam end screen. Home only makes sense for a
+  # participant who has an account to go home to — an anonymous guest would
+  # land on the marketing page — and never inside SEB, where leaving the exam
+  # goes through the quit route alone.
+  attr :exam, :map, required: true
+  attr :submission, :map, required: true
+  attr :current_scope, :any, required: true
+  attr :in_seb, :boolean, required: true
+
+  def exam_end_actions(assigns) do
+    ~H"""
+    <a
+      :if={@exam.seb_enabled and @in_seb}
+      href={~p"/guest/exam/#{@submission.exam_token}/seb-quit"}
+      id="quit-seb-btn"
+      class="inline-flex items-center gap-2 bg-stone-800 text-white text-[13px] font-semibold px-5 py-2.5 rounded-[10px] shadow-md transition-all duration-150 hover:bg-stone-900 active:scale-[0.98]"
+    >
+      <.icon name="hero-arrow-right-on-rectangle" class="w-4 h-4" /> SEB beenden
+    </a>
+    <.link
+      :if={Scope.student?(@current_scope) and not @in_seb}
+      href={~p"/"}
+      id="back-home-btn"
+      class="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
+    >
+      <.icon name="hero-home" class="w-4 h-4" /> Zur Startseite
+    </.link>
     """
   end
 
@@ -727,6 +747,7 @@ defmodule TaskyWeb.Guest.ExamLive do
       |> assign(:in_seb, in_seb)
       |> assign(:attachments, attachments)
       |> assign(:upload_fields, upload_fields)
+      |> assign(:success_emoji, success_emoji())
       |> assign(:has_files, attachments != [] or upload_fields != [])
       |> assign(:student_tab, "pruefung")
       |> assign(:submission_files, submission_files_by_field(submission))

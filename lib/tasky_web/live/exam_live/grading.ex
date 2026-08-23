@@ -34,32 +34,20 @@ defmodule TaskyWeb.ExamLive.Grading do
             </div>
 
             <div class="flex items-center gap-3">
-              <%= if @assigned_mode? do %>
-                <%= if @returned? do %>
-                  <span class="inline-flex items-center gap-1.5 bg-sky-100 text-sky-700 text-[13px] font-semibold px-3 py-1.5 rounded-full">
-                    <.icon name="hero-check-circle-mini" class="w-4 h-4" />
-                    Zurückgegeben am {Calendar.strftime(@exam.returned_at, "%d.%m.%Y")}
-                  </span>
-                  <button
-                    type="button"
-                    id="withdraw-return-btn"
-                    phx-click="withdraw_return"
-                    data-confirm="Die Teilnehmenden verlieren damit den Zugriff auf ihre korrigierte Prüfung. Rückgabe wirklich zurückziehen?"
-                    class="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
-                  >
-                    <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Rückgabe zurückziehen
-                  </button>
-                <% else %>
-                  <button
-                    type="button"
-                    id="open-return-modal-btn"
-                    phx-click="open_return_modal"
-                    disabled={@submissions == []}
-                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500"
-                  >
-                    <.icon name="hero-paper-airplane" class="w-4 h-4" /> Prüfung zurückgeben
-                  </button>
-                <% end %>
+              <%= if @assigned_mode? and @returned? do %>
+                <span class="inline-flex items-center gap-1.5 bg-sky-100 text-sky-700 text-[13px] font-semibold px-3 py-1.5 rounded-full">
+                  <.icon name="hero-check-circle-mini" class="w-4 h-4" />
+                  Zurückgegeben am {Calendar.strftime(@exam.returned_at, "%d.%m.%Y")}
+                </span>
+                <button
+                  type="button"
+                  id="withdraw-return-btn"
+                  phx-click="withdraw_return"
+                  data-confirm="Die Teilnehmenden verlieren damit den Zugriff auf ihre korrigierte Prüfung. Rückgabe wirklich zurückziehen?"
+                  class="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
+                >
+                  <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Rückgabe zurückziehen
+                </button>
               <% end %>
 
               <%= if @pdf_enabled do %>
@@ -84,6 +72,18 @@ defmodule TaskyWeb.ExamLive.Grading do
                     <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
                   </button>
                 </div>
+              <% end %>
+
+              <%= if @assigned_mode? and not @returned? do %>
+                <button
+                  type="button"
+                  id="open-return-modal-btn"
+                  phx-click="open_return_modal"
+                  disabled={@submissions == []}
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500"
+                >
+                  <.icon name="hero-arrow-uturn-right" class="w-4 h-4" /> Prüfung zurückgeben
+                </button>
               <% end %>
             </div>
           </div>
@@ -277,7 +277,7 @@ defmodule TaskyWeb.ExamLive.Grading do
             <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
               <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
-                  <.icon name="hero-paper-airplane" class="w-5 h-5" />
+                  <.icon name="hero-arrow-uturn-right" class="w-5 h-5" />
                 </div>
                 <h3 class="text-lg font-semibold text-stone-900">Prüfung zurückgeben</h3>
               </div>
@@ -319,7 +319,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                 phx-click="confirm_return"
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
-                <.icon name="hero-paper-airplane" class="w-4 h-4" /> Jetzt zurückgeben
+                <.icon name="hero-arrow-uturn-right" class="w-4 h-4" /> Jetzt zurückgeben
               </button>
             </div>
           </div>

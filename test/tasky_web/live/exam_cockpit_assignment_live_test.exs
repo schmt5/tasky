@@ -19,6 +19,12 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
     conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/cockpit")
   end
 
+  # The assignment UI lives behind the "Lernende zuweisen" header button,
+  # so every assignment test has to open the dialog first.
+  defp open_assign_dialog(view) do
+    view |> element("#add-participants-btn") |> render_click()
+  end
+
   describe "anonymous mode" do
     test "still shows the enrollment link and no assignment card", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam("anonymous")
@@ -26,7 +32,8 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       assert html =~ "Einschreibelink"
       assert html =~ exam.enrollment_token
-      refute html =~ "Teilnehmende zuweisen"
+      refute html =~ "add-participants-btn"
+      refute html =~ "Lernende zuweisen"
     end
 
     test "keeps the participant resume link in the row menu", %{conn: conn} do
@@ -34,19 +41,34 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       submission = exam_submission_fixture(exam)
       {:ok, _view, html} = open_cockpit(conn, teacher, exam)
 
-      assert html =~ "Teilnehmerlink kopieren"
+      assert html =~ "Teilnahmelink kopieren"
       assert html =~ submission.exam_token
     end
   end
 
   describe "assigned mode" do
-    test "shows the assignment card instead of the enrollment link", %{conn: conn} do
+    test "offers the assignment dialog instead of the enrollment link", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam("assigned")
-      {:ok, _view, html} = open_cockpit(conn, teacher, exam)
+      {:ok, view, html} = open_cockpit(conn, teacher, exam)
 
-      assert html =~ "Teilnehmende zuweisen"
+      assert html =~ "Lernende zuweisen"
       refute html =~ "Einschreibelink"
       assert html =~ "Noch keine Teilnehmenden zugewiesen."
+
+      # The assignment card itself only appears once the dialog is opened.
+      refute html =~ "Lernende auswählen"
+      assert open_assign_dialog(view) =~ "Lernende auswählen"
+    end
+
+    test "closes the assignment dialog again", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam("assigned")
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+      assert open_assign_dialog(view) =~ "assign-participants-modal"
+
+      html = view |> element("#close-assign-modal-btn") |> render_click()
+
+      refute html =~ "assign-participants-modal"
     end
 
     # The exam_token is a cookie-less bearer credential for one submission.
@@ -60,16 +82,16 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       refute html =~ "/guest/exam/"
       refute html =~ submission.exam_token
-      refute html =~ "Teilnehmerlink kopieren"
+      refute html =~ "Teilnahmelink kopieren"
       assert html =~ "Zuweisung entfernen"
     end
 
     test "assigns a single student and updates the roster", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam("assigned")
       student = user_fixture(%{role: "student", firstname: "Lena", lastname: "Meier"})
-      {:ok, view, html} = open_cockpit(conn, teacher, exam)
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
 
-      assert html =~ "Lena"
+      assert open_assign_dialog(view) =~ "Lena"
 
       html = view |> element("#assign-student-#{student.id}") |> render_click()
 
@@ -86,6 +108,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       _a = user_fixture(%{role: "student", class_id: class.id})
       _b = user_fixture(%{role: "student", class_id: class.id})
       {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      open_assign_dialog(view)
 
       html =
         view
@@ -106,7 +129,8 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       class = class_fixture()
       inside = user_fixture(%{role: "student", class_id: class.id})
       outside = user_fixture(%{role: "student"})
-      {:ok, view, html} = open_cockpit(conn, teacher, exam)
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      html = open_assign_dialog(view)
 
       assert html =~ inside.email
       assert html =~ outside.email
@@ -126,10 +150,10 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       {:ok, submission} = Exams.assign_student(scope, exam, student.id)
       {:ok, view, _html} = open_cockpit(conn, teacher, exam)
 
-      html = view |> element("#unassign-#{submission.id}") |> render_click()
+      view |> element("#unassign-#{submission.id}") |> render_click()
 
       assert Exams.list_exam_submissions(exam) == []
-      assert html =~ "assign-student-#{student.id}"
+      assert open_assign_dialog(view) =~ "assign-student-#{student.id}"
     end
 
     test "offers no removal once the participant has submitted", %{conn: conn} do
@@ -149,17 +173,106 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       student = user_fixture(%{role: "student"})
       {:ok, view, html} = open_cockpit(conn, teacher, exam)
 
-      assert html =~ "Teilnehmende zuweisen"
+      assert html =~ "Lernende zuweisen"
+      open_assign_dialog(view)
       view |> element("#assign-student-#{student.id}") |> render_click()
 
       assert length(Exams.list_exam_submissions(exam)) == 1
     end
 
-    test "the assignment card disappears once the exam is finished", %{conn: conn} do
+    test "the assignment button disappears once the exam is finished", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam("assigned", "finished")
       {:ok, _view, html} = open_cockpit(conn, teacher, exam)
 
-      refute html =~ "Teilnehmende zuweisen"
+      refute html =~ "add-participants-btn"
+      refute html =~ "Lernende zuweisen"
+      assert html =~ "Prüfung beendet"
+    end
+  end
+
+  # The participant label is computed inside a LiveView stream item, so it only
+  # changes when the stream is re-streamed. Nothing did that on a status change,
+  # which left a running exam reading "Im Warteraum" in the cockpit while the
+  # participants were already working.
+  describe "participant status label" do
+    defp track_present(exam, submission) do
+      {:ok, _ref} =
+        TaskyWeb.Presence.track(
+          self(),
+          "exam_waiting:#{exam.id}",
+          submission.exam_token,
+          %{firstname: submission.firstname, lastname: submission.lastname, in_seb: false}
+        )
+
+      :ok
+    end
+
+    defp assign_present_student(scope, exam) do
+      student = user_fixture(%{role: "student"})
+      {:ok, submission} = Exams.assign_student(scope, exam, student.id)
+      :ok = track_present(exam, submission)
+      submission
+    end
+
+    test "says \"Im Warteraum\" for a present participant before the start", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned")
+      assign_present_student(scope, exam)
+
+      {:ok, _view, html} = open_cockpit(conn, teacher, exam)
+
+      assert html =~ "Im Warteraum"
+      assert html =~ "1 online"
+    end
+
+    test "switches to \"In Bearbeitung\" when the exam is started elsewhere", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned")
+      assign_present_student(scope, exam)
+
+      {:ok, view, html} = open_cockpit(conn, teacher, exam)
+      assert html =~ "Im Warteraum"
+
+      # Started from outside this LiveView — the same path a second teacher tab
+      # or ExamLive.Show takes. The cockpit has to pick it up over PubSub.
+      {:ok, _exam} = Exams.update_exam_status(scope, exam, "running")
+
+      html = render(view)
+      assert html =~ "In Bearbeitung"
+      refute html =~ "Im Warteraum"
+    end
+
+    test "switches when the cockpit itself starts the exam", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned")
+      assign_present_student(scope, exam)
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+      view |> element("button[phx-value-action=start_exam]") |> render_click()
+
+      view
+      |> element("#start-exam-modal button[phx-click=confirm_action]")
+      |> render_click()
+
+      # The label arrives with the broadcast the event handler triggered, which
+      # lands in the mailbox after the event itself — so it is not in the click's
+      # own diff.
+      html = render(view)
+
+      assert html =~ "In Bearbeitung"
+      refute html =~ "Im Warteraum"
+    end
+
+    test "drops the assignment button when the exam is finished elsewhere", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
+      assign_present_student(scope, exam)
+
+      {:ok, view, html} = open_cockpit(conn, teacher, exam)
+      assert html =~ "add-participants-btn"
+
+      {:ok, _exam} = Exams.update_exam_status(scope, exam, "finished")
+
+      html = render(view)
+      refute html =~ "add-participants-btn"
+      refute html =~ "In Bearbeitung"
       assert html =~ "Prüfung beendet"
     end
   end

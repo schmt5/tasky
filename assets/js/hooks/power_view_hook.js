@@ -11,7 +11,7 @@
 //   * Tab focus trap inside the modal
 //   * Escape closes the modal (delegated to the existing close handler)
 //
-// The action buttons ("Erledigen" / "Nächster Teilnehmender") are activated
+// The action buttons ("Erledigen" / "Zum nächsten Teilnehmenden") are activated
 // natively via Enter — no JS handling needed.
 export const PowerView = {
   mounted() {

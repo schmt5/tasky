@@ -94,6 +94,20 @@ defmodule TaskyWeb.GuestExamLiveTest do
       {:ok, _view, html} = open_exam(conn, submission)
       assert html =~ "Abgeben"
     end
+
+    test "after submitting, a logged-in participant is offered the way home", %{
+      conn: conn,
+      student: student,
+      submission: submission
+    } do
+      {:ok, view, _html} = conn |> log_in_user(student) |> open_exam(submission)
+
+      render_click(view, "show_submit_modal")
+      render_hook(view, "submit_check_result", %{"ok" => true})
+      render_click(view, "confirm_submit_exam")
+
+      assert has_element?(view, "#back-home-btn[href=\"/\"]")
+    end
   end
 
   describe "submit flow" do
@@ -157,7 +171,32 @@ defmodule TaskyWeb.GuestExamLiveTest do
       html = render_click(view, "confirm_submit_exam")
 
       assert Exams.get_exam_submission_by_token!(submission.exam_token).submitted
-      assert html =~ "Prüfung abgegeben"
+      assert html =~ "abgegeben.</em>"
+    end
+
+    # The exact submission time was noise on a screen whose job is to say
+    # "you are done" — it lives on in the teacher's cockpit.
+    test "the submitted screen names no submission time", %{conn: conn} do
+      %{submission: submission} = running_exam_with_submission()
+      {:ok, view, _html} = open_exam(conn, submission)
+
+      render_click(view, "show_submit_modal")
+      render_hook(view, "submit_check_result", %{"ok" => true})
+      html = render_click(view, "confirm_submit_exam")
+
+      refute html =~ "Abgegeben am"
+    end
+
+    # An anonymous guest has no home in this app to return to.
+    test "an anonymous participant gets no home button", %{conn: conn} do
+      %{submission: submission} = running_exam_with_submission()
+      {:ok, view, _html} = open_exam(conn, submission)
+
+      render_click(view, "show_submit_modal")
+      render_hook(view, "submit_check_result", %{"ok" => true})
+      render_click(view, "confirm_submit_exam")
+
+      refute has_element?(view, "#back-home-btn")
     end
   end
 

@@ -111,8 +111,10 @@ defmodule TaskyWeb.ExamLive.Show do
                   <%= cond do %>
                     <% @exam.status == "draft" -> %>
                       Die Prüfung ist ein Entwurf. Sobald du bereit bist, kannst du die Durchführung öffnen und dabei festlegen, wer teilnimmt.
+                    <% @exam.status == "open" && @exam.participation_mode == "assigned" -> %>
+                      Die Durchführung ist offen. Die zugewiesenen Lernenden sehen die Prüfung auf ihrem Dashboard und befinden sich im Warteraum.
                     <% @exam.status == "open" -> %>
-                      Die Durchführung ist offen. Lernende können sich mit dem Einschreibeschlüssel anmelden und befinden sich im Warteraum.
+                      Die Durchführung ist offen. Teilnehmende können sich über den Einschreibelink einschreiben und befinden sich im Warteraum.
                     <% @exam.status == "running" -> %>
                       Die Prüfung läuft. Lernende bearbeiten gerade die Prüfung.
                     <% @exam.status == "finished" -> %>

@@ -506,62 +506,53 @@ defmodule TaskyWeb.Student.TaskLive do
             </div>
           <% else %>
             <%!-- Completed – waiting for review --%>
-            <div class="border border-stone-200 rounded-[18px] bg-white shadow-sm overflow-hidden">
-              <div class="flex flex-col items-center text-center px-10 py-16 bg-white">
-                <div class="text-[56px] leading-none mb-1.5 animate-bounce">
-                  {@success_emoji}
-                </div>
+            <.completion_panel emoji={@success_emoji}>
+              <:title>
+                Aufgabe <em class="italic text-emerald-500">eingereicht.</em>
+              </:title>
+              <:subtitle>
+                Sehr gute Arbeit — deine Lehrperson schaut sich deine Antworten an
+                und gibt dir Feedback.
+              </:subtitle>
 
-                <div class="w-6 h-[1.5px] bg-stone-200 rounded-sm my-5"></div>
-
-                <h3 class="font-serif text-[34px] font-normal text-stone-900 leading-tight mb-2.5 animate-[fadeUp_0.4s_0.15s_ease_both]">
-                  Aufgabe <em class="italic text-emerald-500">eingereicht.</em>
-                </h3>
-
-                <p class="text-[14px] text-stone-400 leading-relaxed max-w-[320px] mb-8 animate-[fadeUp_0.4s_0.2s_ease_both]">
-                  Sehr gute Arbeit — deine Lehrperson schaut sich deine Antworten an
-                  und gibt dir Feedback.
+              <%!-- Feedback ohne Verdikt: war hier bisher unsichtbar. --%>
+              <div
+                :if={Tasks.has_feedback?(@submission)}
+                class="w-full max-w-[420px] text-left bg-amber-50 border border-amber-100 rounded-[10px] p-4 mb-8"
+              >
+                <p class="text-[13px] font-semibold text-stone-700 mb-1.5">
+                  Feedback der Lehrperson:
                 </p>
-
-                <%!-- Feedback ohne Verdikt: war hier bisher unsichtbar. --%>
-                <div
-                  :if={Tasks.has_feedback?(@submission)}
-                  class="w-full max-w-[420px] text-left bg-amber-50 border border-amber-100 rounded-[10px] p-4 mb-8"
-                >
-                  <p class="text-[13px] font-semibold text-stone-700 mb-1.5">
-                    Feedback der Lehrperson:
-                  </p>
-                  <p class="text-[14px] text-stone-600 whitespace-pre-wrap leading-relaxed">
-                    {@submission.feedback}
-                  </p>
-                  <p :if={@submission.feedback_at} class="mt-2 text-[12px] text-stone-400">
-                    Feedback vom {format_date(@submission.feedback_at)}
-                  </p>
-                </div>
-
-                <div class="flex items-center gap-3 animate-[fadeUp_0.4s_0.25s_ease_both]">
-                  <.link
-                    navigate={~p"/student/tasks/#{@task.id}?preview=true"}
-                    class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-                  >
-                    <.icon name="hero-eye" class="w-4 h-4" /> Antworten ansehen
-                  </.link>
-                  <.link
-                    :if={@solution_visible}
-                    navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
-                    class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-                  >
-                    <.icon name="hero-key" class="w-4 h-4" /> Musterlösung ansehen
-                  </.link>
-                  <.link
-                    navigate={~p"/student/courses/#{@task.course_id}"}
-                    class="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
-                  >
-                    Weiter <.icon name="hero-arrow-right" class="w-3.5 h-3.5" />
-                  </.link>
-                </div>
+                <p class="text-[14px] text-stone-600 whitespace-pre-wrap leading-relaxed">
+                  {@submission.feedback}
+                </p>
+                <p :if={@submission.feedback_at} class="mt-2 text-[12px] text-stone-400">
+                  Feedback vom {format_date(@submission.feedback_at)}
+                </p>
               </div>
-            </div>
+
+              <:actions>
+                <.link
+                  navigate={~p"/student/tasks/#{@task.id}?preview=true"}
+                  class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+                >
+                  <.icon name="hero-eye" class="w-4 h-4" /> Antworten ansehen
+                </.link>
+                <.link
+                  :if={@solution_visible}
+                  navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
+                  class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+                >
+                  <.icon name="hero-key" class="w-4 h-4" /> Musterlösung ansehen
+                </.link>
+                <.link
+                  navigate={~p"/student/courses/#{@task.course_id}"}
+                  class="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
+                >
+                  Weiter <.icon name="hero-arrow-right" class="w-3.5 h-3.5" />
+                </.link>
+              </:actions>
+            </.completion_panel>
           <% end %>
         </div>
       <% end %>
@@ -761,7 +752,7 @@ defmodule TaskyWeb.Student.TaskLive do
         |> assign(:page_title, task.name)
         |> assign(:task, task)
         |> assign(:preview_mode, preview_mode)
-        |> assign(:success_emoji, random_success_emoji())
+        |> assign(:success_emoji, success_emoji())
         |> assign(:attachments, attachments)
         |> assign(:upload_fields, upload_fields)
         |> assign(:has_files, attachments != [] or upload_fields != [])
@@ -1061,11 +1052,5 @@ defmodule TaskyWeb.Student.TaskLive do
 
   defp format_date(datetime) do
     Calendar.strftime(datetime, "%d.%m.%Y um %H:%M")
-  end
-
-  # Pick a random success emoji to celebrate task completion
-  defp random_success_emoji do
-    success_emojis = ["🎉", "🚀", "⭐", "🎊", "✨", "🏆", "🎯", "💫", "🌟", "👏"]
-    Enum.random(success_emojis)
   end
 end
