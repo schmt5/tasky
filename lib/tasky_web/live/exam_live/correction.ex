@@ -29,7 +29,7 @@ defmodule TaskyWeb.ExamLive.Correction do
             <%= if @parts != [] and @submissions != [] and is_nil(@summary.first_uncorrected) do %>
               <.link
                 navigate={~p"/exams/#{@exam}/correction/grading"}
-                class="inline-flex items-center gap-2 text-sm font-semibold text-white bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 hover:shadow-md px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2"
               >
                 <.icon name="hero-academic-cap" class="w-4 h-4" /> Zur Benotung
               </.link>
@@ -60,9 +60,19 @@ defmodule TaskyWeb.ExamLive.Correction do
             </div>
 
             <div class="shrink-0">
+              <%!-- Steps back to a secondary button once every part is done: the
+                    "Zur Benotung" action in the header is the next step then. --%>
               <.link
-                navigate={~p"/exams/#{@exam}/correction/bulk/#{List.first(@parts).id}"}
-                class="inline-flex items-center gap-2 text-sm font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 hover:shadow-md px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(34,197,94,0.25)] transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-green-600 focus:ring-offset-2"
+                navigate={~p"/exams/#{@exam}/correction/bulk/#{@resume_part_id}"}
+                class={[
+                  "inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
+                  if(is_nil(@summary.first_uncorrected),
+                    do:
+                      "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 focus-visible:ring-stone-400",
+                    else:
+                      "bg-emerald-500 text-white shadow-[0_2px_8px_rgba(16,185,129,0.25)] hover:bg-emerald-600 focus-visible:ring-emerald-600"
+                  )
+                ]}
               >
                 <.icon name="hero-play" class="w-4 h-4" />
                 {cond do
@@ -88,140 +98,145 @@ defmodule TaskyWeb.ExamLive.Correction do
               </p>
             </div>
           <% else %>
-            <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse">
-                <thead>
-                  <tr class="bg-stone-50 border-b border-stone-100">
-                    <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                      Schüler/in
-                    </th>
-                    <th class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                      Punkte
-                    </th>
-                    <th
-                      :if={@has_upload_fields}
-                      class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide"
-                    >
-                      Dateien
-                    </th>
-                    <th
-                      :for={part <- @parts}
-                      scope="col"
-                      class="px-3 py-3 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide min-w-[100px] max-w-[160px]"
-                    >
-                      <span
-                        class="line-clamp-2 text-[12px] font-semibold text-stone-700 normal-case tooltip tooltip-bottom tooltip-delayed"
-                        data-tip={part.label}
+            <%= if @submissions == [] do %>
+              <div class="p-12 text-center text-stone-400">
+                <.icon name="hero-user-group" class="w-10 h-10 mx-auto mb-3 text-stone-300" />
+                <p class="text-sm font-medium">Keine Teilnehmenden vorhanden.</p>
+              </div>
+            <% else %>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="bg-stone-50 border-b border-stone-100">
+                      <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                        Teilnehmer:in
+                      </th>
+                      <th class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                        Punkte
+                      </th>
+                      <th
+                        :if={@has_upload_fields}
+                        class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide"
                       >
-                        {part.label}
-                      </span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-stone-100">
-                  <%!-- Submission Rows --%>
-                  <tr :for={submission <- @submissions} class="group hover:bg-stone-50/50">
-                    <td class="px-6 py-3">
-                      <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0">
-                          {String.first(submission.firstname)}{String.first(submission.lastname)}
-                        </div>
-                        <div class="min-w-0">
-                          <p class="text-sm font-semibold text-stone-800 truncate">
-                            {submission.firstname} {submission.lastname}
-                          </p>
-                          <p class="text-xs text-stone-400 mt-0.5">
-                            <%= if submission.submitted do %>
-                              <span class="text-purple-500 font-medium">Abgegeben</span>
-                            <% else %>
-                              <span class="text-stone-400">Nicht abgegeben</span>
-                            <% end %>
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="px-4 py-3">
-                      <span class="font-mono text-sm font-semibold text-stone-700">
-                        {format_points(total_points(submission))}
-                        <span class="text-stone-400 font-normal">
-                          / {format_points(@total_max_points)}
-                        </span>
-                      </span>
-                    </td>
-                    <td :if={@has_upload_fields} class="px-4 py-3">
-                      <%= case Map.get(@submission_files, submission.id, []) do %>
-                        <% [] -> %>
-                          <span class="text-xs text-stone-300">—</span>
-                        <% files -> %>
-                          <div class="flex flex-col gap-1">
-                            <div
-                              :for={file <- files}
-                              class="tooltip tooltip-right tooltip-delayed w-fit max-w-56"
-                              data-tip={"#{file.original_name} herunterladen"}
-                            >
-                              <a
-                                href={
-                                  ~p"/exams/#{@exam.id}/submissions/#{submission.id}/files/#{file.id}"
-                                }
-                                target="_blank"
-                                rel="noopener"
-                                class="group flex items-center gap-1.5 min-w-0"
-                              >
-                                <.file_badge filename={file.stored_filename} size="sm" />
-                                <span class="text-xs font-medium text-stone-600 truncate group-hover:text-sky-700 transition-colors duration-150">
-                                  {file.upload_field.label}
-                                </span>
-                                <.icon
-                                  name="hero-arrow-down-tray"
-                                  class="w-3.5 h-3.5 text-stone-300 group-hover:text-sky-600 shrink-0 transition-colors duration-150"
-                                />
-                              </a>
-                            </div>
-                          </div>
-                      <% end %>
-                    </td>
-                    <td :for={part <- @parts} class="px-3 py-3">
-                      <div class="flex items-center justify-center gap-2">
-                        <div
-                          class="w-9 h-9 flex items-center justify-center shrink-0 tooltip tooltip-delayed"
-                          data-tip={"#{part.label} ansehen"}
+                        Dateien
+                      </th>
+                      <th
+                        :for={part <- @parts}
+                        scope="col"
+                        class="px-3 py-3 text-center text-xs font-semibold text-stone-500 uppercase tracking-wide min-w-[100px] max-w-[160px]"
+                      >
+                        <span
+                          class="line-clamp-2 text-[12px] font-semibold text-stone-700 normal-case tooltip tooltip-bottom tooltip-delayed"
+                          data-tip={part.label}
                         >
-                          <.link
-                            navigate={
-                              ~p"/exams/#{@exam}/correction/#{submission.id}/parts/#{part.id}"
-                            }
-                            class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-500 border border-stone-200 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150 hover:bg-stone-100 hover:text-stone-700 hover:border-stone-300"
+                          {part.label}
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-stone-100">
+                    <%!-- Submission Rows --%>
+                    <tr :for={submission <- @submissions} class="group hover:bg-stone-50/50">
+                      <td class="px-6 py-3">
+                        <div class="flex items-center gap-3">
+                          <.participant_avatar person={submission} />
+                          <div class="min-w-0">
+                            <p class="text-sm font-semibold text-stone-800 truncate">
+                              {submission.firstname} {submission.lastname}
+                            </p>
+                            <p class="text-xs text-stone-400 mt-0.5">
+                              <%= if submission.submitted do %>
+                                <span class="text-purple-500 font-medium">Abgegeben</span>
+                              <% else %>
+                                <span class="text-stone-400">Nicht abgegeben</span>
+                              <% end %>
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3">
+                        <span class="font-mono text-sm font-semibold text-stone-700">
+                          {format_points(total_points(submission))}
+                          <span class="text-stone-400 font-normal">
+                            / {format_points(@total_max_points)}
+                          </span>
+                        </span>
+                      </td>
+                      <td :if={@has_upload_fields} class="px-4 py-3">
+                        <%= case Map.get(@submission_files, submission.id, []) do %>
+                          <% [] -> %>
+                            <span class="text-xs text-stone-300">—</span>
+                          <% files -> %>
+                            <div class="flex flex-col gap-1">
+                              <div
+                                :for={file <- files}
+                                class="tooltip tooltip-right tooltip-delayed w-fit max-w-56"
+                                data-tip={"#{file.original_name} herunterladen"}
+                              >
+                                <a
+                                  href={
+                                    ~p"/exams/#{@exam.id}/submissions/#{submission.id}/files/#{file.id}"
+                                  }
+                                  target="_blank"
+                                  rel="noopener"
+                                  class="group flex items-center gap-1.5 min-w-0"
+                                >
+                                  <.file_badge filename={file.stored_filename} size="sm" />
+                                  <span class="text-xs font-medium text-stone-600 truncate group-hover:text-sky-700 transition-colors duration-150">
+                                    {file.upload_field.label}
+                                  </span>
+                                  <.icon
+                                    name="hero-arrow-down-tray"
+                                    class="w-3.5 h-3.5 text-stone-300 group-hover:text-sky-600 shrink-0 transition-colors duration-150"
+                                  />
+                                </a>
+                              </div>
+                            </div>
+                        <% end %>
+                      </td>
+                      <td :for={part <- @parts} class="px-3 py-3">
+                        <div class="flex items-center justify-center gap-2">
+                          <div
+                            class="w-9 h-9 flex items-center justify-center shrink-0 tooltip tooltip-delayed"
+                            data-tip={"#{part.label} ansehen"}
                           >
-                            <.icon name="hero-eye" class="w-4 h-4" />
-                          </.link>
-                        </div>
-                        <div class="w-9 h-9 flex items-center justify-center shrink-0">
-                          <%= if part.id in (submission.auto_corrected_parts || []) do %>
-                            <div
-                              class="tooltip tooltip-delayed"
-                              data-tip="Automatisch korrigiert"
+                            <.link
+                              navigate={
+                                ~p"/exams/#{@exam}/correction/#{submission.id}/parts/#{part.id}"
+                              }
+                              class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-stone-500 border border-stone-200 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150 hover:bg-stone-100 hover:text-stone-700 hover:border-stone-300"
                             >
-                              <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500">
-                                <.icon name="hero-sparkles" class="w-5 h-5" />
-                              </span>
-                            </div>
-                          <% end %>
+                              <.icon name="hero-eye" class="w-4 h-4" />
+                            </.link>
+                          </div>
+                          <div class="w-9 h-9 flex items-center justify-center shrink-0">
+                            <%= if part.id in (submission.auto_corrected_parts || []) do %>
+                              <div
+                                class="tooltip tooltip-delayed"
+                                data-tip="Automatisch korrigiert"
+                              >
+                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-500">
+                                  <.icon name="hero-sparkles" class="w-5 h-5" />
+                                </span>
+                              </div>
+                            <% end %>
+                          </div>
+                          <div class="w-9 h-9 flex items-center justify-center shrink-0">
+                            <%= if part.id in submission.corrected_parts do %>
+                              <div class="tooltip tooltip-delayed" data-tip="Als erledigt markiert">
+                                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-600">
+                                  <.icon name="hero-check-badge" class="w-5 h-5" />
+                                </span>
+                              </div>
+                            <% end %>
+                          </div>
                         </div>
-                        <div class="w-9 h-9 flex items-center justify-center shrink-0">
-                          <%= if part.id in submission.corrected_parts do %>
-                            <div class="tooltip tooltip-delayed" data-tip="Als erledigt markiert">
-                              <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-600">
-                                <.icon name="hero-check-badge" class="w-5 h-5" />
-                              </span>
-                            </div>
-                          <% end %>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            <% end %>
           <% end %>
         </div>
       </div>
@@ -251,7 +266,7 @@ defmodule TaskyWeb.ExamLive.Correction do
       </div>
       <div class="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
         <div
-          class="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-500 ease-out"
+          class="h-full bg-amber-500 transition-all duration-500 ease-out"
           style={"width: #{progress_percent(@done, @total)}%"}
         >
         </div>
@@ -281,8 +296,7 @@ defmodule TaskyWeb.ExamLive.Correction do
      |> assign(:page_title, exam.name <> " – Korrektur")
      |> assign(:exam, exam)
      |> assign(:parts, parts)
-     |> assign(:submissions, submissions)
-     |> assign(:summary, correction_summary(parts, submissions))
+     |> assign_progress(submissions)
      |> assign(:bulk_status, :idle)
      |> assign(:has_upload_fields, Exams.list_upload_fields(exam) != [])
      |> assign(:submission_files, submission_files)
@@ -296,10 +310,7 @@ defmodule TaskyWeb.ExamLive.Correction do
         if s.id == submission.id, do: submission, else: s
       end)
 
-    {:noreply,
-     socket
-     |> assign(:submissions, submissions)
-     |> assign(:summary, correction_summary(socket.assigns.parts, submissions))}
+    {:noreply, assign_progress(socket, submissions)}
   end
 
   def handle_info({:bulk_correction_progress, %{done: done, total: total}}, socket) do
@@ -312,8 +323,7 @@ defmodule TaskyWeb.ExamLive.Correction do
     socket =
       socket
       |> assign(:bulk_status, :idle)
-      |> assign(:submissions, submissions)
-      |> assign(:summary, correction_summary(socket.assigns.parts, submissions))
+      |> assign_progress(submissions)
 
     cond do
       # A crashed run reports no jobs but a non-empty error list; without this
@@ -352,6 +362,23 @@ defmodule TaskyWeb.ExamLive.Correction do
   defp progress_percent(done, total), do: round(done * 100 / total)
 
   defp format_points(n), do: Grading.format_points(n)
+
+  defp assign_progress(socket, submissions) do
+    summary = correction_summary(socket.assigns.parts, submissions)
+
+    socket
+    |> assign(:submissions, submissions)
+    |> assign(:summary, summary)
+    |> assign(:resume_part_id, resume_part_id(socket.assigns.parts, summary))
+  end
+
+  # "Korrektur fortsetzen" has to land on the part that is actually still open —
+  # it used to always link to part 1, so continuing a half-corrected exam threw
+  # the teacher back to the beginning.
+  defp resume_part_id([], _summary), do: nil
+
+  defp resume_part_id(_parts, %{first_uncorrected: {_submission, part}}), do: part.id
+  defp resume_part_id(parts, _summary), do: hd(parts).id
 
   defp correction_summary(parts, submissions) do
     total = length(parts) * length(submissions)

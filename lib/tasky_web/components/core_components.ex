@@ -675,6 +675,42 @@ defmodule TaskyWeb.CoreComponents do
   defp initial(name), do: name |> String.first() |> String.upcase()
 
   @doc """
+  Round initials chip for a person — a student, a user or an exam submission.
+
+  One component for every surface that lists people, so the exam path cannot
+  drift away from the course/admin pages again (it had grown its own
+  blue-to-indigo gradient). It also goes through `initials/1`, which survives a
+  missing first or last name — inlined `String.first/1` raises on `nil`.
+
+  ## Examples
+
+      <.participant_avatar person={submission} />
+      <.participant_avatar person={student} size="sm" />
+  """
+  attr :person, :map, required: true
+  attr :size, :string, default: "md", values: ~w(md sm lg)
+  attr :class, :any, default: nil
+
+  def participant_avatar(assigns) do
+    ~H"""
+    <div
+      class={[
+        "rounded-full flex items-center justify-center shrink-0 bg-sky-100 text-sky-700 font-semibold",
+        avatar_size(@size),
+        @class
+      ]}
+      aria-hidden="true"
+    >
+      {initials(@person)}
+    </div>
+    """
+  end
+
+  defp avatar_size("sm"), do: "w-8 h-8 text-[11px]"
+  defp avatar_size("lg"), do: "w-12 h-12 text-[15px]"
+  defp avatar_size(_), do: "w-9 h-9 text-xs"
+
+  @doc """
   Translates an error message using gettext.
   """
   def translate_error({msg, opts}) do

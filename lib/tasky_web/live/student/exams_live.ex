@@ -169,43 +169,61 @@ defmodule TaskyWeb.Student.ExamsLive do
 
   defp returned?(%{exam: exam}), do: Exams.returned?(exam)
 
-  defp state_label(%{submitted: true} = submission) do
-    if returned?(submission), do: "Zurückgegeben", else: "Abgegeben"
+  # One atom per row state, so label, colour and hint can never disagree — they
+  # used to each `case` on the German label, and two different states ("Zugewiesen"
+  # and "Zurückgegeben") happened to render in the same sky.
+  #
+  # The colours line up with the teacher side on purpose: amber = waiting (the
+  # guest waiting room), emerald = running (`exam_status_chip`), purple =
+  # abgegeben (the cockpit chip), sky = zurückgegeben (the grading page).
+  defp state(%{submitted: true} = submission) do
+    if returned?(submission), do: :returned, else: :submitted
   end
 
-  defp state_label(%{exam: %{status: "open"}}), do: "Zugewiesen"
-  defp state_label(%{exam: %{status: "running"}}), do: "Läuft"
+  defp state(%{exam: %{status: "open"}}), do: :assigned
+  defp state(%{exam: %{status: "running"}}), do: :running
+
+  defp state(submission) do
+    if returned?(submission), do: :returned, else: :finished
+  end
 
   defp state_label(submission) do
-    if returned?(submission), do: "Zurückgegeben", else: "Beendet"
+    case state(submission) do
+      :assigned -> "Zugewiesen"
+      :running -> "Läuft"
+      :submitted -> "Abgegeben"
+      :returned -> "Zurückgegeben"
+      :finished -> "Beendet"
+    end
   end
 
   defp state_badge_class(submission) do
-    case state_label(submission) do
-      "Zurückgegeben" -> "bg-sky-100 text-sky-700"
-      "Läuft" -> "bg-green-50 text-green-700"
-      "Zugewiesen" -> "bg-sky-100 text-sky-700"
-      "Abgegeben" -> "bg-amber-50 text-amber-700"
-      _ -> "bg-stone-100 text-stone-600"
+    case state(submission) do
+      :assigned -> "bg-amber-50 text-amber-700"
+      :running -> "bg-emerald-100 text-emerald-700"
+      :submitted -> "bg-purple-100 text-purple-700"
+      :returned -> "bg-sky-100 text-sky-700"
+      :finished -> "bg-stone-100 text-stone-600"
     end
   end
 
   defp state_icon_class(submission) do
-    case state_label(submission) do
-      "Läuft" -> "bg-green-50 text-green-600"
-      "Zugewiesen" -> "bg-sky-100 text-sky-600"
-      "Zurückgegeben" -> "bg-sky-100 text-sky-600"
-      _ -> "bg-stone-100 text-stone-400"
+    case state(submission) do
+      :assigned -> "bg-amber-50 text-amber-600"
+      :running -> "bg-emerald-50 text-emerald-600"
+      :submitted -> "bg-purple-50 text-purple-500"
+      :returned -> "bg-sky-100 text-sky-600"
+      :finished -> "bg-stone-100 text-stone-400"
     end
   end
 
   defp state_hint(submission) do
-    case state_label(submission) do
-      "Zugewiesen" -> "Die Prüfung ist noch nicht gestartet. Du kommst in den Warteraum."
-      "Läuft" -> "Die Prüfung läuft. Du kannst weiterarbeiten."
-      "Abgegeben" -> "Du hast abgegeben. Die Korrektur ist noch nicht freigegeben."
-      "Zurückgegeben" -> "Deine korrigierte Prüfung ist freigegeben."
-      _ -> "Die Prüfung ist beendet."
+    case state(submission) do
+      :assigned -> "Die Prüfung ist noch nicht gestartet. Du kommst in den Warteraum."
+      :running -> "Die Prüfung läuft. Du kannst weiterarbeiten."
+      :submitted -> "Du hast abgegeben. Die Korrektur ist noch nicht freigegeben."
+      :returned -> "Deine korrigierte Prüfung ist freigegeben."
+      :finished -> "Die Prüfung ist beendet."
     end
   end
 end

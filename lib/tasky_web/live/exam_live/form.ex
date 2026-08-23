@@ -63,7 +63,7 @@ defmodule TaskyWeb.ExamLive.Form do
               <div class="flex items-center gap-3 pt-4 border-t border-stone-100">
                 <.button
                   phx-disable-with="Speichert..."
-                  class="inline-flex items-center gap-2 bg-amber-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
+                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
                 >
                   {if @live_action == :new, do: "Prüfung erstellen", else: "Änderungen speichern"}
                 </.button>

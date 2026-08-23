@@ -252,7 +252,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                         )
                       ]}
                     >
-                      {if @is_corrected, do: "Erledigt zurück nehmen", else: "Als erledigt markieren"}
+                      {if @is_corrected, do: "Erledigt zurücknehmen", else: "Als erledigt markieren"}
                     </button>
                   </div>
                 </div>
@@ -475,7 +475,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                       )
                     ]}
                   >
-                    {if @is_corrected, do: "Erledigt zurück nehmen", else: "Als erledigt markieren"}
+                    {if @is_corrected, do: "Erledigt zurücknehmen", else: "Als erledigt markieren"}
                     <kbd class="px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
                       Enter
                     </kbd>

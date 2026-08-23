@@ -32,6 +32,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
             <div class="flex items-center gap-3">
               <.link
+                :if={@exam.status in ["open", "running"]}
                 navigate={~p"/exams/#{@exam}/cockpit/config"}
                 id="cockpit-config-btn"
                 class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]"
@@ -44,9 +45,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   type="button"
                   phx-click="show_confirm"
                   phx-value-action="start_exam"
-                  class="inline-flex items-center gap-2.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 hover:shadow-md text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(16,185,129,0.3)] transition-all duration-150 active:scale-[0.98]"
+                  class="inline-flex items-center gap-2 bg-emerald-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150 hover:bg-emerald-600 active:scale-[0.98]"
                 >
-                  <.icon name="hero-play" class="w-5 h-5" /> Prüfung starten
+                  <.icon name="hero-play" class="w-4 h-4" /> Prüfung starten
                 </button>
               <% end %>
               <%= if @exam.status == "running" do %>
@@ -54,9 +55,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   type="button"
                   phx-click="show_confirm"
                   phx-value-action="end_exam"
-                  class="inline-flex items-center gap-2.5 bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 hover:shadow-md text-white text-sm font-semibold px-6 py-3 rounded-xl shadow-[0_2px_12px_rgba(239,68,68,0.3)] transition-all duration-150 active:scale-[0.98]"
+                  class="inline-flex items-center gap-2 bg-red-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(239,68,68,0.25)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
                 >
-                  <.icon name="hero-stop" class="w-5 h-5" /> Prüfung beenden
+                  <.icon name="hero-stop" class="w-4 h-4" /> Prüfung beenden
                 </button>
               <% end %>
             </div>
@@ -122,9 +123,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     :for={student <- @assignable}
                     class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-stone-50 transition-colors duration-150"
                   >
-                    <div class="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 text-xs font-bold shrink-0">
-                      {initials(student)}
-                    </div>
+                    <.participant_avatar person={student} size="sm" />
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-medium text-stone-800 truncate">
                         {student.firstname} {student.lastname}
@@ -179,10 +178,10 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     type="button"
                     phx-hook=".CopyButton"
                     data-target="enrollment-token-field"
-                    class="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 hover:shadow-md text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 active:scale-[0.98]"
+                    class="inline-flex items-center gap-2 bg-amber-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
                   >
                     <.icon name="hero-clipboard-document" class="w-4 h-4" />
-                    <span>Kopieren</span>
+                    <span class="copy-label">Kopieren</span>
                   </button>
                 </div>
               <% end %>
@@ -276,11 +275,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                 class="flex items-center gap-4 px-4 py-3 -mx-4 rounded-lg hover:bg-stone-50 transition-colors duration-150 group"
               >
                 <div class="relative shrink-0">
-                  <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-sm">
-                    {String.first(submission.firstname)}{String.first(submission.lastname)}
-                  </div>
+                  <.participant_avatar person={submission} />
                   <% {dot_class, label_class, label} =
-                    presence_label(@present, submission, @exam.seb_enabled) %>
+                    presence_label(@present, submission, @exam) %>
                   <div class={[
                     "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white",
                     dot_class
@@ -405,11 +402,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
                   />
                   <p class="text-xs text-amber-700 leading-relaxed">
+                    Der Start lässt sich nicht rückgängig machen.
                     <%= if @assigned_mode? do %>
-                      Der Start lässt sich nicht rückgängig machen. Weitere Lernende kannst du
-                      auch während der Prüfung noch zuweisen.
+                      Weitere Lernende kannst du auch während der Prüfung noch zuweisen.
                     <% else %>
-                      Nach dem Start können sich keine weiteren Lernenden mehr einschreiben.
+                      Wer sich mit dem Einschreibelink später anmeldet, kommt direkt in die
+                      laufende Prüfung.
                     <% end %>
                   </p>
                 </div>
@@ -514,20 +512,43 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               const input = document.getElementById(targetId);
               if (!input) return;
 
-              navigator.clipboard.writeText(input.value).then(() => {
-                const span = this.el.querySelector("span");
-                const original = span.textContent;
-                span.textContent = "Kopiert!";
-                this.el.classList.remove("bg-amber-500", "hover:bg-amber-600");
-                this.el.classList.add("bg-emerald-500", "hover:bg-emerald-600");
-                setTimeout(() => {
+              const IDLE = ["bg-amber-500", "hover:bg-amber-600"];
+              const DONE = ["bg-emerald-500", "hover:bg-emerald-600"];
+              const FAIL = ["bg-stone-500", "hover:bg-stone-600"];
+
+              const span = this.el.querySelector(".copy-label");
+              if (!span) return;
+              const original = this._orig || span.textContent;
+              this._orig = original;
+
+              const flash = (label, classes) => {
+                span.textContent = label;
+                this.el.classList.remove(...IDLE);
+                this.el.classList.add(...classes);
+                if (this._t) clearTimeout(this._t);
+                this._t = setTimeout(() => {
                   span.textContent = original;
-                  this.el.classList.remove("bg-emerald-500", "hover:bg-emerald-600");
-                  this.el.classList.add("bg-amber-500", "hover:bg-amber-600");
+                  this.el.classList.remove(...classes);
+                  this.el.classList.add(...IDLE);
+                  this._t = null;
                 }, 2000);
-              });
+              };
+
+              navigator.clipboard
+                .writeText(input.value)
+                .then(() => flash("Kopiert!", DONE))
+                .catch(() => {
+                  // Clipboard denied (permission, insecure context): select the
+                  // field so Ctrl/Cmd+C still works.
+                  input.focus();
+                  input.select();
+                  flash("Bitte manuell kopieren", FAIL);
+                });
             });
-          }
+          },
+          destroyed() {
+            if (this._t) clearTimeout(this._t);
+          },
         }
       </script>
 
@@ -539,8 +560,8 @@ defmodule TaskyWeb.ExamLive.Cockpit do
             this.el.addEventListener("click", () => {
               const input = document.getElementById(this.el.getAttribute("data-target"));
               if (!input || !label) return;
-              navigator.clipboard.writeText(input.value).then(() => {
-                label.textContent = "Kopiert!";
+              const flash = (text) => {
+                label.textContent = text;
                 label.classList.add("text-sky-600", "font-medium");
                 if (this._t) clearTimeout(this._t);
                 this._t = setTimeout(() => {
@@ -548,7 +569,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   label.classList.remove("text-sky-600", "font-medium");
                   this._t = null;
                 }, 1500);
-              });
+              };
+
+              navigator.clipboard
+                .writeText(input.value)
+                .then(() => flash("Kopiert!"))
+                .catch(() => flash("Kopieren nicht möglich"));
             });
           },
           destroyed() {
@@ -622,12 +648,15 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   end
 
   # Returns {dot_class, label_class, label} for a participant's presence state.
-  # gray = absent, yellow = online but SEB not yet started, green = in SEB /
-  # waiting room (or simply online when SEB is not required).
+  # gray = absent, yellow = online but SEB not yet started, green = present.
+  #
+  # The green label depends on the exam status: before the start everyone sits in
+  # the waiting room, afterwards they are working on the exam. It used to say
+  # "Im Warteraum" for the whole run, which read like nobody had been let in.
   #
   # An absent participant with no answers yet never showed up at all — which is
   # a normal state for an assigned exam, unlike someone who dropped off midway.
-  defp presence_label(present, submission, seb_enabled) do
+  defp presence_label(present, submission, exam) do
     case Map.get(present, submission.exam_token) do
       nil ->
         if never_started?(submission) do
@@ -636,16 +665,20 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           {"bg-stone-300", "text-stone-400", "Abwesend"}
         end
 
-      %{in_seb: true} ->
-        {"bg-emerald-400", "text-emerald-500", "Im Warteraum"}
-
-      %{in_seb: false} when seb_enabled ->
+      %{in_seb: false} when exam.seb_enabled ->
         {"bg-yellow-400", "text-yellow-600", "SEB noch nicht gestartet"}
 
       _ ->
-        {"bg-emerald-400", "text-emerald-500", "Online"}
+        {"bg-emerald-400", "text-emerald-500", present_label(exam.status, submission)}
     end
   end
+
+  # Someone who has already handed in is not working on anything — the row's
+  # "Abgegeben" chip says the rest.
+  defp present_label(_status, %{submitted: true}), do: "Online"
+  defp present_label("open", _submission), do: "Im Warteraum"
+  defp present_label("running", _submission), do: "In Bearbeitung"
+  defp present_label(_status, _submission), do: "Online"
 
   defp never_started?(%{submitted: false, content: content}) when is_map(content),
     do: map_size(content) == 0
@@ -654,12 +687,17 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
   @impl true
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
-    # Re-stream all submissions so the presence indicator updates
+    # Re-stream all submissions so the presence indicator updates. This is also
+    # the only signal a fresh anonymous enrolment produces (EnrollLive redirects
+    # straight into the exam, which joins presence), so the counter has to be
+    # recomputed here too — it used to keep the number from mount while the list
+    # below it grew.
     submissions = Exams.list_exam_submissions(socket.assigns.exam)
 
     {:noreply,
      socket
      |> assign(:present, presence_state(socket.assigns.exam.id))
+     |> assign(:submissions_count, length(submissions))
      |> stream(:submissions, submissions, reset: true)}
   end
 
@@ -802,10 +840,13 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     end
   end
 
-  defp assign_all_message(assigned, 0), do: "#{assigned} Teilnehmende zugewiesen."
+  defp assign_all_message(assigned, 0), do: "#{assigned_word(assigned)} zugewiesen."
 
   defp assign_all_message(assigned, skipped),
-    do: "#{assigned} Teilnehmende zugewiesen, #{skipped} übersprungen."
+    do: "#{assigned_word(assigned)} zugewiesen, #{skipped} übersprungen."
+
+  defp assigned_word(1), do: "1 Teilnehmer:in"
+  defp assigned_word(n), do: "#{n} Teilnehmende"
 
   defp assign_error_message(:not_assigned_mode),
     do: "Diese Durchführung läuft mit anonymen Teilnehmenden."

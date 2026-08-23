@@ -55,7 +55,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                     id="open-return-modal-btn"
                     phx-click="open_return_modal"
                     disabled={@submissions == []}
-                    class="inline-flex items-center gap-2 text-white text-sm font-semibold bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 hover:shadow-md px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500"
                   >
                     <.icon name="hero-paper-airplane" class="w-4 h-4" /> Prüfung zurückgeben
                   </button>
@@ -103,16 +103,18 @@ defmodule TaskyWeb.ExamLive.Grading do
             </p>
           </div>
           <div class="shrink-0 inline-flex items-center gap-2">
-            <button
-              type="button"
-              phx-click="adjust_max_points"
-              phx-value-direction="down"
-              disabled={@effective_max_points <= 0}
-              class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              title="−0.25"
-            >
-              <.icon name="hero-minus" class="w-4 h-4" />
-            </button>
+            <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte weniger">
+              <button
+                type="button"
+                phx-click="adjust_max_points"
+                phx-value-direction="down"
+                disabled={@effective_max_points <= 0}
+                aria-label="0.25 Punkte weniger"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              >
+                <.icon name="hero-minus" class="w-4 h-4" />
+              </button>
+            </div>
             <form phx-change="set_max_points" phx-submit="set_max_points">
               <input
                 id="grading-max-points-input"
@@ -126,15 +128,17 @@ defmodule TaskyWeb.ExamLive.Grading do
                 class="w-24 font-mono text-base text-right text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
               />
             </form>
-            <button
-              type="button"
-              phx-click="adjust_max_points"
-              phx-value-direction="up"
-              class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"
-              title="+0.25"
-            >
-              <.icon name="hero-plus" class="w-4 h-4" />
-            </button>
+            <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte mehr">
+              <button
+                type="button"
+                phx-click="adjust_max_points"
+                phx-value-direction="up"
+                aria-label="0.25 Punkte mehr"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"
+              >
+                <.icon name="hero-plus" class="w-4 h-4" />
+              </button>
+            </div>
             <span class="text-sm text-stone-500 ml-1">Punkte</span>
           </div>
         </div>
@@ -151,7 +155,7 @@ defmodule TaskyWeb.ExamLive.Grading do
               <thead class="bg-stone-50 border-b border-stone-100">
                 <tr>
                   <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                    Lernende:r
+                    Teilnehmer:in
                   </th>
                   <th class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide text-right">
                     Punkte
@@ -168,9 +172,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                 <tr :for={row <- @rows} class="hover:bg-stone-50/50">
                   <td class="px-6 py-3">
                     <div class="flex items-center gap-3">
-                      <div class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0">
-                        {String.first(row.submission.firstname)}{String.first(row.submission.lastname)}
-                      </div>
+                      <.participant_avatar person={row.submission} />
                       <span class="text-sm font-semibold text-stone-800">
                         {row.submission.firstname} {row.submission.lastname}
                       </span>
@@ -246,14 +248,14 @@ defmodule TaskyWeb.ExamLive.Grading do
               <button
                 type="button"
                 phx-click="close_export_modal"
-                class="px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors duration-150"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
               >
                 Abbrechen
               </button>
               <button
                 type="button"
                 phx-click="start_export"
-                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-sky-500 hover:bg-sky-600 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-colors duration-150"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
                 <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
               </button>
@@ -307,7 +309,7 @@ defmodule TaskyWeb.ExamLive.Grading do
               <button
                 type="button"
                 phx-click="close_return_modal"
-                class="px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors duration-150"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
               >
                 Abbrechen
               </button>
@@ -315,7 +317,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                 type="button"
                 id="confirm-return-btn"
                 phx-click="confirm_return"
-                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-sky-500 hover:bg-sky-600 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-colors duration-150"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
                 <.icon name="hero-paper-airplane" class="w-4 h-4" /> Jetzt zurückgeben
               </button>
@@ -326,26 +328,49 @@ defmodule TaskyWeb.ExamLive.Grading do
 
       <%!-- Export progress overlay --%>
       <%= if @export_status do %>
-        <div
-          id="export-overlay"
-          class="fixed inset-0 z-50 bg-stone-900/50 flex items-center justify-center"
-        >
-          <div class="bg-white rounded-[16px] shadow-2xl p-6 w-full max-w-md mx-4">
-            <h3 class="text-lg font-semibold text-stone-900 mb-1">PDFs werden erstellt …</h3>
-            <p class="text-sm text-stone-500 mb-4 tabular-nums">
-              <span class="font-semibold text-stone-700">{@export_status.done}</span>
-              von <span class="font-semibold text-stone-700">{@export_status.total}</span>
-              Teilnehmer:innen verarbeitet
-            </p>
-            <div class="h-2 bg-stone-100 rounded-full overflow-hidden">
+        <dialog id="export-overlay" class="modal modal-open">
+          <div class="modal-backdrop bg-stone-900/50"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                  <.icon
+                    name="hero-arrow-path"
+                    class="w-5 h-5 text-sky-600 motion-safe:animate-spin"
+                  />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">PDFs werden erstellt …</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">
+                    Das Fenster schliesst sich automatisch.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <div class="flex items-center justify-between text-sm text-stone-600">
+                <span>Teilnehmer:innen</span>
+                <span class="font-semibold text-stone-800 tabular-nums">
+                  {@export_status.done}/{@export_status.total}
+                </span>
+              </div>
               <div
-                class="h-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-500"
-                style={"width: #{export_percent(@export_status)}%"}
+                class="mt-3 h-2 w-full rounded-full bg-stone-100 overflow-hidden"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax={@export_status.total}
+                aria-valuenow={@export_status.done}
+                aria-label="Fortschritt beim Erstellen der PDFs"
               >
+                <div
+                  class="h-full rounded-full bg-sky-500 transition-[width] duration-300"
+                  style={"width: #{export_percent(@export_status)}%"}
+                >
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </dialog>
       <% end %>
     </Layouts.app>
     """
@@ -362,17 +387,19 @@ defmodule TaskyWeb.ExamLive.Grading do
 
     ~H"""
     <div class="inline-flex items-center justify-end gap-1.5 w-full">
-      <button
-        type="button"
-        phx-click="adjust_mark"
-        phx-value-submission-id={@row.submission.id}
-        phx-value-direction="down"
-        disabled={not @can_dec}
-        class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-        title="−0.25"
-      >
-        <.icon name="hero-minus" class="w-3.5 h-3.5" />
-      </button>
+      <div class="tooltip tooltip-left tooltip-delayed" data-tip="Note um 0.25 senken">
+        <button
+          type="button"
+          phx-click="adjust_mark"
+          phx-value-submission-id={@row.submission.id}
+          phx-value-direction="down"
+          disabled={not @can_dec}
+          aria-label="Note um 0.25 senken"
+          class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        >
+          <.icon name="hero-minus" class="w-3.5 h-3.5" />
+        </button>
+      </div>
       <form
         phx-change="set_mark"
         phx-submit="set_mark"
@@ -391,17 +418,19 @@ defmodule TaskyWeb.ExamLive.Grading do
           class="w-16 font-mono text-sm font-semibold text-center text-stone-700 bg-stone-50 border border-stone-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
         />
       </form>
-      <button
-        type="button"
-        phx-click="adjust_mark"
-        phx-value-submission-id={@row.submission.id}
-        phx-value-direction="up"
-        disabled={not @can_inc}
-        class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-        title="+0.25"
-      >
-        <.icon name="hero-plus" class="w-3.5 h-3.5" />
-      </button>
+      <div class="tooltip tooltip-left tooltip-delayed" data-tip="Note um 0.25 erhöhen">
+        <button
+          type="button"
+          phx-click="adjust_mark"
+          phx-value-submission-id={@row.submission.id}
+          phx-value-direction="up"
+          disabled={not @can_inc}
+          aria-label="Note um 0.25 erhöhen"
+          class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        >
+          <.icon name="hero-plus" class="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
     """
   end

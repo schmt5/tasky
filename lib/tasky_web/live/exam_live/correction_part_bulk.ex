@@ -125,10 +125,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     ~H"""
     <div class="overflow-x-auto -mx-1 px-1 mb-4">
       <ol class="flex items-stretch gap-2 whitespace-nowrap">
-        <li :for={{part, idx} <- Enum.with_index(@parts)}>
+        <li
+          :for={{part, idx} <- Enum.with_index(@parts)}
+          class="tooltip tooltip-bottom tooltip-delayed"
+          data-tip={part.label}
+        >
           <.link
             navigate={~p"/exams/#{@exam}/correction/bulk/#{part.id}"}
-            title={part.label}
             class={[
               "inline-flex items-center gap-3 px-3 py-2 rounded-[10px] border-2 transition-all duration-150 max-w-[14rem]",
               part_chip_classes(
@@ -574,7 +577,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
       idx ->
         current_part = Enum.at(parts, idx)
-        prev_part_id = if idx > 0, do: Enum.at(parts, idx - 1).id, else: nil
         next_part_id = if idx + 1 < length(parts), do: Enum.at(parts, idx + 1).id, else: nil
 
         submissions = Exams.list_exam_submissions(exam)
@@ -592,7 +594,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:current_part_index, idx)
          |> assign(:parts_done, compute_parts_done(submissions, parts))
          |> assign(:is_corrected, part_corrected?(submissions, part_id))
-         |> assign(:prev_part_id, prev_part_id)
          |> assign(:next_part_id, next_part_id)
          |> assign(:answer_blocks, answer_blocks)
          |> assign(:manual_input, nil)
@@ -796,9 +797,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
   defp half_of(max), do: Tasky.Grading.half_of(max)
 
+  # Manual points go through `Grading.marker_verdict/2` — the same mapping the
+  # answer markers use — so a manual 0 lands in "0 Punkte" and a manual full
+  # score in "Volle Punkte". They all used to be counted as "Manuell", which put
+  # the summary bar at odds with both the awarded points and the block markers.
   defp block_totals(block) do
     Enum.reduce(block.groups, %{correct: 0, half: 0, wrong: 0, total: 0}, fn g, acc ->
-      v = effective_verdict(g)
+      v = g |> effective_verdict() |> Grading.marker_verdict(block.max_points)
 
       acc
       |> Map.update!(:total, &(&1 + g.count))
@@ -821,7 +826,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
   defp verdict_atom("correct"), do: :correct
   defp verdict_atom("half"), do: :half
-  # manual points land in the middle ("Manuell") bucket of the summary bar
+  # Belt and braces: `marker_verdict/2` only returns a number when it was handed
+  # one together with an unknown block maximum.
   defp verdict_atom(v) when is_number(v), do: :half
   defp verdict_atom(_), do: :wrong
 

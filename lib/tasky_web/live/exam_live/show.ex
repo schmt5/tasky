@@ -141,18 +141,29 @@ defmodule TaskyWeb.ExamLive.Show do
                     </.link>
                   </div>
                 <% end %>
+                <%!-- One primary action per row: as long as parts are open the
+                      correction is the next step; once every part is corrected the
+                      grading takes over and the correction becomes a revisit. --%>
                 <%= if @exam.status == "finished" do %>
                   <div class="mt-4 flex items-center gap-3">
                     <.link
                       navigate={~p"/exams/#{@exam}/correction"}
-                      class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                      class={[
+                        "inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-[10px] transition-all duration-150 active:scale-[0.98]",
+                        if(@grading_available,
+                          do:
+                            "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700",
+                          else:
+                            "bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600"
+                        )
+                      ]}
                     >
                       <.icon name="hero-chat-bubble-left-ellipsis" class="w-4 h-4" /> Zur Korrektur
                     </.link>
                     <.link
                       :if={@grading_available}
                       navigate={~p"/exams/#{@exam}/correction/grading"}
-                      class="inline-flex items-center gap-2 text-white text-sm font-semibold bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 hover:shadow-md px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 active:scale-[0.98]"
+                      class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
                     >
                       <.icon name="hero-academic-cap" class="w-4 h-4" /> Zur Benotung
                     </.link>

@@ -2,6 +2,9 @@ defmodule Tasky.Exams.ExamSubmission do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @typedoc "A persisted ExamSubmission row."
+  @type t :: %__MODULE__{}
+
   schema "exam_submissions" do
     field :firstname, :string
     field :lastname, :string

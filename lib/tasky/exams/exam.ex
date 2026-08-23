@@ -2,6 +2,9 @@ defmodule Tasky.Exams.Exam do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @typedoc "A persisted Exam row."
+  @type t :: %__MODULE__{}
+
   schema "exams" do
     field :name, :string
     field :content, :map, default: %{}

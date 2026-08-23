@@ -9,12 +9,12 @@ defmodule TaskyWeb.ExamLive.Index do
     <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams"}>
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
-          <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-amber-500 mb-3">
+          <div class="text-[11px] tracking-[0.1em] uppercase font-semibold text-sky-500 mb-3">
             Prüfungsverwaltung
           </div>
 
           <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] mb-3 font-normal">
-            Meine <em class="italic text-amber-500">Prüfungen</em>
+            Meine <em class="italic text-sky-500">Prüfungen</em>
           </h1>
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
@@ -47,7 +47,7 @@ defmodule TaskyWeb.ExamLive.Index do
           >
             <.link
               navigate={~p"/exams/#{exam}"}
-              class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-amber-100 text-amber-600"
+              class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 mt-0.5 bg-sky-100 text-sky-600"
             >
               <.icon name="hero-document-text" class="w-5 h-5" />
             </.link>
@@ -58,27 +58,7 @@ defmodule TaskyWeb.ExamLive.Index do
               <div class="flex items-center gap-2.5 flex-wrap">
                 <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{exam.name}</h3>
 
-                <span class={[
-                  "inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em]",
-                  exam.status == "draft" && "bg-amber-100 text-amber-700",
-                  exam.status == "open" && "bg-sky-100 text-sky-700",
-                  exam.status == "running" && "bg-emerald-100 text-emerald-700",
-                  exam.status == "finished" && "bg-purple-100 text-purple-700",
-                  exam.status == "archived" && "bg-stone-100 text-stone-500"
-                ]}>
-                  <%= cond do %>
-                    <% exam.status == "open" -> %>
-                      Offen
-                    <% exam.status == "running" -> %>
-                      Laufend
-                    <% exam.status == "finished" -> %>
-                      Beendet
-                    <% exam.status == "archived" -> %>
-                      Archiviert
-                    <% true -> %>
-                      Entwurf
-                  <% end %>
-                </span>
+                <.exam_status_chip status={exam.status} />
               </div>
 
               <div class="flex items-center gap-2 mt-1">
@@ -105,7 +85,7 @@ defmodule TaskyWeb.ExamLive.Index do
         </ul>
 
         <div :if={!@has_exams} class="flex flex-col items-center text-center px-8 py-16 bg-white">
-          <div class="w-14 h-14 rounded-[14px] bg-amber-50 flex items-center justify-center text-amber-400 mb-5">
+          <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
             <.icon name="hero-document-text" class="w-6 h-6" />
           </div>
 

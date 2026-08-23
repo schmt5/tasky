@@ -18,8 +18,15 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
   /** Teacher authoring the exam/task content. */
   author: {},
 
-  /** Student answering: content locked, only answer fields editable. */
-  student: { hideAnswers: true, lockContent: true },
+  /**
+   * Student answering: content locked, only answer fields editable.
+   *
+   * `hideQuestion` matters here: the "Frage" button inserts a question heading,
+   * which is the teacher's authoring control. On a locked document it either
+   * does nothing or turns the learner's own answer into a heading — it has no
+   * business being in the exam toolbar.
+   */
+  student: { hideAnswers: true, hideQuestion: true, lockContent: true },
 
   /** One sample-solution part editor under the shared toolbar. */
   solution: {
