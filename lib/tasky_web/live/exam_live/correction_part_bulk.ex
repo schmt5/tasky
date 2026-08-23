@@ -52,7 +52,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           <div id="bulk-power-keys" phx-hook="BulkPowerKeys">
             <div class="mt-4">
               <%= if @is_multi_input do %>
-                <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] divide-y divide-stone-200">
+                <div class="space-y-4">
                   <%= for block <- @answer_blocks do %>
                     {render_block_section(assigns, block)}
                   <% end %>
@@ -287,34 +287,30 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     assigns = assign(assigns, :block, block)
 
     ~H"""
-    <div class="px-5 py-4 space-y-2">
-      <div class="flex items-center gap-2 flex-wrap pb-1">
-        <span class="text-xs font-mono text-stone-400">
-          {roman(@block.index + 1)}.
-        </span>
-        <span class="text-base font-semibold text-stone-800">
-          {@block.label || "Antwort #{@block.index + 1}"}
-        </span>
-        <span
-          :if={@block.max_points}
-          class="inline-flex items-center text-xs font-semibold text-stone-600 bg-stone-100 border border-stone-200 rounded-full px-2.5 py-0.5"
-        >
+    <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-5 space-y-2">
+      <div class="pb-1">
+        <div class="text-lg font-bold text-stone-900">
+          {block_heading(@block)}
+        </div>
+        <div :if={@block.max_points} class="text-xs font-medium text-stone-500 mt-0.5">
           max. {format_max_points(@block.max_points)} P.
-        </span>
-        <%= if @block.sample_answers != [] do %>
-          <.icon name="hero-arrow-right" class="w-3.5 h-3.5 text-stone-300 shrink-0" />
-          <%= for sample <- @block.sample_answers do %>
-            <span class="inline-flex items-center text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5">
-              {sample}
-            </span>
-          <% end %>
-        <% end %>
+        </div>
       </div>
       <%= for group <- @block.groups do %>
         {render_group_card(assigns, @block, group)}
       <% end %>
     </div>
     """
+  end
+
+  # "fliegen → fly" — label and sample answers as one equal-weight heading.
+  defp block_heading(block) do
+    label = block.label || "Antwort #{block.index + 1}"
+
+    case block.sample_answers do
+      [] -> label
+      samples -> label <> " → " <> Enum.join(samples, " / ")
+    end
   end
 
   defp render_groups_card(assigns, block) do
@@ -386,7 +382,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         <div class="text-xs text-stone-500 mt-0.5">
           {@group.count}× abgegeben<span :if={@awarded != nil and @block.max_points}> · {format_max_points(@awarded)} / {format_max_points(@block.max_points)} P.</span>
         </div>
-        <div class="text-xs text-stone-500 mt-2 pt-2 border-t border-dashed border-stone-200">
+        <div class="text-xs text-stone-500 mt-2">
           {Enum.map_join(@group.students, " · ", &student_name/1)}
         </div>
       </div>
@@ -410,7 +406,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         verdict="correct"
         active={@effective == "correct"}
         label={full_points_label(@block.max_points)}
-        icon="hero-check"
         kbd_label="J"
         active_class="bg-green-500 text-white shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
       />
@@ -428,7 +423,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           )
         ]}
       >
-        <.icon name="hero-pencil" class="w-3.5 h-3.5" />
         <span>{manual_label(@effective, @block.max_points)}</span>
         <kbd class={[
           "px-1.5 py-0.5 rounded font-mono text-[10px] border",
@@ -446,7 +440,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         verdict="wrong"
         active={@effective == "wrong"}
         label="0 Punkte"
-        icon="hero-x-mark"
         kbd_label="L"
         active_class="bg-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
       />
@@ -529,7 +522,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   attr :verdict, :string, required: true
   attr :active, :boolean, required: true
   attr :label, :string, required: true
-  attr :icon, :string, required: true
   attr :kbd_label, :string, required: true
   attr :active_class, :string, required: true
 
@@ -547,7 +539,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         if(@active, do: @active_class, else: "text-stone-500 hover:bg-stone-50 hover:text-stone-700")
       ]}
     >
-      <.icon name={@icon} class="w-3.5 h-3.5" />
       <span>{@label}</span>
       <kbd class={[
         "px-1.5 py-0.5 rounded font-mono text-[10px] border",
@@ -844,13 +835,4 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   defp student_name(%{lastname: nil, firstname: nil}), do: "—"
   defp student_name(%{lastname: nil, firstname: f}), do: f
   defp student_name(%{lastname: l}), do: l
-
-  defp roman(n) when n in 1..20 do
-    Enum.at(
-      ~w(i ii iii iv v vi vii viii ix x xi xii xiii xiv xv xvi xvii xviii xix xx),
-      n - 1
-    )
-  end
-
-  defp roman(n), do: Integer.to_string(n)
 end
