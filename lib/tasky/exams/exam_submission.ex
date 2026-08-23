@@ -21,6 +21,10 @@ defmodule Tasky.Exams.ExamSubmission do
     field :mark, :float
 
     belongs_to :exam, Tasky.Exams.Exam
+    # Set for assigned participants, nil for anonymous ones. Also nil again
+    # once the account behind it is deleted — the copied name and email are
+    # what keep such a submission gradable.
+    belongs_to :user, Tasky.Accounts.User
 
     timestamps(type: :utc_datetime)
   end
@@ -50,9 +54,42 @@ defmodule Tasky.Exams.ExamSubmission do
   end
 
   @doc false
+  # The anonymous self-enrolment changeset, fed straight from EnrollLive params.
+  # :user_id is deliberately absent — a user_id in that payload would be a
+  # privilege escalation. Assignments go through assignment_changeset/2.
   def changeset(exam_submission, attrs) do
     exam_submission
     |> cast(attrs, [:firstname, :lastname, :email])
+    |> validate_participant()
+    |> unique_constraint([:exam_id, :email],
+      name: :exam_submissions_exam_id_email_index,
+      message: "ist für diese Prüfung bereits eingeschrieben"
+    )
+  end
+
+  @doc """
+  Assigns a logged-in participant. Name and email are copied from the account
+  so the submission stays gradable after an account deletion nilifies
+  `user_id`.
+  """
+  def assignment_changeset(exam_submission, attrs) do
+    exam_submission
+    |> cast(attrs, [:user_id, :firstname, :lastname, :email])
+    |> validate_required([:user_id], message: "darf nicht leer sein")
+    |> validate_participant()
+    |> unique_constraint([:exam_id, :user_id],
+      name: :exam_submissions_exam_id_user_id_index,
+      message: "ist dieser Prüfung bereits zugewiesen"
+    )
+    |> unique_constraint([:exam_id, :email],
+      name: :exam_submissions_exam_id_email_index,
+      message: "ist dieser Prüfung bereits zugewiesen"
+    )
+    |> foreign_key_constraint(:user_id)
+  end
+
+  defp validate_participant(changeset) do
+    changeset
     |> validate_required([:firstname, :lastname, :email],
       message: "darf nicht leer sein"
     )
@@ -73,10 +110,6 @@ defmodule Tasky.Exams.ExamSubmission do
     )
     |> put_exam_token()
     |> unique_constraint(:exam_token)
-    |> unique_constraint([:exam_id, :email],
-      name: :exam_submissions_exam_id_email_index,
-      message: "ist für diese Prüfung bereits eingeschrieben"
-    )
   end
 
   defp put_exam_token(changeset) do

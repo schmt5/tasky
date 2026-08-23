@@ -7,6 +7,10 @@ defmodule Tasky.ExamsTest do
 
   defp enrollment_attrs, do: valid_enrollment_attrs()
 
+  defp teacher_scope(exam) do
+    Tasky.Accounts.Scope.for_user(Tasky.Accounts.get_user!(exam.teacher_id))
+  end
+
   defp sample_doc(text) do
     %{
       "type" => "doc",
@@ -97,9 +101,13 @@ defmodule Tasky.ExamsTest do
 
       assert {:error, :unauthorized} = Exams.update_exam(other, exam, %{name: "Übernommen"})
       assert {:error, :unauthorized} = Exams.delete_exam(other, exam)
-      assert {:error, :unauthorized} = Exams.open_exam_session(other, exam)
+      assert {:error, :unauthorized} = Exams.open_exam_session(other, exam, "anonymous")
       assert {:error, :unauthorized} = Exams.save_exam_structure(other, exam, %{"type" => "doc"})
       assert {:error, :unauthorized} = Exams.update_grading_max_points(other, exam, 10.0)
+      assert {:error, :unauthorized} = Exams.assign_student(other, exam, 1)
+      assert {:error, :unauthorized} = Exams.assign_students_from_class(other, exam, 1)
+      assert {:error, :unauthorized} = Exams.return_exam(other, exam, %{})
+      assert {:error, :unauthorized} = Exams.withdraw_exam_return(other, exam)
     end
 
     test "a foreign teacher cannot grade another teacher's submission" do
@@ -178,6 +186,263 @@ defmodule Tasky.ExamsTest do
       for _ <- 1..100 do
         assert Exams.generate_quit_password() =~ ~r/^[1-9]\d{5}$/
       end
+    end
+  end
+
+  describe "participation modes" do
+    test "an anonymous session mints an enrollment token" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "open")
+
+      assert exam.participation_mode == "anonymous"
+      assert exam.enrollment_token
+      assert Exams.anonymous_mode?(exam)
+      refute Exams.assigned_mode?(exam)
+    end
+
+    test "an assigned session never mints an enrollment token" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+
+      assert exam.participation_mode == "assigned"
+      refute exam.enrollment_token
+      assert Exams.assigned_mode?(exam)
+    end
+
+    test "participation_mode is not mass-assignable" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "open")
+
+      {:ok, updated} = Exams.update_exam(:system, exam, %{"participation_mode" => "assigned"})
+
+      assert updated.participation_mode == "anonymous"
+    end
+
+    test "an unknown mode is refused" do
+      exam = exam_fixture()
+      scope = teacher_scope(exam)
+
+      assert_raise FunctionClauseError, fn ->
+        Exams.open_exam_session(scope, exam, "irgendwas")
+      end
+    end
+
+    test "self-enrolment is refused on an assigned exam" do
+      exam = exam_fixture(participation_mode: "assigned", status: "running")
+
+      assert {:error, :exam_not_open} =
+               Exams.create_exam_submission(exam, enrollment_attrs())
+    end
+
+    test "an assigned exam is not reachable through an enrollment token" do
+      anonymous = exam_fixture(participation_mode: "anonymous", status: "open")
+      token = anonymous.enrollment_token
+
+      # Same token value, but the exam now runs in assigned mode.
+      {:ok, _} =
+        anonymous
+        |> Ecto.Changeset.change(%{participation_mode: "assigned"})
+        |> Tasky.Repo.update()
+
+      refute Exams.get_exam_by_enrollment_token(token)
+    end
+  end
+
+  describe "assign_student/3" do
+    import Tasky.AccountsFixtures
+
+    test "creates the submission right away, copying name and email" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      student = user_fixture(%{role: "student", firstname: "Lena", lastname: "Meier"})
+
+      assert {:ok, submission} = Exams.assign_student(teacher_scope(exam), exam, student.id)
+      assert submission.user_id == student.id
+      assert submission.firstname == "Lena"
+      assert submission.lastname == "Meier"
+      assert submission.email == student.email
+      assert submission.exam_token
+      refute submission.submitted
+    end
+
+    test "refuses a second assignment of the same student" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      student = user_fixture(%{role: "student"})
+      scope = teacher_scope(exam)
+
+      assert {:ok, _} = Exams.assign_student(scope, exam, student.id)
+      assert {:error, %Ecto.Changeset{}} = Exams.assign_student(scope, exam, student.id)
+    end
+
+    test "refuses non-students" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      admin = user_fixture(%{role: "admin"})
+
+      assert {:error, :not_a_student} = Exams.assign_student(teacher_scope(exam), exam, admin.id)
+    end
+
+    test "refuses an anonymous-mode exam" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "open")
+      student = user_fixture(%{role: "student"})
+
+      assert {:error, :not_assigned_mode} =
+               Exams.assign_student(teacher_scope(exam), exam, student.id)
+    end
+
+    test "refuses a draft exam" do
+      exam = exam_fixture()
+      student = user_fixture(%{role: "student"})
+
+      # A draft has no mode yet, so the mode gate is what fires first.
+      assert {:error, :not_assigned_mode} =
+               Exams.assign_student(teacher_scope(exam), exam, student.id)
+    end
+
+    test "assignment during a running exam is allowed" do
+      exam = exam_fixture(participation_mode: "assigned", status: "running")
+      student = user_fixture(%{role: "student"})
+
+      assert {:ok, _} = Exams.assign_student(teacher_scope(exam), exam, student.id)
+    end
+  end
+
+  describe "assign_students_from_class/3 and list_assignable_students/2" do
+    import Tasky.AccountsFixtures
+    import Tasky.ClassesFixtures
+
+    test "assigns the whole class and skips those already assigned" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      scope = teacher_scope(exam)
+      class = class_fixture()
+      a = user_fixture(%{role: "student", class_id: class.id})
+      b = user_fixture(%{role: "student", class_id: class.id})
+      _elsewhere = user_fixture(%{role: "student"})
+
+      assert Enum.sort(Enum.map(Exams.list_assignable_students(exam, class.id), & &1.id)) ==
+               Enum.sort([a.id, b.id])
+
+      assert {:ok, %{assigned: 2, skipped: 0}} =
+               Exams.assign_students_from_class(scope, exam, class.id)
+
+      assert Exams.list_assignable_students(exam, class.id) == []
+      assert length(Exams.list_exam_submissions(exam)) == 2
+
+      # Nothing left to assign — and no error either.
+      assert {:ok, %{assigned: 0, skipped: 0}} =
+               Exams.assign_students_from_class(scope, exam, class.id)
+    end
+
+    test "already-assigned students drop out of the candidate list" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      student = user_fixture(%{role: "student"})
+
+      assert student.id in Enum.map(Exams.list_assignable_students(exam), & &1.id)
+      {:ok, _} = Exams.assign_student(teacher_scope(exam), exam, student.id)
+      refute student.id in Enum.map(Exams.list_assignable_students(exam), & &1.id)
+    end
+  end
+
+  describe "unassign_student/3" do
+    import Tasky.AccountsFixtures
+
+    test "removes the assignment" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      student = user_fixture(%{role: "student"})
+      scope = teacher_scope(exam)
+      {:ok, submission} = Exams.assign_student(scope, exam, student.id)
+
+      assert {:ok, _} = Exams.unassign_student(scope, exam, submission)
+      assert Exams.list_exam_submissions(exam) == []
+      assert student.id in Enum.map(Exams.list_assignable_students(exam), & &1.id)
+    end
+
+    test "refuses once the participant has submitted" do
+      exam = exam_fixture(participation_mode: "assigned", status: "running")
+      student = user_fixture(%{role: "student"})
+      scope = teacher_scope(exam)
+      {:ok, submission} = Exams.assign_student(scope, exam, student.id)
+      {:ok, submission} = Exams.submit_exam_submission(submission)
+
+      assert {:error, :already_submitted} = Exams.unassign_student(scope, exam, submission)
+    end
+
+    test "refuses an anonymous submission" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "open")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      assert {:error, :not_assigned} =
+               Exams.unassign_student(teacher_scope(exam), exam, submission)
+    end
+  end
+
+  describe "list_assigned_exams/1 and get_submission_for_user/2" do
+    import Tasky.AccountsFixtures
+
+    test "a student sees only their own assignments" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      mine = user_fixture(%{role: "student"})
+      theirs = user_fixture(%{role: "student"})
+      scope = teacher_scope(exam)
+      {:ok, own} = Exams.assign_student(scope, exam, mine.id)
+      {:ok, _other} = Exams.assign_student(scope, exam, theirs.id)
+
+      assert [listed] = Exams.list_assigned_exams(user_scope_fixture(mine))
+      assert listed.id == own.id
+      assert listed.exam.id == exam.id
+      assert listed.exam.teacher
+
+      assert Exams.get_submission_for_user(exam.id, mine.id).id == own.id
+      refute Exams.get_submission_for_user(exam.id, user_fixture(%{role: "student"}).id)
+    end
+
+    test "anonymous exams never show up" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "open")
+      {:ok, _} = Exams.create_exam_submission(exam, enrollment_attrs())
+      student = user_fixture(%{role: "student"})
+
+      assert Exams.list_assigned_exams(user_scope_fixture(student)) == []
+    end
+
+    test "teachers get nothing" do
+      teacher = user_fixture(%{role: "teacher"})
+      assert Exams.list_assigned_exams(user_scope_fixture(teacher)) == []
+    end
+  end
+
+  describe "return_exam/3 and withdraw_exam_return/2" do
+    test "stores the flags and can be withdrawn" do
+      exam = exam_fixture(participation_mode: "assigned", status: "finished")
+      scope = teacher_scope(exam)
+
+      refute Exams.returned?(exam)
+
+      assert {:ok, returned} =
+               Exams.return_exam(scope, exam, %{
+                 show_points_and_mark: true,
+                 show_content: true,
+                 show_correction: true,
+                 show_sample_solution: false
+               })
+
+      assert Exams.returned?(returned)
+      assert returned.returned_at
+      assert returned.return_show_points_and_mark
+      assert returned.return_show_content
+      assert returned.return_show_correction
+      refute returned.return_show_sample_solution
+
+      assert {:ok, withdrawn} = Exams.withdraw_exam_return(scope, returned)
+      refute Exams.returned?(withdrawn)
+      # The flags survive, so they pre-fill the modal on a re-return.
+      assert withdrawn.return_show_correction
+    end
+
+    test "refuses an unfinished exam" do
+      exam = exam_fixture(participation_mode: "assigned", status: "running")
+
+      assert {:error, :exam_not_finished} = Exams.return_exam(teacher_scope(exam), exam, %{})
+    end
+
+    test "refuses an anonymous exam" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "finished")
+
+      assert {:error, :not_assigned_mode} = Exams.return_exam(teacher_scope(exam), exam, %{})
     end
   end
 end

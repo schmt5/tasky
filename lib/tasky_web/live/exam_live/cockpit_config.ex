@@ -3,6 +3,7 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
 
   alias Tasky.Exams
   alias Tasky.Exams.Exam
+  alias TaskyWeb.ExamComponents
 
   @impl true
   def render(assigns) do
@@ -12,27 +13,40 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="flex items-center justify-between mb-3">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-              %{label: "Cockpit", navigate: ~p"/exams/#{@exam}/cockpit"},
-              %{label: "Konfiguration"}
-            ]} />
+            <.breadcrumbs crumbs={@crumbs} />
           </div>
           <div class="flex items-center gap-3 mb-3">
-            <.back_button
-              navigate={~p"/exams/#{@exam}/cockpit"}
-              tooltip="Zurück zum Cockpit"
-            />
+            <.back_button navigate={@back_to} tooltip={@back_tooltip} />
             <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
-              Konfiguration
+              {@heading}
             </h1>
           </div>
         </div>
       </div>
 
-      <div class="max-w-6xl mx-auto px-8 pb-8">
-        <div class="max-w-2xl">
+      <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
+        <%!-- Participation Mode Card --%>
+        <div class="max-w-3xl bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+          <div class="p-6 border-b border-stone-100">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                <.icon name="hero-user-group" class="w-5 h-5 text-sky-500" />
+              </div>
+              <div>
+                <h2 class="text-lg font-semibold text-stone-800">Teilnehmende</h2>
+                <p class="text-sm text-stone-500">Wer an dieser Durchführung teilnimmt</p>
+              </div>
+            </div>
+          </div>
+          <div class="p-6">
+            <ExamComponents.participation_mode_picker
+              value={@participation_mode}
+              readonly={not @draft?}
+            />
+          </div>
+        </div>
+
+        <div class="max-w-3xl">
           <%!-- SEB Config Card --%>
           <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
             <div class="p-6 border-b border-stone-100">
@@ -95,19 +109,29 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
 
               <div class="px-6 py-4 bg-stone-50 border-t border-stone-100 flex items-center justify-between">
                 <.link
-                  navigate={~p"/exams/#{@exam}/cockpit"}
+                  navigate={@back_to}
                   class="text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
                 >
-                  ← Zurück zum Cockpit
+                  ← {@back_tooltip}
                 </.link>
-                <button
-                  type="submit"
-                  id="save-seb-config-btn"
-                  disabled={not @changed?}
-                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
-                >
-                  <.icon name="hero-check" class="w-4 h-4" /> Speichern
-                </button>
+                <%= if @draft? do %>
+                  <button
+                    type="submit"
+                    id="open-session-btn"
+                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                  >
+                    <.icon name="hero-play" class="w-4 h-4" /> Durchführung eröffnen
+                  </button>
+                <% else %>
+                  <button
+                    type="submit"
+                    id="save-seb-config-btn"
+                    disabled={not @changed?}
+                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
+                  >
+                    <.icon name="hero-check" class="w-4 h-4" /> Speichern
+                  </button>
+                <% end %>
               </div>
             </.form>
           </div>
@@ -125,10 +149,53 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
 
     {:ok,
      socket
-     |> assign(:page_title, exam.name <> " – Konfiguration")
      |> assign(:exam, exam)
      |> assign(:form, form)
-     |> assign(:changed?, false)}
+     |> assign(:changed?, false)
+     |> assign_mode()
+     |> assign_chrome()}
+  end
+
+  # A draft has no cockpit yet, so the page is titled after what it does —
+  # opening the session — and leads back to the exam instead.
+  defp assign_chrome(socket) do
+    exam = socket.assigns.exam
+
+    if socket.assigns.draft? do
+      socket
+      |> assign(:page_title, exam.name <> " – Durchführung")
+      |> assign(:heading, "Durchführung")
+      |> assign(:back_to, ~p"/exams/#{exam}")
+      |> assign(:back_tooltip, "Zurück zur Prüfung")
+      |> assign(:crumbs, [
+        %{label: "Prüfungen", navigate: ~p"/exams"},
+        %{label: exam.name, navigate: ~p"/exams/#{exam}"},
+        %{label: "Durchführung"}
+      ])
+    else
+      socket
+      |> assign(:page_title, exam.name <> " – Konfiguration")
+      |> assign(:heading, "Konfiguration")
+      |> assign(:back_to, ~p"/exams/#{exam}/cockpit")
+      |> assign(:back_tooltip, "Zurück zum Cockpit")
+      |> assign(:crumbs, [
+        %{label: "Prüfungen", navigate: ~p"/exams"},
+        %{label: exam.name, navigate: ~p"/exams/#{exam}"},
+        %{label: "Cockpit", navigate: ~p"/exams/#{exam}/cockpit"},
+        %{label: "Konfiguration"}
+      ])
+    end
+  end
+
+  # `assigned` is the pre-selection for a fresh session; an already-opened exam
+  # shows what it actually runs as.
+  defp assign_mode(socket) do
+    exam = socket.assigns.exam
+    draft? = exam.status == "draft"
+
+    socket
+    |> assign(:draft?, draft?)
+    |> assign(:participation_mode, if(draft?, do: "assigned", else: exam.participation_mode))
   end
 
   @impl true
@@ -139,6 +206,44 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
      socket
      |> assign(:form, to_form(changeset, as: :config, action: :validate))
      |> assign(:changed?, changeset.changes != %{})}
+  end
+
+  # Only reachable while the exam is a draft — after that the mode is fixed, and
+  # `open_exam_session/3` is the only writer of the column anyway.
+  def handle_event("select_mode", %{"mode" => mode}, %{assigns: %{draft?: true}} = socket) do
+    mode =
+      case mode do
+        "assigned" -> "assigned"
+        "anonymous" -> "anonymous"
+        _ -> socket.assigns.participation_mode
+      end
+
+    {:noreply, assign(socket, :participation_mode, mode)}
+  end
+
+  def handle_event("select_mode", _params, socket), do: {:noreply, socket}
+
+  # Opening persists the pending SEB params first: the SEB form only saves on
+  # its own submit, so without this a teacher who ticks SEB and opens straight
+  # away would silently lose the setting.
+  def handle_event("save", %{"config" => params}, %{assigns: %{draft?: true}} = socket) do
+    exam = socket.assigns.exam
+    scope = socket.assigns.current_scope
+    params = maybe_generate_quit_password(params, exam)
+
+    with {:ok, exam} <- Exams.update_exam(scope, exam, params),
+         {:ok, exam} <- Exams.open_exam_session(scope, exam, socket.assigns.participation_mode) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Durchführung eröffnet.")
+       |> push_navigate(to: ~p"/exams/#{exam}/cockpit")}
+    else
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :form, to_form(changeset, as: :config))}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Durchführung konnte nicht eröffnet werden.")}
+    end
   end
 
   def handle_event("save", %{"config" => params}, socket) do

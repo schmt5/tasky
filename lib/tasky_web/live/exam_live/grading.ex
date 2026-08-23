@@ -3,6 +3,8 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   alias Tasky.Exams
   alias Tasky.Grading
+  alias TaskyWeb.ExamComponents
+  alias TaskyWeb.ExamSubmissionView
 
   @impl true
   def render(assigns) do
@@ -31,29 +33,59 @@ defmodule TaskyWeb.ExamLive.Grading do
               </h1>
             </div>
 
-            <%= if @pdf_enabled do %>
-              <button
-                type="button"
-                phx-click="open_export_modal"
-                disabled={@submissions == []}
-                class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
-              </button>
-            <% else %>
-              <div
-                class="tooltip tooltip-bottom tooltip-delayed"
-                data-tip="PDF-Dienst nicht verfügbar"
-              >
+            <div class="flex items-center gap-3">
+              <%= if @assigned_mode? do %>
+                <%= if @returned? do %>
+                  <span class="inline-flex items-center gap-1.5 bg-sky-100 text-sky-700 text-[13px] font-semibold px-3 py-1.5 rounded-full">
+                    <.icon name="hero-check-circle-mini" class="w-4 h-4" />
+                    Zurückgegeben am {Calendar.strftime(@exam.returned_at, "%d.%m.%Y")}
+                  </span>
+                  <button
+                    type="button"
+                    id="withdraw-return-btn"
+                    phx-click="withdraw_return"
+                    data-confirm="Die Teilnehmenden verlieren damit den Zugriff auf ihre korrigierte Prüfung. Rückgabe wirklich zurückziehen?"
+                    class="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
+                  >
+                    <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Rückgabe zurückziehen
+                  </button>
+                <% else %>
+                  <button
+                    type="button"
+                    id="open-return-modal-btn"
+                    phx-click="open_return_modal"
+                    disabled={@submissions == []}
+                    class="inline-flex items-center gap-2 text-white text-sm font-semibold bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 hover:shadow-md px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                  >
+                    <.icon name="hero-paper-airplane" class="w-4 h-4" /> Prüfung zurückgeben
+                  </button>
+                <% end %>
+              <% end %>
+
+              <%= if @pdf_enabled do %>
                 <button
                   type="button"
-                  disabled
-                  class="inline-flex items-center gap-2 text-sm font-semibold text-stone-400 bg-stone-100 border border-stone-200 px-4 py-2.5 rounded-lg cursor-not-allowed"
+                  phx-click="open_export_modal"
+                  disabled={@submissions == []}
+                  class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
                 </button>
-              </div>
-            <% end %>
+              <% else %>
+                <div
+                  class="tooltip tooltip-bottom tooltip-delayed"
+                  data-tip="PDF-Dienst nicht verfügbar"
+                >
+                  <button
+                    type="button"
+                    disabled
+                    class="inline-flex items-center gap-2 text-sm font-semibold text-stone-400 bg-stone-100 border border-stone-200 px-4 py-2.5 rounded-lg cursor-not-allowed"
+                  >
+                    <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
+                  </button>
+                </div>
+              <% end %>
+            </div>
           </div>
         </div>
       </div>
@@ -201,33 +233,12 @@ defmodule TaskyWeb.ExamLive.Grading do
                 Erstellt eine PDF pro Teilnehmer:in und packt alles in eine ZIP-Datei.
               </p>
 
-              <.export_checkbox
-                option="show_points_and_mark"
-                checked={@export_options.show_points_and_mark}
-                label="Punkte und Note anzeigen"
-                description="Zeigt die erreichte Punktzahl und die berechnete Note auf der Titelseite des PDFs."
-              />
-
-              <.export_checkbox
-                option="show_content"
-                checked={@export_options.show_content}
-                label="Inhalt anzeigen"
-                description="Die Antworten der Teilnehmer:in werden vollständig im PDF abgebildet."
-              />
-
-              <.export_checkbox
-                option="show_correction"
-                checked={@export_options.show_correction}
-                disabled={not @export_options.show_content}
-                label="Korrektur anzeigen"
-                description="Markiert jeden Antwortblock mit einem 🟢 (richtig), 🟡 (halb richtig) oder 🔴 (falsch) Emoji. Nur verfügbar, wenn Inhalt angezeigt wird."
-              />
-
-              <.export_checkbox
-                option="show_sample_solution"
-                checked={@export_options.show_sample_solution}
-                label="Musterlösung anzeigen"
-                description="Hängt die vollständige Musterlösung im Anschluss an."
+              <ExamComponents.submission_view_option_checkbox
+                :for={option <- ExamComponents.submission_view_options()}
+                option={option}
+                checked={Map.fetch!(@export_options, option.key)}
+                disabled={option.requires && not Map.fetch!(@export_options, option.requires)}
+                event="toggle_export_option"
               />
             </div>
 
@@ -245,6 +256,68 @@ defmodule TaskyWeb.ExamLive.Grading do
                 class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-sky-500 hover:bg-sky-600 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-colors duration-150"
               >
                 <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
+      <%!-- Return modal --%>
+      <%= if @show_return_modal do %>
+        <dialog
+          id="return-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_return_modal"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_return_modal"></div>
+          <div class="modal-box max-w-lg p-0 bg-white rounded-[16px] shadow-2xl">
+            <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
+                  <.icon name="hero-paper-airplane" class="w-5 h-5" />
+                </div>
+                <h3 class="text-lg font-semibold text-stone-900">Prüfung zurückgeben</h3>
+              </div>
+              <button
+                type="button"
+                phx-click="close_return_modal"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors duration-150 cursor-pointer"
+              >
+                <.icon name="hero-x-mark" class="w-5 h-5" />
+              </button>
+            </div>
+
+            <div class="px-6 py-5 space-y-4">
+              <p class="text-sm text-stone-500">
+                Alle {length(@submissions)} Teilnehmenden sehen ihre korrigierte Prüfung danach
+                auf ihrem Dashboard. Du kannst die Rückgabe jederzeit zurückziehen.
+              </p>
+
+              <ExamComponents.submission_view_option_checkbox
+                :for={option <- ExamComponents.submission_view_options()}
+                option={option}
+                checked={Map.fetch!(@return_options, option.key)}
+                disabled={option.requires && not Map.fetch!(@return_options, option.requires)}
+                event="toggle_return_option"
+              />
+            </div>
+
+            <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                phx-click="close_return_modal"
+                class="px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors duration-150"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                id="confirm-return-btn"
+                phx-click="confirm_return"
+                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-sky-500 hover:bg-sky-600 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-colors duration-150"
+              >
+                <.icon name="hero-paper-airplane" class="w-4 h-4" /> Jetzt zurückgeben
               </button>
             </div>
           </div>
@@ -275,37 +348,6 @@ defmodule TaskyWeb.ExamLive.Grading do
         </div>
       <% end %>
     </Layouts.app>
-    """
-  end
-
-  attr :option, :string, required: true
-  attr :checked, :boolean, required: true
-  attr :disabled, :boolean, default: false
-  attr :label, :string, required: true
-  attr :description, :string, required: true
-
-  defp export_checkbox(assigns) do
-    ~H"""
-    <label class={[
-      "flex items-start gap-3 p-3 rounded-lg border transition-colors duration-150",
-      if(@disabled,
-        do: "border-stone-100 bg-stone-50/50 cursor-not-allowed opacity-60",
-        else: "border-stone-200 hover:bg-stone-50/60 cursor-pointer"
-      )
-    ]}>
-      <input
-        type="checkbox"
-        checked={@checked}
-        disabled={@disabled}
-        phx-click="toggle_export_option"
-        phx-value-option={@option}
-        class="w-[18px] h-[18px] mt-0.5 rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer disabled:cursor-not-allowed"
-      />
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-semibold text-stone-800">{@label}</p>
-        <p class="text-xs text-stone-500 mt-0.5 leading-relaxed">{@description}</p>
-      </div>
-    </label>
     """
   end
 
@@ -388,7 +430,30 @@ defmodule TaskyWeb.ExamLive.Grading do
        show_correction: false,
        show_sample_solution: false
      })
-     |> assign(:export_status, nil)}
+     |> assign(:export_status, nil)
+     |> assign(:show_return_modal, false)
+     |> assign_return_state(exam)}
+  end
+
+  # A returned exam pre-fills the modal with what it was released with, so
+  # re-returning does not silently change the flags.
+  defp assign_return_state(socket, exam) do
+    socket
+    |> assign(:assigned_mode?, Exams.assigned_mode?(exam))
+    |> assign(:returned?, Exams.returned?(exam))
+    |> assign(
+      :return_options,
+      if Exams.returned?(exam) do
+        ExamSubmissionView.options_from_exam(exam)
+      else
+        %{
+          show_points_and_mark: true,
+          show_content: true,
+          show_correction: true,
+          show_sample_solution: false
+        }
+      end
+    )
   end
 
   @impl true
@@ -431,20 +496,60 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   def handle_event("toggle_export_option", %{"option" => option}, socket) do
-    # Explicit whitelist: client params must never mint or crash on atoms.
-    key =
-      case option do
-        "show_points_and_mark" -> :show_points_and_mark
-        "show_content" -> :show_content
-        "show_correction" -> :show_correction
-        "show_sample_solution" -> :show_sample_solution
-        _ -> nil
-      end
+    case view_option_key(option) do
+      nil -> {:noreply, socket}
+      key -> {:noreply, toggle_view_option(socket, :export_options, key)}
+    end
+  end
 
-    if is_nil(key) do
-      {:noreply, socket}
-    else
-      toggle_export_option(socket, key)
+  def handle_event("open_return_modal", _params, socket) do
+    {:noreply, assign(socket, :show_return_modal, true)}
+  end
+
+  def handle_event("close_return_modal", _params, socket) do
+    {:noreply, assign(socket, :show_return_modal, false)}
+  end
+
+  def handle_event("toggle_return_option", %{"option" => option}, socket) do
+    case view_option_key(option) do
+      nil -> {:noreply, socket}
+      key -> {:noreply, toggle_view_option(socket, :return_options, key)}
+    end
+  end
+
+  def handle_event("confirm_return", _params, socket) do
+    case Exams.return_exam(
+           socket.assigns.current_scope,
+           socket.assigns.exam,
+           socket.assigns.return_options
+         ) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> assign(:exam, exam)
+         |> assign(:show_return_modal, false)
+         |> assign_return_state(exam)
+         |> put_flash(:info, "Prüfung an die Teilnehmenden zurückgegeben.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:show_return_modal, false)
+         |> put_flash(:error, "Prüfung konnte nicht zurückgegeben werden.")}
+    end
+  end
+
+  def handle_event("withdraw_return", _params, socket) do
+    case Exams.withdraw_exam_return(socket.assigns.current_scope, socket.assigns.exam) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> assign(:exam, exam)
+         |> assign_return_state(exam)
+         |> put_flash(:info, "Rückgabe zurückgezogen.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Rückgabe konnte nicht zurückgezogen werden.")}
     end
   end
 
@@ -649,17 +754,25 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   defp parse_mark(_), do: nil
 
-  defp toggle_export_option(socket, key) do
-    current = socket.assigns.export_options
+  # Explicit whitelist: client params must never mint or crash on atoms.
+  defp view_option_key("show_points_and_mark"), do: :show_points_and_mark
+  defp view_option_key("show_content"), do: :show_content
+  defp view_option_key("show_correction"), do: :show_correction
+  defp view_option_key("show_sample_solution"), do: :show_sample_solution
+  defp view_option_key(_), do: nil
+
+  # Shared by the export and the return modal — including the rule that
+  # show_correction requires show_content.
+  defp toggle_view_option(socket, assign_key, key) do
+    current = Map.fetch!(socket.assigns, assign_key)
     updated = Map.put(current, key, not Map.fetch!(current, key))
 
-    # show_correction requires show_content; clear it if content is turned off.
     updated =
       if updated.show_content,
         do: updated,
         else: Map.put(updated, :show_correction, false)
 
-    {:noreply, assign(socket, :export_options, updated)}
+    assign(socket, assign_key, updated)
   end
 
   defp load_sorted_submissions(exam) do

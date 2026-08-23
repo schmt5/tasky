@@ -53,7 +53,7 @@ defmodule Tasky.ExamsAutoCorrectionTest do
       if exam.status == "running" do
         exam
       else
-        {:ok, exam} = Exams.open_exam_session(:system, exam)
+        {:ok, exam} = Exams.open_exam_session(:system, exam, "anonymous")
         {:ok, exam} = Exams.update_exam_status(:system, exam, "running")
         exam
       end

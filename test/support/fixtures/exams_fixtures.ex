@@ -29,6 +29,8 @@ defmodule Tasky.ExamsFixtures do
     * `:status` - `"draft"` (default), `"open"`, or any later status such as
       `"running"`/`"finished"`; the exam is moved through the session
       lifecycle accordingly
+    * `:participation_mode` - `"anonymous"` (default, so existing tests keep
+      exercising the self-enrolment path) or `"assigned"`
     * `:attrs` - attributes passed to `Exams.create_exam/2`
   """
   def exam_fixture(opts \\ []) do
@@ -46,13 +48,14 @@ defmodule Tasky.ExamsFixtures do
       })
 
     {:ok, exam} = Exams.create_exam(scope, attrs)
+    participation_mode = Keyword.get(opts, :participation_mode, "anonymous")
 
     case Keyword.get(opts, :status, "draft") do
       "draft" ->
         exam
 
       status ->
-        {:ok, exam} = Exams.open_exam_session(scope, exam)
+        {:ok, exam} = Exams.open_exam_session(scope, exam, participation_mode)
 
         steps =
           case status do
@@ -67,6 +70,15 @@ defmodule Tasky.ExamsFixtures do
           e
         end)
     end
+  end
+
+  @doc """
+  Assign a logged-in student to the given exam.
+  """
+  def assigned_submission_fixture(exam, user) do
+    scope = user_scope_fixture(Tasky.Accounts.get_user!(exam.teacher_id))
+    {:ok, submission} = Exams.assign_student(scope, exam, user.id)
+    submission
   end
 
   @doc """

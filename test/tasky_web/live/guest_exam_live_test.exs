@@ -40,6 +40,60 @@ defmodule TaskyWeb.GuestExamLiveTest do
       {:ok, _view, html} = live(conn, ~p"/guest/exam/#{token}")
       assert html =~ "Abgeben"
     end
+
+    test "the enroll page is dead for an assigned-mode exam", %{conn: conn} do
+      anonymous = exam_fixture(status: "open", participation_mode: "anonymous")
+      token = anonymous.enrollment_token
+
+      {:ok, _} =
+        anonymous
+        |> Ecto.Changeset.change(%{participation_mode: "assigned"})
+        |> Tasky.Repo.update()
+
+      {:ok, _view, html} = live(conn, ~p"/guest/enroll/#{token}")
+      assert html =~ "Einschreibelink ungültig"
+    end
+  end
+
+  describe "assigned participants" do
+    import Tasky.AccountsFixtures
+
+    setup do
+      teacher = user_fixture(%{role: "teacher"})
+      scope = user_scope_fixture(teacher)
+      exam = exam_fixture(scope: scope, status: "running", participation_mode: "assigned")
+      student = user_fixture(%{role: "student"})
+      {:ok, submission} = Exams.assign_student(scope, exam, student.id)
+
+      %{exam: exam, student: student, submission: submission}
+    end
+
+    test "the owner can open their own submission", %{
+      conn: conn,
+      student: student,
+      submission: submission
+    } do
+      {:ok, _view, html} = conn |> log_in_user(student) |> open_exam(submission)
+      assert html =~ "Abgeben"
+    end
+
+    # The token has to keep working without a session (SEB), but a logged-in
+    # classmate pasting someone else's token is refused.
+    test "another logged-in student cannot open it", %{conn: conn, submission: submission} do
+      classmate = user_fixture(%{role: "student"})
+
+      {:ok, _view, html} = conn |> log_in_user(classmate) |> open_exam(submission)
+      refute html =~ "Abgeben"
+      assert html =~ "ungültig"
+    end
+
+    test "a cookie-less request still works (this is the SEB path)", %{
+      conn: conn,
+      submission: submission
+    } do
+      {:ok, _view, html} = open_exam(conn, submission)
+      assert html =~ "Abgeben"
+    end
   end
 
   describe "submit flow" do

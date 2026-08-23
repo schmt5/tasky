@@ -7,6 +7,7 @@ defmodule Tasky.Exams do
   alias Tasky.Repo
 
   alias Tasky.Accounts.Scope
+  alias Tasky.Accounts.User
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
   alias Tasky.Exams.Exam
@@ -247,12 +248,24 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Opens an exam session by generating an enrollment token and setting status to open.
+  Opens an exam session in the given participation mode and sets the status to
+  open.
+
+  `"anonymous"` mints an enrollment token for the `/guest/enroll/:token` page;
+  `"assigned"` deliberately leaves it `nil` — a token on an assigned exam would
+  be a hole, since a leaked link would let strangers self-enrol into a session
+  meant for named accounts.
   """
-  def open_exam_session(scope, %Exam{} = exam) do
+  def open_exam_session(scope, %Exam{} = exam, mode) when mode in ["assigned", "anonymous"] do
     with :ok <- Policy.authorize(scope, exam.teacher_id),
          :ok <- validate_status_transition(exam.status, "open") do
-      case open_with_fresh_token(exam, 5) do
+      result =
+        case mode do
+          "anonymous" -> open_with_fresh_token(exam, 5)
+          "assigned" -> exam |> Exam.open_changeset("assigned", nil) |> Repo.update()
+        end
+
+      case result do
         {:ok, updated_exam} ->
           broadcast_exam_update(updated_exam)
           {:ok, updated_exam}
@@ -263,14 +276,14 @@ defmodule Tasky.Exams do
     end
   end
 
-  # The 6-char token space is small enough that collisions are possible —
-  # retry with a fresh token instead of surfacing a constraint error.
+  # The token space is small enough that collisions are possible — retry with a
+  # fresh token instead of surfacing a constraint error.
   defp open_with_fresh_token(_exam, 0), do: {:error, :token_collision}
 
   defp open_with_fresh_token(exam, attempts) do
     result =
       exam
-      |> Ecto.Changeset.change(%{status: "open", enrollment_token: generate_enrollment_token()})
+      |> Exam.open_changeset("anonymous", generate_enrollment_token())
       |> Ecto.Changeset.unique_constraint(:enrollment_token)
       |> Repo.update()
 
@@ -286,6 +299,21 @@ defmodule Tasky.Exams do
         other
     end
   end
+
+  @doc "The participation modes a session can run in."
+  def participation_modes, do: Exam.participation_modes()
+
+  @doc "True when the exam runs with assigned, logged-in participants."
+  def assigned_mode?(%Exam{participation_mode: "assigned"}), do: true
+  def assigned_mode?(%Exam{}), do: false
+
+  @doc "True when the exam runs with anonymous participants enrolling via link."
+  def anonymous_mode?(%Exam{participation_mode: "anonymous"}), do: true
+  def anonymous_mode?(%Exam{}), do: false
+
+  @doc "True once a corrected exam has been handed back to its participants."
+  def returned?(%Exam{returned_at: nil}), do: false
+  def returned?(%Exam{}), do: true
 
   # 10 base32 chars ≈ 50 bits. The token is never typed by hand — the cockpit
   # only offers the full enrol URL as copy-to-clipboard — so length costs
@@ -334,7 +362,8 @@ defmodule Tasky.Exams do
   Raises if not found.
   """
   def get_exam_by_enrollment_token!(token) do
-    Repo.get_by!(Exam, enrollment_token: token)
+    enrollment_token_query(token)
+    |> Repo.one!()
     |> Repo.preload([:teacher])
   end
 
@@ -344,10 +373,20 @@ defmodule Tasky.Exams do
   of raising a generic 404.
   """
   def get_exam_by_enrollment_token(token) when is_binary(token) do
-    case Repo.get_by(Exam, enrollment_token: token) do
+    case Repo.one(enrollment_token_query(token)) do
       nil -> nil
       exam -> Repo.preload(exam, [:teacher])
     end
+  end
+
+  # Belt and braces: the mode filter keeps a stale token from a session that
+  # was reopened as assigned from resolving, and the nil guard keeps an empty
+  # token from matching an arbitrary assigned exam.
+  defp enrollment_token_query(token) do
+    from e in Exam,
+      where:
+        e.enrollment_token == ^token and not is_nil(e.enrollment_token) and
+          e.participation_mode == "anonymous"
   end
 
   @doc """
@@ -419,7 +458,10 @@ defmodule Tasky.Exams do
     Repo.transaction(fn ->
       locked = Repo.lock_one!(Exam, exam.id, :share)
 
-      if locked.status in ["open", "running"] do
+      # The mode is re-read from the locked row too — this is the authoritative
+      # layer, and it holds even against an EnrollLive mounted before the
+      # session was opened for assigned participants.
+      if locked.status in ["open", "running"] and locked.participation_mode == "anonymous" do
         case %ExamSubmission{exam_id: locked.id}
              |> ExamSubmission.changeset(attrs)
              |> Repo.insert() do
@@ -430,6 +472,226 @@ defmodule Tasky.Exams do
         Repo.rollback(:exam_not_open)
       end
     end)
+  end
+
+  # --- Assigned participants ---
+
+  @doc """
+  Lists the students who could still be assigned to this exam, optionally
+  narrowed to one class.
+
+  Like `Courses.list_unenrolled_students/1,2` this spans all students, not only
+  those in the teacher's own classes.
+  """
+  def list_assignable_students(%Exam{} = exam, class_id \\ nil) do
+    query =
+      from u in User,
+        where:
+          u.role == "student" and
+            u.id not in subquery(
+              from s in ExamSubmission,
+                where: s.exam_id == ^exam.id and not is_nil(s.user_id),
+                select: s.user_id
+            ),
+        order_by: [asc: u.lastname, asc: u.firstname, asc: u.email]
+
+    query
+    |> then(fn q -> if class_id, do: where(q, [u], u.class_id == ^class_id), else: q end)
+    |> Repo.all()
+  end
+
+  @doc """
+  Assigns one logged-in student to an assigned-mode exam, creating their
+  submission right away so the roster, correction and grading views always show
+  the full class — absentees included.
+  """
+  def assign_student(scope, %Exam{} = exam, user_id) when is_integer(user_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      Repo.transaction(fn ->
+        # FOR SHARE, per the lock rules in ARCHITECTURE.md: FOR UPDATE on
+        # `exams` conflicts with the FOR KEY SHARE that the child INSERT takes
+        # on the parent row.
+        locked = Repo.lock_one!(Exam, exam.id, :share)
+
+        with :ok <- check_assignable(locked),
+             {:ok, user} <- fetch_assignable_user(user_id),
+             {:ok, submission} <- insert_assignment(locked, user) do
+          submission
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    end
+  end
+
+  @doc """
+  Assigns every not-yet-assigned student of a class in one transaction.
+  Returns `{:ok, %{assigned: n, skipped: n}}`; skips are students who raced in
+  through another tab, not errors.
+  """
+  def assign_students_from_class(scope, %Exam{} = exam, class_id) when is_integer(class_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(Exam, exam.id, :share)
+
+        case check_assignable(locked) do
+          :ok ->
+            locked
+            |> list_assignable_students(class_id)
+            |> Enum.reduce(%{assigned: 0, skipped: 0}, fn user, acc ->
+              case insert_assignment(locked, user) do
+                {:ok, _submission} -> Map.update!(acc, :assigned, &(&1 + 1))
+                {:error, _changeset} -> Map.update!(acc, :skipped, &(&1 + 1))
+              end
+            end)
+
+          {:error, reason} ->
+            Repo.rollback(reason)
+        end
+      end)
+    end
+  end
+
+  # The unique constraints on (exam_id, user_id) and (exam_id, email) rule out
+  # a single `insert_all` with one `on_conflict` target, so this inserts row by
+  # row. A class is ~25 rows.
+  #
+  # `mode: :savepoint` is load-bearing: without it a constraint violation
+  # aborts the surrounding Postgres transaction, so the bulk loop could not
+  # skip an already-assigned student and carry on.
+  defp insert_assignment(%Exam{} = locked_exam, %User{} = user) do
+    %ExamSubmission{exam_id: locked_exam.id}
+    |> ExamSubmission.assignment_changeset(%{
+      user_id: user.id,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      email: user.email
+    })
+    |> Repo.insert(mode: :savepoint)
+  end
+
+  defp check_assignable(%Exam{} = exam) do
+    cond do
+      exam.participation_mode != "assigned" -> {:error, :not_assigned_mode}
+      exam.status not in ["open", "running"] -> {:error, :exam_not_open}
+      true -> :ok
+    end
+  end
+
+  # The id arrives off the wire, so the role is checked here rather than
+  # trusted — otherwise a teacher could assign an admin to their exam.
+  defp fetch_assignable_user(user_id) do
+    case Repo.get(User, user_id) do
+      %User{role: "student"} = user -> {:ok, user}
+      _ -> {:error, :not_a_student}
+    end
+  end
+
+  @doc """
+  Removes an assignment, including any answer files the participant uploaded
+  (rows via FK cascade, bytes on disk explicitly — otherwise they leak
+  forever). Refuses once the exam has been submitted.
+  """
+  def unassign_student(scope, %Exam{} = exam, %ExamSubmission{} = submission) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_unassignable(exam, submission) do
+      files =
+        Repo.all(
+          from sf in ExamSubmissionFile,
+            where: sf.exam_submission_id == ^submission.id,
+            select: sf.stored_filename
+        )
+
+      case Repo.delete(submission) do
+        {:ok, deleted} ->
+          # Disk deletion is not transactional and must run after the commit.
+          Enum.each(files, fn stored ->
+            Tasky.Uploads.delete_submission_file_from_disk(exam.id, submission.id, stored)
+          end)
+
+          {:ok, deleted}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  defp validate_unassignable(%Exam{} = exam, %ExamSubmission{} = submission) do
+    cond do
+      submission.exam_id != exam.id -> {:error, :not_found}
+      is_nil(submission.user_id) -> {:error, :not_assigned}
+      submission.submitted -> {:error, :already_submitted}
+      true -> :ok
+    end
+  end
+
+  @doc """
+  The submission a logged-in participant owns for this exam, or nil. Exam and
+  teacher preloaded.
+  """
+  def get_submission_for_user(exam_id, user_id) do
+    case Repo.get_by(ExamSubmission, exam_id: exam_id, user_id: user_id) do
+      nil -> nil
+      submission -> Repo.preload(submission, exam: [:teacher])
+    end
+  end
+
+  @doc """
+  The exams a student has been assigned to, as their own submissions with the
+  exam preloaded — everything the student's view needs (`submitted`,
+  `exam_token`, `mark`) lives on the submission, not the exam.
+  """
+  def list_assigned_exams(%Scope{user: %{role: "student", id: user_id}}) do
+    Repo.all(
+      from s in ExamSubmission,
+        join: e in assoc(s, :exam),
+        where: s.user_id == ^user_id and e.participation_mode == "assigned",
+        order_by: [desc: e.inserted_at],
+        preload: [exam: {e, [:teacher]}]
+    )
+  end
+
+  def list_assigned_exams(%Scope{}), do: []
+
+  @doc """
+  Hands the corrected exam back to all assigned participants. `opts` carries
+  the same four flags as the PDF export and decides what they get to see.
+  """
+  def return_exam(scope, %Exam{} = exam, opts) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_returnable(exam) do
+      exam
+      |> Exam.return_changeset(%{
+        returned_at: DateTime.utc_now(:second),
+        return_show_points_and_mark: !!opts[:show_points_and_mark],
+        return_show_content: !!opts[:show_content],
+        return_show_correction: !!opts[:show_correction],
+        return_show_sample_solution: !!opts[:show_sample_solution]
+      })
+      |> update_and_broadcast(&broadcast_exam_update/1)
+    end
+  end
+
+  @doc """
+  Withdraws a return. The four flags are left as they are — they pre-fill the
+  modal if the exam is handed back again.
+  """
+  def withdraw_exam_return(scope, %Exam{} = exam) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_returnable(exam) do
+      exam
+      |> Exam.return_changeset(%{returned_at: nil})
+      |> update_and_broadcast(&broadcast_exam_update/1)
+    end
+  end
+
+  defp validate_returnable(%Exam{} = exam) do
+    cond do
+      not assigned_mode?(exam) -> {:error, :not_assigned_mode}
+      exam.status not in ["finished", "archived"] -> {:error, :exam_not_finished}
+      true -> :ok
+    end
   end
 
   @doc """

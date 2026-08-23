@@ -79,7 +79,11 @@ defmodule TaskyWeb.Router do
 
     # The hook is not redundant with the pipeline above: a live_redirect inside
     # this live_session joins over the open websocket and never touches a plug.
-    live_session :guest, on_mount: [{TaskyWeb.GuestRateLimit, :default}] do
+    # The scope hook is what lets Guest.ExamLive refuse a logged-in student who
+    # pasted a classmate's token. SEB carries no cookie, so the scope is nil
+    # there and the assigned-mode participant path stays untouched.
+    live_session :guest,
+      on_mount: [{TaskyWeb.GuestRateLimit, :default}, {TaskyWeb.UserAuth, :mount_current_scope}] do
       live "/enroll/:enrollment_token", EnrollLive, :enroll
       live "/exam/:exam_token", ExamLive, :show
     end
@@ -232,6 +236,10 @@ defmodule TaskyWeb.Router do
       live "/courses/:id", CourseLive, :show
       live "/courses/:id/feedback", FeedbackLive, :feedback
       live "/tasks/:id", TaskLive, :show
+      live "/exams", ExamsLive, :index
+      # :id is the exam id — a participant has exactly one submission per exam,
+      # resolved server-side from the current scope.
+      live "/exams/:id", ExamLive, :show
     end
   end
 

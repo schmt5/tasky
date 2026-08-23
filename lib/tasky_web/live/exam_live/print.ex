@@ -12,6 +12,7 @@ defmodule TaskyWeb.ExamLive.Print do
   alias Tasky.Exams
   alias Tasky.Exams.PrintToken
   alias Tasky.Grading
+  alias TaskyWeb.ExamSubmissionView
 
   @impl true
   def render(%{error: error} = assigns) when not is_nil(error) do
@@ -110,7 +111,7 @@ defmodule TaskyWeb.ExamLive.Print do
     points = total_points(submission)
     mark = submission.mark || calculate_mark(points, max_points)
 
-    sections = build_sections(exam, submission, opts)
+    sections = ExamSubmissionView.sections(exam, submission, opts)
 
     {:ok,
      socket
@@ -130,46 +131,6 @@ defmodule TaskyWeb.ExamLive.Print do
     |> assign(:page_title, "Druckansicht")
     |> assign(:error, message)
   end
-
-  # Each section ends up as its own TipTap viewer with its own visual frame
-  # (and a page break before the second section if both are present).
-  defp build_sections(exam, submission, opts) do
-    []
-    |> maybe_add_content_section(submission, opts)
-    |> maybe_add_sample_solution_section(exam, opts)
-  end
-
-  defp maybe_add_content_section(sections, submission, opts) do
-    if opts[:show_content] do
-      nodes =
-        if opts[:show_correction] do
-          doc_nodes(submission.corrected_content || submission.content)
-        else
-          doc_nodes(submission.content)
-        end
-
-      sections ++ [build_section(:content, nil, nodes)]
-    else
-      sections
-    end
-  end
-
-  defp maybe_add_sample_solution_section(sections, exam, opts) do
-    if opts[:show_sample_solution] do
-      sections ++
-        [build_section(:sample, "Musterlösung", doc_nodes(Tasky.Exams.sample_solution_doc(exam)))]
-    else
-      sections
-    end
-  end
-
-  defp build_section(key, heading, nodes) do
-    doc = %{"type" => "doc", "content" => nodes}
-    %{key: key, heading: heading, doc_json: Jason.encode!(doc)}
-  end
-
-  defp doc_nodes(doc) when is_map(doc), do: Map.get(doc, "content", [])
-  defp doc_nodes(_), do: []
 
   defp sum_map_points(map), do: Grading.sum_points(map)
 

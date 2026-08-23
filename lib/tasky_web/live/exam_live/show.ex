@@ -110,7 +110,7 @@ defmodule TaskyWeb.ExamLive.Show do
                 <p class="text-sm text-stone-500 leading-relaxed">
                   <%= cond do %>
                     <% @exam.status == "draft" -> %>
-                      Die Prüfung ist ein Entwurf. Sobald du bereit bist, kannst du die Durchführung öffnen, damit sich Lernende einschreiben können.
+                      Die Prüfung ist ein Entwurf. Sobald du bereit bist, kannst du die Durchführung öffnen und dabei festlegen, wer teilnimmt.
                     <% @exam.status == "open" -> %>
                       Die Durchführung ist offen. Lernende können sich mit dem Einschreibeschlüssel anmelden und befinden sich im Warteraum.
                     <% @exam.status == "running" -> %>
@@ -123,13 +123,12 @@ defmodule TaskyWeb.ExamLive.Show do
                 </p>
                 <%= if @exam.status == "draft" do %>
                   <div class="mt-4 flex items-center gap-3">
-                    <button
-                      type="button"
-                      phx-click="open_session"
+                    <.link
+                      navigate={~p"/exams/#{@exam}/cockpit/config"}
                       class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
                     >
                       Durchführung öffnen
-                    </button>
+                    </.link>
                   </div>
                 <% end %>
                 <%= if @exam.status in ["open", "running"] do %>
@@ -280,17 +279,6 @@ defmodule TaskyWeb.ExamLive.Show do
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Prüfung konnte nicht kopiert werden.")}
-    end
-  end
-
-  @impl true
-  def handle_event("open_session", _params, socket) do
-    case Exams.open_exam_session(socket.assigns.current_scope, socket.assigns.exam) do
-      {:ok, exam} ->
-        {:noreply, push_navigate(socket, to: ~p"/exams/#{exam}/cockpit")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Durchführung konnte nicht geöffnet werden.")}
     end
   end
 end

@@ -163,6 +163,29 @@ defmodule TaskyWeb.AuthorizationTest do
       conn = get(conn, "/exams")
       assert redirected_to(conn) =~ "/users/log-in"
     end
+
+    test "teachers cannot open the student exam list", %{conn: conn} do
+      conn = conn |> log_in_role("teacher") |> get("/student/exams")
+      assert redirected_to(conn) == "/"
+    end
+
+    test "anonymous users cannot open the student exam list", %{conn: conn} do
+      assert redirected_to(get(conn, "/student/exams")) =~ "/users/log-in"
+    end
+
+    test "students cannot open the session config", %{conn: conn, exam: exam} do
+      conn = conn |> log_in_role("student") |> get("/exams/#{exam.id}/cockpit/config")
+      assert redirected_to(conn) == "/"
+    end
+
+    test "a foreign teacher cannot open another teacher's session config", %{
+      conn: conn,
+      exam: exam
+    } do
+      assert_raise Ecto.NoResultsError, fn ->
+        conn |> log_in_role("teacher") |> get("/exams/#{exam.id}/cockpit/config")
+      end
+    end
   end
 
   describe "course feedback mailbox" do

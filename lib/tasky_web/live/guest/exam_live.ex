@@ -645,7 +645,24 @@ defmodule TaskyWeb.Guest.ExamLive do
   def mount(%{"exam_token" => exam_token}, _session, socket) do
     case Exams.get_exam_submission_by_token(exam_token) do
       nil -> mount_not_found(socket)
-      submission -> mount_submission(submission, socket)
+      submission -> mount_if_own(submission, socket)
+    end
+  end
+
+  # The token is the credential — it has to be, because the Safe Exam Browser
+  # starts without a session cookie and this is the only entry point that works
+  # there. But when a session *is* present we can do better than trusting the
+  # token alone: a logged-in student opening someone else's submission is
+  # refused. A cookie-less request (SEB, or an anonymous participant) has no
+  # scope and falls through unchanged.
+  defp mount_if_own(submission, socket) do
+    case socket.assigns[:current_scope] do
+      %{user: %{role: "student", id: user_id}}
+      when not is_nil(submission.user_id) and submission.user_id != user_id ->
+        mount_not_found(socket)
+
+      _ ->
+        mount_submission(submission, socket)
     end
   end
 

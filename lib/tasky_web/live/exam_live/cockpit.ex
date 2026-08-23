@@ -2,6 +2,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   use TaskyWeb, :live_view
 
   alias Tasky.Exams
+  alias TaskyWeb.Params
 
   @impl true
   def render(assigns) do
@@ -66,7 +67,87 @@ defmodule TaskyWeb.ExamLive.Cockpit do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
-        <%= if @exam.status != "finished" do %>
+        <%= if @assigned_mode? and @exam.status in ["open", "running"] do %>
+          <%!-- Participant Assignment Card (assigned mode replaces the
+                enrollment link: there is no token to share). --%>
+          <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 bg-sky-50 text-sky-500">
+                  <.icon name="hero-user-plus" class="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 class="text-lg font-semibold text-stone-800">Teilnehmende zuweisen</h2>
+                  <p class="text-sm text-stone-500 mt-0.5">
+                    Zugewiesene Lernende sehen die Prüfung auf ihrem Dashboard.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6 space-y-4">
+              <.form for={%{}} phx-change="filter_by_class" id="assign-class-filter">
+                <.input
+                  type="select"
+                  name="class_id"
+                  value={@class_filter}
+                  label="Klasse"
+                  prompt="Alle Klassen"
+                  options={@class_options}
+                />
+              </.form>
+
+              <%= if @class_filter && @assignable != [] do %>
+                <div class="flex items-center justify-between gap-4 bg-sky-50 border border-sky-100 rounded-xl px-4 py-3">
+                  <p class="text-sm text-sky-900">
+                    {length(@assignable)} Lernende dieser Klasse sind noch nicht zugewiesen.
+                  </p>
+                  <button
+                    type="button"
+                    id="assign-all-btn"
+                    phx-click="assign_all_from_class"
+                    class="inline-flex items-center gap-2 shrink-0 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                  >
+                    <.icon name="hero-user-plus" class="w-4 h-4" /> Alle zuweisen
+                  </button>
+                </div>
+              <% end %>
+
+              <div class="max-h-72 overflow-y-auto -mx-2 px-2">
+                <%= if @assignable == [] do %>
+                  <p class="text-sm text-stone-400 py-6 text-center">
+                    Keine weiteren Lernenden zum Zuweisen.
+                  </p>
+                <% else %>
+                  <div
+                    :for={student <- @assignable}
+                    class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-stone-50 transition-colors duration-150"
+                  >
+                    <div class="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 text-xs font-bold shrink-0">
+                      {initials(student)}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium text-stone-800 truncate">
+                        {student.firstname} {student.lastname}
+                      </p>
+                      <p class="text-xs text-stone-400 truncate">{student.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      id={"assign-student-#{student.id}"}
+                      phx-click="assign_student"
+                      phx-value-student_id={student.id}
+                      class="inline-flex items-center gap-1.5 shrink-0 text-[13px] font-semibold text-sky-600 border border-sky-200 px-3 py-1.5 rounded-lg transition-colors duration-150 hover:bg-sky-50 hover:border-sky-300 active:scale-[0.98]"
+                    >
+                      <.icon name="hero-plus" class="w-3.5 h-3.5" /> Zuweisen
+                    </button>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <%= if @anonymous_mode? and @exam.status != "finished" do %>
           <%!-- Enrollment Token Card --%>
           <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
             <div class="p-6 border-b border-stone-100">
@@ -103,20 +184,6 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     <.icon name="hero-clipboard-document" class="w-4 h-4" />
                     <span>Kopieren</span>
                   </button>
-                </div>
-              <% else %>
-                <div class="flex items-center gap-3 text-stone-400">
-                  <.icon name="hero-exclamation-circle" class="w-5 h-5" />
-                  <p class="text-sm">
-                    Kein Einschreibeschlüssel gesetzt. Du kannst einen in den
-                    <.link
-                      navigate={~p"/exams/#{@exam}/edit?return_to=show"}
-                      class="text-amber-600 hover:text-amber-700 font-medium underline underline-offset-2"
-                    >
-                      Prüfungseinstellungen
-                    </.link>
-                    hinterlegen.
-                  </p>
                 </div>
               <% end %>
             </div>
@@ -160,9 +227,13 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   <.icon name="hero-users" class="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 class="text-lg font-semibold text-stone-800">Teilnehmer</h2>
+                  <h2 class="text-lg font-semibold text-stone-800">Teilnehmende</h2>
                   <p class="text-sm text-stone-500 mt-0.5">
-                    Eingeschriebene Lernende für diese Prüfung.
+                    <%= if @assigned_mode? do %>
+                      Zugewiesene Lernende für diese Prüfung.
+                    <% else %>
+                      Eingeschriebene Lernende für diese Prüfung.
+                    <% end %>
                   </p>
                 </div>
               </div>
@@ -186,9 +257,18 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           </div>
           <div class="p-6">
             <div id="submissions" phx-update="stream">
-              <div class="hidden only:flex flex-col items-center justify-center py-12 text-stone-400">
+              <div
+                id="submissions-empty"
+                class="hidden only:flex flex-col items-center justify-center py-12 text-stone-400"
+              >
                 <.icon name="hero-user-group" class="w-10 h-10 mb-3 text-stone-300" />
-                <p class="text-sm font-medium">Noch keine Teilnehmer eingeschrieben.</p>
+                <p class="text-sm font-medium">
+                  <%= if @assigned_mode? do %>
+                    Noch keine Teilnehmenden zugewiesen.
+                  <% else %>
+                    Noch keine Teilnehmenden eingeschrieben.
+                  <% end %>
+                </p>
               </div>
               <div
                 :for={{id, submission} <- @streams.submissions}
@@ -200,7 +280,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     {String.first(submission.firstname)}{String.first(submission.lastname)}
                   </div>
                   <% {dot_class, label_class, label} =
-                    presence_label(@present, submission.exam_token, @exam.seb_enabled) %>
+                    presence_label(@present, submission, @exam.seb_enabled) %>
                   <div class={[
                     "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white",
                     dot_class
@@ -214,7 +294,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     <span class={["font-medium", label_class]}>{label}</span>
                     <span class="text-stone-300 mx-1">·</span>
                     <span class="text-stone-400">
-                      Eingeschrieben am {Calendar.strftime(
+                      {if @assigned_mode?, do: "Zugewiesen am", else: "Eingeschrieben am"} {Calendar.strftime(
                         submission.inserted_at,
                         "%d.%m.%Y um %H:%M"
                       )}
@@ -229,7 +309,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   >
                     <.icon name="hero-ellipsis-vertical" class="w-5 h-5" />
                   </label>
+                  <%!-- The exam_token is a cookie-less bearer credential for this
+                        submission. Handing it to a human defeats the point of an
+                        assigned session, so it is neither offered nor put in the
+                        DOM in that mode. --%>
                   <input
+                    :if={@anonymous_mode?}
                     id={"resume-link-#{submission.exam_token}"}
                     type="text"
                     value={url(~p"/guest/exam/#{submission.exam_token}")}
@@ -242,7 +327,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     tabindex="0"
                     class="dropdown-content z-[60] menu p-2 shadow-lg bg-white rounded-[10px] w-60 mt-2 border border-stone-100"
                   >
-                    <li>
+                    <li :if={@anonymous_mode?}>
                       <button
                         id={"resume-copy-#{submission.exam_token}"}
                         type="button"
@@ -252,6 +337,19 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                       >
                         <.icon name="hero-link" class="copy-icon w-4 h-4 text-stone-400" />
                         <span class="copy-label">Teilnehmerlink kopieren</span>
+                      </button>
+                    </li>
+                    <li :if={@assigned_mode? and not submission.submitted}>
+                      <button
+                        id={"unassign-#{submission.id}"}
+                        type="button"
+                        phx-click="unassign_student"
+                        phx-value-submission_id={submission.id}
+                        data-confirm={unassign_confirm(submission)}
+                        class="flex items-center gap-2 text-sm text-red-600"
+                      >
+                        <.icon name="hero-user-minus" class="w-4 h-4 text-red-400" />
+                        <span>Zuweisung entfernen</span>
                       </button>
                     </li>
                   </ul>
@@ -294,7 +392,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               <p class="text-sm text-stone-600 leading-relaxed">
                 Möchtest du die Prüfung <span class="font-semibold text-stone-800">{@exam.name}</span>
                 jetzt starten?
-                Alle eingeschriebenen Lernenden erhalten sofort Zugang zu den Aufgaben.
+                <%= if @assigned_mode? do %>
+                  Alle zugewiesenen Lernenden erhalten sofort Zugang zu den Aufgaben.
+                <% else %>
+                  Alle eingeschriebenen Lernenden erhalten sofort Zugang zu den Aufgaben.
+                <% end %>
               </p>
               <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
                 <div class="flex items-start gap-2.5">
@@ -303,7 +405,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
                   />
                   <p class="text-xs text-amber-700 leading-relaxed">
-                    Nach dem Start können sich keine weiteren Lernenden mehr einschreiben.
+                    <%= if @assigned_mode? do %>
+                      Der Start lässt sich nicht rückgängig machen. Weitere Lernende kannst du
+                      auch während der Prüfung noch zuweisen.
+                    <% else %>
+                      Nach dem Start können sich keine weiteren Lernenden mehr einschreiben.
+                    <% end %>
                   </p>
                 </div>
               </div>
@@ -468,11 +575,41 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      socket
      |> assign(:page_title, exam.name <> " – Cockpit")
      |> assign(:exam, exam)
+     |> assign(:assigned_mode?, Exams.assigned_mode?(exam))
+     |> assign(:anonymous_mode?, Exams.anonymous_mode?(exam))
      |> assign(:submissions_count, length(submissions))
      |> assign(:present, presence_state(exam.id))
      |> assign(:confirm_action, nil)
+     |> assign(:class_filter, nil)
+     |> assign(:class_options, class_options())
+     |> assign_assignable()
      |> stream(:submissions, submissions)}
   end
+
+  # Only assigned sessions have anything to assign; the query is skipped
+  # entirely for anonymous ones.
+  defp assign_assignable(socket) do
+    exam = socket.assigns.exam
+
+    assignable =
+      if Exams.assigned_mode?(exam) and exam.status in ["open", "running"] do
+        Exams.list_assignable_students(exam, socket.assigns.class_filter)
+      else
+        []
+      end
+
+    assign(socket, :assignable, assignable)
+  end
+
+  defp class_options do
+    Enum.map(Tasky.Classes.list_classes(), &{&1.name, &1.id})
+  end
+
+  defp unassign_confirm(%{content: content}) when is_map(content) and map_size(content) > 0 do
+    "Diese Person hat bereits Antworten erfasst. Zuweisung samt Antworten wirklich entfernen?"
+  end
+
+  defp unassign_confirm(_submission), do: "Zuweisung wirklich entfernen?"
 
   # Map of present exam_token => %{in_seb: bool}. A participant counts as in SEB
   # if any of their tracked sessions reports it (e.g. the SEB window alongside a
@@ -487,10 +624,17 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   # Returns {dot_class, label_class, label} for a participant's presence state.
   # gray = absent, yellow = online but SEB not yet started, green = in SEB /
   # waiting room (or simply online when SEB is not required).
-  defp presence_label(present, token, seb_enabled) do
-    case Map.get(present, token) do
+  #
+  # An absent participant with no answers yet never showed up at all — which is
+  # a normal state for an assigned exam, unlike someone who dropped off midway.
+  defp presence_label(present, submission, seb_enabled) do
+    case Map.get(present, submission.exam_token) do
       nil ->
-        {"bg-stone-300", "text-stone-400", "Abwesend"}
+        if never_started?(submission) do
+          {"bg-stone-300", "text-stone-400", "Noch nicht begonnen"}
+        else
+          {"bg-stone-300", "text-stone-400", "Abwesend"}
+        end
 
       %{in_seb: true} ->
         {"bg-emerald-400", "text-emerald-500", "Im Warteraum"}
@@ -502,6 +646,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
         {"bg-emerald-400", "text-emerald-500", "Online"}
     end
   end
+
+  defp never_started?(%{submitted: false, content: content}) when is_map(content),
+    do: map_size(content) == 0
+
+  defp never_started?(_submission), do: false
 
   @impl true
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
@@ -519,6 +668,79 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   end
 
   @impl true
+  def handle_event("filter_by_class", %{"class_id" => raw}, socket) do
+    {:noreply,
+     socket
+     |> assign(:class_filter, Params.int(raw))
+     |> assign_assignable()}
+  end
+
+  def handle_event("assign_student", %{"student_id" => raw}, socket) do
+    case Exams.assign_student(socket.assigns.current_scope, socket.assigns.exam, Params.int(raw)) do
+      {:ok, submission} ->
+        {:noreply,
+         socket
+         |> stream_insert(:submissions, submission)
+         |> assign(:submissions_count, socket.assigns.submissions_count + 1)
+         |> assign_assignable()}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, assign_error_message(reason))}
+    end
+  end
+
+  def handle_event("assign_all_from_class", _params, socket) do
+    case socket.assigns.class_filter do
+      nil ->
+        {:noreply, socket}
+
+      class_id ->
+        case Exams.assign_students_from_class(
+               socket.assigns.current_scope,
+               socket.assigns.exam,
+               class_id
+             ) do
+          {:ok, %{assigned: assigned, skipped: skipped}} ->
+            submissions = Exams.list_exam_submissions(socket.assigns.exam)
+
+            {:noreply,
+             socket
+             |> assign(:submissions_count, length(submissions))
+             |> stream(:submissions, submissions, reset: true)
+             |> assign_assignable()
+             |> put_flash(:info, assign_all_message(assigned, skipped))}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, assign_error_message(reason))}
+        end
+    end
+  end
+
+  def handle_event("unassign_student", %{"submission_id" => raw}, socket) do
+    exam = socket.assigns.exam
+
+    with id when not is_nil(id) <- Params.int(raw),
+         submission when not is_nil(submission) <- Exams.get_submission(exam, id),
+         {:ok, _} <- Exams.unassign_student(socket.assigns.current_scope, exam, submission) do
+      {:noreply,
+       socket
+       |> stream_delete(:submissions, submission)
+       |> assign(:submissions_count, max(socket.assigns.submissions_count - 1, 0))
+       |> assign_assignable()}
+    else
+      {:error, :already_submitted} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Diese Prüfung wurde bereits abgegeben und kann nicht mehr entfernt werden."
+         )}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Zuweisung konnte nicht entfernt werden.")}
+    end
+  end
+
   def handle_event("show_confirm", %{"action" => action}, socket) do
     # Explicit whitelist: client params must never mint or crash on atoms.
     confirm_action =
@@ -579,4 +801,20 @@ defmodule TaskyWeb.ExamLive.Cockpit do
         {:noreply, assign(socket, :confirm_action, nil)}
     end
   end
+
+  defp assign_all_message(assigned, 0), do: "#{assigned} Teilnehmende zugewiesen."
+
+  defp assign_all_message(assigned, skipped),
+    do: "#{assigned} Teilnehmende zugewiesen, #{skipped} übersprungen."
+
+  defp assign_error_message(:not_assigned_mode),
+    do: "Diese Durchführung läuft mit anonymen Teilnehmenden."
+
+  defp assign_error_message(:exam_not_open), do: "Die Durchführung ist nicht offen."
+  defp assign_error_message(:not_a_student), do: "Nur Lernende können zugewiesen werden."
+
+  defp assign_error_message(%Ecto.Changeset{}),
+    do: "Diese Person ist der Prüfung bereits zugewiesen."
+
+  defp assign_error_message(_), do: "Zuweisung fehlgeschlagen."
 end
