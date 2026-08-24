@@ -122,6 +122,13 @@ defmodule TaskyWeb.ExamLive.Content do
                 <div class="p-5 border-b border-stone-100">
                   <h2 class="text-base font-semibold text-stone-800 truncate">{pv.label}</h2>
                   <p class="text-xs text-stone-500 mt-1">Musterlösung</p>
+                  <button
+                    type="button"
+                    phx-click="open_alternatives_help"
+                    class="block w-full text-left mt-2 text-xs font-medium text-stone-500 hover:text-stone-700 hover:underline underline-offset-2 cursor-pointer transition-colors duration-150"
+                  >
+                    Mehrere Musterlösungen pro Antwortfeld
+                  </button>
                 </div>
 
                 <div class="p-5">
@@ -313,6 +320,115 @@ defmodule TaskyWeb.ExamLive.Content do
             </aside>
           </div>
         </div>
+
+        <%!-- Erklär-Dialog: rendered ONCE outside the part loop, so several
+             question cards share one <dialog> instead of duplicating its ID. --%>
+        <%= if @show_alternatives_help do %>
+          <dialog
+            id="alternatives-help-modal"
+            class="modal modal-open"
+            phx-window-keydown="close_alternatives_help"
+            phx-key="escape"
+          >
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_alternatives_help"></div>
+            <div class="modal-box max-w-lg p-0 bg-white rounded-[16px] shadow-2xl">
+              <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
+                    <.icon name="hero-information-circle" class="w-5 h-5" />
+                  </div>
+                  <h3 class="text-lg font-semibold text-stone-900">
+                    Mehrere Musterlösungen pro Antwortfeld
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  phx-click="close_alternatives_help"
+                  aria-label="Schliessen"
+                  class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors duration-150 cursor-pointer shrink-0"
+                >
+                  <.icon name="hero-x-mark" class="w-5 h-5" />
+                </button>
+              </div>
+
+              <div class="px-6 py-5 space-y-4">
+                <p class="text-sm text-stone-600 leading-relaxed">
+                  Ein Antwortfeld kann mehrere gültige Antworten haben. Trenne sie in der
+                  Musterlösung mit einem Semikolon.
+                </p>
+
+                <div class="rounded-xl border border-stone-200 bg-stone-50/70 px-4 py-3.5 space-y-2">
+                  <div>
+                    <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Frage</p>
+                    <p class="text-sm text-stone-700 mt-0.5">
+                      Nenne ein Synonym für „schnell“.
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                      Musterlösung
+                    </p>
+                    <p class="font-mono text-sm text-red-600 mt-0.5">
+                      rasch; flink; zügig; geschwind
+                    </p>
+                  </div>
+                  <p class="text-xs text-stone-500 leading-relaxed pt-1">
+                    Jede dieser vier Eingaben zählt als richtig.
+                  </p>
+                </div>
+
+                <ul class="text-sm text-stone-600 space-y-2 leading-relaxed">
+                  <li class="flex gap-2">
+                    <span class="text-stone-400 shrink-0">•</span>
+                    <span>
+                      Gilt für <span class="font-medium text-stone-700">Antwortfelder</span>
+                      und <span class="font-medium text-stone-700">Lückentextfelder</span>
+                      – nicht für Ankreuzaufgaben.
+                    </span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-stone-400 shrink-0">•</span>
+                    <span>
+                      Wirkt bei der Auto-Korrektur und als Vorschlag in der Korrektur nach Frage.
+                      Du kannst jede Bewertung weiterhin überschreiben.
+                    </span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-stone-400 shrink-0">•</span>
+                    <span>
+                      Jede Alternative wird mit denselben Regeln geprüft wie eine einzelne
+                      Musterlösung – auch „Gross-/Kleinschreibung ignorieren“ und
+                      „Rechtschreibung ignorieren“.
+                    </span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-stone-400 shrink-0">•</span>
+                    <span>
+                      Leerzeichen rund um die Alternativen und leere Abschnitte werden ignoriert.
+                    </span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-stone-400 shrink-0">•</span>
+                    <span>
+                      Das Semikolon ist das Trennzeichen: eine Antwort, die selbst ein Semikolon
+                      enthält, lässt sich so nicht abbilden.
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-end">
+                <button
+                  type="button"
+                  phx-click="close_alternatives_help"
+                  class="bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] cursor-pointer"
+                >
+                  Verstanden
+                </button>
+              </div>
+            </div>
+          </dialog>
+        <% end %>
       </div>
 
       <%!-- Dateien tab --%>
@@ -549,6 +665,9 @@ defmodule TaskyWeb.ExamLive.Content do
     {:ok,
      socket
      |> assign(:exam, exam)
+     # Assigned here rather than in the "musterloesung" branch of
+     # handle_params/3 so the flag is defined on every tab.
+     |> assign(:show_alternatives_help, false)
      |> allow_upload(:attachment,
        accept: Uploads.attachment_accept_exts(),
        max_entries: 3,
@@ -782,6 +901,14 @@ defmodule TaskyWeb.ExamLive.Content do
 
   def handle_event("toggle_ignore_spelling", %{"part-id" => part_id}, socket) do
     toggle_flag_if_auto(socket, part_id, "ignore_spelling", :ignore_spelling)
+  end
+
+  def handle_event("open_alternatives_help", _params, socket) do
+    {:noreply, assign(socket, :show_alternatives_help, true)}
+  end
+
+  def handle_event("close_alternatives_help", _params, socket) do
+    {:noreply, assign(socket, :show_alternatives_help, false)}
   end
 
   ## Dateien tab: attachments

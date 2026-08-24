@@ -122,6 +122,29 @@ defmodule TaskyWeb.ExamContentLiveTest do
     end
   end
 
+  describe "\"Mehrere Musterlösungen\" help dialog" do
+    test "opens and closes, and never duplicates its DOM id across parts", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam(two_part_content())
+      {:ok, view, html} = open_musterloesung(conn, teacher, exam)
+
+      # One trigger per question card, but the dialog itself is closed.
+      assert count(html, "Mehrere Musterlösungen pro Antwortfeld") == 2
+      refute html =~ ~s(id="alternatives-help-modal")
+
+      html = render_click(view, "open_alternatives_help")
+
+      # The dialog lives outside the part loop: two question cards must still
+      # yield exactly one <dialog>, otherwise the DOM id is duplicated.
+      assert count(html, ~s(id="alternatives-help-modal")) == 1
+      assert html =~ "rasch; flink; zügig; geschwind"
+
+      html = render_click(view, "close_alternatives_help")
+      refute html =~ ~s(id="alternatives-help-modal")
+    end
+  end
+
+  defp count(haystack, needle), do: length(String.split(haystack, needle)) - 1
+
   describe "save_sample_solution_part/3 with stale structs" do
     # The stacked Musterlösung view autosaves every part independently, so a
     # request can arrive carrying state read before another part's save

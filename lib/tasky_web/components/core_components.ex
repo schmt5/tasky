@@ -34,47 +34,145 @@ defmodule TaskyWeb.CoreComponents do
   @doc """
   Renders flash notices.
 
+  Four kinds are supported: `:info` and `:success` are transient and fade out
+  on their own, `:warning` and `:error` stay until they are dismissed.
+
   ## Examples
 
       <.flash kind={:info} flash={@flash} />
-      <.flash kind={:info} phx-mounted={show("#flash")}>Welcome Back!</.flash>
+      <.flash kind={:success} phx-mounted={show("#flash")}>Willkommen zurück!</.flash>
   """
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+
+  attr :kind, :atom,
+    values: [:info, :success, :warning, :error],
+    doc: "used for styling and flash lookup"
+
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
 
+  # Tone per kind: a soft tinted card, a matching icon badge and the colour of
+  # the countdown line. `:dismiss_after` is the auto-dismiss delay in ms —
+  # `nil` keeps the message up until it is clicked away.
+  @flash_tones %{
+    info: %{
+      icon: "hero-information-circle",
+      card: "bg-sky-50 border-sky-200",
+      badge: "bg-sky-100 text-sky-600",
+      title: "text-sky-900",
+      bar: "bg-sky-400",
+      dismiss_after: 5000
+    },
+    success: %{
+      icon: "hero-check-circle",
+      card: "bg-emerald-50 border-emerald-200",
+      badge: "bg-emerald-100 text-emerald-600",
+      title: "text-emerald-900",
+      bar: "bg-emerald-400",
+      dismiss_after: 5000
+    },
+    warning: %{
+      icon: "hero-exclamation-triangle",
+      card: "bg-amber-50 border-amber-200",
+      badge: "bg-amber-100 text-amber-700",
+      title: "text-amber-900",
+      bar: "bg-amber-400",
+      dismiss_after: nil
+    },
+    error: %{
+      icon: "hero-exclamation-circle",
+      card: "bg-rose-50 border-rose-200",
+      badge: "bg-rose-100 text-rose-600",
+      title: "text-rose-900",
+      bar: "bg-rose-400",
+      dismiss_after: nil
+    }
+  }
+
   def flash(assigns) do
-    assigns = assign_new(assigns, :id, fn -> "flash-#{assigns.kind}" end)
+    assigns =
+      assigns
+      |> assign_new(:id, fn -> "flash-#{assigns.kind}" end)
+      |> assign(:tone, Map.fetch!(@flash_tones, assigns.kind))
 
     ~H"""
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
-      role="alert"
-      class="toast toast-top toast-end z-50"
+      phx-hook=".FlashAutoDismiss"
+      data-dismiss-after={@tone.dismiss_after}
+      role={if @kind in [:warning, :error], do: "alert", else: "status"}
+      class={[
+        "ll-flash pointer-events-auto w-80 sm:w-96 cursor-pointer overflow-hidden",
+        "rounded-xl border shadow-[0_10px_30px_-12px_rgba(28,25,23,0.35)]",
+        @tone.card
+      ]}
       {@rest}
     >
-      <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
-      ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
-        <div>
-          <p :if={@title} class="font-semibold">{@title}</p>
-          <p>{msg}</p>
+      <div class="flex items-start gap-3 px-4 py-3.5">
+        <span class={[
+          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
+          @tone.badge
+        ]}>
+          <.icon name={@tone.icon} class="size-5" />
+        </span>
+        <div class="min-w-0 flex-1">
+          <p :if={@title} class={["text-sm font-semibold", @tone.title]}>{@title}</p>
+          <p class={["text-sm leading-relaxed text-stone-600 text-wrap", @title && "mt-0.5"]}>
+            {msg}
+          </p>
         </div>
-        <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+        <button
+          type="button"
+          class="-mr-1 shrink-0 rounded-lg p-1 text-stone-400 transition-colors duration-150 hover:bg-stone-900/5 hover:text-stone-600"
+          aria-label={gettext("close")}
+        >
+          <.icon name="hero-x-mark" class="size-4" />
         </button>
       </div>
+      <div
+        :if={@tone.dismiss_after}
+        class={["ll-flash-progress h-0.5 w-full origin-left", @tone.bar]}
+        style={"animation-duration: #{@tone.dismiss_after}ms"}
+      />
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".FlashAutoDismiss">
+        // Auto-dismisses transient flashes after `data-dismiss-after` ms and
+        // pauses the countdown (and the progress line) while hovered, so a
+        // message is never yanked away mid-read.
+        export default {
+          mounted() {
+            // Warning and error flashes carry no `data-dismiss-after`: they
+            // stay up until the reader clicks them away.
+            this.remaining = parseInt(this.el.dataset.dismissAfter || "0", 10);
+            if (!this.remaining) return;
+            this.armed = true;
+
+            this.onEnter = () => this.pause();
+            this.onLeave = () => this.resume();
+            this.el.addEventListener("mouseenter", this.onEnter);
+            this.el.addEventListener("mouseleave", this.onLeave);
+            this.resume();
+          },
+          resume() {
+            this.startedAt = Date.now();
+            this.timer = setTimeout(() => this.el.click(), this.remaining);
+          },
+          pause() {
+            clearTimeout(this.timer);
+            this.remaining -= Date.now() - this.startedAt;
+          },
+          destroyed() {
+            if (!this.armed) return;
+            clearTimeout(this.timer);
+            this.el.removeEventListener("mouseenter", this.onEnter);
+            this.el.removeEventListener("mouseleave", this.onLeave);
+          },
+        }
+      </script>
     </div>
     """
   end

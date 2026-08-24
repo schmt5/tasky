@@ -1085,8 +1085,8 @@ defmodule TaskyWeb.CourseLive.Show do
 
     base = "«#{task_name}» wurde nach #{target} kopiert — als Entwurf am Schluss."
 
-    # `:warning` wird von `Layouts.flash_group/1` nicht gerendert, darum fährt
-    # die Zahl im :info-Text mit.
+    # Der Kopiervorgang gilt als erfolgreich; fehlgeschlagene Dateien fahren
+    # als Zusatz im :info-Text mit.
     if failed == 0,
       do: base,
       else: base <> " #{failed} Datei(en) konnten nicht kopiert werden."
@@ -1117,8 +1117,8 @@ defmodule TaskyWeb.CourseLive.Show do
   @impl true
   def handle_info({:duplicate_done, %{course_id: course_id, failed: failed}}, socket) do
     # The records are committed either way — a copy failure is reported, not
-    # treated as a failed duplication. `:warning` is not rendered by
-    # `Layouts.flash_group/1`, so the count rides along in the :info text.
+    # treated as a failed duplication, so the count rides along in the :info
+    # text.
     message =
       if failed == 0 do
         "Inhalt wurde in einen neuen Kurs dupliziert."

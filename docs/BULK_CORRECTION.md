@@ -51,7 +51,8 @@ The teacher can fine-tune how strict that matching is, per question:
 
 - **ignore upper/lowercase** — "fliegen" and "Fliegen" count the same;
 - **fuzzy spelling** — small typos still count as correct;
-- a sample answer can list several accepted alternatives.
+- a sample answer can list several accepted alternatives, separated by `;`
+  (e.g. `rasch; flink; zügig`).
 
 This is just a suggestion, not a final verdict. The bulk view shows each group
 already coloured with the system's guess, so the teacher mostly just confirms —

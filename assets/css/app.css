@@ -12,6 +12,87 @@
     transition-delay: 500ms;
 }
 
+/* ── Notifications (flashes + connection state) ── */
+
+/* Flash cards slide in from above the top-right corner. */
+@keyframes ll-flash-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.ll-flash {
+    animation: ll-flash-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Countdown line of a self-dismissing flash. Its duration is set inline and
+   matches the JS timer in the FlashAutoDismiss hook; both pause on hover. */
+@keyframes ll-flash-progress {
+    from {
+        transform: scaleX(1);
+    }
+    to {
+        transform: scaleX(0);
+    }
+}
+
+.ll-flash-progress {
+    opacity: 0.7;
+    animation-name: ll-flash-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+
+.ll-flash:hover .ll-flash-progress {
+    animation-play-state: paused;
+}
+
+/* The connection pill only fades in after ~1s of downtime, so the short
+   reconnects of a scale-to-zero machine never surface at all. */
+@keyframes ll-conn-in {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.ll-conn {
+    animation: ll-conn-in 200ms ease-out 900ms both;
+}
+
+@keyframes ll-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ll-spinner {
+    animation: ll-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ll-flash {
+        animation: none;
+    }
+
+    .ll-conn {
+        animation: ll-conn-in 1ms linear 900ms both;
+    }
+
+    .ll-spinner {
+        animation-duration: 2s;
+    }
+}
+
 /* Sticky page header: grow a soft shadow once scrolled (toggled by the
    StickyShadow JS hook) so it detaches cleanly from the content. */
 #content-page-header.is-scrolled {

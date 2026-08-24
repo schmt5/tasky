@@ -343,8 +343,8 @@ defmodule TaskyWeb.CatalogLive.Show do
   @impl true
   def handle_info({:duplicate_done, %{course_id: course_id, failed: failed}}, socket) do
     # Die Records sind so oder so committed — ein Kopierfehler wird gemeldet,
-    # nicht als gescheiterter Import behandelt. `:warning` rendert
-    # `Layouts.flash_group/1` nicht, darum reitet die Zahl im :info-Text mit.
+    # nicht als gescheiterter Import behandelt, darum reitet die Zahl im
+    # :info-Text mit.
     message =
       if failed == 0 do
         "Kurs wurde in deine Kurse übernommen."

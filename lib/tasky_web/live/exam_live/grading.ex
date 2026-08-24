@@ -36,7 +36,7 @@ defmodule TaskyWeb.ExamLive.Grading do
             <div class="flex items-center gap-3">
               <%= if @assigned_mode? and @returned? do %>
                 <span class="inline-flex items-center gap-1.5 bg-sky-100 text-sky-700 text-[13px] font-semibold px-3 py-1.5 rounded-full">
-                  <.icon name="hero-check-circle-mini" class="w-4 h-4" />
+                  <.icon name="hero-arrow-uturn-right" class="w-4 h-4" />
                   Zurückgegeben am {Calendar.strftime(@exam.returned_at, "%d.%m.%Y")}
                 </span>
                 <button

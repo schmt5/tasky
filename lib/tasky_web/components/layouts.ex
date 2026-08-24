@@ -194,6 +194,10 @@ defmodule TaskyWeb.Layouts do
   @doc """
   Shows the flash group with standard titles and content.
 
+  Flashes stack in the top-right corner; the connection state gets its own
+  slim pill centred under the header, so a reconnect never looks like an
+  application error.
+
   ## Examples
 
       <.flash_group flash={@flash} />
@@ -203,33 +207,54 @@ defmodule TaskyWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div
+      id={@id}
+      aria-live="polite"
+      class="pointer-events-none fixed top-20 right-4 z-70 flex flex-col items-end gap-3"
+    >
       <.flash kind={:info} flash={@flash} />
+      <.flash kind={:success} flash={@flash} />
+      <.flash kind={:warning} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
+    </div>
 
-      <.flash
-        id="client-error"
-        kind={:error}
-        title={gettext("We can't find the internet")}
-        phx-disconnected={show(".phx-client-error #client-error") |> JS.remove_attribute("hidden")}
-        phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
-        hidden
-      >
-        {gettext("Attempting to reconnect")}
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-      </.flash>
+    <.connection_status />
+    """
+  end
 
-      <.flash
-        id="server-error"
-        kind={:error}
-        title={gettext("Something went wrong!")}
-        phx-disconnected={show(".phx-server-error #server-error") |> JS.remove_attribute("hidden")}
-        phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}
+  @doc """
+  Shows the LiveView connection state as a slim pill under the header.
+
+  Both pills carry a built-in delay (see `.ll-conn` in `app.css`), so short
+  reconnects — the app sleeps on a scale-to-zero machine — stay invisible and
+  only a genuinely slow wake-up is announced.
+  """
+  def connection_status(assigns) do
+    ~H"""
+    <div class="pointer-events-none fixed inset-x-0 top-20 z-80 flex flex-col items-center gap-2 px-4">
+      <div
+        id="connection-status"
+        class="ll-conn flex items-center gap-2.5 rounded-full border border-sky-200 bg-sky-50/95 px-4 py-2 text-sm font-medium text-sky-900 shadow-[0_10px_30px_-12px_rgba(28,25,23,0.35)] backdrop-blur-sm"
+        role="status"
         hidden
+        phx-disconnected={JS.remove_attribute("hidden", to: ".phx-client-error #connection-status")}
+        phx-connected={JS.set_attribute({"hidden", ""}, to: "#connection-status")}
       >
-        {gettext("Attempting to reconnect")}
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-      </.flash>
+        <span class="ll-spinner size-4 shrink-0 rounded-full border-2 border-sky-200 border-t-sky-500" />
+        Verbindung wird hergestellt …
+      </div>
+
+      <div
+        id="server-status"
+        class="ll-conn flex items-center gap-2.5 rounded-full border border-amber-200 bg-amber-50/95 px-4 py-2 text-sm font-medium text-amber-900 shadow-[0_10px_30px_-12px_rgba(28,25,23,0.35)] backdrop-blur-sm"
+        role="status"
+        hidden
+        phx-disconnected={JS.remove_attribute("hidden", to: ".phx-server-error #server-status")}
+        phx-connected={JS.set_attribute({"hidden", ""}, to: "#server-status")}
+      >
+        <span class="ll-spinner size-4 shrink-0 rounded-full border-2 border-amber-200 border-t-amber-500" />
+        Kurz gestolpert – wir versuchen es erneut …
+      </div>
     </div>
     """
   end
