@@ -32,6 +32,7 @@ defmodule TaskyWeb.ClassLive.Index do
           </div>
 
           <.link
+            :if={@can_create}
             navigate={~p"/classes/new"}
             class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
           >
@@ -103,7 +104,22 @@ defmodule TaskyWeb.ClassLive.Index do
           </li>
         </ul>
 
-        <div :if={!@has_classes} class="flex flex-col items-center text-center px-8 py-16 bg-white">
+        <div
+          :if={!@has_classes && !@can_create}
+          class="flex flex-col items-center text-center px-8 py-16 bg-white"
+        >
+          <h2 class="font-serif text-[24px] text-stone-900 leading-[1.2] mb-3 font-normal">
+            Noch keiner Organisation zugewiesen
+          </h2>
+          <p class="text-[15px] text-stone-500 max-w-[420px] leading-[1.7]">
+            Klassen gehören zu einer Organisation, und du bist noch keiner zugewiesen.
+            Bitte wende dich an die Administration.
+          </p>
+        </div>
+        <div
+          :if={!@has_classes && @can_create}
+          class="flex flex-col items-center text-center px-8 py-16 bg-white"
+        >
           <div class="w-14 h-14 rounded-[14px] bg-sky-50 flex items-center justify-center text-sky-400 mb-5">
             <.icon name="hero-user-group" class="w-6 h-6" />
           </div>
@@ -115,6 +131,7 @@ defmodule TaskyWeb.ClassLive.Index do
           </p>
 
           <.link
+            :if={@can_create}
             navigate={~p"/classes/new"}
             class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
           >
@@ -128,7 +145,8 @@ defmodule TaskyWeb.ClassLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    classes = Classes.list_classes()
+    scope = socket.assigns.current_scope
+    classes = Classes.list_classes(scope)
     class_count = length(classes)
 
     {:ok,
@@ -136,7 +154,8 @@ defmodule TaskyWeb.ClassLive.Index do
      |> assign(:page_title, "Klassen")
      |> assign(:class_count, class_count)
      |> assign(:has_classes, class_count > 0)
-     |> assign(:student_counts, Classes.count_students_per_class())
+     |> assign(:can_create, Tasky.Policy.organization_scope(scope) != :none)
+     |> assign(:student_counts, Classes.count_students_per_class(scope))
      |> stream(:classes, classes)}
   end
 
@@ -149,22 +168,25 @@ defmodule TaskyWeb.ClassLive.Index do
   end
 
   def handle_event("delete", %{"id" => id}, socket) do
-    class = Classes.get_class!(id)
+    scope = socket.assigns.current_scope
+    # Scoped lookup: the id comes from a phx-value, and deleting a class nilifies
+    # `class_id` for all of its students — a foreign class must 404 here.
+    class = Classes.get_class!(scope, id)
 
-    case Classes.delete_class(class) do
+    case Classes.delete_class(scope, class) do
       {:ok, _class} ->
-        classes = Classes.list_classes()
+        classes = Classes.list_classes(scope)
         class_count = length(classes)
 
         {:noreply,
          socket
          |> assign(:class_count, class_count)
          |> assign(:has_classes, class_count > 0)
-         |> assign(:student_counts, Classes.count_students_per_class())
+         |> assign(:student_counts, Classes.count_students_per_class(scope))
          |> stream(:classes, classes, reset: true)
          |> put_flash(:info, "Klasse wurde erfolgreich gelöscht.")}
 
-      {:error, _changeset} ->
+      {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Klasse konnte nicht gelöscht werden.")}
     end
   end

@@ -4,6 +4,8 @@ defmodule Tasky.AccountsTest do
   alias Tasky.Accounts
 
   import Tasky.AccountsFixtures
+  import Tasky.ClassesFixtures
+  import Tasky.OrganizationsFixtures
   alias Tasky.Accounts.{User, UserToken}
 
   describe "get_user_by_email/1" do
@@ -46,59 +48,125 @@ defmodule Tasky.AccountsTest do
     end
   end
 
-  describe "register_user/1" do
-    test "requires email to be set" do
-      {:error, changeset} = Accounts.register_user(%{})
+  describe "register_user/2 — the invitation decides the role" do
+    setup do
+      %{class: class_fixture(), organization: organization_fixture()}
+    end
+
+    test "a class link creates a student in that class", %{class: class} do
+      {:ok, user} =
+        Accounts.register_user(valid_user_attributes(), {:class, class})
+
+      assert user.role == "student"
+      assert user.class_id == class.id
+      # A student's organization is derived from their class, never stored.
+      assert user.organization_id == nil
+    end
+
+    test "an organization link creates a teacher in that organization", %{
+      organization: organization
+    } do
+      {:ok, user} =
+        Accounts.register_user(valid_user_attributes(), {:organization, organization})
+
+      assert user.role == "teacher"
+      assert user.organization_id == organization.id
+      assert user.class_id == nil
+    end
+
+    test "role, class and organization in the params are ignored", %{class: class} do
+      other = organization_fixture()
+      other_class = class_fixture()
+
+      {:ok, user} =
+        Accounts.register_user(
+          valid_user_attributes(%{
+            role: "admin",
+            is_teacher: true,
+            class_id: other_class.id,
+            organization_id: other.id
+          }),
+          {:class, class}
+        )
+
+      # This is the regression test that matters: before invitations, a crafted
+      # submit could set `is_teacher` and `class_id` and so walk into a foreign
+      # organization as a teacher. None of those fields is castable any more.
+      assert user.role == "student"
+      assert user.class_id == class.id
+      assert user.organization_id == nil
+    end
+
+    test "there is no registration without an invitation" do
+      assert_raise FunctionClauseError, fn ->
+        Accounts.register_user(valid_user_attributes(), nil)
+      end
+
+      assert_raise FunctionClauseError, fn ->
+        Accounts.register_user(valid_user_attributes(), {:organization, nil})
+      end
+    end
+
+    test "requires email to be set", %{class: class} do
+      {:error, changeset} = Accounts.register_user(%{}, {:class, class})
 
       assert %{email: ["darf nicht leer sein"]} = errors_on(changeset)
     end
 
-    test "validates email when given" do
-      {:error, changeset} = Accounts.register_user(%{email: "not valid"})
+    test "validates email when given", %{class: class} do
+      {:error, changeset} = Accounts.register_user(%{email: "not valid"}, {:class, class})
 
       assert %{email: ["muss ein @-Zeichen enthalten und darf keine Leerzeichen haben"]} =
                errors_on(changeset)
     end
 
-    test "validates maximum values for email for security" do
+    test "validates maximum values for email for security", %{class: class} do
       too_long = String.duplicate("db", 100)
-      {:error, changeset} = Accounts.register_user(%{email: too_long})
+      {:error, changeset} = Accounts.register_user(%{email: too_long}, {:class, class})
       assert "darf maximal 160 Zeichen lang sein" in errors_on(changeset).email
     end
 
-    test "validates email uniqueness" do
+    test "validates email uniqueness", %{class: class} do
       %{email: email} = user_fixture()
-      {:error, changeset} = Accounts.register_user(%{email: email})
+      {:error, changeset} = Accounts.register_user(%{email: email}, {:class, class})
       assert "has already been taken" in errors_on(changeset).email
 
       # Now try with the uppercased email too, to check that email case is ignored.
-      {:error, changeset} = Accounts.register_user(%{email: String.upcase(email)})
+      {:error, changeset} =
+        Accounts.register_user(%{email: String.upcase(email)}, {:class, class})
+
       assert "has already been taken" in errors_on(changeset).email
     end
 
-    test "registers users with password and auto-confirms" do
+    test "registers users with password and auto-confirms", %{class: class} do
       email = unique_user_email()
-      {:ok, user} = Accounts.register_user(valid_user_attributes(email: email))
+      {:ok, user} = Accounts.register_user(valid_user_attributes(email: email), {:class, class})
       assert user.email == email
       assert user.hashed_password != ""
       assert is_struct(user.confirmed_at, DateTime)
     end
 
-    test "requires password" do
+    test "requires password", %{class: class} do
       {:error, changeset} =
-        Accounts.register_user(%{email: unique_user_email(), firstname: "A", lastname: "B"})
+        Accounts.register_user(
+          %{email: unique_user_email(), firstname: "A", lastname: "B"},
+          {:class, class}
+        )
 
       assert %{password: ["darf nicht leer sein"]} = errors_on(changeset)
     end
 
-    test "validates password length" do
+    test "validates password length", %{class: class} do
       {:error, changeset} =
-        Accounts.register_user(%{
-          email: unique_user_email(),
-          firstname: "A",
-          lastname: "B",
-          password: "short"
-        })
+        Accounts.register_user(
+          %{
+            email: unique_user_email(),
+            firstname: "A",
+            lastname: "B",
+            password: "short"
+          },
+          {:class, class}
+        )
 
       assert %{password: ["muss zwischen 8 und 72 Zeichen lang sein"]} = errors_on(changeset)
     end

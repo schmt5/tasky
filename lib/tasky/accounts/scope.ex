@@ -58,6 +58,16 @@ defmodule Tasky.Accounts.Scope do
   def admin_or_teacher?(_), do: false
 
   @doc """
+  Returns the organization of the user in the scope, or `nil`.
+
+  Only teachers carry an organization directly; students derive theirs from
+  their class (see `Tasky.Organizations`), and admins have none because they see
+  every organization.
+  """
+  def organization_id(%__MODULE__{user: %User{organization_id: id}}), do: id
+  def organization_id(_), do: nil
+
+  @doc """
   Returns the role of the user in the scope.
   """
   def role(%__MODULE__{user: %User{role: role}}), do: role

@@ -7,7 +7,6 @@ defmodule Tasky.Tasks do
   alias Tasky.Repo
 
   alias Tasky.Accounts.Scope
-  alias Tasky.Accounts.User
   alias Tasky.Correction.AnswerKey
   alias Tasky.Policy
   alias Tasky.Tasks.Task
@@ -797,119 +796,6 @@ defmodule Tasky.Tasks do
   """
   def change_submission(%TaskSubmission{} = submission, attrs \\ %{}) do
     TaskSubmission.status_changeset(submission, attrs)
-  end
-
-  @doc """
-  Lists all students who can be assigned tasks.
-  Only teachers and admins can view this list.
-
-  ## Examples
-
-      iex> list_available_students(scope)
-      [%User{}, ...]
-
-  """
-  def list_available_students(%Scope{} = scope) do
-    if Scope.admin_or_teacher?(scope) do
-      User
-      |> where([u], u.role == "student")
-      |> order_by([u], asc: u.email)
-      |> Repo.all()
-    else
-      []
-    end
-  end
-
-  @doc """
-  Lists students who are not yet assigned to a task.
-  Only teachers and admins can view this list.
-
-  ## Examples
-
-      iex> list_unassigned_students(scope, task_id)
-      [%User{}, ...]
-
-  """
-  def list_unassigned_students(%Scope{} = scope, task_id) do
-    if Scope.admin_or_teacher?(scope) do
-      already_assigned_ids =
-        TaskSubmission
-        |> where([s], s.task_id == ^task_id)
-        |> select([s], s.student_id)
-        |> Repo.all()
-
-      User
-      |> where([u], u.role == "student")
-      |> where([u], u.id not in ^already_assigned_ids)
-      |> order_by([u], asc: u.email)
-      |> Repo.all()
-    else
-      []
-    end
-  end
-
-  @doc """
-  Assigns a task to one or more students by creating submissions.
-  Only teachers and admins can assign tasks.
-
-  ## Examples
-
-      iex> assign_task_to_students(scope, task_id, [1, 2, 3])
-      {:ok, 3}
-
-  """
-  def assign_task_to_students(%Scope{} = scope, task_id, student_ids)
-      when is_list(student_ids) do
-    if Scope.admin_or_teacher?(scope) do
-      # Verify the task belongs to the teacher
-      task = get_task!(scope, task_id)
-
-      # Create submissions for each student
-      now = DateTime.utc_now(:second)
-
-      submissions =
-        Enum.map(student_ids, fn student_id ->
-          %{
-            task_id: task.id,
-            student_id: student_id,
-            status: "not_started",
-            inserted_at: now,
-            updated_at: now
-          }
-        end)
-
-      {count, _} =
-        Repo.insert_all(
-          TaskSubmission,
-          submissions,
-          on_conflict: :nothing,
-          conflict_target: [:task_id, :student_id]
-        )
-
-      {:ok, count}
-    else
-      {:error, :unauthorized}
-    end
-  end
-
-  @doc """
-  Assigns a task to all students.
-  Only teachers and admins can assign tasks.
-
-  ## Examples
-
-      iex> assign_task_to_all_students(scope, task_id)
-      {:ok, 5}
-
-  """
-  def assign_task_to_all_students(%Scope{} = scope, task_id) do
-    if Scope.admin_or_teacher?(scope) do
-      students = list_available_students(scope)
-      student_ids = Enum.map(students, & &1.id)
-      assign_task_to_students(scope, task_id, student_ids)
-    else
-      {:error, :unauthorized}
-    end
   end
 
   @doc """

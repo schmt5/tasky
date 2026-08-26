@@ -159,7 +159,7 @@ defmodule TaskyWeb.Admin.UserLive do
     {:ok,
      socket
      |> assign(:page_title, "Benutzer verwalten")
-     |> assign(:classes, Classes.list_classes())
+     |> assign(:classes, Classes.list_classes(socket.assigns.current_scope))
      |> assign(:search, "")
      |> assign(:role_filter, "")
      |> assign(:class_filter, "")

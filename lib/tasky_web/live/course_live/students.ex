@@ -233,7 +233,7 @@ defmodule TaskyWeb.CourseLive.Students do
   @impl true
   def handle_event("show_enroll_modal", _params, socket) do
     unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id)
-    classes = Classes.list_classes()
+    classes = Classes.list_classes(socket.assigns.current_scope)
 
     {:noreply,
      socket
@@ -323,6 +323,14 @@ defmodule TaskyWeb.CourseLive.Students do
          |> assign(:student_count, socket.assigns.student_count + 1)
          |> stream_insert(:enrolled_students, student)
          |> assign(:unenrolled_students, unenrolled_students)}
+
+      {:error, :different_organization} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Diese Person gehört nicht zu deiner Organisation."
+         )}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to enroll student")}

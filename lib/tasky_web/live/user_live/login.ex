@@ -32,14 +32,7 @@ defmodule TaskyWeb.UserLive.Login do
             </h1>
 
             <p class="text-[15px] text-stone-500 leading-[1.6]">
-              Noch kein Konto?
-              <.link
-                navigate={~p"/users/register"}
-                class="font-semibold text-sky-600 hover:text-sky-700 transition-colors duration-150"
-              >
-                Jetzt registrieren
-              </.link>
-              und loslegen.
+              Noch kein Konto? Die Registrierung läuft über den Einladungslink deiner Schule.
             </p>
           </div>
 

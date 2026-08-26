@@ -8,7 +8,9 @@ defmodule TaskyWeb.AuthorizationTest do
   use TaskyWeb.ConnCase, async: false
 
   import Tasky.AccountsFixtures
+  import Tasky.ClassesFixtures
   import Tasky.ExamsFixtures
+  import Tasky.OrganizationsFixtures
   import Tasky.TasksFixtures
 
   alias Tasky.Accounts.Scope
@@ -268,6 +270,87 @@ defmodule TaskyWeb.AuthorizationTest do
     test "anonymous users are sent to login", %{conn: conn, published: published} do
       assert redirected_to(get(conn, "/catalog")) =~ "/users/log-in"
       assert redirected_to(get(conn, "/catalog/#{published.id}")) =~ "/users/log-in"
+    end
+  end
+
+  describe "Organisationen" do
+    setup do
+      organization = organization_fixture()
+      owner = user_fixture(%{role: "teacher", organization_id: organization.id})
+      class = class_fixture(%{organization_id: organization.id})
+
+      %{organization: organization, owner: owner, class: class}
+    end
+
+    test "a teacher of the same organization may edit its classes", %{conn: conn, class: class} do
+      colleague =
+        user_fixture(%{role: "teacher", organization_id: class.organization_id})
+
+      conn = log_in_user(conn, colleague)
+
+      assert html_response(get(conn, "/classes"), 200) =~ class.name
+      assert html_response(get(conn, "/classes/#{class.id}/edit"), 200)
+    end
+
+    test "a teacher of another organization gets 404 for the class", %{conn: conn, class: class} do
+      conn = log_in_user(conn, user_fixture(%{role: "teacher"}))
+
+      refute html_response(get(conn, "/classes"), 200) =~ class.name
+      assert_error_sent 404, fn -> get(conn, "/classes/#{class.id}/edit") end
+    end
+
+    test "a teacher without an organization gets 404 for the class", %{conn: conn, class: class} do
+      conn = log_in_user(conn, user_fixture(%{role: "teacher", organization_id: nil}))
+
+      assert_error_sent 404, fn -> get(conn, "/classes/#{class.id}/edit") end
+    end
+
+    test "only admins reach the organization administration", %{conn: conn} do
+      for role <- ["teacher", "student"] do
+        conn = log_in_role(conn, role)
+        assert redirected_to(get(conn, "/admin/organizations")) == "/"
+      end
+
+      assert html_response(get(log_in_role(conn, "admin"), "/admin/organizations"), 200)
+    end
+
+    test "anonymous users are sent to login", %{conn: conn} do
+      assert redirected_to(get(conn, "/admin/organizations")) =~ "/users/log-in"
+    end
+  end
+
+  describe "Registrierung" do
+    test "without an invitation there is no form", %{conn: conn} do
+      html = html_response(get(conn, "/users/register"), 200)
+
+      assert html =~ "Einladungslink benötigt"
+      refute html =~ "registration_form"
+    end
+
+    test "a class link offers a student registration", %{conn: conn} do
+      class = class_fixture()
+      html = html_response(get(conn, "/users/register?class=#{class.slug}"), 200)
+
+      assert html =~ "registration_form"
+      assert html =~ class.name
+    end
+
+    test "an organization invite token offers a teacher registration", %{conn: conn} do
+      organization = organization_fixture()
+
+      html =
+        html_response(get(conn, "/users/register?invite=#{organization.invite_token}"), 200)
+
+      assert html =~ "registration_form"
+      assert html =~ organization.name
+      assert html =~ "Lehrpersonen-Konto"
+    end
+
+    test "an unknown invite token offers nothing", %{conn: conn} do
+      html = html_response(get(conn, "/users/register?invite=nope"), 200)
+
+      assert html =~ "Einladungslink benötigt"
+      refute html =~ "registration_form"
     end
   end
 end

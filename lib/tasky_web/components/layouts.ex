@@ -172,12 +172,6 @@ defmodule TaskyWeb.Layouts do
             >
               Anmelden
             </.link>
-            <.link
-              navigate={~p"/users/register"}
-              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-            >
-              Registrieren
-            </.link>
           <% end %>
         </div>
       </div>

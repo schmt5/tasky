@@ -12,10 +12,8 @@ defmodule Tasky.Accounts.User do
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
 
-    # Virtual fields for UI representation
-    field :is_teacher, :boolean, virtual: true, default: false
-
     belongs_to :class, Tasky.Classes.Class
+    belongs_to :organization, Tasky.Organizations.Organization
 
     has_many :task_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :student_id
     has_many :reviewed_submissions, Tasky.Tasks.TaskSubmission, foreign_key: :feedback_by_id
@@ -36,13 +34,15 @@ defmodule Tasky.Accounts.User do
   @doc """
   A user changeset for registration.
 
-  Casts email, password, firstname, lastname, is_teacher, and class_id.
-  Validates email and password, and sets the role based on is_teacher.
+  Casts email, password, firstname and lastname — and nothing else. `role`,
+  `class_id` and `organization_id` are set programmatically from the invitation
+  the visitor arrived with (see `Tasky.Accounts.register_user/2`), never from
+  parameters. That is what makes self-registration into a foreign organization
+  structurally impossible rather than merely validated.
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :password, :firstname, :lastname, :is_teacher, :class_id])
-    |> transform_is_teacher_to_role()
+    |> cast(attrs, [:email, :password, :firstname, :lastname])
     |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
     |> validate_length(:firstname,
       min: 1,
@@ -58,6 +58,7 @@ defmodule Tasky.Accounts.User do
     |> validate_password(opts)
     |> validate_role()
     |> foreign_key_constraint(:class_id)
+    |> foreign_key_constraint(:organization_id)
   end
 
   @doc """
@@ -112,12 +113,17 @@ defmodule Tasky.Accounts.User do
   end
 
   @doc """
-  A user changeset for admin editing (firstname, lastname, email).
+  A user changeset for admin editing (firstname, lastname, email, class,
+  organization).
   Unlike `email_changeset/3`, it does not error when the email is unchanged.
+
+  Only teachers carry an organization; a student's is derived from their class,
+  so setting one on a student is rejected here (and by a check constraint).
   """
   def admin_update_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:firstname, :lastname, :email, :class_id])
+    |> cast(attrs, [:firstname, :lastname, :email, :class_id, :organization_id])
+    |> validate_student_has_no_organization()
     |> validate_required([:firstname, :lastname], message: "darf nicht leer sein")
     |> validate_length(:firstname,
       min: 1,
@@ -131,6 +137,7 @@ defmodule Tasky.Accounts.User do
     )
     |> validate_email(opts)
     |> foreign_key_constraint(:class_id)
+    |> foreign_key_constraint(:organization_id)
   end
 
   @doc """
@@ -198,11 +205,18 @@ defmodule Tasky.Accounts.User do
     end
   end
 
-  defp transform_is_teacher_to_role(changeset) do
-    case get_change(changeset, :is_teacher) do
-      true -> put_change(changeset, :role, "teacher")
-      false -> put_change(changeset, :role, "student")
-      nil -> changeset
+  defp validate_student_has_no_organization(changeset) do
+    role = get_field(changeset, :role)
+    organization_id = get_field(changeset, :organization_id)
+
+    if role == "student" and not is_nil(organization_id) do
+      add_error(
+        changeset,
+        :organization_id,
+        "Lernende gehören zur Organisation ihrer Klasse und können keine eigene haben"
+      )
+    else
+      changeset
     end
   end
 

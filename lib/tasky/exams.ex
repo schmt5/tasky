@@ -16,6 +16,7 @@ defmodule Tasky.Exams do
   alias Tasky.Exams.ExamSubmissionFile
   alias Tasky.Exams.ExamUploadField
   alias Tasky.Grading
+  alias Tasky.Organizations
   alias Tasky.Policy
 
   @doc """
@@ -480,23 +481,25 @@ defmodule Tasky.Exams do
   Lists the students who could still be assigned to this exam, optionally
   narrowed to one class.
 
-  Like `Courses.list_unenrolled_students/1,2` this spans all students, not only
-  those in the teacher's own classes.
+  Limited to the organization of the exam's **owner** — the same rule
+  `fetch_assignable_user/2` enforces on the write path. Deriving it from
+  `exam.teacher_id` rather than from a caller scope keeps the signature unchanged
+  and holds even when an admin performs the assignment.
   """
   def list_assignable_students(%Exam{} = exam, class_id \\ nil) do
-    query =
-      from u in User,
-        where:
-          u.role == "student" and
-            u.id not in subquery(
-              from s in ExamSubmission,
-                where: s.exam_id == ^exam.id and not is_nil(s.user_id),
-                select: s.user_id
-            ),
-        order_by: [asc: u.lastname, asc: u.firstname, asc: u.email]
-
-    query
+    exam.teacher_id
+    |> Organizations.teacher_organization_id()
+    |> Organizations.students_query()
+    |> where(
+      [u],
+      u.id not in subquery(
+        from s in ExamSubmission,
+          where: s.exam_id == ^exam.id and not is_nil(s.user_id),
+          select: s.user_id
+      )
+    )
     |> then(fn q -> if class_id, do: where(q, [u], u.class_id == ^class_id), else: q end)
+    |> order_by([u], asc: u.lastname, asc: u.firstname, asc: u.email)
     |> Repo.all()
   end
 
@@ -514,7 +517,7 @@ defmodule Tasky.Exams do
         locked = Repo.lock_one!(Exam, exam.id, :share)
 
         with :ok <- check_assignable(locked),
-             {:ok, user} <- fetch_assignable_user(user_id),
+             {:ok, user} <- fetch_assignable_user(locked, user_id),
              {:ok, submission} <- insert_assignment(locked, user) do
           submission
         else
@@ -578,12 +581,23 @@ defmodule Tasky.Exams do
     end
   end
 
-  # The id arrives off the wire, so the role is checked here rather than
-  # trusted — otherwise a teacher could assign an admin to their exam.
-  defp fetch_assignable_user(user_id) do
+  # The id arrives off the wire, so both the role and the organization are
+  # checked here rather than trusted — otherwise a teacher could assign an admin,
+  # or a student of another organization whose name and email would then show up
+  # in the cockpit, correction and grading views.
+  defp fetch_assignable_user(%Exam{} = exam, user_id) do
     case Repo.get(User, user_id) do
-      %User{role: "student"} = user -> {:ok, user}
-      _ -> {:error, :not_a_student}
+      %User{role: "student"} = user ->
+        owner_organization_id = Organizations.teacher_organization_id(exam.teacher_id)
+
+        if Organizations.student_member?(user.id, owner_organization_id) do
+          {:ok, user}
+        else
+          {:error, :different_organization}
+        end
+
+      _ ->
+        {:error, :not_a_student}
     end
   end
 

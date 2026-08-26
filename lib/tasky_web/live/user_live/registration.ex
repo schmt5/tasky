@@ -4,6 +4,7 @@ defmodule TaskyWeb.UserLive.Registration do
   alias Tasky.Accounts
   alias Tasky.Accounts.User
   alias Tasky.Classes
+  alias Tasky.Organizations
 
   @impl true
   def render(assigns) do
@@ -46,122 +47,134 @@ defmodule TaskyWeb.UserLive.Registration do
               und loslegen.
             </p>
           </div>
-          <%!-- Form Card --%>
-          <div class="bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-hidden">
-            <.form
-              for={@form}
-              id="registration_form"
-              phx-submit="save"
-              phx-change="validate"
-              action={~p"/users/log-in"}
-              phx-trigger-action={@trigger_submit}
-            >
-              <div class="p-8 space-y-5">
-                <.input
-                  field={@form[:firstname]}
-                  type="text"
-                  label="Vorname"
-                  required
-                  phx-mounted={JS.focus()}
-                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                  placeholder="Max"
-                />
-
-                <.input
-                  field={@form[:lastname]}
-                  type="text"
-                  label="Nachname"
-                  required
-                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                  placeholder="Mustermann"
-                />
-
-                <.input
-                  field={@form[:email]}
-                  type="email"
-                  label="E-Mail"
-                  autocomplete="username"
-                  required
-                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                  placeholder="max@beispiel.de"
-                />
-
-                <.input
-                  field={@form[:password]}
-                  type="password"
-                  label="Passwort"
-                  autocomplete="new-password"
-                  required
-                  class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-                  placeholder="Mindestens 8 Zeichen"
-                />
-
-                <%= if @class_name do %>
+          <%= if @invitation do %>
+            <%!-- Form Card --%>
+            <div class="bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-hidden">
+              <.form
+                for={@form}
+                id="registration_form"
+                phx-submit="save"
+                phx-change="validate"
+                action={~p"/users/log-in"}
+                phx-trigger-action={@trigger_submit}
+              >
+                <div class="p-8 space-y-5">
                   <.input
-                    field={@form[:class_name]}
+                    field={@form[:firstname]}
                     type="text"
-                    label="Klasse"
-                    value={@class_name}
-                    readonly
-                    class="w-full px-4 py-3 text-[15px] text-stone-900 bg-stone-50 border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 cursor-not-allowed"
+                    label="Vorname"
+                    required
+                    phx-mounted={JS.focus()}
+                    class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    placeholder="Max"
                   />
-                <% end %>
 
-                <%= unless @class_name do %>
-                  <div class="pt-2 border-t border-stone-100 mt-6 pt-6">
-                    <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
-                      <div class="flex items-start gap-3">
-                        <div class="mt-0.5">
-                          <.input
-                            field={@form[:is_teacher]}
-                            type="checkbox"
-                            label=""
-                            class="w-5 h-5 text-sky-500 bg-white border-stone-300 rounded-[6px] focus:ring-4 focus:ring-sky-100 focus:ring-offset-0 transition-all duration-150 cursor-pointer"
-                          />
-                        </div>
-                        <div class="flex-1 -mt-1">
-                          <label for={@form[:is_teacher].id} class="cursor-pointer">
-                            <span class="block text-[14px] font-semibold text-stone-800 hover:text-stone-900 transition-colors">
-                              Ich bin eine Lehrperson
-                            </span>
-                            <span class="block text-[13px] text-stone-600 mt-0.5 leading-[1.5]">
-                              Lehrpersonen können Kurse erstellen und Lerneinheiten verwalten.
-                            </span>
-                          </label>
-                        </div>
+                  <.input
+                    field={@form[:lastname]}
+                    type="text"
+                    label="Nachname"
+                    required
+                    class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    placeholder="Mustermann"
+                  />
+
+                  <.input
+                    field={@form[:email]}
+                    type="email"
+                    label="E-Mail"
+                    autocomplete="username"
+                    required
+                    class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    placeholder="max@beispiel.de"
+                  />
+
+                  <.input
+                    field={@form[:password]}
+                    type="password"
+                    label="Passwort"
+                    autocomplete="new-password"
+                    required
+                    class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    placeholder="Mindestens 8 Zeichen"
+                  />
+
+                  <%= case @invitation do %>
+                    <% {:class, class} -> %>
+                      <.input
+                        field={@form[:invitation_target]}
+                        type="text"
+                        label="Klasse"
+                        value={class.name}
+                        readonly
+                        class="w-full px-4 py-3 text-[15px] text-stone-900 bg-stone-50 border border-stone-200 rounded-[10px] transition-all duration-150 cursor-not-allowed"
+                      />
+                    <% {:organization, organization} -> %>
+                      <.input
+                        field={@form[:invitation_target]}
+                        type="text"
+                        label="Organisation"
+                        value={organization.name}
+                        readonly
+                        class="w-full px-4 py-3 text-[15px] text-stone-900 bg-stone-50 border border-stone-200 rounded-[10px] transition-all duration-150 cursor-not-allowed"
+                      />
+                      <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
+                        <p class="text-[13px] text-stone-600 leading-[1.5]">
+                          Du erstellst ein
+                          <span class="font-semibold text-stone-800">Lehrpersonen-Konto</span>
+                          für diese Organisation und siehst damit deren Klassen und Lernende.
+                        </p>
                       </div>
-                    </div>
-                  </div>
-                <% end %>
-              </div>
+                  <% end %>
+                </div>
 
-              <div class="px-8 pb-8">
-                <button
-                  type="submit"
-                  phx-disable-with="Konto wird erstellt..."
-                  class="w-full inline-flex items-center justify-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-6 py-3.5 rounded-[10px] shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    stroke-width="2"
+                <div class="px-8 pb-8">
+                  <button
+                    type="submit"
+                    phx-disable-with="Konto wird erstellt..."
+                    class="w-full inline-flex items-center justify-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-6 py-3.5 rounded-[10px] shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  Konto erstellen
-                </button>
-              </div>
-            </.form>
-          </div>
+                    <svg
+                      width="18"
+                      height="18"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    Konto erstellen
+                  </button>
+                </div>
+              </.form>
+            </div>
+          <% else %>
+            <div class="bg-white rounded-[16px] border border-stone-100 shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-8 text-center">
+              <h2 class="text-[17px] font-semibold text-stone-900 mb-3">
+                Einladungslink benötigt
+              </h2>
+              <p class="text-[14px] text-stone-600 leading-[1.6] mb-6">
+                Die Registrierung ist nur über den Einladungslink deiner Schule möglich.
+                Lernende erhalten den Link ihrer Klasse von ihrer Lehrperson,
+                Lehrpersonen den Link ihrer Organisation von der Administration.
+              </p>
+              <.link
+                navigate={~p"/users/log-in"}
+                class="inline-flex items-center justify-center gap-2 bg-sky-500 text-white text-[15px] font-semibold px-6 py-3 rounded-[10px] shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+              >
+                Zur Anmeldung
+              </.link>
+            </div>
+          <% end %>
           <%!-- Footer Note --%>
-          <div class="mt-6 flex items-center justify-center gap-2 text-[13px] text-stone-400">
+          <div
+            :if={@invitation}
+            class="mt-6 flex items-center justify-center gap-2 text-[13px] text-stone-400"
+          >
             <svg
               width="14"
               height="14"
@@ -197,21 +210,20 @@ defmodule TaskyWeb.UserLive.Registration do
       socket
       |> assign_form(changeset)
       |> assign(trigger_submit: false)
-      |> handle_class_param(params)
+      |> assign_invitation(params)
 
     {:ok, socket, temporary_assigns: [form: nil]}
   end
 
   @impl true
-  def handle_event("save", %{"user" => user_params}, socket) do
-    user_params =
-      if socket.assigns[:class_id] do
-        Map.put(user_params, "class_id", socket.assigns.class_id)
-      else
-        user_params
-      end
+  def handle_event("save", _params, %{assigns: %{invitation: nil}} = socket) do
+    # No form is rendered without an invitation, so this is only reachable by a
+    # crafted socket message. Fail closed rather than crash.
+    {:noreply, put_flash(socket, :error, "Die Registrierung braucht einen Einladungslink.")}
+  end
 
-    case Accounts.register_user(user_params) do
+  def handle_event("save", %{"user" => user_params}, socket) do
+    case Accounts.register_user(user_params, socket.assigns.invitation) do
       {:ok, _user} ->
         changeset = Accounts.change_user_registration(%User{}, user_params)
 
@@ -226,14 +238,6 @@ defmodule TaskyWeb.UserLive.Registration do
   end
 
   def handle_event("validate", %{"user" => user_params}, socket) do
-    # Include class_id if it was set via query parameter
-    user_params =
-      if socket.assigns[:class_id] do
-        Map.put(user_params, "class_id", socket.assigns.class_id)
-      else
-        user_params
-      end
-
     changeset = Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
     {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
@@ -243,27 +247,28 @@ defmodule TaskyWeb.UserLive.Registration do
     assign(socket, form: form)
   end
 
-  defp handle_class_param(socket, %{"class" => slug}) when is_binary(slug) do
+  # The link decides the role: a class slug makes a student, an organization
+  # invite token makes a teacher. Nothing in the submitted params can influence
+  # it — see `Tasky.Accounts.register_user/2`.
+  defp assign_invitation(socket, %{"class" => slug}) when is_binary(slug) do
     case Classes.get_class_by_slug(slug) do
-      nil ->
-        socket
-        |> put_flash(:error, "Die angegebene Klasse wurde nicht gefunden.")
-        |> assign(class_name: nil, class_id: nil)
-
-      class ->
-        # Update the changeset to include class_id
-        changeset =
-          Accounts.change_user_registration(%User{}, %{"class_id" => class.id},
-            validate_unique: false
-          )
-
-        socket
-        |> assign_form(changeset)
-        |> assign(class_name: class.name, class_id: class.id)
+      nil -> reject_invitation(socket, "Die angegebene Klasse wurde nicht gefunden.")
+      class -> assign(socket, invitation: {:class, class})
     end
   end
 
-  defp handle_class_param(socket, _params) do
-    assign(socket, class_name: nil, class_id: nil)
+  defp assign_invitation(socket, %{"invite" => token}) when is_binary(token) do
+    case Organizations.get_organization_by_invite_token(token) do
+      nil -> reject_invitation(socket, "Dieser Einladungslink ist nicht mehr gültig.")
+      organization -> assign(socket, invitation: {:organization, organization})
+    end
+  end
+
+  defp assign_invitation(socket, _params), do: assign(socket, invitation: nil)
+
+  defp reject_invitation(socket, message) do
+    socket
+    |> put_flash(:error, message)
+    |> assign(invitation: nil)
   end
 end

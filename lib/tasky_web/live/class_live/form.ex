@@ -3,6 +3,7 @@ defmodule TaskyWeb.ClassLive.Form do
 
   alias Tasky.Classes
   alias Tasky.Classes.Class
+  alias Tasky.Organizations
 
   @impl true
   def render(assigns) do
@@ -20,8 +21,7 @@ defmodule TaskyWeb.ClassLive.Form do
             <% else %>
               <.breadcrumbs crumbs={[
                 %{label: "Klassen", navigate: ~p"/classes"},
-                %{label: @class.name},
-                %{label: "Bearbeiten"}
+                %{label: "#{@class.name} bearbeiten"}
               ]} />
             <% end %>
           </div>
@@ -57,6 +57,15 @@ defmodule TaskyWeb.ClassLive.Form do
                 label="Klassenname"
                 required
                 placeholder="z.B. Klasse 5a, Mathematik 2024"
+              />
+
+              <.input
+                :if={@organization_options != []}
+                field={@form[:organization_id]}
+                type="select"
+                label="Organisation"
+                prompt="Organisation wählen"
+                options={@organization_options}
               />
               <div class="bg-sky-50 rounded-[10px] p-4 border border-sky-100">
                 <div class="flex items-start gap-3">
@@ -100,11 +109,12 @@ defmodule TaskyWeb.ClassLive.Form do
   end
 
   defp apply_action(socket, :edit, %{"id" => id}) do
-    class = Classes.get_class!(id)
+    class = Classes.get_class!(socket.assigns.current_scope, id)
 
     socket
     |> assign(:page_title, "Klasse bearbeiten")
     |> assign(:class, class)
+    |> assign_organization_options()
     |> assign(:form, to_form(Classes.change_class(class)))
   end
 
@@ -114,7 +124,23 @@ defmodule TaskyWeb.ClassLive.Form do
     socket
     |> assign(:page_title, "Neue Klasse")
     |> assign(:class, class)
+    |> assign_organization_options()
     |> assign(:form, to_form(Classes.change_class(class)))
+  end
+
+  # Admins have no organization of their own, so they name one explicitly;
+  # teachers never get to choose (and never get to move a class).
+  defp assign_organization_options(socket) do
+    scope = socket.assigns.current_scope
+
+    options =
+      if Tasky.Accounts.Scope.admin?(scope) do
+        Enum.map(Organizations.list_organizations(scope), &{&1.name, &1.id})
+      else
+        []
+      end
+
+    assign(socket, :organization_options, options)
   end
 
   @impl true
@@ -129,7 +155,7 @@ defmodule TaskyWeb.ClassLive.Form do
   end
 
   defp save_class(socket, :edit, class_params) do
-    case Classes.update_class(socket.assigns.class, class_params) do
+    case Classes.update_class(socket.assigns.current_scope, socket.assigns.class, class_params) do
       {:ok, class} ->
         {:noreply,
          socket
@@ -142,12 +168,20 @@ defmodule TaskyWeb.ClassLive.Form do
   end
 
   defp save_class(socket, :new, class_params) do
-    case Classes.create_class(class_params) do
+    case Classes.create_class(socket.assigns.current_scope, class_params) do
       {:ok, class} ->
         {:noreply,
          socket
          |> put_flash(:info, "Klasse \"#{class.name}\" wurde erfolgreich erstellt.")
          |> push_navigate(to: ~p"/classes")}
+
+      {:error, :no_organization} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Du gehörst noch keiner Organisation an. Bitte wende dich an die Administration."
+         )}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}

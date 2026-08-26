@@ -3,6 +3,7 @@ defmodule TaskyWeb.Admin.UserEditLive do
 
   alias Tasky.Accounts
   alias Tasky.Classes
+  alias Tasky.Organizations
   import TaskyWeb.RoleHelpers
 
   @impl true
@@ -116,6 +117,23 @@ defmodule TaskyWeb.Admin.UserEditLive do
                 prompt="Keine Klasse"
                 options={Enum.map(@classes, &{&1.name, &1.id})}
               />
+
+              <.input
+                :if={@user.role != "student"}
+                field={@profile_form[:organization_id]}
+                type="select"
+                label="Organisation"
+                prompt="Keine Organisation"
+                options={Enum.map(@organizations, &{&1.name, &1.id})}
+              />
+
+              <div :if={@user.role == "student"}>
+                <span class="block text-sm font-semibold text-stone-700 mb-1">Organisation</span>
+                <p class="text-sm text-stone-500">
+                  {(@user.class && @user.class.organization && @user.class.organization.name) ||
+                    "Keine — ergibt sich aus der Klasse"}
+                </p>
+              </div>
 
               <div class="flex items-center justify-between pt-2">
                 <.link
@@ -241,7 +259,8 @@ defmodule TaskyWeb.Admin.UserEditLive do
      socket
      |> assign(:page_title, "Benutzer bearbeiten")
      |> assign(:user, user)
-     |> assign(:classes, Classes.list_classes())
+     |> assign(:classes, Classes.list_classes(socket.assigns.current_scope))
+     |> assign(:organizations, Organizations.list_organizations(socket.assigns.current_scope))
      |> assign(:profile_form, to_form(changeset))
      |> assign(:show_password_modal, false)
      |> assign(:password_form, to_form(%{"password" => ""}, as: "password_reset"))}
@@ -261,7 +280,7 @@ defmodule TaskyWeb.Admin.UserEditLive do
   def handle_event("update_user", %{"user" => params}, socket) do
     case Accounts.admin_update_user(socket.assigns.current_scope, socket.assigns.user, params) do
       {:ok, user} ->
-        user = Accounts.reload_user_class(user)
+        user = Accounts.get_user_with_class!(user.id)
 
         {:noreply,
          socket

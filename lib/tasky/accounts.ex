@@ -61,32 +61,60 @@ defmodule Tasky.Accounts do
   def get_user!(id), do: Repo.get!(User, id)
 
   @doc "Gets a single user with the class association loaded."
-  def get_user_with_class!(id), do: Repo.get!(User, id) |> Repo.preload(:class)
-
-  @doc "Reloads the user's class association (e.g. after a class change)."
-  def reload_user_class(%User{} = user), do: Repo.preload(user, :class, force: true)
+  def get_user_with_class!(id),
+    do: Repo.get!(User, id) |> Repo.preload([[class: :organization], :organization])
 
   ## User registration
 
   @doc """
-  Registers a user.
+  Registers a user against an invitation.
+
+  There is no open registration: the invitation decides the role, and it is
+  resolved server-side from the link the visitor arrived with. Exactly two forms
+  exist, and there is deliberately no third clause — a request without a valid
+  invitation cannot produce an account at all.
+
+    * `{:class, %Class{}}` — from `/users/register?class=<slug>`. Creates a
+      **student** in that class. Their organization is derived from the class, so
+      `organization_id` stays `nil`.
+
+    * `{:organization, %Organization{}}` — from `/users/register?invite=<token>`.
+      Creates a **teacher** in that organization, with no class.
+
+  Because the role never comes from parameters, registering into a foreign
+  organization is structurally impossible rather than validated.
 
   The user is automatically confirmed upon registration.
 
   ## Examples
 
-      iex> register_user(%{field: value})
-      {:ok, %User{}}
+      iex> register_user(attrs, {:class, class})
+      {:ok, %User{role: "student"}}
 
-      iex> register_user(%{field: bad_value})
+      iex> register_user(%{}, {:organization, org})
       {:error, %Ecto.Changeset{}}
 
   """
-  def register_user(attrs) do
+  def register_user(attrs, invitation) do
     %User{}
     |> User.registration_changeset(attrs)
+    |> apply_invitation(invitation)
     |> Ecto.Changeset.put_change(:confirmed_at, DateTime.utc_now(:second))
     |> Repo.insert()
+  end
+
+  defp apply_invitation(changeset, {:class, %Tasky.Classes.Class{} = class}) do
+    changeset
+    |> Ecto.Changeset.put_change(:role, "student")
+    |> Ecto.Changeset.put_change(:class_id, class.id)
+    |> Ecto.Changeset.put_change(:organization_id, nil)
+  end
+
+  defp apply_invitation(changeset, {:organization, %Tasky.Organizations.Organization{} = org}) do
+    changeset
+    |> Ecto.Changeset.put_change(:role, "teacher")
+    |> Ecto.Changeset.put_change(:organization_id, org.id)
+    |> Ecto.Changeset.put_change(:class_id, nil)
   end
 
   @doc """
@@ -352,7 +380,11 @@ defmodule Tasky.Accounts do
     * `:class_id` — integer class id, or `:none` for users without a class
   """
   def list_users(filters \\ []) do
-    base = from(u in User, order_by: [asc: u.lastname, asc: u.firstname], preload: :class)
+    base =
+      from(u in User,
+        order_by: [asc: u.lastname, asc: u.firstname],
+        preload: [[class: :organization], :organization]
+      )
 
     filters
     |> Enum.reduce(base, &apply_user_filter/2)

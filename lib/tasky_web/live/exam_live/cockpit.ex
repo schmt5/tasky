@@ -646,7 +646,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:confirm_action, nil)
      |> assign(:show_assign?, false)
      |> assign(:class_filter, nil)
-     |> assign(:class_options, class_options())
+     |> assign(:class_options, class_options(socket.assigns.current_scope))
      |> assign_assignable()
      |> stream(:submissions, submissions)}
   end
@@ -666,8 +666,8 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     assign(socket, :assignable, assignable)
   end
 
-  defp class_options do
-    Enum.map(Tasky.Classes.list_classes(), &{&1.name, &1.id})
+  defp class_options(scope) do
+    Enum.map(Tasky.Classes.list_classes(scope), &{&1.name, &1.id})
   end
 
   defp unassign_confirm(%{content: content}) when is_map(content) and map_size(content) > 0 do

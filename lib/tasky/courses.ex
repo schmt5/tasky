@@ -10,6 +10,7 @@ defmodule Tasky.Courses do
   alias Tasky.Accounts.Scope
   alias Tasky.Courses.Course
   alias Tasky.Courses.CourseEnrollment
+  alias Tasky.Organizations
 
   @doc """
   Returns the list of courses for a given scope.
@@ -554,11 +555,29 @@ defmodule Tasky.Courses do
 
   @doc """
   Enrolls a student in a course.
+
+  The student id arrives off the wire (a `phx-value-student_id`), so membership
+  is verified here rather than trusted: the student must belong to the
+  organization of the course's **owner**. Scoping the picker in the UI would only
+  clean up the modal — this event handler is directly reachable, and an enrolled
+  student's name, email and progress become visible to the teacher.
+
+  Deriving the organization from the owner rather than from a caller scope keeps
+  the signature unchanged and makes the rule hold even when an admin (who has no
+  organization) performs the enrollment.
   """
   def enroll_student(course_id, student_id) do
-    %CourseEnrollment{}
-    |> CourseEnrollment.changeset(%{course_id: course_id, student_id: student_id})
-    |> Repo.insert()
+    owner_organization_id =
+      Repo.one(from c in Course, where: c.id == ^course_id, select: c.teacher_id)
+      |> Organizations.teacher_organization_id()
+
+    if Organizations.student_member?(student_id, owner_organization_id) do
+      %CourseEnrollment{}
+      |> CourseEnrollment.changeset(%{course_id: course_id, student_id: student_id})
+      |> Repo.insert()
+    else
+      {:error, :different_organization}
+    end
   end
 
   @doc """
@@ -579,6 +598,13 @@ defmodule Tasky.Courses do
 
   @doc """
   Returns the list of students enrolled in a course.
+
+  Deliberately **not** organization-filtered: both callers load the course
+  through `get_course!/2` or `Tasks.get_task_with_course!/2` first, so
+  enrollment is the authorization boundary here. Filtering would only make
+  students vanish from a progress grid while their submissions stay in the
+  database. Accepted consequence: a student an admin moves to another class
+  stays visible in the old roster.
   """
   def list_enrolled_students(course_id) do
     Repo.all(
@@ -591,38 +617,30 @@ defmodule Tasky.Courses do
   end
 
   @doc """
-  Returns the list of students not enrolled in a course.
-  """
-  def list_unenrolled_students(course_id) do
-    Repo.all(
-      from u in Tasky.Accounts.User,
-        where:
-          u.role == "student" and
-            u.id not in subquery(
-              from e in CourseEnrollment,
-                where: e.course_id == ^course_id,
-                select: e.student_id
-            ),
-        order_by: u.email
-    )
-  end
+  Returns the students who could still be enrolled in this course, optionally
+  narrowed to one class.
 
-  @doc """
-  Returns the list of students not enrolled in a course, filtered by class.
+  Limited to the organization of the course's **owner**, which is also what
+  `enroll_student/2` enforces on the write path.
   """
-  def list_unenrolled_students(course_id, class_id) when is_integer(class_id) do
-    Repo.all(
-      from u in Tasky.Accounts.User,
-        where:
-          u.role == "student" and
-            u.class_id == ^class_id and
-            u.id not in subquery(
-              from e in CourseEnrollment,
-                where: e.course_id == ^course_id,
-                select: e.student_id
-            ),
-        order_by: u.email
+  def list_unenrolled_students(course_id, class_id \\ nil) do
+    owner_organization_id =
+      Repo.one(from c in Course, where: c.id == ^course_id, select: c.teacher_id)
+      |> Organizations.teacher_organization_id()
+
+    owner_organization_id
+    |> Organizations.students_query()
+    |> where(
+      [u],
+      u.id not in subquery(
+        from e in CourseEnrollment,
+          where: e.course_id == ^course_id,
+          select: e.student_id
+      )
     )
+    |> then(fn q -> if class_id, do: where(q, [u], u.class_id == ^class_id), else: q end)
+    |> order_by([u], asc: u.email)
+    |> Repo.all()
   end
 
   @doc """

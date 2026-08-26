@@ -1,4 +1,14 @@
 defmodule Tasky.Classes.Class do
+  @moduledoc """
+  A class belongs to one organization; the teachers of that organization all see
+  it and every student in it. A student's organization *is* this class's
+  organization — see `Tasky.Organizations`.
+
+  `organization_id` is never cast by `changeset/2`: for a teacher it is taken
+  from their own organization, and only an admin may name one explicitly through
+  `admin_changeset/2`.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -6,6 +16,7 @@ defmodule Tasky.Classes.Class do
     field :name, :string
     field :slug, :string
 
+    belongs_to :organization, Tasky.Organizations.Organization
     has_many :students, Tasky.Accounts.User, foreign_key: :class_id
 
     timestamps(type: :utc_datetime)
@@ -20,6 +31,19 @@ defmodule Tasky.Classes.Class do
     |> generate_slug()
     |> validate_required([:slug])
     |> unique_constraint(:slug)
+  end
+
+  @doc """
+  Like `changeset/2` but lets an admin move the class between organizations.
+
+  Only reachable from the admin path in `Tasky.Classes` — a teacher must never
+  be able to reassign a class.
+  """
+  def admin_changeset(class, attrs) do
+    class
+    |> changeset(attrs)
+    |> cast(attrs, [:organization_id])
+    |> foreign_key_constraint(:organization_id)
   end
 
   defp generate_slug(changeset) do
