@@ -7,8 +7,10 @@ defmodule Tasky.Tasks do
   alias Tasky.Repo
 
   alias Tasky.Accounts.Scope
+  alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
   alias Tasky.Policy
+  alias Tasky.Tasks.SelfCheck
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskAttachment
   alias Tasky.Tasks.TaskSolutionFile
@@ -801,23 +803,35 @@ defmodule Tasky.Tasks do
   @doc """
   Returns a map of `%{student_id => entry}` for all given students on a single
   task, where each entry carries the submission id, its status, whether there
-  is content, and the two fields `solution_visible_for_entry?/2` needs. Used by
-  the task progress LiveView.
+  is content, the two fields `solution_visible_for_entry?/2` needs, and the
+  `:self_check` summary from `Tasky.Tasks.SelfCheck`. Used by the task progress
+  LiveView.
   """
-  def get_progress_map_for_task(task_id, student_ids) do
+  def get_progress_map_for_task(%Task{} = task, student_ids) do
     Repo.all(
       from s in TaskSubmission,
-        where: s.student_id in ^student_ids and s.task_id == ^task_id,
+        where: s.student_id in ^student_ids and s.task_id == ^task.id,
         select: %{
           student_id: s.student_id,
           submission_id: s.id,
           status: s.status,
           has_content: not is_nil(s.content),
+          content: s.content,
           completed_at: s.completed_at,
           solution_released_at: s.solution_released_at
         }
     )
-    |> Map.new(&{&1.student_id, Map.delete(&1, :student_id)})
+    |> Map.new(fn entry ->
+      # Das Antwortdokument wird nur geladen, um die Trefferquote zu rechnen,
+      # und fliegt danach wieder raus: die Fortschrittsansicht hält die Map als
+      # Assign, ein Dokument pro Lernende hätte dort nichts zu suchen.
+      summary = SelfCheck.evaluate(task, entry.content)
+
+      {entry.student_id,
+       entry
+       |> Map.drop([:student_id, :content])
+       |> Map.put(:self_check, summary)}
+    end)
   end
 
   @doc """
@@ -1002,6 +1016,122 @@ defmodule Tasky.Tasks do
   @doc "Anzahl Antwortfelder im Inhalt — steuert den Leerzustand des Musterlösungs-Tabs."
   def answer_block_count(%Task{} = task),
     do: task.content |> Kernel.||(%{}) |> AnswerKey.block_ids() |> MapSet.size()
+
+  ## Selbstkontrolle
+
+  @doc """
+  Nimmt ein Antwortfeld von der automatischen Selbstkontrolle aus bzw. gibt es
+  wieder frei. Gedacht für offene Formulierungsfragen, bei denen ein
+  Textvergleich nur täuschen würde.
+
+  Bewusst ein eigener Schreibweg statt eines Attributs im Dokument:
+  `save_sample_solution/3` verwirft das geblankte Dokument und darf `content`
+  unter keinen Umständen anfassen — ein Attribut am Antwortknoten käme dort
+  also nie an.
+  """
+  def toggle_self_check(%Scope{} = scope, %Task{} = task, answer_id)
+      when is_binary(answer_id) do
+    with :ok <- Policy.authorize(scope, task.user_id) do
+      result =
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(Task, task.id)
+          current = locked.self_check_off || []
+
+          toggled =
+            if answer_id in current,
+              do: List.delete(current, answer_id),
+              else: [answer_id | current]
+
+          # Waisen fliegen raus, sonst wächst die Liste mit jedem gelöschten
+          # Antwortfeld weiter — gleiches Muster wie `prune_orphan_answers/2`.
+          ids = AnswerKey.block_ids(locked.content || %{})
+          pruned = Enum.filter(toggled, &MapSet.member?(ids, &1))
+
+          case locked |> Task.self_check_off_changeset(pruned) |> Repo.update() do
+            {:ok, updated} -> updated
+            {:error, changeset} -> Repo.rollback(changeset)
+          end
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_task(scope, {:updated, updated})
+        {:ok, updated}
+      end
+    end
+  end
+
+  @doc """
+  Die Antwortfelder der Lerneinheit für die Selbstkontroll-Liste im
+  Musterlösungs-Tab: `answer_id`, `type`, ein Text-Ausschnitt und ob das Feld
+  automatisch geprüft wird.
+
+  Gelesen wird das antwortgefüllte Dokument, nicht `content` — im Skelett sind
+  die Textfelder geblankt, der Ausschnitt wäre also leer. Felder ohne
+  `answerId` fallen weg: ohne id gibt es nichts zu schalten.
+  """
+  def list_solution_blocks(%Task{} = task) do
+    off = MapSet.new(task.self_check_off || [])
+
+    task
+    |> sample_solution_doc()
+    |> Map.get("content", [])
+    |> Kernel.||([])
+    |> NodePatcher.list_answer_blocks()
+    |> Enum.reject(&is_nil(&1.answer_id))
+    |> Enum.map(fn block ->
+      %{
+        answer_id: block.answer_id,
+        type: block.type,
+        snippet: snippet(block.text),
+        checked: not MapSet.member?(off, block.answer_id)
+      }
+    end)
+  end
+
+  defp snippet(text) when is_binary(text) do
+    case String.trim(text) do
+      "" -> "—"
+      trimmed -> String.slice(trimmed, 0, 60)
+    end
+  end
+
+  defp snippet(_text), do: "—"
+
+  @doc """
+  Die Auswertung der Selbstkontrolle einer Abgabe.
+
+  Dünne Delegation, damit Aufrufer nicht an `Tasky.Tasks.SelfCheck` vorbei
+  eigene Regeln bauen.
+  """
+  def self_check_summary(%Task{} = task, %TaskSubmission{} = submission),
+    do: SelfCheck.evaluate(task, submission)
+
+  @doc """
+  Das Dokument der Vergleichsansicht: das Antwortdokument, das die/der Lernende
+  zurückgelesen bekommt, ergänzt um Verdikte und die Musterlösung an den
+  Antwortfeldern.
+
+  Setzt `answer_doc_for_student/2` und `SelfCheck.review_doc/3` zusammen, damit
+  die Entscheidung «eigene Antworten oder Korrektur der Lehrperson» an genau
+  einer Stelle fällt.
+  """
+  def review_doc_for_student(%Task{} = task, %TaskSubmission{} = submission) do
+    if answered?(submission) do
+      {_source, doc} = answer_doc_for_student(task, submission)
+      %{verdicts: verdicts} = SelfCheck.evaluate(task, submission)
+
+      SelfCheck.review_doc(task, doc, verdicts)
+    else
+      # Ohne erfasste Antworten gibt es nichts zu vergleichen — ein Dokument
+      # voller ❌ wäre irreführend. Dann bleibt es bei der reinen Musterlösung.
+      sample_solution_doc(task)
+    end
+  end
+
+  defp answered?(%TaskSubmission{content: content}) when is_map(content),
+    do: map_size(content) > 0
+
+  defp answered?(_submission), do: false
 
   ## Freigabe von Musterlösung und Korrektur
 
@@ -1571,6 +1701,24 @@ defmodule Tasky.Tasks do
   @doc "Lists a submission's uploaded files."
   def list_submission_files(%TaskSubmission{} = submission) do
     Repo.all(from sf in TaskSubmissionFile, where: sf.task_submission_id == ^submission.id)
+  end
+
+  @doc """
+  Every uploaded answer file of a learning unit, keyed by
+  `{student_id, upload_field_id}`. The teacher's file overview needs all
+  students at once, which `list_submission_files/1` (one submission at a time)
+  could only deliver as an N+1. The submission id travels along because the
+  download URL is built from it. Authorization rides on the task.
+  """
+  def submission_files_by_student(%Task{} = task) do
+    from(sf in TaskSubmissionFile,
+      join: s in TaskSubmission,
+      on: s.id == sf.task_submission_id,
+      where: s.task_id == ^task.id,
+      select: {{s.student_id, sf.upload_field_id}, %{file: sf, submission_id: s.id}}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   @doc "Gets a submission's file for one upload field, or nil."

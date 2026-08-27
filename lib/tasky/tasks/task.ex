@@ -13,6 +13,12 @@ defmodule Tasky.Tasks.Task do
   Bearbeiten der Lerneinheit gesetzt und ist darum — anders als die beiden
   JSON-Spalten — regulär castbar. Ausgewertet wird der Modus an genau einer
   Stelle: `Tasky.Tasks.solution_visible?/2`.
+
+  `self_check_off` listet die `answerId`s, die von der automatischen
+  Selbstkontrolle (`Tasky.Tasks.SelfCheck`) ausgenommen sind — gedacht für
+  offene Formulierungsfragen, bei denen ein Textvergleich nur täuschen würde.
+  Geschrieben wird die Liste ausschliesslich über
+  `Tasky.Tasks.toggle_self_check/3`, nicht über ein Formular.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -27,6 +33,7 @@ defmodule Tasky.Tasks.Task do
     field :extended, :boolean, default: false
     field :content, :map
     field :sample_solution, :map, default: %{}
+    field :self_check_off, {:array, :string}, default: []
     field :solution_release_mode, :string, default: "never"
     field :user_id, :id
 
@@ -98,5 +105,16 @@ defmodule Tasky.Tasks.Task do
         do: [sample_solution: "Musterlösung ist zu gross"],
         else: []
     end)
+  end
+
+  @doc """
+  Changeset für die von der Selbstkontrolle ausgenommenen Antwortfelder.
+
+  Eigenes Changeset statt `changeset/3`: die Liste kommt nie aus einem
+  Formular, sondern immer aus `Tasky.Tasks.toggle_self_check/3`, das sie vorher
+  gegen die Antwortfelder im Inhalt abgleicht.
+  """
+  def self_check_off_changeset(task, answer_ids) when is_list(answer_ids) do
+    change(task, self_check_off: Enum.sort(answer_ids))
   end
 end

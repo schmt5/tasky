@@ -446,4 +446,80 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       assert render(lv) =~ student.lastname
     end
   end
+
+  describe "Spalte Selbstkontrolle" do
+    setup %{task: task, student: student} do
+      teacher_scope = Scope.for_user(Tasky.Repo.get!(Tasky.Accounts.User, task.user_id))
+
+      skeleton = %{
+        "type" => "doc",
+        "content" =>
+          Enum.map(["a1", "a2"], fn id ->
+            %{
+              "type" => "answerBlock",
+              "attrs" => %{"answerId" => id},
+              "content" => [%{"type" => "paragraph"}]
+            }
+          end)
+      }
+
+      {:ok, task} = Tasks.save_task_content(teacher_scope, task, skeleton)
+
+      filled =
+        skeleton
+        |> put_in(["content", Access.at(0), "content"], [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Bern"}]}
+        ])
+        |> put_in(["content", Access.at(1), "content"], [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Aare"}]}
+        ])
+
+      {:ok, task} = Tasks.save_sample_solution(teacher_scope, task, filled)
+
+      %{task: task, teacher_scope: teacher_scope, skeleton: skeleton, student: student}
+    end
+
+    test "zeigt die automatische Trefferquote der Abgabe", %{
+      conn: conn,
+      task: task,
+      skeleton: skeleton
+    } do
+      # Die/der Lernende aus dem äusseren Setup hat bereits abgegeben, die
+      # Abgabe ist also nicht mehr beschreibbar. Also eine zweite Person, die
+      # noch am Arbeiten ist — die Quote hängt am Antwortdokument, nicht am
+      # Status.
+      other = user_fixture(%{role: "student", firstname: "Nina", lastname: "Neu"})
+      course_id = Tasky.Repo.get!(Tasky.Tasks.Task, task.id).course_id
+      {:ok, _} = Courses.enroll_student(course_id, other.id)
+
+      other_scope = Scope.for_user(other)
+      {:ok, submission} = Tasks.get_or_create_submission(other_scope, task.id)
+
+      answered =
+        put_in(skeleton, ["content", Access.at(0), "content"], [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Bern"}]}
+        ])
+
+      {:ok, _} = Tasks.save_student_answers(other_scope, submission, answered)
+
+      {:ok, _lv, html} = live(conn, ~p"/progress/#{task.id}")
+
+      assert html =~ "Selbstkontrolle"
+      assert html =~ "1/2"
+    end
+
+    test "bleibt leer, wenn kein Feld geprüft werden kann", %{
+      conn: conn,
+      task: task,
+      teacher_scope: teacher_scope
+    } do
+      {:ok, task} = Tasks.toggle_self_check(teacher_scope, task, "a1")
+      {:ok, task} = Tasks.toggle_self_check(teacher_scope, task, "a2")
+
+      {:ok, _lv, html} = live(conn, ~p"/progress/#{task.id}")
+
+      assert html =~ "Selbstkontrolle"
+      refute html =~ "0/2"
+    end
+  end
 end

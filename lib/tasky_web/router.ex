@@ -174,6 +174,10 @@ defmodule TaskyWeb.Router do
         TaskSubmissionFileController,
         :download
 
+    get "/tasks/:id/submissions/:submission_id/files/:file_id/inline",
+        TaskSubmissionFileController,
+        :inline
+
     get "/tasks/:id/solution-files/:file_id", TaskSolutionFileController, :download
 
     live_session :tasks,
@@ -188,6 +192,7 @@ defmodule TaskyWeb.Router do
       live "/courses/:id/feedback", CourseLive.Feedback, :feedback
       live "/courses/:id/reorder", CourseLive.Reorder, :reorder
       live "/progress/:task_id", TaskLive.Progress, :task_progress
+      live "/progress/:task_id/files", TaskLive.Files, :task_files
 
       live "/progress/:task_id/correction/:submission_id", TaskLive.Correction, :correction
       live "/tasks/:id/content", TaskLive.Content, :content

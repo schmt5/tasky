@@ -82,16 +82,60 @@ defmodule TaskyWeb.TaskLive.Content do
       </div>
 
       <%!-- Musterlösung tab: dieselbe Struktur wie «Inhalt», aber gesperrter
-           Aufgabentext — die Lehrperson füllt nur die Antwortfelder. --%>
+           Aufgabentext — die Lehrperson füllt nur die Antwortfelder. Rechts
+           daneben die Selbstkontrolle pro Antwortfeld. --%>
       <div :if={@tab == "musterloesung"} class="min-w-0">
-        <div
-          :if={@answer_block_count > 0}
-          id={"task-sample-solution-editor-#{@task.id}"}
-          phx-hook="TaskSampleSolutionEditor"
-          phx-update="ignore"
-          data-task-id={@task.id}
-          data-content={@solution_json}
-        >
+        <div :if={@answer_block_count > 0} class="flex items-stretch min-h-[calc(100vh-54px)]">
+          <div class="min-w-0 flex-1 bg-stone-100">
+            <div
+              id={"task-sample-solution-editor-#{@task.id}"}
+              phx-hook="TaskSampleSolutionEditor"
+              phx-update="ignore"
+              data-task-id={@task.id}
+              data-content={@solution_json}
+            >
+            </div>
+          </div>
+
+          <aside class="w-[300px] shrink-0 border-l border-stone-200 bg-white">
+            <div class="p-5 border-b border-stone-100">
+              <h3 class="text-sm font-semibold text-stone-800">Selbstkontrolle</h3>
+              <p class="text-xs text-stone-500 mt-1 leading-relaxed">
+                Geprüfte Felder vergleicht Tasky nach der Freigabe automatisch mit der
+                Musterlösung. Gross-/Kleinschreibung wird ignoriert, mehrere gültige
+                Antworten trennst du mit <code class="font-mono">;</code>.
+              </p>
+            </div>
+
+            <div class="p-5 space-y-2">
+              <label
+                :for={block <- @solution_blocks}
+                class="flex items-start gap-3 cursor-pointer rounded-lg border border-stone-200 bg-stone-50/60 px-2.5 py-2 hover:bg-stone-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={block.checked}
+                  phx-click="toggle_self_check"
+                  phx-value-answer-id={block.answer_id}
+                  aria-label="Automatisch prüfen"
+                  class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
+                />
+                <span class="min-w-0">
+                  <span class="block text-xs font-semibold text-stone-700">
+                    {block.type_label}
+                  </span>
+                  <span class="block text-xs text-stone-500 mt-0.5 truncate">
+                    {block.snippet}
+                  </span>
+                </span>
+              </label>
+
+              <p class="text-xs text-stone-400 leading-relaxed pt-1">
+                Nimm offen formulierte Fragen heraus — dort sieht die/der Lernende nur die
+                Musterlösung und vergleicht selbst.
+              </p>
+            </div>
+          </aside>
         </div>
 
         <div :if={@answer_block_count == 0} class="bg-stone-100 min-h-[calc(100vh-54px)]">
@@ -483,7 +527,8 @@ defmodule TaskyWeb.TaskLive.Content do
         {:noreply,
          socket
          |> assign(:solution_json, Jason.encode!(Tasks.sample_solution_doc(task)))
-         |> assign(:answer_block_count, Tasks.answer_block_count(task))}
+         |> assign(:answer_block_count, Tasks.answer_block_count(task))
+         |> assign_solution_blocks(task)}
 
       "dateien" ->
         {:noreply,
@@ -496,9 +541,35 @@ defmodule TaskyWeb.TaskLive.Content do
     end
   end
 
+  ## Musterlösung tab: Selbstkontrolle pro Antwortfeld
+
+  defp assign_solution_blocks(socket, task) do
+    blocks =
+      task
+      |> Tasks.list_solution_blocks()
+      |> Enum.map(&Map.put(&1, :type_label, block_type_label(&1.type)))
+
+    assign(socket, :solution_blocks, blocks)
+  end
+
+  defp block_type_label("answerBlock"), do: "Antwortfeld"
+  defp block_type_label("lueckentext"), do: "Lücke"
+  defp block_type_label("taskItem"), do: "Checkbox"
+  defp block_type_label(_type), do: "Antwortfeld"
+
   ## Dateien tab: Lösungsdateien
 
   @impl true
+  def handle_event("toggle_self_check", %{"answer-id" => answer_id}, socket) do
+    case Tasks.toggle_self_check(socket.assigns.current_scope, socket.assigns.task, answer_id) do
+      {:ok, task} ->
+        {:noreply, socket |> assign(:task, task) |> assign_solution_blocks(task)}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Konnte nicht gespeichert werden.")}
+    end
+  end
+
   def handle_event("validate_solution_file", _params, socket) do
     # auto_upload does the work; this handler just accepts the phx-change.
     {:noreply, socket}

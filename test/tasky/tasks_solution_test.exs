@@ -661,4 +661,71 @@ defmodule Tasky.TasksSolutionTest do
       assert second == []
     end
   end
+
+  describe "toggle_self_check/3" do
+    setup %{teacher_scope: scope, task: task} do
+      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
+      %{task: task}
+    end
+
+    test "schaltet ein Antwortfeld ab und wieder ein", %{teacher_scope: scope, task: task} do
+      assert task.self_check_off == []
+
+      {:ok, task} = Tasks.toggle_self_check(scope, task, "a1")
+      assert task.self_check_off == ["a1"]
+
+      {:ok, task} = Tasks.toggle_self_check(scope, task, "a1")
+      assert task.self_check_off == []
+    end
+
+    test "wirft Waisen heraus, wenn das Antwortfeld verschwindet", %{
+      teacher_scope: scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.toggle_self_check(scope, task, "a1")
+      {:ok, task} = Tasks.toggle_self_check(scope, task, "a2")
+      assert Enum.sort(task.self_check_off) == ["a1", "a2"]
+
+      # Die Lehrperson löscht das erste Antwortfeld aus dem Inhalt. Ohne das
+      # Prunen würde die Liste mit jedem gelöschten Feld weiterwachsen.
+      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a2"]))
+      {:ok, task} = Tasks.toggle_self_check(scope, task, "a2")
+
+      assert task.self_check_off == []
+    end
+
+    test "verweigert einer fremden Lehrperson den Zugriff", %{task: task} do
+      other = user_scope_fixture(user_fixture(%{role: "teacher"}))
+
+      assert {:error, :unauthorized} = Tasks.toggle_self_check(other, task, "a1")
+    end
+  end
+
+  describe "list_solution_blocks/1" do
+    test "listet die Antwortfelder mit Ausschnitt und Prüfstatus", %{
+      teacher_scope: scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
+
+      {:ok, task} =
+        Tasks.save_sample_solution(
+          scope,
+          task,
+          doc_with_answers(["a1", "a2"], %{
+            "a1" => text_node("Bern"),
+            "a2" => text_node("Aare")
+          })
+        )
+
+      {:ok, task} = Tasks.toggle_self_check(scope, task, "a2")
+
+      assert [first, second] = Tasks.list_solution_blocks(task)
+      assert first.answer_id == "a1"
+      assert first.snippet == "Bern"
+      assert first.checked
+      assert second.answer_id == "a2"
+      refute second.checked
+    end
+  end
 end

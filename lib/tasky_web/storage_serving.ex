@@ -20,17 +20,28 @@ defmodule TaskyWeb.StorageServing do
     redirect(conn, external: url)
   end
 
-  @doc "Serves a source inline (images) with the given content type."
+  @doc """
+  Serves a source inline (images, PDFs) with the given content type.
+
+  `:cache_control` defaults to the immutable public caching that suits the
+  world-readable `/uploads/...` content images. Anything served behind
+  authentication has to pass a private value instead, so a shared cache never
+  holds one student's file.
+  """
   # Same provenance as above — no user-controlled path components.
   # sobelow_skip ["Traversal.SendFile"]
-  def serve_inline(conn, {:file, path}, content_type) do
+  def serve_inline(conn, source, content_type, opts \\ [])
+
+  def serve_inline(conn, {:file, path}, content_type, opts) do
+    cache_control = Keyword.get(opts, :cache_control, "public, max-age=31536000, immutable")
+
     conn
     |> put_resp_header("content-type", content_type)
-    |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
+    |> put_resp_header("cache-control", cache_control)
     |> send_file(200, path)
   end
 
-  def serve_inline(conn, {:redirect, url}, _content_type) do
+  def serve_inline(conn, {:redirect, url}, _content_type, _opts) do
     redirect(conn, external: url)
   end
 end

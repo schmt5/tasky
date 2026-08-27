@@ -30,6 +30,14 @@ defmodule TaskyWeb.TaskLive.Progress do
               %{label: "Fortschritt", navigate: ~p"/courses/#{@task.course_id}/progress"},
               %{label: @task.name}
             ]} />
+
+            <.link
+              :if={@upload_fields != []}
+              navigate={~p"/progress/#{@task.id}/files"}
+              class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+            >
+              <.icon name="hero-paper-clip" class="w-4 h-4" /> Alle Datei-Abgaben
+            </.link>
           </div>
 
           <div class="flex items-center gap-3 mb-3">
@@ -152,6 +160,13 @@ defmodule TaskyWeb.TaskLive.Progress do
 
                       <th
                         scope="col"
+                        class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[120px]"
+                      >
+                        Selbstkontrolle
+                      </th>
+
+                      <th
+                        scope="col"
                         class="px-4 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[160px]"
                       >
                         Musterlösung
@@ -205,6 +220,12 @@ defmodule TaskyWeb.TaskLive.Progress do
                           <% else %>
                             <span class="text-[12px] text-stone-400">-</span>
                           <% end %>
+                        </div>
+                      </td>
+
+                      <td class="px-4 py-4">
+                        <div class="flex justify-center">
+                          <.self_check_cell entry={Map.get(@progress_map, student.id)} />
                         </div>
                       </td>
 
@@ -589,6 +610,39 @@ defmodule TaskyWeb.TaskLive.Progress do
     """
   end
 
+  # Die automatische Trefferquote aus `Tasky.Tasks.SelfCheck` — dieselbe
+  # Rechnung, die die/der Lernende in der Vergleichsansicht sieht. Kein Urteil
+  # der Lehrperson, darum bewusst neutral gehalten: eine Lerneinheit wird nicht
+  # bewertet, die Quote ist nur ein Hinweis, wo es klemmt.
+  attr :entry, :map, default: nil
+
+  defp self_check_cell(assigns) do
+    summary = assigns.entry && assigns.entry[:self_check]
+
+    assigns = assign(assigns, :summary, if(summary && summary.total > 0, do: summary))
+
+    ~H"""
+    <span :if={is_nil(@summary)} class="text-[12px] text-stone-400">-</span>
+    <span
+      :if={@summary}
+      class={[
+        "inline-flex items-center gap-1 text-[12px] font-semibold rounded-full px-2.5 py-0.5 tabular-nums border",
+        self_check_tone(@summary)
+      ]}
+    >
+      {@summary.correct}/{@summary.total}
+    </span>
+    """
+  end
+
+  defp self_check_tone(%{correct: correct, total: total}) do
+    cond do
+      correct == total -> "text-emerald-700 bg-emerald-50 border-emerald-200"
+      correct * 2 >= total -> "text-amber-700 bg-amber-50 border-amber-200"
+      true -> "text-rose-700 bg-rose-50 border-rose-200"
+    end
+  end
+
   attr :task, :map, required: true
   attr :entry, :map, default: nil
 
@@ -722,7 +776,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
     students = Courses.list_enrolled_students(task.course_id)
 
-    progress_map = build_progress_map(task.id, students)
+    progress_map = build_progress_map(task, students)
 
     has_data = students != []
 
@@ -743,7 +797,7 @@ defmodule TaskyWeb.TaskLive.Progress do
   def handle_info({:submission_updated, updated_submission}, socket) do
     # Only rebuild if the update is for this task
     if updated_submission.task_id == socket.assigns.task.id do
-      progress_map = build_progress_map(socket.assigns.task.id, socket.assigns.students)
+      progress_map = build_progress_map(socket.assigns.task, socket.assigns.students)
       {:noreply, assign(socket, :progress_map, progress_map)}
     else
       {:noreply, socket}
@@ -892,7 +946,7 @@ defmodule TaskyWeb.TaskLive.Progress do
              |> put_flash(:info, verdict_flash(verdict, socket.assigns.selected_student_name))
              |> assign(
                :progress_map,
-               build_progress_map(socket.assigns.task.id, socket.assigns.students)
+               build_progress_map(socket.assigns.task, socket.assigns.students)
              )
              |> reset_modal_assigns()}
 
@@ -907,7 +961,7 @@ defmodule TaskyWeb.TaskLive.Progress do
              |> assign(:feedback_saved, true)
              |> assign(
                :progress_map,
-               build_progress_map(socket.assigns.task.id, socket.assigns.students)
+               build_progress_map(socket.assigns.task, socket.assigns.students)
              )}
 
           {{:error, reason}, _} ->
@@ -965,7 +1019,7 @@ defmodule TaskyWeb.TaskLive.Progress do
              )
              |> assign(
                :progress_map,
-               build_progress_map(socket.assigns.task.id, socket.assigns.students)
+               build_progress_map(socket.assigns.task, socket.assigns.students)
              )
              |> reset_modal_assigns()}
 
@@ -1073,9 +1127,9 @@ defmodule TaskyWeb.TaskLive.Progress do
     |> assign(:pending_return_feedback, nil)
   end
 
-  defp build_progress_map(task_id, students) do
+  defp build_progress_map(task, students) do
     student_ids = Enum.map(students, & &1.id)
-    Tasks.get_progress_map_for_task(task_id, student_ids)
+    Tasks.get_progress_map_for_task(task, student_ids)
   end
 
   defp submission_status(progress_map, student_id) do
@@ -1154,7 +1208,7 @@ defmodule TaskyWeb.TaskLive.Progress do
 
   defp refresh_after_bulk(socket) do
     socket
-    |> assign(:progress_map, build_progress_map(socket.assigns.task.id, socket.assigns.students))
+    |> assign(:progress_map, build_progress_map(socket.assigns.task, socket.assigns.students))
     |> assign(:bulk_student_ids, MapSet.new())
   end
 

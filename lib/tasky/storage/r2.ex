@@ -38,11 +38,11 @@ defmodule Tasky.Storage.R2 do
   end
 
   @impl true
-  def fetch(key, _opts) do
+  def fetch(key, opts) do
     # Existence check first: a dangling presigned redirect would surface as a
     # raw R2 XML error instead of the app's 404 page.
     case Req.head(req(), url: object_url(key)) do
-      {:ok, %Req.Response{status: 200}} -> {:ok, {:redirect, presign(key)}}
+      {:ok, %Req.Response{status: 200}} -> {:ok, {:redirect, presign(key, opts)}}
       {:ok, %Req.Response{status: 404}} -> {:error, :not_found}
       {:ok, %Req.Response{status: status}} -> {:error, {:r2_http_error, status}}
       {:error, reason} -> {:error, reason}
@@ -110,7 +110,7 @@ defmodule Tasky.Storage.R2 do
     end
   end
 
-  defp presign(key) do
+  defp presign(key, opts) do
     ReqS3.presign_url(
       access_key_id: config()[:access_key_id],
       secret_access_key: config()[:secret_access_key],
@@ -118,8 +118,22 @@ defmodule Tasky.Storage.R2 do
       key: key,
       endpoint_url: endpoint_url(),
       region: @region,
-      expires: @presign_ttl_seconds
+      expires: @presign_ttl_seconds,
+      query: presign_query(opts)
     )
+  end
+
+  # Submission files are stored with `content-disposition: attachment`, so a
+  # plain presigned GET always downloads. Viewing one inline (the teacher's
+  # image modal, a PDF in a new tab) overrides that per request. The override
+  # has to go through `:query` rather than into the URL: `presign_url/1` hands
+  # unknown options to `Req.Utils.aws_sigv4_url/1`, which folds `:query` into
+  # the signed canonical query string, and asserts the URL itself carries none.
+  defp presign_query(opts) do
+    case Keyword.get(opts, :disposition) do
+      "inline" -> [{"response-content-disposition", "inline"}]
+      _ -> []
+    end
   end
 
   defp put_headers(opts) do

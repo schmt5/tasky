@@ -372,7 +372,9 @@ defmodule TaskyWeb.Student.TaskLive do
           </div>
         </div>
 
-        <%!-- Musterlösung tab: nur im DOM, wenn auch freigegeben. --%>
+        <%!-- Musterlösung tab: nur im DOM, wenn auch freigegeben. Zeigt die
+            eigenen Antworten mit der automatischen Selbstkontrolle und der
+            Musterlösung direkt am jeweiligen Antwortfeld. --%>
         <div
           :if={@solution_visible}
           class={[
@@ -384,10 +386,28 @@ defmodule TaskyWeb.Student.TaskLive do
             <div class="bg-emerald-50 border border-emerald-200 rounded-[14px] px-5 py-4">
               <div class="flex items-start gap-3">
                 <.icon name="hero-key" class="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                <div class="min-w-0">
-                  <p class="text-[14px] font-semibold text-emerald-900">Musterlösung</p>
+                <div class="min-w-0 flex-1">
+                  <p class="text-[14px] font-semibold text-emerald-900">
+                    Deine Antworten im Vergleich
+                  </p>
                   <p class="text-[13px] text-emerald-700 mt-0.5">
-                    So hätte die Lösung aussehen können. Vergleiche sie mit deinen Antworten.
+                    <%= if @self_check.total > 0 do %>
+                      Automatisch verglichen. Bei offen formulierten Fragen steht nur die
+                      Musterlösung — die vergleichst du selbst.
+                    <% else %>
+                      So hätte die Lösung aussehen können. Vergleiche sie mit deinen Antworten.
+                    <% end %>
+                  </p>
+                </div>
+                <div
+                  :if={@self_check.total > 0}
+                  class="shrink-0 text-center bg-white border border-emerald-200 rounded-[10px] px-4 py-2"
+                >
+                  <p class="text-[18px] font-semibold text-emerald-900 tabular-nums leading-none">
+                    {@self_check.correct}/{@self_check.total}
+                  </p>
+                  <p class="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide mt-1">
+                    richtig
                   </p>
                 </div>
               </div>
@@ -398,10 +418,10 @@ defmodule TaskyWeb.Student.TaskLive do
               class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
             >
               <div
-                id={"task-solution-viewer-#{@task.id}"}
+                id={"task-solution-viewer-#{@submission.id}"}
                 phx-hook="ExamReadOnlyViewer"
                 phx-update="ignore"
-                data-content={@solution_json}
+                data-content={@review_json}
               >
               </div>
             </div>
@@ -487,19 +507,8 @@ defmodule TaskyWeb.Student.TaskLive do
                     >
                       <.icon name="hero-eye" class="w-4 h-4" /> Antworten ansehen
                     </.link>
-                    <.link
-                      :if={@solution_visible}
-                      navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
-                      class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-                    >
-                      <.icon name="hero-key" class="w-4 h-4" /> Musterlösung ansehen
-                    </.link>
-                    <.link
-                      navigate={~p"/student/courses/#{@task.course_id}"}
-                      class="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
-                    >
-                      Weiter <.icon name="hero-arrow-right" class="w-3.5 h-3.5" />
-                    </.link>
+                    <.solution_review_link :if={@solution_visible} task={@task} />
+                    <.continue_link task={@task} primary={not @solution_visible} />
                   </div>
                 </div>
               </div>
@@ -538,19 +547,8 @@ defmodule TaskyWeb.Student.TaskLive do
                 >
                   <.icon name="hero-eye" class="w-4 h-4" /> Antworten ansehen
                 </.link>
-                <.link
-                  :if={@solution_visible}
-                  navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
-                  class="inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-                >
-                  <.icon name="hero-key" class="w-4 h-4" /> Musterlösung ansehen
-                </.link>
-                <.link
-                  navigate={~p"/student/courses/#{@task.course_id}"}
-                  class="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
-                >
-                  Weiter <.icon name="hero-arrow-right" class="w-3.5 h-3.5" />
-                </.link>
+                <.solution_review_link :if={@solution_visible} task={@task} />
+                <.continue_link task={@task} primary={not @solution_visible} />
               </:actions>
             </.completion_panel>
           <% end %>
@@ -685,6 +683,46 @@ defmodule TaskyWeb.Student.TaskLive do
     """
   end
 
+  @primary_button_class "inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 active:scale-[0.97] rounded-[10px] shadow-[0_2px_8px_rgba(16,185,129,0.25)] transition-all duration-150"
+  @secondary_button_class "inline-flex items-center gap-2 border border-stone-200 text-stone-600 text-[13px] font-semibold px-4 py-2.5 rounded-[10px] transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+
+  # Ist die Musterlösung freigegeben, ist das Vergleichen der eigenen Antworten
+  # der nächste sinnvolle Schritt — nicht das Weiterklicken. Darum bekommt
+  # dieser Link den Primary-Look und «Weiter» tritt zurück.
+  attr :task, :map, required: true
+
+  defp solution_review_link(assigns) do
+    assigns = assign(assigns, :class, @primary_button_class)
+
+    ~H"""
+    <.link
+      navigate={~p"/student/tasks/#{@task.id}?preview=true&tab=musterloesung"}
+      class={@class}
+    >
+      <.icon name="hero-clipboard-document-check" class="w-4 h-4" />
+      Antworten prüfen und Musterlösung anzeigen
+    </.link>
+    """
+  end
+
+  attr :task, :map, required: true
+  attr :primary, :boolean, required: true
+
+  defp continue_link(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :class,
+        if(assigns.primary, do: @primary_button_class, else: @secondary_button_class)
+      )
+
+    ~H"""
+    <.link navigate={~p"/student/courses/#{@task.course_id}"} class={@class}>
+      Weiter <.icon name="hero-arrow-right" class="w-3.5 h-3.5" />
+    </.link>
+    """
+  end
+
   @impl true
   def mount(%{"id" => id} = params, _session, socket) do
     scope = socket.assigns.current_scope
@@ -803,15 +841,22 @@ defmodule TaskyWeb.Student.TaskLive do
     |> assign(:editable, Tasks.editable_submission?(submission))
     |> assign(:submission_files, submission_files_by_field(submission))
     |> assign(:solution_visible, visible)
-    |> assign(:solution_json, solution_json(task, visible))
+    |> assign(:review_json, review_json(task, submission, visible))
+    |> assign(:self_check, self_check(task, submission, visible))
     |> assign(:showing_correction, showing_correction)
     |> assign(:correction_json, correction_json(task, submission, showing_correction))
   end
 
-  # Das Lösungsdokument wird nur berechnet, wenn es auch freigegeben ist — es
-  # hinter einem CSS-`hidden` ins DOM zu rendern wäre kein Tor.
-  defp solution_json(task, true), do: Jason.encode!(Tasks.sample_solution_doc(task))
-  defp solution_json(_task, false), do: nil
+  # Die Vergleichsansicht wird nur berechnet, wenn die Musterlösung auch
+  # freigegeben ist — sie hinter einem CSS-`hidden` ins DOM zu rendern wäre
+  # kein Tor.
+  defp review_json(task, submission, true),
+    do: Jason.encode!(Tasks.review_doc_for_student(task, submission))
+
+  defp review_json(_task, _submission, false), do: nil
+
+  defp self_check(task, submission, true), do: Tasks.self_check_summary(task, submission)
+  defp self_check(_task, _submission, false), do: %{verdicts: %{}, correct: 0, total: 0}
 
   defp correction_json(task, submission, true) do
     case Tasks.answer_doc_for_student(task, submission) do

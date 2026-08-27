@@ -90,6 +90,19 @@ const answerIdAttribute = {
   },
 };
 
+// Das Ergebnis der Selbstkontrolle einer Lerneinheit ("correct" | "wrong"),
+// gesetzt von `Tasky.Tasks.SelfCheck` und nur im Read-only-Viewer sichtbar.
+// Bewusst ein Attribut statt eines ✅/❌ im Text: das Rendern ist Sache des
+// Stylesheets, das Dokument bleibt sauber.
+const verdictAttribute = {
+  verdict: {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.getAttribute("data-verdict"),
+    renderHTML: (attrs: Record<string, unknown>) =>
+      attrs.verdict ? { "data-verdict": attrs.verdict } : {},
+  },
+};
+
 export const Lueckentext = Node.create({
   name: "lueckentext",
   inline: true,
@@ -97,7 +110,7 @@ export const Lueckentext = Node.create({
   content: "inline*",
 
   addAttributes() {
-    return { ...answerIdAttribute };
+    return { ...answerIdAttribute, ...verdictAttribute };
   },
 
   parseHTML() {
@@ -139,7 +152,7 @@ export const AnswerBlock = Node.create({
   defining: true,
 
   addAttributes() {
-    return { ...answerIdAttribute };
+    return { ...answerIdAttribute, ...verdictAttribute };
   },
 
   parseHTML() {
@@ -278,7 +291,27 @@ export const TaskItemWithId = TaskItem.extend({
     return {
       ...this.parent?.(),
       ...answerIdAttribute,
+      ...verdictAttribute,
     };
+  },
+});
+
+// Die Musterlösung eines Antwortfelds, in der Vergleichsansicht einer
+// Lerneinheit direkt unter der eigenen Antwort. Eingefügt wird der Knoten
+// ausschliesslich serverseitig von `Tasky.Tasks.SelfCheck.review_doc/3` —
+// darum kein Command und keine Input-Rule: er kann nicht in ein
+// Autoren-Dokument geraten.
+export const SolutionHint = Node.create({
+  name: "solutionHint",
+  group: "block",
+  content: "block+",
+
+  parseHTML() {
+    return [{ tag: "div.solution-hint" }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", { ...HTMLAttributes, class: "solution-hint" }, 0];
   },
 });
 

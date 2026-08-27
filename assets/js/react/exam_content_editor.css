@@ -661,6 +661,77 @@
     color: #dc2626;
 }
 
+/* Selbstkontrolle einer Lerneinheit: das Verdikt hängt als `data-verdict` am
+   Antwortknoten (siehe `Tasky.Tasks.SelfCheck`), das Zeichen setzt das
+   Stylesheet. So bleibt das Dokument frei von ✅/❌-Text. */
+.exam-editor__content .ProseMirror .answer-block[data-verdict] {
+    position: relative;
+    padding-right: 2.25em;
+}
+
+.exam-editor__content .ProseMirror .answer-block[data-verdict]::after {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 0.95em;
+    line-height: 1;
+}
+
+.exam-editor__content .ProseMirror .lueckentext[data-verdict]::after,
+.exam-editor__content .ProseMirror li[data-verdict]::after {
+    margin-left: 0.4em;
+    font-size: 0.95em;
+}
+
+.exam-editor__content .ProseMirror [data-verdict="correct"]::after {
+    content: "\2705";
+}
+
+.exam-editor__content .ProseMirror [data-verdict="wrong"]::after {
+    content: "\274C";
+}
+
+.exam-editor__content .ProseMirror .answer-block[data-verdict="correct"] {
+    border-color: #34d399;
+    background: #ecfdf5;
+}
+
+.exam-editor__content .ProseMirror .answer-block[data-verdict="wrong"] {
+    border-color: #fca5a5;
+    background: #fef2f2;
+}
+
+/* Die Musterlösung unter der eigenen Antwort. Dieselbe rote Sprache wie im
+   Musterlösungs-Editor (`.exam-editor--solution-mode`), plus ein Label, damit
+   klar ist, welches der beiden Felder die Vorgabe ist. */
+.exam-editor__content .ProseMirror .solution-hint {
+    margin: 0.25em 0 0.75em;
+    padding-left: 0.75em;
+    border-left: 3px solid #fca5a5;
+}
+
+.exam-editor__content .ProseMirror .solution-hint::before {
+    content: "Musterlösung";
+    display: block;
+    margin-bottom: 0.25em;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #dc2626;
+}
+
+.exam-editor__content .ProseMirror .solution-hint,
+.exam-editor__content .ProseMirror .solution-hint * {
+    color: #dc2626;
+}
+
+.exam-editor__content .ProseMirror .solution-hint .answer-block,
+.exam-editor__content .ProseMirror .solution-hint .lueckentext {
+    border-color: #fca5a5;
+    background: #fef2f2;
+}
+
 .exam-editor__content .ProseMirror .page-break {
     position: relative;
     border-top: 1px dashed #a8a29e;
