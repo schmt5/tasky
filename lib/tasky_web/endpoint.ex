@@ -11,9 +11,17 @@ defmodule TaskyWeb.Endpoint do
     same_site: "Lax"
   ]
 
+  # :x_headers carries the websocket upgrade's `x-`-prefixed request headers,
+  # which is how TaskyWeb.SebGuardHook sees SEB's
+  # `X-SafeExamBrowser-ConfigKeyHash`. :uri is the upgrade URL, needed for the
+  # URL-salted variant of that hash.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [:user_agent, :peer_data, session: @session_options]],
-    longpoll: [connect_info: [:user_agent, :peer_data, session: @session_options]]
+    websocket: [
+      connect_info: [:user_agent, :peer_data, :x_headers, :uri, session: @session_options]
+    ],
+    longpoll: [
+      connect_info: [:user_agent, :peer_data, :x_headers, :uri, session: @session_options]
+    ]
 
   # Serve at "/" the static files from "priv/static" directory.
   #

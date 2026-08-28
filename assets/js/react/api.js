@@ -13,12 +13,37 @@ async function request(url, options = {}) {
 
   const response = await fetch(url, { ...options, headers });
 
+  const isJson = (response.headers.get("content-type") || "").includes("json");
+
+  // The Safe Exam Browser guard refuses writes with a 403 carrying
+  // `code: "seb_required"`. Without this branch it would fall into the
+  // session-expiry case below: autosave stops permanently and tells the
+  // participant to reload, which is both wrong and unhelpful mid-exam. Still
+  // permanent — retrying the same request from the same browser cannot start
+  // succeeding — but it has to say what actually happened.
+  if (response.status === 403 && isJson) {
+    let code;
+    try {
+      code = (await response.clone().json()).code;
+    } catch {
+      code = undefined;
+    }
+
+    if (code === "seb_required") {
+      const error = new Error(
+        "Diese Prüfung läuft nur im Safe Exam Browser. Bitte melde dich bei deiner Lehrperson.",
+      );
+      error.status = response.status;
+      error.permanent = true;
+      error.code = code;
+      throw error;
+    }
+  }
+
   // An expired session surfaces as a redirect to the login page (fetch
   // follows it, yielding HTML with status 200) or as a bare 401/403.
   // Retrying can never succeed — mark the error permanent so autosave
   // stops and asks the user to reload instead of looping forever.
-  const isJson = (response.headers.get("content-type") || "").includes("json");
-
   if (
     response.redirected ||
     [401, 403].includes(response.status) ||

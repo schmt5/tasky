@@ -123,6 +123,18 @@ defmodule TaskyWeb.Layouts do
                   Klassen
                 </.link>
                 <.link
+                  navigate={~p"/students"}
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/students"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
+                >
+                  Lernende
+                </.link>
+                <.link
                   navigate={~p"/exams"}
                   class={[
                     "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",

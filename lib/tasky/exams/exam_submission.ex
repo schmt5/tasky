@@ -11,6 +11,7 @@ defmodule Tasky.Exams.ExamSubmission do
     field :email, :string
     field :exam_token, :string
     field :submitted, :boolean, default: false
+    field :submitted_at, :utc_datetime
     field :content, :map, default: %{}
     field :corrected_parts, {:array, :string}, default: []
     field :auto_corrected_parts, {:array, :string}, default: []

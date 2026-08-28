@@ -4,6 +4,7 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
   alias Tasky.Exams
   alias Tasky.Exams.Exam
   alias TaskyWeb.ExamComponents
+  alias TaskyWeb.SebGuard
 
   @impl true
   def render(assigns) do
@@ -104,6 +105,130 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
                       </div>
                     </div>
                   </div>
+
+                  <%!-- The admin password gates SEB's own settings window. It is
+                        never spoken aloud, so it is hidden behind a toggle
+                        rather than printed like the quit password. --%>
+                  <div
+                    :if={@exam.seb_admin_password}
+                    class="bg-stone-50 rounded-xl p-4 border border-stone-200"
+                  >
+                    <div class="flex items-start gap-3">
+                      <.icon name="hero-lock-closed" class="w-5 h-5 text-stone-400 shrink-0 mt-0.5" />
+                      <div class="min-w-0">
+                        <h3 class="text-sm font-semibold text-stone-700 mb-1">Admin-Passwort</h3>
+                        <p class="text-xs text-stone-500 leading-relaxed mb-2">
+                          Sperrt das Einstellungsfenster von SEB. Nur für dich — <span class="font-semibold">nie den Teilnehmenden nennen</span>.
+                          Du brauchst es beim Probelauf, um den Config Key in SEB abzulesen.
+                        </p>
+                        <button
+                          type="button"
+                          phx-click="toggle_admin_password"
+                          class="text-xs font-semibold text-sky-600 hover:text-sky-700"
+                        >
+                          {if @show_admin_password?, do: "Verbergen", else: "Anzeigen"}
+                        </button>
+                        <p
+                          :if={@show_admin_password?}
+                          class="mt-2 font-mono text-sm text-stone-800 break-all select-all"
+                        >
+                          {@exam.seb_admin_password}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <%!-- Enforcement. Three states rather than a switch, because
+                        "observe" is what makes it safe to turn on at all: it
+                        reports without ever blocking, so the Config Key
+                        derivation can be confirmed against the SEB build in the
+                        room before it is allowed to lock anyone out. --%>
+                  <div class="rounded-xl border border-stone-200 p-4 space-y-3">
+                    <div>
+                      <h3 class="text-sm font-semibold text-stone-700">Serverseitige Prüfung</h3>
+                      <p class="text-xs text-stone-500 leading-relaxed mt-0.5">
+                        Ohne diese Prüfung genügt ein manipulierter Browser-Kennstring, um die
+                        Prüfung im normalen Browser zu schreiben.
+                      </p>
+                    </div>
+
+                    <div class="space-y-2">
+                      <label
+                        :for={{value, title, hint} <- enforcement_options()}
+                        class="flex items-start gap-3 cursor-pointer"
+                      >
+                        <input
+                          type="radio"
+                          name="seb_enforcement"
+                          value={value}
+                          checked={@exam.seb_enforcement == value}
+                          phx-click="set_enforcement"
+                          phx-value-mode={value}
+                          class="mt-0.5 w-[18px] h-[18px] border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer shrink-0"
+                        />
+                        <span class="min-w-0">
+                          <span class="block text-sm font-medium text-stone-700">{title}</span>
+                          <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
+                            {hint}
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
+                    <div
+                      :if={@exam.seb_enforcement == "enforce"}
+                      class="bg-red-50 rounded-lg p-3 border border-red-100"
+                    >
+                      <p class="text-xs text-red-700 leading-relaxed mb-2">
+                        Falls während der Prüfung niemand mehr hineinkommt: hiermit die Prüfung
+                        sofort für 15 Minuten entsperren. Danach greift sie wieder von selbst.
+                      </p>
+                      <button
+                        type="button"
+                        id="seb-bypass-btn"
+                        phx-click="bypass_seb"
+                        class="inline-flex items-center gap-2 bg-red-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors hover:bg-red-600"
+                      >
+                        <.icon name="hero-lock-open" class="w-4 h-4" /> SEB-Zwang 15 Minuten aussetzen
+                      </button>
+                      <p :if={@bypass_active?} class="text-xs text-red-800 font-semibold mt-2">
+                        Zwang ausgesetzt bis {Calendar.strftime(@exam.seb_bypass_until, "%H:%M")} Uhr.
+                      </p>
+                    </div>
+
+                    <%!-- Observe mode's payoff: what real clients actually sent,
+                          so a value we derive wrongly can be blessed instead of
+                          ending the exam for the class. --%>
+                    <div :if={@observations != []} class="border-t border-stone-100 pt-3">
+                      <h4 class="text-xs font-semibold text-stone-600 mb-2">
+                        Beobachtete SEB-Schlüssel
+                      </h4>
+                      <div
+                        :for={{hash, count} <- @observations}
+                        class="flex items-center gap-2 mb-1.5"
+                      >
+                        <code class="text-[11px] font-mono text-stone-500 truncate flex-1">
+                          {String.slice(hash, 0, 24)}…
+                        </code>
+                        <span class="text-[11px] text-stone-400 shrink-0">{count}×</span>
+                        <button
+                          type="button"
+                          phx-click="accept_config_key"
+                          phx-value-hash={hash}
+                          class="text-[11px] font-semibold text-sky-600 hover:text-sky-700 shrink-0"
+                        >
+                          Akzeptieren
+                        </button>
+                      </div>
+                    </div>
+
+                    <p
+                      :if={@exam.seb_accepted_config_keys != []}
+                      class="text-xs text-stone-400"
+                    >
+                      {length(@exam.seb_accepted_config_keys)} Schlüssel manuell akzeptiert.
+                    </p>
+                  </div>
                 <% end %>
               </div>
 
@@ -147,14 +272,57 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
     changeset = Exam.changeset(exam, %{})
     form = to_form(changeset, as: :config)
 
+    # Observed Config Key hashes are exam-day diagnostics, not an audit trail:
+    # they live in this LiveView's own state and are gone when it closes.
+    if connected?(socket), do: Phoenix.PubSub.subscribe(Tasky.PubSub, SebGuard.topic(exam))
+
     {:ok,
      socket
      |> assign(:exam, exam)
      |> assign(:form, form)
      |> assign(:changed?, false)
+     |> assign(:show_admin_password?, false)
+     |> assign(:observed_counts, %{})
+     |> assign_observations()
+     |> assign_bypass()
      |> assign_mode()
      |> assign_chrome()}
   end
+
+  @doc """
+  The enforcement modes, in the order they appear on the config page.
+
+  `observe` is the default and the middle rung on purpose: the Config Key
+  derivation has to be confirmed against the SEB build actually installed in
+  the exam room before it is allowed to lock anybody out.
+  """
+  def enforcement_options do
+    [
+      {"off", "Aus",
+       "Keine serverseitige Prüfung. Der Safe-Exam-Browser-Hinweis bleibt ein Hinweis."},
+      {"observe", "Melden",
+       "Prüft und zeigt im Cockpit an, wer verifiziert ist — blockiert aber niemanden. " <>
+         "Damit den Probelauf machen."},
+      {"enforce", "Erzwingen",
+       "Ohne gültigen SEB-Schlüssel kein Zugriff, auch nicht auf Speichern und Abgeben. " <>
+         "Erst einschalten, wenn der Probelauf mit echtem SEB sauber war."}
+    ]
+  end
+
+  # Only hashes that are not already accepted are worth offering.
+  defp assign_observations(socket) do
+    accepted = socket.assigns.exam.seb_accepted_config_keys || []
+
+    observations =
+      socket.assigns.observed_counts
+      |> Enum.reject(fn {hash, _count} -> hash in accepted end)
+      |> Enum.sort_by(fn {_hash, count} -> -count end)
+
+    assign(socket, :observations, observations)
+  end
+
+  defp assign_bypass(socket),
+    do: assign(socket, :bypass_active?, SebGuard.bypassed?(socket.assigns.exam))
 
   # A draft has no cockpit yet, so the page is titled after what it does —
   # opening the session — and leads back to the exam instead.
@@ -229,7 +397,7 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
   def handle_event("save", %{"config" => params}, %{assigns: %{draft?: true}} = socket) do
     exam = socket.assigns.exam
     scope = socket.assigns.current_scope
-    params = maybe_generate_quit_password(params, exam)
+    params = maybe_generate_seb_passwords(params, exam)
 
     with {:ok, exam} <- Exams.update_exam(scope, exam, params),
          {:ok, exam} <- Exams.open_exam_session(scope, exam, socket.assigns.participation_mode) do
@@ -249,7 +417,7 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
   def handle_event("save", %{"config" => params}, socket) do
     exam = socket.assigns.exam
 
-    params = maybe_generate_quit_password(params, exam)
+    params = maybe_generate_seb_passwords(params, exam)
 
     case Exams.update_exam(socket.assigns.current_scope, exam, params) do
       {:ok, updated_exam} ->
@@ -267,20 +435,81 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
     end
   end
 
-  defp maybe_generate_quit_password(params, exam) do
-    seb_enabled = params["seb_enabled"] in ["true", true]
+  # Both SEB passwords are minted here, server-side, and only ever reach the
+  # changeset from this function — they are never form input.
+  #
+  # Regenerating either one changes the SEB Config Key, which instantly
+  # invalidates every `.seb` file already downloaded. That is why they are only
+  # minted when missing, never refreshed on an ordinary save.
+  def handle_event("toggle_admin_password", _params, socket) do
+    {:noreply, update(socket, :show_admin_password?, &(not &1))}
+  end
 
-    cond do
-      seb_enabled and (is_nil(exam.seb_quit_password) or exam.seb_quit_password == "") ->
-        Map.put(params, "seb_quit_password", generate_quit_password())
+  def handle_event("set_enforcement", %{"mode" => mode}, socket) do
+    case Exams.set_seb_enforcement(socket.assigns.current_scope, socket.assigns.exam, mode) do
+      {:ok, exam} ->
+        {:noreply, socket |> assign(:exam, exam) |> assign_bypass()}
 
-      !seb_enabled ->
-        Map.put(params, "seb_quit_password", nil)
-
-      true ->
-        params
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Modus konnte nicht gespeichert werden.")}
     end
   end
 
-  defp generate_quit_password, do: Tasky.Exams.generate_quit_password()
+  def handle_event("bypass_seb", _params, socket) do
+    case Exams.bypass_seb(socket.assigns.current_scope, socket.assigns.exam, 15) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> assign(:exam, exam)
+         |> assign_bypass()
+         |> put_flash(:info, "SEB-Zwang für 15 Minuten ausgesetzt.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Aussetzen fehlgeschlagen.")}
+    end
+  end
+
+  def handle_event("accept_config_key", %{"hash" => hash}, socket) do
+    case Exams.accept_seb_config_key(socket.assigns.current_scope, socket.assigns.exam, hash) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> assign(:exam, exam)
+         # Re-filter, or the hash keeps being offered after it was accepted.
+         |> assign_observations()
+         |> put_flash(:info, "Schlüssel akzeptiert.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Schlüssel konnte nicht akzeptiert werden.")}
+    end
+  end
+
+  @impl true
+  def handle_info({:seb_observation, %{observed: observed}}, socket) when is_binary(observed) do
+    counts = Map.update(socket.assigns.observed_counts, String.downcase(observed), 1, &(&1 + 1))
+
+    {:noreply, socket |> assign(:observed_counts, counts) |> assign_observations()}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp maybe_generate_seb_passwords(params, exam) do
+    if params["seb_enabled"] in ["true", true] do
+      params
+      |> put_missing("seb_quit_password", exam.seb_quit_password, &Exams.generate_quit_password/0)
+      |> put_missing(
+        "seb_admin_password",
+        exam.seb_admin_password,
+        &Exams.generate_admin_password/0
+      )
+    else
+      params
+      |> Map.put("seb_quit_password", nil)
+      |> Map.put("seb_admin_password", nil)
+    end
+  end
+
+  defp put_missing(params, key, current, generator) do
+    if current in [nil, ""], do: Map.put(params, key, generator.()), else: params
+  end
 end

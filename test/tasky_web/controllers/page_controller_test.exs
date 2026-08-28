@@ -23,6 +23,8 @@ defmodule TaskyWeb.PageControllerTest do
     html = html_response(conn, 200)
 
     assert html =~ "Klassen verwalten"
+    assert html =~ "Lernende verwalten"
+    assert html =~ ~p"/students"
     refute html =~ ~p"/admin/organizations"
     refute html =~ ~p"/admin/users"
   end

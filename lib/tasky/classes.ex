@@ -60,6 +60,32 @@ defmodule Tasky.Classes do
   end
 
   @doc """
+  True when the scope may reach the class with this id.
+
+  The cheap counterpart to `get_class!/2` for validating a *target* class before
+  assigning something to it — `Tasky.Accounts.update_student/3` uses it so a
+  teacher cannot move a student into another organization's class by posting a
+  foreign `class_id`.
+
+  Accepts the raw string a form sends. Anything unparsable is `false`.
+  """
+  def visible?(scope, id) when is_integer(id) do
+    Class
+    |> Policy.scope_by_organization(scope)
+    |> where([c], c.id == ^id)
+    |> Repo.exists?()
+  end
+
+  def visible?(scope, id) when is_binary(id) do
+    case Integer.parse(id) do
+      {parsed, ""} -> visible?(scope, parsed)
+      _ -> false
+    end
+  end
+
+  def visible?(_scope, _id), do: false
+
+  @doc """
   Gets a class by slug.
 
   Returns `nil` if no class exists with the given slug.

@@ -109,7 +109,10 @@ defmodule Tasky.Exams do
       "sample_solution_points" => source.sample_solution_points || %{},
       "sample_solution_block_points" => source.sample_solution_block_points || %{},
       "seb_enabled" => source.seb_enabled,
+      # Fresh secrets for the copy: a duplicated exam is a separate session, and
+      # sharing the passwords would mean one leaked `.seb` file unlocks both.
       "seb_quit_password" => if(source.seb_enabled, do: generate_quit_password(), else: nil),
+      "seb_admin_password" => if(source.seb_enabled, do: generate_admin_password(), else: nil),
       "ai_correction_config" => source.ai_correction_config || %{}
       # status defaults to "draft" via schema
       # enrollment_token stays nil
@@ -222,7 +225,11 @@ defmodule Tasky.Exams do
     "draft" => ~w(open),
     "open" => ~w(running),
     "running" => ~w(finished),
-    "finished" => ~w(archived),
+    # `finished -> running` is the escape hatch for a misclicked "Prüfung
+    # beenden": the click is otherwise terminal, and after it nobody can save
+    # or hand in any more. Reopening broadcasts the status change like any
+    # other transition, so the participants' views follow on their own.
+    "finished" => ~w(archived running),
     "archived" => ~w()
   }
 
@@ -260,10 +267,18 @@ defmodule Tasky.Exams do
   def open_exam_session(scope, %Exam{} = exam, mode) when mode in ["assigned", "anonymous"] do
     with :ok <- Policy.authorize(scope, exam.teacher_id),
          :ok <- validate_status_transition(exam.status, "open") do
+      # Resolved once, here, and stored on the exam — see Exam.open_changeset/4.
+      allow_files? = exam_has_files?(exam)
+
       result =
         case mode do
-          "anonymous" -> open_with_fresh_token(exam, 5)
-          "assigned" -> exam |> Exam.open_changeset("assigned", nil) |> Repo.update()
+          "anonymous" ->
+            open_with_fresh_token(exam, allow_files?, 5)
+
+          "assigned" ->
+            exam
+            |> Exam.open_changeset("assigned", nil, allow_files?)
+            |> Repo.update()
         end
 
       case result do
@@ -279,19 +294,19 @@ defmodule Tasky.Exams do
 
   # The token space is small enough that collisions are possible — retry with a
   # fresh token instead of surfacing a constraint error.
-  defp open_with_fresh_token(_exam, 0), do: {:error, :token_collision}
+  defp open_with_fresh_token(_exam, _allow_files?, 0), do: {:error, :token_collision}
 
-  defp open_with_fresh_token(exam, attempts) do
+  defp open_with_fresh_token(exam, allow_files?, attempts) do
     result =
       exam
-      |> Exam.open_changeset("anonymous", generate_enrollment_token())
+      |> Exam.open_changeset("anonymous", generate_enrollment_token(), allow_files?)
       |> Ecto.Changeset.unique_constraint(:enrollment_token)
       |> Repo.update()
 
     case result do
       {:error, %Ecto.Changeset{errors: errors}} = error ->
         if Keyword.has_key?(errors, :enrollment_token) do
-          open_with_fresh_token(exam, attempts - 1)
+          open_with_fresh_token(exam, allow_files?, attempts - 1)
         else
           error
         end
@@ -327,13 +342,117 @@ defmodule Tasky.Exams do
     |> String.upcase()
   end
 
+  # Dictation-friendly: no 0/O, 1/I/l, or anything else that goes wrong when a
+  # teacher reads it out across a room.
+  @password_alphabet ~c"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
   @doc """
-  Generates a fresh 6-digit SEB quit password from a cryptographically
-  strong source. The single place quit passwords come from.
+  Generates a fresh SEB quit password. The single place quit passwords come
+  from.
+
+  Eleven characters out of a 32-symbol alphabet is ~55 bits. Length matters
+  here because the password's SHA-256 travels inside the plain (`plnd`) `.seb`
+  file that every participant downloads: the previous 6-digit password had
+  900 000 candidates, so anyone holding the file could recover it in
+  milliseconds and quit the lockdown mid-exam.
   """
-  def generate_quit_password do
-    <<n::32>> = :crypto.strong_rand_bytes(4)
-    Integer.to_string(100_000 + rem(n, 900_000))
+  def generate_quit_password, do: random_password(11) |> group_in_fours()
+
+  @doc """
+  Generates a fresh SEB admin password, which gates SEB's own preferences and
+  config-inspection windows. Never spoken aloud, so it is not grouped and it is
+  long (26 chars ≈ 130 bits).
+  """
+  def generate_admin_password, do: random_password(26)
+
+  defp random_password(length) do
+    # Rejection-free because the alphabet size (32) divides 256 evenly, so
+    # `rem/2` over strong random bytes stays uniform.
+    alphabet_size = length(@password_alphabet)
+
+    :crypto.strong_rand_bytes(length)
+    |> :binary.bin_to_list()
+    |> Enum.map(&Enum.at(@password_alphabet, rem(&1, alphabet_size)))
+    |> List.to_string()
+  end
+
+  defp group_in_fours(string) do
+    string
+    |> String.graphemes()
+    |> Enum.chunk_every(4)
+    |> Enum.map_join("-", &Enum.join/1)
+  end
+
+  @doc """
+  Sets the SEB enforcement mode (`"off"` / `"observe"` / `"enforce"`).
+
+  Not part of `update_exam/3`: the mode decides whether a participant can reach
+  the exam at all, so it must not be reachable through a content form.
+  """
+  def set_seb_enforcement(scope, %Exam{} = exam, mode) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      exam
+      |> Exam.seb_enforcement_changeset(mode)
+      |> update_and_broadcast(&broadcast_exam_update/1)
+    end
+  end
+
+  @doc """
+  Suspends SEB enforcement for `minutes`, degrading `"enforce"` to `"observe"`
+  until it expires.
+
+  The kill switch for exam day: if the Config Key derivation is wrong for the
+  SEB build in the room, this is what gets the class writing again without a
+  deploy. Broadcast like any other exam update so the participants' halted
+  views can be retried.
+  """
+  def bypass_seb(scope, %Exam{} = exam, minutes) when is_integer(minutes) and minutes > 0 do
+    until =
+      DateTime.utc_now()
+      |> DateTime.add(minutes * 60, :second)
+      |> DateTime.truncate(:second)
+
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      exam
+      |> Ecto.Changeset.change(%{seb_bypass_until: until})
+      |> update_and_broadcast(&broadcast_exam_update/1)
+    end
+  end
+
+  # Capped so a misbehaving client cannot grow the row without bound.
+  @max_accepted_config_keys 10
+
+  @doc """
+  Adds an observed SEB Config Key hash to the exam's accepted list.
+
+  The operator override behind `observe` mode: a hash a real client actually
+  sent can be blessed explicitly, so a config change mid-session — or a
+  derivation that is subtly wrong for one SEB build — does not end the exam for
+  everybody. Idempotent.
+  """
+  def accept_seb_config_key(scope, %Exam{} = exam, hash) when is_binary(hash) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         {:ok, normalized} <- normalize_config_key(hash) do
+      if normalized in (exam.seb_accepted_config_keys || []) do
+        {:ok, exam}
+      else
+        keys =
+          [normalized | exam.seb_accepted_config_keys || []]
+          |> Enum.take(@max_accepted_config_keys)
+
+        exam
+        |> Ecto.Changeset.change(%{seb_accepted_config_keys: keys})
+        |> update_and_broadcast(&broadcast_exam_update/1)
+      end
+    end
+  end
+
+  defp normalize_config_key(hash) do
+    normalized = hash |> String.trim() |> String.downcase()
+
+    if Regex.match?(~r/^[0-9a-f]{64}$/, normalized),
+      do: {:ok, normalized},
+      else: {:error, :invalid_config_key}
   end
 
   @doc """
@@ -788,7 +907,15 @@ defmodule Tasky.Exams do
             Repo.rollback(:missing_required_uploads)
 
           true ->
-            case locked |> Ecto.Changeset.change(%{submitted: true}) |> Repo.update() do
+            # The hand-in timestamp is written here, inside the same
+            # transaction against the same locked row that flips the flag, so
+            # the two can never disagree.
+            changes = %{
+              submitted: true,
+              submitted_at: DateTime.utc_now() |> DateTime.truncate(:second)
+            }
+
+            case locked |> Ecto.Changeset.change(changes) |> Repo.update() do
               {:ok, updated} -> %{updated | exam: exam}
               {:error, changeset} -> Repo.rollback(changeset)
             end
@@ -1633,11 +1760,16 @@ defmodule Tasky.Exams do
   the bulk-correction runner — one atomic write instead of three racy ones,
   and grading no longer depends on re-inferring the runner's verdicts from
   the ✅/🟡/❌ markers.
+
+  The part total is recomputed here from the verdicts actually stored, the
+  same way `part_verdict_changes_for_keys/4` computes it for a manual edit.
+  The runner does not pass a total: it only knows the verdicts it proposed,
+  and a re-run keeps the teacher's verdicts for blocks they already judged,
+  so the runner's own sum would be wrong for exactly those parts.
   """
   def apply_auto_correction(scope, %ExamSubmission{} = submission, part_id, part_nodes, opts)
       when is_binary(part_id) and is_list(part_nodes) do
     verdicts = Keyword.get(opts, :verdicts, %{})
-    points = Keyword.get(opts, :points)
 
     with :ok <- authorize_submission(scope, submission) do
       result =
@@ -1678,14 +1810,21 @@ defmodule Tasky.Exams do
               if p.id == part_id, do: %{p | nodes: marked_nodes}, else: p
             end)
 
+          # Recomputed from what we are about to store, never frozen and never
+          # taken from the runner. A re-run refreshes every block the teacher
+          # has *not* judged — verdicts and markers both — so a total carried
+          # over from the last manual write would contradict both of them.
+          # Same helpers as the manual path, so the two agree by construction.
+          new_part_points =
+            blocks
+            |> effective_verdicts_for_part(merged_verdicts)
+            |> compute_part_points(points_by_index)
+
           new_points =
-            cond do
-              # The teacher has judged at least one block here, so the runner's
-              # total is computed from verdicts that were partly rejected. The
-              # manual path already keeps this part's points correct.
-              manual_keys != [] -> locked.points_per_part || %{}
-              is_nil(points) -> Map.delete(locked.points_per_part || %{}, part_id)
-              true -> Map.put(locked.points_per_part || %{}, part_id, points)
+            if is_nil(new_part_points) do
+              Map.delete(locked.points_per_part || %{}, part_id)
+            else
+              Map.put(locked.points_per_part || %{}, part_id, new_part_points)
             end
 
           changes = %{
@@ -1910,14 +2049,30 @@ defmodule Tasky.Exams do
   Updates the grading max-points override for the exam. Pass `nil` to clear
   the override (the grading view then falls back to the sum of
   `sample_solution_points`).
+
+  The value is validated here rather than in the LiveView because a bad max
+  divides into *every* mark of the exam: a negative one clamps the whole class
+  to 1.0, a zero removes every mark. Same reasoning as `set_part_points/4`.
   """
   def update_grading_max_points(scope, %Exam{} = exam, value) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         {:ok, normalized} <- normalize_grading_max_points(value) do
       exam
-      |> Ecto.Changeset.change(%{grading_max_points: value})
+      |> Ecto.Changeset.change(%{grading_max_points: normalized})
       |> Repo.update()
     end
   end
+
+  defp normalize_grading_max_points(nil), do: {:ok, nil}
+
+  defp normalize_grading_max_points(value) when is_number(value) do
+    case Grading.normalize_points(value) do
+      n when n > 0 -> {:ok, n / 1}
+      _ -> {:error, :invalid_max_points}
+    end
+  end
+
+  defp normalize_grading_max_points(_), do: {:error, :invalid_max_points}
 
   @doc """
   Sets (or clears, when `mark` is `nil`) the teacher-adjusted final mark for
@@ -1925,12 +2080,20 @@ defmodule Tasky.Exams do
   fall back to the calculated mark from `points / max_points`.
   """
   def set_submission_mark(scope, %ExamSubmission{} = submission, mark) do
-    with :ok <- authorize_submission(scope, submission) do
+    with :ok <- authorize_submission(scope, submission),
+         {:ok, normalized} <- normalize_submission_mark(mark) do
       submission
-      |> Ecto.Changeset.change(%{mark: mark})
+      |> Ecto.Changeset.change(%{mark: normalized})
       |> Repo.update()
     end
   end
+
+  defp normalize_submission_mark(nil), do: {:ok, nil}
+
+  defp normalize_submission_mark(mark) when is_number(mark),
+    do: {:ok, Grading.normalize_mark(mark) / 1}
+
+  defp normalize_submission_mark(_), do: {:error, :invalid_mark}
 
   @doc """
   Updates the AI correction configuration for a single part of an exam.

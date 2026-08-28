@@ -492,7 +492,9 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   def handle_event("adjust_max_points", %{"direction" => dir}, socket) do
     delta = if dir == "up", do: 0.25, else: -0.25
-    new_value = max((socket.assigns.effective_max_points || 0) + delta, 0)
+    # Floor at 0.25, not 0: a max of 0 means "no mark for anybody", so the
+    # minus button must not be able to walk the exam into it.
+    new_value = max((socket.assigns.effective_max_points || 0) + delta, 0.25)
     save_max_points(socket, new_value)
   end
 
@@ -696,13 +698,18 @@ defmodule TaskyWeb.ExamLive.Grading do
   defp save_max_points(socket, value) do
     case Exams.update_grading_max_points(socket.assigns.current_scope, socket.assigns.exam, value) do
       {:ok, updated_exam} ->
-        effective = value || socket.assigns.sample_solution_total
+        # Read the effective value back off the exam, not off the input: the
+        # context normalizes (quarter-rounds) what it stores.
+        effective = updated_exam.grading_max_points || socket.assigns.sample_solution_total
 
         {:noreply,
          socket
          |> assign(:exam, updated_exam)
          |> assign(:effective_max_points, effective)
          |> assign(:rows, build_rows(socket.assigns.submissions, effective))}
+
+      {:error, :invalid_max_points} ->
+        {:noreply, put_flash(socket, :error, "Maximalpunkte müssen grösser als 0 sein.")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Maximalpunkte konnten nicht gespeichert werden.")}

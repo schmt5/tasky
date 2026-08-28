@@ -44,6 +44,22 @@ defmodule Tasky.Organizations do
   end
 
   @doc """
+  Query of the students this scope may see.
+
+  The scope-aware companion to `students_query/1`: `:all` for an admin (which
+  includes class-less students — they belong to no organization, and only an
+  admin can put that right), the organization's students for a teacher, and
+  nobody for a scope without one.
+  """
+  def visible_students_query(scope) do
+    case Policy.organization_scope(scope) do
+      :all -> from(u in User, where: u.role == "student")
+      {:org, id} -> students_query(id)
+      :none -> from(u in User, where: false)
+    end
+  end
+
+  @doc """
   True when this student belongs to `org_id` through their class.
 
   Fail-closed on `nil` on either side.

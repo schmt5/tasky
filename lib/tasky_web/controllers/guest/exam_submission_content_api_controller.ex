@@ -6,7 +6,11 @@ defmodule TaskyWeb.Guest.ExamSubmissionContentApiController do
   alias Tasky.Exams
 
   def update(conn, %{"token" => token, "content" => content}) when is_map(content) do
-    submission = Exams.get_exam_submission_by_token!(token)
+    # `TaskyWeb.Plugs.SebGuard` has already loaded this submission when the exam
+    # runs with SEB; reuse it rather than hitting the database twice on what is
+    # the hottest write path in the app.
+    submission =
+      conn.assigns[:seb_submission] || Exams.get_exam_submission_by_token!(token)
 
     case Exams.update_exam_submission_content(submission, content) do
       {:error, :already_submitted} ->

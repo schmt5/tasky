@@ -205,7 +205,12 @@ defmodule TaskyWeb.Guest.EnrollLive do
 
     case Exams.create_exam_submission(exam, params) do
       {:ok, submission} ->
-        {:noreply, push_navigate(socket, to: ~p"/guest/exam/#{submission.exam_token}")}
+        # A full navigation, not push_navigate: the exam route is SEB-guarded by
+        # a plug, and a live_redirect inside this live_session would join over
+        # the open websocket without ever running it. Under `enforce` that left
+        # a participant who is genuinely inside SEB unable to get in, because
+        # only the HTTP request can carry the verification into the session.
+        {:noreply, redirect(socket, to: ~p"/guest/exam/#{submission.exam_token}")}
 
       {:error, :exam_not_open} ->
         # The exam closed between loading the form and submitting it.

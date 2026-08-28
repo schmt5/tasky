@@ -8,6 +8,7 @@ defmodule TaskyWeb.Guest.SebController do
 
   alias Tasky.Exams
   alias Tasky.Exams.SebConfig
+  alias TaskyWeb.SebGuard
 
   @doc """
   Serves the `.seb` configuration file as a download.
@@ -18,16 +19,12 @@ defmodule TaskyWeb.Guest.SebController do
     submission = Exams.get_exam_submission_by_token!(exam_token)
 
     if submission.exam.seb_enabled do
-      base_url = TaskyWeb.Endpoint.url()
-      start_url = base_url <> "/guest/exam/#{exam_token}"
-      quit_url = base_url <> "/guest/exam/#{exam_token}/seb-quit"
-
+      # One place assembles the options, so the file handed out and the Config
+      # Key the guard checks are derived from identical input.
       seb_binary =
-        SebConfig.generate(
-          start_url: start_url,
-          quit_url: quit_url,
-          quit_password: submission.exam.seb_quit_password
-        )
+        submission.exam
+        |> SebGuard.config_opts(submission)
+        |> SebConfig.generate()
 
       conn
       |> put_resp_content_type("application/octet-stream")
@@ -39,6 +36,27 @@ defmodule TaskyWeb.Guest.SebController do
       |> text("Not Found")
       |> halt()
     end
+  end
+
+  @doc """
+  The SEB gate as its own page.
+
+  `TaskyWeb.SebGuardHook` redirects here when it halts a LiveView mount: a
+  halted mount cannot render the gate itself, and the participant still needs
+  the download link. Renders the same component as the LiveView's own gate.
+  """
+  def required(conn, %{"exam_token" => exam_token}) do
+    submission = Exams.get_exam_submission_by_token!(exam_token)
+
+    conn
+    |> put_status(:forbidden)
+    |> put_view(html: TaskyWeb.Guest.SebHTML)
+    |> put_layout(false)
+    |> render(:required,
+      page_title: "Safe Exam Browser erforderlich",
+      exam_token: submission.exam_token,
+      reason: :no_header
+    )
   end
 
   @doc """

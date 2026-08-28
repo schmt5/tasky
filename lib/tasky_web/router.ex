@@ -50,6 +50,16 @@ defmodule TaskyWeb.Router do
     plug :protect_from_forgery
   end
 
+  # Safe Exam Browser enforcement. Inert unless the exam has SEB enabled *and*
+  # its seb_enforcement is "enforce" — see TaskyWeb.SebGuard.
+  pipeline :seb_guard_html do
+    plug TaskyWeb.Plugs.SebGuard, on_reject: :html
+  end
+
+  pipeline :seb_guard_json do
+    plug TaskyWeb.Plugs.SebGuard, on_reject: :json
+  end
+
   scope "/", TaskyWeb do
     pipe_through :browser
 
@@ -70,20 +80,35 @@ defmodule TaskyWeb.Router do
 
   ## Guest exam routes (no authentication required)
 
+  # Deliberately NOT SEB-guarded: downloading the configuration and reaching the
+  # gate page is how a participant gets into SEB in the first place, and the
+  # quit URL has to work as SEB is shutting down.
   scope "/guest", TaskyWeb.Guest do
     pipe_through [:browser, :guest_rate_limit]
 
     get "/exam/:exam_token/seb-config", SebController, :config
     get "/exam/:exam_token/seb-quit", SebController, :quit
+    get "/exam/:exam_token/seb-required", SebController, :required
+  end
+
+  scope "/guest", TaskyWeb.Guest do
+    pipe_through [:browser, :guest_rate_limit, :seb_guard_html]
+
     get "/exam/:exam_token/files/:field_id", FileController, :download
 
-    # The hook is not redundant with the pipeline above: a live_redirect inside
-    # this live_session joins over the open websocket and never touches a plug.
-    # The scope hook is what lets Guest.ExamLive refuse a logged-in student who
-    # pasted a classmate's token. SEB carries no cookie, so the scope is nil
-    # there and the assigned-mode participant path stays untouched.
+    # The hooks are not redundant with the pipelines above: a live_redirect
+    # inside this live_session joins over the open websocket and never touches a
+    # plug. The scope hook is what lets Guest.ExamLive refuse a logged-in
+    # student who pasted a classmate's token. SEB carries no login cookie, so
+    # the scope is nil there and the assigned-mode participant path stays
+    # untouched. The SEB hook runs last so an over-quota client is still turned
+    # away first.
     live_session :guest,
-      on_mount: [{TaskyWeb.GuestRateLimit, :default}, {TaskyWeb.UserAuth, :mount_current_scope}] do
+      on_mount: [
+        {TaskyWeb.GuestRateLimit, :default},
+        {TaskyWeb.UserAuth, :mount_current_scope},
+        {TaskyWeb.SebGuardHook, :default}
+      ] do
       live "/enroll/:enrollment_token", EnrollLive, :enroll
       live "/exam/:exam_token", ExamLive, :show
     end
@@ -120,7 +145,7 @@ defmodule TaskyWeb.Router do
   # brute-forceable, and autosave traffic from a whole class behind one NAT
   # would trip any sensible per-IP limit, so no rate limiting here).
   scope "/api/guest", TaskyWeb.Guest do
-    pipe_through :guest_api
+    pipe_through [:guest_api, :seb_guard_json]
 
     put "/exam/:token/content", ExamSubmissionContentApiController, :update
   end
@@ -203,6 +228,9 @@ defmodule TaskyWeb.Router do
       live "/classes", ClassLive.Index, :index
       live "/classes/new", ClassLive.Form, :new
       live "/classes/:id/edit", ClassLive.Form, :edit
+
+      live "/students", StudentsLive.Index, :index
+      live "/students/:id/edit", StudentsLive.Edit, :edit
 
       live "/exams", ExamLive.Index, :index
       live "/exams/new", ExamLive.Form, :new

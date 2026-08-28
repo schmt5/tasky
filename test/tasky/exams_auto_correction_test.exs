@@ -110,8 +110,7 @@ defmodule Tasky.ExamsAutoCorrectionTest do
 
       {:ok, updated} =
         Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
-          verdicts: %{"a1" => "correct", "a2" => "wrong"},
-          points: 1
+          verdicts: %{"a1" => "correct", "a2" => "wrong"}
         )
 
       assert updated.block_verdicts["a1"] == "correct"
@@ -126,14 +125,12 @@ defmodule Tasky.ExamsAutoCorrectionTest do
 
       {:ok, updated} =
         Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
-          verdicts: %{"a1" => "wrong"},
-          points: 0
+          verdicts: %{"a1" => "wrong"}
         )
 
       {:ok, updated} =
         Exams.apply_auto_correction(:system, updated, "q-1", part_nodes(updated),
-          verdicts: %{"a1" => "correct"},
-          points: 2
+          verdicts: %{"a1" => "correct"}
         )
 
       assert updated.block_verdicts["a1"] == "correct"
@@ -148,8 +145,7 @@ defmodule Tasky.ExamsAutoCorrectionTest do
 
       {:ok, submission} =
         Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
-          verdicts: %{"a1" => "wrong", "a2" => "wrong"},
-          points: 0
+          verdicts: %{"a1" => "wrong", "a2" => "wrong"}
         )
 
       # Teacher overrides block a1 (index 0).
@@ -159,8 +155,7 @@ defmodule Tasky.ExamsAutoCorrectionTest do
 
       {:ok, rerun} =
         Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
-          verdicts: %{"a1" => "wrong", "a2" => "wrong"},
-          points: 0
+          verdicts: %{"a1" => "wrong", "a2" => "wrong"}
         )
 
       assert rerun.block_verdicts["a1"] == "correct",
@@ -170,22 +165,58 @@ defmodule Tasky.ExamsAutoCorrectionTest do
       assert rerun.points_per_part["q-1"] == teacher_points
     end
 
+    test "a re-run that changes an unjudged block also updates the part total" do
+      # The regression this file's other re-run tests could not see: they re-run
+      # with the non-manual block unchanged, so a frozen total happens to be
+      # right. Once any block is hand-graded, the total used to be carried over
+      # verbatim while the *other* blocks' verdicts and ✅/❌ markers were still
+      # refreshed — so points, verdicts and the document disagreed until the
+      # teacher happened to touch that part again.
+      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 2}})
+      submission = submission_fixture(exam)
+
+      {:ok, submission} =
+        Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
+          verdicts: %{"a1" => "wrong", "a2" => "wrong"}
+        )
+
+      assert submission.points_per_part["q-1"] == 0
+
+      # Teacher overrides a1 (index 0); a1 counts as manual from here on.
+      {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 0, "correct")
+      assert submission.points_per_part["q-1"] == 1
+
+      # Model answer edited, re-run: a1 stays the teacher's, a2 flips to correct.
+      {:ok, rerun} =
+        Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
+          verdicts: %{"a1" => "wrong", "a2" => "correct"}
+        )
+
+      assert rerun.block_verdicts == %{"a1" => "correct", "a2" => "correct"}
+
+      assert rerun.points_per_part["q-1"] == 2,
+             "the part total must follow the verdicts that were actually stored"
+
+      # And the document must agree with both.
+      [first, second] = NodePatcher.list_answer_blocks(part_nodes(rerun))
+      assert first.inferred_verdict == "correct"
+      assert second.inferred_verdict == "correct"
+    end
+
     test "markers follow the stored verdicts, not the runner's own" do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 2}})
       submission = submission_fixture(exam)
 
       {:ok, submission} =
         Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
-          verdicts: %{"a1" => "wrong", "a2" => "wrong"},
-          points: 0
+          verdicts: %{"a1" => "wrong", "a2" => "wrong"}
         )
 
       {:ok, submission} = Exams.set_block_verdict(:system, submission, "q-1", 0, "correct")
 
       {:ok, rerun} =
         Exams.apply_auto_correction(:system, submission, "q-1", part_nodes(submission),
-          verdicts: %{"a1" => "wrong", "a2" => "wrong"},
-          points: 0
+          verdicts: %{"a1" => "wrong", "a2" => "wrong"}
         )
 
       # `list_answer_blocks/1` strips the markers out of `text` and reports what

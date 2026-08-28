@@ -7,6 +7,7 @@ defmodule Tasky.Accounts do
   alias Tasky.Repo
 
   alias Tasky.Accounts.{User, UserNotifier, UserToken}
+  alias Tasky.Classes
 
   ## Database getters
 
@@ -420,6 +421,110 @@ defmodule Tasky.Accounts do
   end
 
   defp apply_user_filter(_, query), do: query
+
+  ## Student directory (organization-scoped)
+
+  @doc """
+  Lists the students the scope may see, newest filters applied.
+
+  The organization-scoped counterpart to `list_users/1`: a teacher sees the
+  students of their own organization (derived through `classes.organization_id`),
+  an admin sees all of them, and a teacher without an organization sees none.
+  Accepts the same `:search` and `:class_id` filters; `:role` is meaningless here
+  because every row is a student.
+  """
+  def list_students(scope, filters \\ []) do
+    base =
+      scope
+      |> Tasky.Organizations.visible_students_query()
+      |> order_by([u], asc: u.lastname, asc: u.firstname)
+      |> preload([[class: :organization], :organization])
+
+    filters
+    |> Enum.reduce(base, &apply_user_filter/2)
+    |> Repo.all()
+  end
+
+  @doc """
+  Gets a single student the scope may see, with class and organization loaded.
+
+  Raises `Ecto.NoResultsError` for a student of another organization, so a
+  foreign student is indistinguishable from a missing one (same convention as
+  `Tasky.Classes.get_class!/2`).
+  """
+  def get_student!(scope, id) do
+    scope
+    |> Tasky.Organizations.visible_students_query()
+    |> where([u], u.id == ^id)
+    |> preload([[class: :organization], :organization])
+    |> Repo.one!()
+  end
+
+  @doc """
+  Updates a student's profile on behalf of a teacher or admin.
+
+  Two authorization steps, and both are needed:
+
+    * the *student* must be visible to the scope, and
+    * the *target class* must be too — otherwise a teacher could hand a student
+      to another organization by posting a foreign `class_id`, which would also
+      remove them from their own sight.
+
+  `organization_id` is dropped rather than validated: a student's organization is
+  always derived from their class, so there is no legitimate value for it here.
+  """
+  def update_student(scope, %User{} = student, attrs) do
+    attrs = Map.drop(attrs, ["organization_id", :organization_id])
+
+    with :ok <- authorize_student(scope, student),
+         :ok <- authorize_target_class(scope, attrs) do
+      student
+      |> User.admin_update_changeset(attrs)
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  Sets a new password for a student, on behalf of a teacher or admin.
+
+  Production sends no mail (`Swoosh.Adapters.Local`), so this is the only way a
+  student who forgot their password gets back in. Like `admin_reset_password/3`
+  it invalidates every existing session of that student.
+  """
+  def reset_student_password(scope, %User{} = student, new_password) do
+    with :ok <- authorize_student(scope, student) do
+      do_admin_reset_password(student, new_password)
+    end
+  end
+
+  defp authorize_student(scope, %User{role: "student", id: id}) do
+    visible? =
+      scope
+      |> Tasky.Organizations.visible_students_query()
+      |> where([u], u.id == ^id)
+      |> Repo.exists?()
+
+    if visible?, do: :ok, else: {:error, :unauthorized}
+  end
+
+  defp authorize_student(_scope, %User{}), do: {:error, :unauthorized}
+
+  # An absent `class_id` leaves the current one alone; an explicit empty one
+  # clears it — which only an admin can undo, so the UI warns about it.
+  defp authorize_target_class(scope, attrs) do
+    case fetch_class_id(attrs) do
+      :absent -> :ok
+      {:ok, blank} when blank in [nil, ""] -> :ok
+      {:ok, id} -> if Classes.visible?(scope, id), do: :ok, else: {:error, :unauthorized}
+    end
+  end
+
+  defp fetch_class_id(attrs) do
+    case Map.fetch(attrs, "class_id") do
+      {:ok, value} -> {:ok, value}
+      :error -> with :error <- Map.fetch(attrs, :class_id), do: :absent
+    end
+  end
 
   @doc """
   Returns an `%Ecto.Changeset{}` for admin editing of a user

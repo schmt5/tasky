@@ -36,9 +36,20 @@ defmodule TaskyWeb.ContentSecurityPolicy do
     end)
   end
 
+  @doc """
+  Origins the app itself loads content from, besides its own.
+
+  Shared with the Safe Exam Browser URL filter
+  (`Tasky.Exams.SebConfig`): SEB enforces its own allow-list on top of the
+  CSP, so an origin missing there fails exactly the same way — the request
+  reaches the app, returns a healthy 302, and the image renders as a broken
+  icon. Deriving both lists from this one function is what stops them
+  diverging the next time a storage adapter is added.
+  """
+  @spec storage_origins() :: [String.t()]
   # Only the remote adapter serves uploads off another origin; the local one
   # streams the bytes itself and stays covered by 'self'.
-  defp storage_origins do
+  def storage_origins do
     case Application.get_env(:tasky, :storage_adapter, Tasky.Storage.Local) do
       Tasky.Storage.R2 -> [Tasky.Storage.R2.endpoint_url()]
       _ -> []

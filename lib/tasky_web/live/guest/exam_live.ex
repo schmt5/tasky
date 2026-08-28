@@ -1,6 +1,7 @@
 defmodule TaskyWeb.Guest.ExamLive do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.ExamComponents, only: [seb_gate: 1]
   import TaskyWeb.FileComponents
   import TaskyWeb.StudentComponents
 
@@ -8,6 +9,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   alias Tasky.Exams
   alias Tasky.Uploads
   alias TaskyWeb.Params
+  alias TaskyWeb.SebGuard
 
   @impl true
   def render(assigns) do
@@ -44,81 +46,8 @@ defmodule TaskyWeb.Guest.ExamLive do
           hidden
         />
         <%= cond do %>
-          <% @exam.seb_enabled and not @in_seb and not @submission.submitted and @exam.status in ["open", "running"] -> %>
-            <%!-- SEB Required Gate --%>
-            <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
-              <div class="w-full max-w-lg">
-                <div class="text-center mb-8">
-                  <div class="w-16 h-16 rounded-2xl bg-sky-50 flex items-center justify-center mx-auto mb-4">
-                    <.icon name="hero-shield-check" class="w-8 h-8 text-sky-500" />
-                  </div>
-                  <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
-                    Safe Exam Browser erforderlich
-                  </h1>
-                  <p class="text-stone-500 text-sm">
-                    Diese Prüfung erfordert den Safe Exam Browser (SEB).
-                  </p>
-                </div>
-
-                <div class="bg-white rounded-2xl border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-6 space-y-4">
-                  <div class="bg-sky-50 rounded-xl p-4 border border-sky-100">
-                    <div class="flex items-start gap-3">
-                      <.icon
-                        name="hero-information-circle"
-                        class="w-5 h-5 text-sky-500 shrink-0 mt-0.5"
-                      />
-                      <div class="text-sm text-sky-800 leading-relaxed">
-                        <p class="mb-1">
-                          Der Safe Exam Browser sperrt deinen Computer während der Prüfung
-                          in einen sicheren Kiosk-Modus.
-                        </p>
-                        <p>
-                          Der Safe Exam Browser muss bereits installiert sein. Falls nicht,
-                          installiere ihn zuerst.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <ol class="space-y-3">
-                    <li class="flex items-start gap-3">
-                      <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
-                        1
-                      </span>
-                      <p class="text-sm text-stone-600 leading-relaxed">
-                        Klicke auf den Button <span class="font-semibold text-stone-800">«Im Safe Exam Browser öffnen»</span>.
-                      </p>
-                    </li>
-                    <li class="flex items-start gap-3">
-                      <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
-                        2
-                      </span>
-                      <p class="text-sm text-stone-600 leading-relaxed">
-                        Es wird eine Konfigurationsdatei
-                        (<span class="font-semibold text-stone-800">exam.seb</span>) heruntergeladen.
-                      </p>
-                    </li>
-                    <li class="flex items-start gap-3">
-                      <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
-                        3
-                      </span>
-                      <p class="text-sm text-stone-600 leading-relaxed">
-                        Öffne die heruntergeladene Datei mit einem Klick und warte einige Sekunden –
-                        der Safe Exam Browser startet automatisch.
-                      </p>
-                    </li>
-                  </ol>
-
-                  <a
-                    href={~p"/guest/exam/#{@submission.exam_token}/seb-config"}
-                    id="open-in-seb-btn"
-                    class="w-full inline-flex items-center justify-center gap-2.5 bg-sky-500 text-white text-sm font-semibold px-6 py-3.5 rounded-xl shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
-                  >
-                    <.icon name="hero-shield-check" class="w-5 h-5" /> Im Safe Exam Browser öffnen
-                  </a>
-                </div>
-              </div>
-            </div>
+          <% @exam.seb_enabled and not @seb_ok and not @submission.submitted and @exam.status in ["open", "running"] -> %>
+            <.seb_gate exam_token={@submission.exam_token} reason={@seb_reason} />
           <% @exam.status == "open" -> %>
             <%!-- Waiting Room --%>
             <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
@@ -696,6 +625,18 @@ defmodule TaskyWeb.Guest.ExamLive do
   defp mount_submission(submission, socket) do
     exam = submission.exam
 
+    # Two different questions, deliberately kept apart.
+    #
+    # `in_seb` is cosmetic: is the participant looking at this through SEB right
+    # now? It decides whether the "SEB beenden" button makes any sense. A
+    # user-agent sniff is the right tool for that and its spoofability does not
+    # matter.
+    #
+    # `seb_ok` is the gate, and it must not rest on a sniff. It comes from
+    # `TaskyWeb.SebGuardHook`'s `:seb_state`, which checked the Config Key hash
+    # SEB sends. In `observe` mode the sniff still satisfies the gate, because
+    # observe must never block anyone — that is the whole point of having a
+    # stage before `enforce`.
     in_seb =
       if connected?(socket) do
         case get_connect_info(socket, :user_agent) do
@@ -705,6 +646,18 @@ defmodule TaskyWeb.Guest.ExamLive do
       else
         false
       end
+
+    seb_state = socket.assigns[:seb_state] || :unverified
+    verified? = seb_state != :unverified
+
+    seb_ok =
+      case SebGuard.mode(exam) do
+        :enforce -> verified?
+        :observe -> verified? or in_seb
+        :off -> in_seb
+      end
+
+    seb_reason = if verified? or not in_seb, do: :no_header, else: :mismatch
 
     if connected?(socket) do
       Exams.subscribe_exam(exam.id)
@@ -718,7 +671,10 @@ defmodule TaskyWeb.Guest.ExamLive do
             %{
               firstname: submission.firstname,
               lastname: submission.lastname,
-              in_seb: in_seb
+              in_seb: in_seb,
+              # The honest state for the cockpit: `in_seb` alone cannot tell a
+              # real SEB from a spoofed user agent.
+              seb_state: seb_state
             }
           )
       end
@@ -745,6 +701,8 @@ defmodule TaskyWeb.Guest.ExamLive do
       |> assign(:show_submit_modal, false)
       |> assign(:submit_check, :checking)
       |> assign(:in_seb, in_seb)
+      |> assign(:seb_ok, seb_ok)
+      |> assign(:seb_reason, seb_reason)
       |> assign(:attachments, attachments)
       |> assign(:upload_fields, upload_fields)
       |> assign(:success_emoji, success_emoji())

@@ -182,7 +182,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          :ok <- ensure_has_answers(answer_count),
          blocks = NodePatcher.list_answer_blocks(submission_nodes),
          block_points = Exams.resolve_block_points(exam, part_id, blocks),
-         {:ok, %{verdicts: verdicts, points: points}} <-
+         {:ok, %{verdicts: verdicts}} <-
            StringComparator.correct_part(
              annotated_nodes,
              sample_nodes,
@@ -196,8 +196,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          corrected_nodes = NodePatcher.apply_verdicts(annotated_nodes, verdicts),
          {:ok, _updated} <-
            Exams.apply_auto_correction(:system, submission, part_id, corrected_nodes,
-             verdicts: verdicts_by_answer_id(verdicts, blocks),
-             points: clamp_points(points, max_points)
+             verdicts: verdicts_by_answer_id(verdicts, blocks)
            ) do
       :ok
     else
@@ -243,9 +242,6 @@ defmodule Tasky.AI.BulkCorrectionRunner do
       p -> p.nodes
     end
   end
-
-  defp clamp_points(points, nil), do: max(points, 0)
-  defp clamp_points(points, max_points), do: points |> max(0) |> min(max_points)
 
   # StringComparator keys verdicts by the annotation id (`__ai_id`, which is
   # block index + 1); grading data is keyed by the block's stable answerId.

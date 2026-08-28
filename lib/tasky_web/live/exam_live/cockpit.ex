@@ -70,6 +70,18 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   <.icon name="hero-stop" class="w-4 h-4" /> Prüfung beenden
                 </button>
               <% end %>
+              <%!-- Recovery from a misclicked "Prüfung beenden". Deliberately
+                    quiet: it is a way back, not a step forward. --%>
+              <%= if @exam.status == "finished" do %>
+                <button
+                  type="button"
+                  phx-click="show_confirm"
+                  phx-value-action="reopen_exam"
+                  class="inline-flex items-center gap-2 text-stone-500 text-sm font-semibold px-4 py-2.5 rounded-xl border border-stone-200 transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+                >
+                  <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Prüfung wieder öffnen
+                </button>
+              <% end %>
             </div>
           </div>
 
@@ -173,10 +185,20 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   <span class="w-2 h-2 rounded-full bg-emerald-400" />
                   {map_size(@present)} online
                 </span>
+                <%!-- Two counters, not one: "im SEB" used to count a
+                      spoofable user-agent string and report it as a green
+                      shield. Verified means the Config Key hash checked out. --%>
                 <%= if @exam.seb_enabled do %>
                   <span class="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full">
                     <.icon name="hero-shield-check-mini" class="w-4 h-4" />
-                    {@present |> Map.values() |> Enum.count(& &1.in_seb)} im SEB
+                    {seb_verified_count(@present)} verifiziert
+                  </span>
+                  <span
+                    :if={seb_unverified_count(@present) > 0}
+                    class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 text-sm font-semibold px-3 py-1.5 rounded-full"
+                  >
+                    <.icon name="hero-exclamation-triangle-mini" class="w-4 h-4" />
+                    {seb_unverified_count(@present)} ohne SEB-Schlüssel
                   </span>
                 <% end %>
                 <span class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-sm font-semibold px-3 py-1.5 rounded-full">
@@ -284,9 +306,16 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   </ul>
                 </div>
                 <%= if submission.submitted do %>
-                  <span class="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                    <.icon name="hero-check-circle-mini" class="w-3.5 h-3.5" /> Abgegeben
-                  </span>
+                  <div class="flex flex-col items-end gap-1 shrink-0">
+                    <span class="inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      <.icon name="hero-check-circle-mini" class="w-3.5 h-3.5" /> Abgegeben
+                    </span>
+                    <%!-- The hand-in time, not updated_at: auto-correction during
+                          a running exam moves updated_at past the hand-in. --%>
+                    <span :if={submission.submitted_at} class="text-[11px] text-stone-400">
+                      {Calendar.strftime(submission.submitted_at, "%d.%m.%Y, %H:%M")}
+                    </span>
+                  </div>
                 <% end %>
               </div>
             </div>
@@ -383,7 +412,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                 <div>
                   <h3 class="text-lg font-semibold text-stone-800">Prüfung beenden</h3>
                   <p class="text-xs text-stone-400 mt-0.5">
-                    Diese Aktion kann nicht rückgängig gemacht werden.
+                    Danach im Notfall wieder zu öffnen.
                   </p>
                 </div>
               </div>
@@ -402,6 +431,8 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   />
                   <p class="text-xs text-red-700 leading-relaxed">
                     Nach dem Beenden können Teilnehmende keine Änderungen mehr vornehmen.
+                    Wer bis dahin nicht abgegeben hat, wird mit dem letzten
+                    automatisch gespeicherten Stand korrigiert.
                   </p>
                 </div>
               </div>
@@ -420,6 +451,65 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                 class="inline-flex items-center gap-2 bg-red-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(239,68,68,0.25)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
               >
                 <.icon name="hero-stop" class="w-4 h-4" /> Jetzt beenden
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
+      <%= if @confirm_action == :reopen_exam do %>
+        <dialog
+          id="reopen-exam-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_confirm"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_confirm"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">Prüfung wieder öffnen</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">Für den Fall eines Fehlklicks.</p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Möchtest du <span class="font-semibold text-stone-800">{@exam.name}</span>
+                wieder öffnen?
+              </p>
+              <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
+                <div class="flex items-start gap-2.5">
+                  <.icon
+                    name="hero-exclamation-triangle"
+                    class="w-4 h-4 text-amber-500 shrink-0 mt-0.5"
+                  />
+                  <p class="text-xs text-amber-800 leading-relaxed">
+                    Wer noch nicht abgegeben hat, kann danach wieder schreiben und
+                    abgeben. Bereits abgegebene Arbeiten bleiben abgegeben, und
+                    bereits erfasste Korrekturen bleiben erhalten.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6 pt-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                phx-click="close_confirm"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                phx-click="confirm_action"
+                class="inline-flex items-center gap-2 bg-amber-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(245,158,11,0.25)] transition-all duration-150 hover:bg-amber-600 active:scale-[0.98]"
+              >
+                <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Wieder öffnen
               </button>
             </div>
           </div>
@@ -682,8 +772,25 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   defp presence_state(exam_id) do
     TaskyWeb.Presence.list("exam_waiting:#{exam_id}")
     |> Map.new(fn {token, %{metas: metas}} ->
-      {token, %{in_seb: Enum.any?(metas, & &1[:in_seb])}}
+      {token,
+       %{
+         in_seb: Enum.any?(metas, & &1[:in_seb]),
+         # `in_seb` is a user-agent sniff and a participant can set it to
+         # anything. `seb_state` is what the Config Key check concluded, and it
+         # is the only one of the two worth acting on.
+         seb_state: best_seb_state(metas)
+       }}
     end)
+  end
+
+  @seb_state_rank %{verified: 3, stamped: 2, unverified: 1}
+
+  # One participant can hold several sockets (a reload leaves the old one
+  # briefly alive); take the best state among them.
+  defp best_seb_state(metas) do
+    metas
+    |> Enum.map(&(&1[:seb_state] || :unverified))
+    |> Enum.max_by(&Map.get(@seb_state_rank, &1, 0), fn -> :unverified end)
   end
 
   # Returns {dot_class, label_class, label} for a participant's presence state.
@@ -704,8 +811,14 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           {"bg-stone-300", "text-stone-400", "Abwesend"}
         end
 
-      %{in_seb: false} when exam.seb_enabled ->
+      %{seb_state: :unverified, in_seb: false} when exam.seb_enabled ->
         {"bg-yellow-400", "text-yellow-600", "SEB noch nicht gestartet"}
+
+      # Claims to be SEB but sent no valid Config Key hash. Either a stale
+      # `.seb` file or a spoofed user agent — worth the teacher's attention
+      # either way, and it used to render as a green shield.
+      %{seb_state: :unverified, in_seb: true} when exam.seb_enabled ->
+        {"bg-amber-400", "text-amber-600", "SEB nicht verifiziert"}
 
       _ ->
         {"bg-emerald-400", "text-emerald-500", present_label(exam.status, submission)}
@@ -718,6 +831,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   defp present_label("open", _submission), do: "Im Warteraum"
   defp present_label("running", _submission), do: "In Bearbeitung"
   defp present_label(_status, _submission), do: "Online"
+
+  defp seb_verified_count(present),
+    do: present |> Map.values() |> Enum.count(&(&1.seb_state != :unverified))
+
+  defp seb_unverified_count(present),
+    do: present |> Map.values() |> Enum.count(&(&1.seb_state == :unverified))
 
   defp never_started?(%{submitted: false, content: content}) when is_map(content),
     do: map_size(content) == 0
@@ -853,6 +972,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     confirm_action =
       case action do
         "start_exam" -> :start_exam
+        "reopen_exam" -> :reopen_exam
         "end_exam" -> :end_exam
         _ -> nil
       end
@@ -864,48 +984,54 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     {:noreply, assign(socket, :confirm_action, nil)}
   end
 
+  # Every confirmable action is the same shape: one status transition, one
+  # message when it fails, sometimes one when it succeeds. Spelling them out
+  # three times made the differences hard to see and the function hard to
+  # extend — the reopen action was the third copy.
+  @confirmable_actions %{
+    start_exam: %{
+      status: "running",
+      error: "Prüfung konnte nicht gestartet werden."
+    },
+    end_exam: %{
+      status: "finished",
+      error: "Prüfung konnte nicht beendet werden."
+    },
+    reopen_exam: %{
+      status: "running",
+      error: "Prüfung konnte nicht wieder geöffnet werden.",
+      info: "Prüfung ist wieder offen. Teilnehmende können weiterschreiben."
+    }
+  }
+
   def handle_event("confirm_action", _params, socket) do
-    case socket.assigns.confirm_action do
-      :start_exam ->
-        case Exams.update_exam_status(
-               socket.assigns.current_scope,
-               socket.assigns.exam,
-               "running"
-             ) do
-          {:ok, exam} ->
-            {:noreply,
-             socket
-             |> assign(:exam, exam)
-             |> assign(:confirm_action, nil)}
+    case Map.fetch(@confirmable_actions, socket.assigns.confirm_action) do
+      {:ok, action} -> transition(socket, action)
+      :error -> {:noreply, assign(socket, :confirm_action, nil)}
+    end
+  end
 
-          {:error, _changeset} ->
-            {:noreply,
-             socket
-             |> assign(:confirm_action, nil)
-             |> put_flash(:error, "Prüfung konnte nicht gestartet werden.")}
+  defp transition(socket, action) do
+    result =
+      Exams.update_exam_status(
+        socket.assigns.current_scope,
+        socket.assigns.exam,
+        action.status
+      )
+
+    socket = assign(socket, :confirm_action, nil)
+
+    case result do
+      {:ok, exam} ->
+        socket = assign(socket, :exam, exam)
+
+        case action do
+          %{info: info} -> {:noreply, put_flash(socket, :info, info)}
+          _ -> {:noreply, socket}
         end
 
-      :end_exam ->
-        case Exams.update_exam_status(
-               socket.assigns.current_scope,
-               socket.assigns.exam,
-               "finished"
-             ) do
-          {:ok, exam} ->
-            {:noreply,
-             socket
-             |> assign(:exam, exam)
-             |> assign(:confirm_action, nil)}
-
-          {:error, _changeset} ->
-            {:noreply,
-             socket
-             |> assign(:confirm_action, nil)
-             |> put_flash(:error, "Prüfung konnte nicht beendet werden.")}
-        end
-
-      _ ->
-        {:noreply, assign(socket, :confirm_action, nil)}
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, action.error)}
     end
   end
 

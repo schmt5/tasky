@@ -104,6 +104,16 @@ binding:
   `/uploads` responses are sandboxed (`default-src 'none'`, nosniff, CORP);
   the guest enrollment routes are rate-limited per IP
   (`TaskyWeb.Plugs.RateLimit`; the 128-bit `exam_token` API routes are not).
+- **Safe Exam Browser enforcement** is the second thing that has to cover both
+  a plug and an `on_mount` hook, for the same reason the rate limiter does: the
+  guest LiveViews share one `live_session`, so a `live_redirect` joins over the
+  open websocket and never touches a pipeline again. The decision logic lives
+  in `TaskyWeb.SebGuard`; `TaskyWeb.Plugs.SebGuard` and
+  `TaskyWeb.SebGuardHook` are thin callers. A verified HTTP request stamps the
+  session, and the hook accepts that stamp — SEB's headers cannot be assumed to
+  survive a WebSocket upgrade. Per-exam mode (`off`/`observe`/`enforce`)
+  defaults to `observe`: see `docs/SEB_PROBELAUF.md` for why nothing may be
+  switched to `enforce` before a dry run against a real client.
 - JSON APIs (autosave, images) share `TaskyWeb.ApiHelpers`
   (`render_save_result/2`, uniform errors). File downloads share
   `TaskyWeb.StorageServing` (local `send_file`/`send_download` vs. presigned

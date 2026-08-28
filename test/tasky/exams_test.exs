@@ -83,6 +83,21 @@ defmodule Tasky.ExamsTest do
       assert submitted.submitted
     end
 
+    test "stamps submitted_at in the same write that flips the flag" do
+      # `updated_at` is not the hand-in time: autosave moves it, and
+      # auto-correction during a running exam can move it past the hand-in.
+      exam = exam_fixture(status: "running")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      refute submission.submitted_at
+
+      before = DateTime.utc_now() |> DateTime.add(-1, :second)
+      {:ok, submitted} = Exams.submit_exam_submission(submission)
+
+      assert submitted.submitted_at
+      assert DateTime.compare(submitted.submitted_at, before) == :gt
+      assert DateTime.compare(submitted.submitted_at, DateTime.utc_now()) in [:lt, :eq]
+    end
+
     test "rejects submission once the exam is finished" do
       exam = exam_fixture(status: "running")
       {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
@@ -139,6 +154,36 @@ defmodule Tasky.ExamsTest do
       assert {:error, :invalid_transition} = Exams.update_exam_status(:system, exam, "draft")
     end
 
+    test "a finished exam can be reopened, but not rewound further" do
+      # "Prüfung beenden" is one click and used to be terminal: after it nobody
+      # could save or hand in any more, with no way back.
+      exam = exam_fixture(status: "running")
+      {:ok, exam} = Exams.update_exam_status(:system, exam, "finished")
+
+      assert {:ok, reopened} = Exams.update_exam_status(:system, exam, "running")
+      assert reopened.status == "running"
+
+      {:ok, finished} = Exams.update_exam_status(:system, reopened, "finished")
+      assert {:error, :invalid_transition} = Exams.update_exam_status(:system, finished, "draft")
+      assert {:error, :invalid_transition} = Exams.update_exam_status(:system, finished, "open")
+    end
+
+    test "reopening lets a participant write again" do
+      exam = exam_fixture(status: "running")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      {:ok, exam} = Exams.update_exam_status(:system, exam, "finished")
+
+      assert {:error, :exam_not_running} =
+               Exams.update_exam_submission_content(submission, sample_doc("zu spät"))
+
+      {:ok, _exam} = Exams.update_exam_status(:system, exam, "running")
+
+      assert {:ok, updated} =
+               Exams.update_exam_submission_content(submission, sample_doc("wieder offen"))
+
+      assert updated.content == sample_doc("wieder offen")
+    end
+
     test "status and enrollment_token are not mass-assignable" do
       exam = exam_fixture()
 
@@ -181,11 +226,73 @@ defmodule Tasky.ExamsTest do
     end
   end
 
-  describe "generate_quit_password/0" do
-    test "always produces a 6-digit numeric password" do
-      for _ <- 1..100 do
-        assert Exams.generate_quit_password() =~ ~r/^[1-9]\d{5}$/
+  describe "update_grading_max_points/3 and set_submission_mark/2" do
+    test "rejects a max that would corrupt every mark in the exam" do
+      # `mark/2` divides by this. Negative clamps the whole class to 1.0, zero
+      # removes every mark — and both are one typo away in the number field.
+      exam = exam_fixture()
+
+      assert {:error, :invalid_max_points} =
+               Exams.update_grading_max_points(:system, exam, -6)
+
+      assert {:error, :invalid_max_points} = Exams.update_grading_max_points(:system, exam, 0)
+      assert {:error, :invalid_max_points} = Exams.update_grading_max_points(:system, exam, "20")
+
+      assert Tasky.Repo.reload!(exam).grading_max_points == nil
+    end
+
+    test "accepts a positive max, quarter-rounded, and nil to clear it" do
+      exam = exam_fixture()
+
+      assert {:ok, updated} = Exams.update_grading_max_points(:system, exam, 20.3)
+      assert updated.grading_max_points == 20.25
+
+      assert {:ok, cleared} = Exams.update_grading_max_points(:system, updated, nil)
+      assert cleared.grading_max_points == nil
+    end
+
+    test "a mark is normalized into the Swiss 1..6 range" do
+      exam = exam_fixture(status: "open")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      assert {:ok, high} = Exams.set_submission_mark(:system, submission, 9.0)
+      assert high.mark == 6.0
+
+      assert {:ok, low} = Exams.set_submission_mark(:system, high, -3)
+      assert low.mark == 1.0
+
+      assert {:ok, rounded} = Exams.set_submission_mark(:system, low, 4.3)
+      assert rounded.mark == 4.25
+
+      assert {:ok, cleared} = Exams.set_submission_mark(:system, rounded, nil)
+      assert cleared.mark == nil
+    end
+  end
+
+  describe "SEB passwords" do
+    test "the quit password is long, dictation-safe and grouped" do
+      # Its SHA-256 ships inside the plain `.seb` file every participant
+      # downloads, so it has to survive being public-by-construction. The old
+      # 6-digit password had 900 000 candidates.
+      passwords = for _ <- 1..100, do: Exams.generate_quit_password()
+
+      for password <- passwords do
+        assert password =~ ~r/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{3}$/
+        # Uppercase-only, so `l` never appears; `I`/`O` are out of the alphabet.
+        refute password =~ ~r/[O0I1]/
       end
+
+      assert length(Enum.uniq(passwords)) == 100
+    end
+
+    test "the admin password is long and never grouped" do
+      passwords = for _ <- 1..100, do: Exams.generate_admin_password()
+
+      for password <- passwords do
+        assert password =~ ~r/^[A-Z2-9]{26}$/
+      end
+
+      assert length(Enum.uniq(passwords)) == 100
     end
   end
 

@@ -30,7 +30,9 @@ defmodule TaskyWeb.GuestExamLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/guest/enroll/#{exam.enrollment_token}")
 
-      assert {:error, {:live_redirect, %{to: "/guest/exam/" <> token}}} =
+      # A full redirect, not a live_redirect: the exam route is SEB-guarded by a
+      # plug, and joining over the open websocket would skip it.
+      assert {:error, {:redirect, %{to: "/guest/exam/" <> token}}} =
                view
                |> form("#enrollment-form",
                  enrollment: %{firstname: "Lena", lastname: "Späti", email: "lena@example.com"}
@@ -225,6 +227,106 @@ defmodule TaskyWeb.GuestExamLiveTest do
       # A non-numeric id reached an integer column and raised Ecto.Query.CastError.
       assert render_click(view, "delete_answer_file", %{"field-id" => "not-a-number"})
       assert render(view) =~ "Live Prüfung"
+    end
+  end
+
+  describe "the Safe Exam Browser gate" do
+    # The gate used to key on `String.contains?(user_agent, "SEB")`, so a
+    # user-agent switcher walked straight past it. It now keys on the Config Key
+    # hash SEB sends — except in `observe`, which must never block anyone while
+    # the derivation is still being confirmed against a real client.
+    setup do
+      exam = exam_fixture(status: "running")
+
+      {:ok, exam} =
+        exam
+        |> Ecto.Changeset.change(%{
+          seb_enabled: true,
+          seb_quit_password: "PRZN-9XXN-79Z",
+          seb_admin_password: "SSMW6X9PVV54GAN8SDNLLNE69D"
+        })
+        |> Tasky.Repo.update()
+
+      submission = exam_submission_fixture(exam)
+      %{exam: exam, submission: Tasky.Repo.preload(submission, :exam, force: true)}
+    end
+
+    defp set_mode(exam, mode) do
+      {:ok, exam} = Exams.set_seb_enforcement(:system, exam, mode)
+      exam
+    end
+
+    defp with_seb_ua(conn),
+      do: Plug.Conn.put_req_header(conn, "user-agent", "Mozilla/5.0 (Windows NT 10.0) SEB/3.5.0")
+
+    defp with_valid_hash(conn, exam, submission) do
+      hash =
+        exam
+        |> TaskyWeb.SebGuard.config_opts(submission)
+        |> Tasky.Exams.SebConfig.config_key()
+
+      Plug.Conn.put_req_header(conn, TaskyWeb.SebGuard.header_name(), hash)
+    end
+
+    test "off: the user-agent hint still opens it, as before", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      set_mode(exam, "off")
+
+      {:ok, _view, html} = conn |> with_seb_ua() |> open_exam(submission)
+      assert html =~ "Abgeben"
+    end
+
+    test "off: without the hint the download gate is shown", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      set_mode(exam, "off")
+
+      {:ok, _view, html} = open_exam(conn, submission)
+      assert html =~ "Safe Exam Browser erforderlich"
+      refute html =~ "Abgeben"
+    end
+
+    test "observe: a spoofed user agent is still let through, deliberately", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      # Observe reports, it does not block — otherwise a derivation we get
+      # subtly wrong would lock out the class during the dry run.
+      set_mode(exam, "observe")
+
+      {:ok, _view, html} = conn |> with_seb_ua() |> open_exam(submission)
+      assert html =~ "Abgeben"
+    end
+
+    test "enforce: a valid Config Key hash opens the exam", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      exam = set_mode(exam, "enforce")
+
+      {:ok, _view, html} = conn |> with_valid_hash(exam, submission) |> open_exam(submission)
+      assert html =~ "Abgeben"
+    end
+
+    test "enforce: a spoofed user agent with no hash never reaches the exam", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      # The regression. This exact request used to render the whole exam; now
+      # the dead render is refused before a LiveView ever mounts.
+      set_mode(exam, "enforce")
+
+      conn = conn |> with_seb_ua() |> get(~p"/guest/exam/#{submission.exam_token}")
+
+      assert html_response(conn, 403) =~ "Safe Exam Browser erforderlich"
     end
   end
 end

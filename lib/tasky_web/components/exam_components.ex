@@ -230,4 +230,120 @@ defmodule TaskyWeb.ExamComponents do
     </label>
     """
   end
+
+  @doc """
+  Das SEB-Gate: die Seite, die statt der Prüfung erscheint, solange der Safe
+  Exam Browser nicht nachgewiesen ist.
+
+  Eine Komponente und nicht zwei Kopien, weil sie an zwei strukturell
+  verschiedenen Stellen gerendert wird: als `cond`-Zweig in
+  `TaskyWeb.Guest.ExamLive` (Teilnehmer:in ist noch im normalen Browser und
+  soll die Konfiguration herunterladen) und als 403 aus
+  `TaskyWeb.Plugs.SebGuard` heraus (ein Request, der die Prüfung ohne gültigen
+  SEB-Nachweis anfassen wollte). Beide müssen dasselbe sagen, sonst wird der
+  Probelauf unlesbar.
+
+  `reason` unterscheidet die beiden Fälle, die im Betrieb ganz verschiedene
+  Ursachen haben:
+
+  * `:no_header` — SEB läuft (noch) nicht. Normalfall vor dem Start.
+  * `:mismatch` — SEB läuft, meldet aber eine andere Konfiguration. Praktisch
+    immer eine veraltete `.seb`-Datei, weil die Konfiguration nach dem
+    Herunterladen geändert wurde.
+  """
+  attr :exam_token, :string, required: true
+  attr :reason, :atom, default: :no_header
+
+  def seb_gate(assigns) do
+    ~H"""
+    <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
+      <div class="w-full max-w-lg">
+        <div class="text-center mb-8">
+          <div class="w-16 h-16 rounded-2xl bg-sky-50 flex items-center justify-center mx-auto mb-4">
+            <.icon name="hero-shield-check" class="w-8 h-8 text-sky-500" />
+          </div>
+          <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
+            Safe Exam Browser erforderlich
+          </h1>
+          <p class="text-stone-500 text-sm">
+            Diese Prüfung erfordert den Safe Exam Browser (SEB).
+          </p>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-6 space-y-4">
+          <div :if={@reason == :mismatch} class="bg-amber-50 rounded-xl p-4 border border-amber-100">
+            <div class="flex items-start gap-3">
+              <.icon
+                name="hero-exclamation-triangle"
+                class="w-5 h-5 text-amber-500 shrink-0 mt-0.5"
+              />
+              <div class="text-sm text-amber-800 leading-relaxed">
+                <p class="font-semibold mb-1">Die Konfiguration passt nicht.</p>
+                <p>
+                  Der Safe Exam Browser läuft, meldet aber eine andere Konfiguration
+                  als diese Prüfung erwartet. Lade die Konfigurationsdatei unten neu
+                  herunter und starte den Safe Exam Browser damit erneut. Wenn das
+                  nicht hilft, melde dich bei deiner Lehrperson.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div :if={@reason != :mismatch} class="bg-sky-50 rounded-xl p-4 border border-sky-100">
+            <div class="flex items-start gap-3">
+              <.icon name="hero-information-circle" class="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />
+              <div class="text-sm text-sky-800 leading-relaxed">
+                <p class="mb-1">
+                  Der Safe Exam Browser sperrt deinen Computer während der Prüfung
+                  in einen sicheren Kiosk-Modus.
+                </p>
+                <p>
+                  Der Safe Exam Browser muss bereits installiert sein. Falls nicht,
+                  installiere ihn zuerst.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <ol class="space-y-3">
+            <li class="flex items-start gap-3">
+              <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
+                1
+              </span>
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Klicke auf den Button <span class="font-semibold text-stone-800">«Im Safe Exam Browser öffnen»</span>.
+              </p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
+                2
+              </span>
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Es wird eine Konfigurationsdatei
+                (<span class="font-semibold text-stone-800">exam.seb</span>) heruntergeladen.
+              </p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="shrink-0 w-6 h-6 rounded-full bg-sky-100 text-sky-700 text-xs font-semibold flex items-center justify-center mt-0.5">
+                3
+              </span>
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Öffne die heruntergeladene Datei mit einem Klick und warte einige Sekunden –
+                der Safe Exam Browser startet automatisch.
+              </p>
+            </li>
+          </ol>
+
+          <a
+            href={"/guest/exam/#{@exam_token}/seb-config"}
+            id="open-in-seb-btn"
+            class="w-full inline-flex items-center justify-center gap-2.5 bg-sky-500 text-white text-sm font-semibold px-6 py-3.5 rounded-xl shadow-[0_2px_12px_rgba(14,165,233,0.3)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+          >
+            <.icon name="hero-shield-check" class="w-5 h-5" /> Im Safe Exam Browser öffnen
+          </a>
+        </div>
+      </div>
+    </div>
+    """
+  end
 end
