@@ -40,6 +40,8 @@ export default function ExamContentEditor({
   save,
   mode = null,
   hideAnswers = false,
+  protectAnswers = false,
+  hideCallout = false,
   lockContent = false,
   correctionMode = false,
   notFullWidth = false,
@@ -60,6 +62,8 @@ export default function ExamContentEditor({
   // try to override one from the call site.
   const preset = (mode && EDITOR_MODES[mode]) || {};
   hideAnswers = preset.hideAnswers ?? hideAnswers;
+  protectAnswers = preset.protectAnswers ?? protectAnswers;
+  hideCallout = preset.hideCallout ?? hideCallout;
   lockContent = preset.lockContent ?? lockContent;
   correctionMode = preset.correctionMode ?? correctionMode;
   notFullWidth = preset.notFullWidth ?? notFullWidth;
@@ -123,7 +127,7 @@ export default function ExamContentEditor({
       Color,
       Image,
       ...(placeholder ? [Placeholder.configure({ placeholder })] : []),
-      ...(hideAnswers ? [PreventNodeDeletion] : []),
+      ...(protectAnswers ? [PreventNodeDeletion] : []),
       ...(lockContent
         ? [LockExamContent.configure({ onBlocked: showLockHint })]
         : []),
@@ -228,6 +232,7 @@ export default function ExamContentEditor({
           status={status}
           errorMsg={errorMsg}
           hideAnswers={hideAnswers}
+          hideCallout={hideCallout}
           correctionMode={correctionMode}
           hideQuestion={hideQuestion}
           uploadImage={uploadImage}

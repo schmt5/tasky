@@ -72,7 +72,7 @@ defmodule Tasky.ExamsAutoCorrectionTest do
   defp part_nodes(submission) do
     submission
     |> Exams.correction_content()
-    |> Exams.split_content_into_parts()
+    |> Exams.split_content_into_parts("answer_fields")
     |> Enum.find(&(&1.id == "q-1"))
     |> Map.fetch!(:nodes)
   end

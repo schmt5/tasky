@@ -2,6 +2,7 @@ defmodule TaskyWeb.ExamLive.Show do
   use TaskyWeb, :live_view
 
   alias Tasky.Exams
+  alias TaskyWeb.ExamComponents
 
   @impl true
   def render(assigns) do
@@ -81,6 +82,15 @@ defmodule TaskyWeb.ExamLive.Show do
 
           <div class="flex items-center gap-3 mt-2">
             <.exam_status_chip status={@exam.status} />
+            <%!-- Beim Erstellen einmal entschieden und danach fix, deshalb hier
+                 als Feststellung statt als Bedienelement. --%>
+            <span
+              class="tooltip tooltip-bottom tooltip-delayed text-[13px] text-stone-400 flex items-center gap-1"
+              data-tip={@answer_mode_option.description}
+            >
+              <.icon name="hero-pencil-square" class="w-3.5 h-3.5" />
+              {@answer_mode_option.state_label}
+            </span>
             <span class="text-[13px] text-stone-400 flex items-center gap-1">
               <.icon name="hero-user" class="w-3.5 h-3.5" /> {@exam.teacher.email}
             </span>
@@ -256,11 +266,12 @@ defmodule TaskyWeb.ExamLive.Show do
      socket
      |> assign(:page_title, exam.name)
      |> assign(:exam, exam)
+     |> assign(:answer_mode_option, ExamComponents.answer_mode_option(exam.answer_mode))
      |> assign(:grading_available, grading_available?(exam))}
   end
 
   defp grading_available?(exam) do
-    parts = Exams.split_content_into_parts(exam.content || %{})
+    parts = Exams.split_content_into_parts(exam.content || %{}, exam.answer_mode)
     submissions = Exams.list_exam_submissions(exam)
 
     parts != [] and submissions != [] and

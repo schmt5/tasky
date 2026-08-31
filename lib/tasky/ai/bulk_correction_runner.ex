@@ -175,7 +175,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
          ignore_case: ignore_case
        }) do
     with {:ok, submission} <- fetch_submission(exam.id, submission_id),
-         {:ok, submission_nodes} <- fetch_part_nodes(submission, part_id),
+         {:ok, submission_nodes} <- fetch_part_nodes(exam, submission, part_id),
          sample_nodes = sample_solution_part_nodes(exam, part_id),
          max_points = Map.get(exam.sample_solution_points || %{}, part_id),
          {annotated_nodes, answer_count} = NodePatcher.annotate(submission_nodes),
@@ -219,11 +219,11 @@ defmodule Tasky.AI.BulkCorrectionRunner do
     end
   end
 
-  defp fetch_part_nodes(submission, part_id) do
+  defp fetch_part_nodes(exam, submission, part_id) do
     parts =
       submission
       |> Exams.correction_content()
-      |> Exams.split_content_into_parts()
+      |> Exams.split_content_into_parts(exam.answer_mode)
 
     case Enum.find(parts, &(&1.id == part_id)) do
       nil -> {:error, "part not found in submission"}
@@ -235,7 +235,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   defp sample_solution_part_nodes(exam, part_id) do
     exam
     |> Exams.sample_solution_doc()
-    |> Exams.split_content_into_parts()
+    |> Exams.split_content_into_parts(exam.answer_mode)
     |> Enum.find(&(&1.id == part_id))
     |> case do
       nil -> []

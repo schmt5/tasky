@@ -75,7 +75,7 @@ defmodule Tasky.ExamsBlockPointsTest do
 
   defp blocks_of(exam, part_id) do
     (exam.content || %{})
-    |> Exams.split_content_into_parts()
+    |> Exams.split_content_into_parts(exam.answer_mode)
     |> Enum.find(&(&1.id == part_id))
     |> Map.fetch!(:nodes)
     |> NodePatcher.list_answer_blocks()
@@ -193,7 +193,7 @@ defmodule Tasky.ExamsBlockPointsTest do
 
       inferred =
         submission.corrected_content
-        |> Exams.split_content_into_parts()
+        |> Exams.split_content_into_parts("answer_fields")
         |> Enum.find(&(&1.id == "q-1"))
         |> Map.fetch!(:nodes)
         |> NodePatcher.list_answer_blocks()

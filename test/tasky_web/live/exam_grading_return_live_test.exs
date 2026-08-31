@@ -136,9 +136,18 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
 
     return_html = view |> element("#open-return-modal-btn") |> render_click()
 
-    for option <- TaskyWeb.ExamComponents.submission_view_options() do
+    for option <- TaskyWeb.ExamComponents.submission_view_options(exam) do
       assert return_html =~ option.label
       assert return_html =~ ~s(phx-value-option="#{option.key}")
     end
+  end
+
+  test "a free-document exam is not offered the sample-solution option" do
+    exam = %Tasky.Exams.Exam{answer_mode: "free_document"}
+
+    keys = Enum.map(TaskyWeb.ExamComponents.submission_view_options(exam), & &1.key)
+
+    refute :show_sample_solution in keys
+    assert :show_correction in keys
   end
 end

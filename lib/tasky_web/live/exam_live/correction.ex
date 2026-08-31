@@ -47,7 +47,9 @@ defmodule TaskyWeb.ExamLive.Correction do
                   Fortschritt
                 </span>
                 <span class="text-sm font-semibold text-stone-700 tabular-nums">
-                  {@summary.corrected} / {@summary.total} Teile erledigt
+                  {@summary.corrected} / {@summary.total} {if @free_document,
+                    do: "Abgaben",
+                    else: "Teile"} erledigt
                 </span>
               </div>
               <div class="h-2 bg-stone-100 rounded-full overflow-hidden">
@@ -63,7 +65,7 @@ defmodule TaskyWeb.ExamLive.Correction do
               <%!-- Steps back to a secondary button once every part is done: the
                     "Zur Benotung" action in the header is the next step then. --%>
               <.link
-                navigate={~p"/exams/#{@exam}/correction/bulk/#{@resume_part_id}"}
+                navigate={@resume_path}
                 class={[
                   "inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
                   if(is_nil(@summary.first_uncorrected),
@@ -283,7 +285,7 @@ defmodule TaskyWeb.ExamLive.Correction do
       Exams.subscribe_correction(exam.id)
     end
 
-    parts = Exams.split_content_into_parts(exam.content || %{})
+    parts = Exams.split_content_into_parts(exam.content || %{}, exam.answer_mode)
     submissions = load_sorted_submissions(exam)
 
     submission_files =
@@ -295,6 +297,7 @@ defmodule TaskyWeb.ExamLive.Correction do
      socket
      |> assign(:page_title, exam.name <> " – Korrektur")
      |> assign(:exam, exam)
+     |> assign(:free_document, Exams.free_document?(exam))
      |> assign(:parts, parts)
      |> assign_progress(submissions)
      |> assign(:bulk_status, :idle)
@@ -369,12 +372,32 @@ defmodule TaskyWeb.ExamLive.Correction do
     socket
     |> assign(:submissions, submissions)
     |> assign(:summary, summary)
-    |> assign(:resume_part_id, resume_part_id(socket.assigns.parts, summary))
+    |> assign(
+      :resume_path,
+      resume_path(socket.assigns.exam, socket.assigns.parts, submissions, summary)
+    )
   end
 
   # "Korrektur fortsetzen" has to land on the part that is actually still open —
   # it used to always link to part 1, so continuing a half-corrected exam threw
   # the teacher back to the beginning.
+  #
+  # A free-document exam has a single part and no answer fields, so the grouped
+  # view ("Korrektur nach Frage") has nothing to group and would only show
+  # "Keine Antwortfelder in diesem Teil." There the resume link goes straight to
+  # the submission the teacher still has to read.
+  defp resume_path(exam, parts, submissions, summary) do
+    if Exams.free_document?(exam) do
+      case {summary.first_uncorrected, submissions} do
+        {{submission, part}, _} -> ~p"/exams/#{exam}/correction/#{submission.id}/parts/#{part.id}"
+        {nil, [s | _]} -> ~p"/exams/#{exam}/correction/#{s.id}/parts/#{hd(parts).id}"
+        {nil, []} -> ~p"/exams/#{exam}/correction"
+      end
+    else
+      ~p"/exams/#{exam}/correction/bulk/#{resume_part_id(parts, summary)}"
+    end
+  end
+
   defp resume_part_id([], _summary), do: nil
 
   defp resume_part_id(_parts, %{first_uncorrected: {_submission, part}}), do: part.id

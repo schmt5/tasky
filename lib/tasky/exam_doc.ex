@@ -17,6 +17,16 @@ defmodule Tasky.ExamDoc do
 
   @answer_node_types ["answerBlock", "lueckentext", "taskItem"]
 
+  @free_document_part_id "document"
+
+  @doc """
+  The part id of a `free_document` exam. Such an exam has no question headings,
+  so the whole document is one synthetic part under this fixed id — that is
+  what keeps `points_per_part`, `corrected_parts`, `sample_solution_points` and
+  the correction UI working unchanged for it.
+  """
+  def free_document_part_id, do: @free_document_part_id
+
   @doc """
   Assigns a stable `attrs["partId"]` to every question heading that lacks
   one, leaving existing ids untouched. Returns the updated doc.
@@ -59,18 +69,37 @@ defmodule Tasky.ExamDoc do
   defp part_id_of(_), do: nil
 
   @doc """
-  Splits a TipTap document into question-delimited parts.
+  Splits a TipTap document into parts, according to the exam's answer mode.
 
-  Each part begins with a level-3 heading (`h3`) which represents the
-  question. Anything before the first `h3` is *preamble* (intro /
-  instructions) and is NOT returned — use `content_preamble/1` to access it.
+  With `"answer_fields"`, each part begins with a level-3 heading (`h3`) which
+  represents the question. Anything before the first `h3` is *preamble* (intro
+  / instructions) and is NOT returned — use `content_preamble/2` to access it.
+
+  With `"free_document"` there are no questions: the whole document is one
+  part under `free_document_part_id/0`, and the preamble is empty. Everything
+  downstream (points per part, corrected parts, the correction editor) then
+  works on an essay without knowing it is one.
 
   Returns a list of `%{id, label, nodes}`:
     * `id` — the heading's stable `partId`, or positional `"q-N"` fallback
     * `label` — the heading's inline text content, or fallback `"Frage N"`
     * `nodes` — the part's nodes, starting with the leading `h3` node
+
+  The mode has no default on purpose: a forgotten call site would silently
+  report "no parts" for every essay exam, which reads as an empty exam rather
+  than as a bug.
   """
-  def split_content_into_parts(doc) when is_map(doc) do
+  def split_content_into_parts(doc, "free_document") when is_map(doc) do
+    [
+      %{
+        id: @free_document_part_id,
+        label: "Dokument",
+        nodes: Map.get(doc, "content", []) || []
+      }
+    ]
+  end
+
+  def split_content_into_parts(doc, "answer_fields") when is_map(doc) do
     nodes = Map.get(doc, "content", []) || []
 
     {parts, current} = Enum.reduce(nodes, {[], nil}, &split_step/2)
@@ -79,7 +108,8 @@ defmodule Tasky.ExamDoc do
     Enum.reverse(parts)
   end
 
-  def split_content_into_parts(_), do: []
+  def split_content_into_parts(_doc, mode) when mode in ["answer_fields", "free_document"],
+    do: []
 
   defp split_step(node, {parts, current}) when is_map(node) do
     cond do
@@ -126,21 +156,26 @@ defmodule Tasky.ExamDoc do
   @doc """
   Returns the preamble — nodes before the first level-3 heading. Empty list
   if the document has no preamble (starts with an h3) or no h3 headings.
+
+  Always empty for `"free_document"`: there the single part already covers the
+  whole document, so a preamble would duplicate it on reassembly.
   """
-  def content_preamble(doc) when is_map(doc) do
+  def content_preamble(_doc, "free_document"), do: []
+
+  def content_preamble(doc, "answer_fields") when is_map(doc) do
     (doc |> Map.get("content", []) || [])
     |> Enum.take_while(fn n -> not question_heading?(n) end)
   end
 
-  def content_preamble(_), do: []
+  def content_preamble(_doc, "answer_fields"), do: []
 
   @doc """
   Reassembles a TipTap doc from a preamble (nodes before the first question)
-  and a list of parts (as returned by `split_content_into_parts/1`).
+  and a list of parts (as returned by `split_content_into_parts/2`).
 
   Each part's `nodes` already includes its leading `question` node, so the
-  reassembly is just concatenation. Inverse of `split_content_into_parts/1`
-  + `content_preamble/1`.
+  reassembly is just concatenation. Inverse of `split_content_into_parts/2`
+  + `content_preamble/2`.
   """
   def assemble_parts_into_content(preamble, parts)
       when is_list(preamble) and is_list(parts) do

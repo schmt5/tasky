@@ -6,6 +6,12 @@ export const ExamContentEditor = createReactHook({
     initialContent,
     save: (doc, opts) => api.saveExamContent(dataset.examId, doc, opts),
     uploadImage: (file) => api.uploadExamImage(dataset.examId, file),
-    placeholder: "Beginne mit einer Überschrift …",
+    // "author" for a question/answer exam, "freeDocument" for an essay one —
+    // the server knows the exam's answer_mode, the hook does not.
+    mode: dataset.editorMode || "author",
+    placeholder:
+      dataset.editorMode === "freeDocument"
+        ? "Beginne mit der Aufgabenstellung …"
+        : "Beginne mit einer Überschrift …",
   }),
 });

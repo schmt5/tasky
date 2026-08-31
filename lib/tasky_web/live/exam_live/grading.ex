@@ -98,8 +98,13 @@ defmodule TaskyWeb.ExamLive.Grading do
           </div>
           <div class="flex-1">
             <h2 class="text-sm font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
-            <p class="text-xs text-stone-500 mt-0.5">
+            <p :if={not @free_document} class="text-xs text-stone-500 mt-0.5">
               Standardwert: Summe aller Musterlösungs-Punkte ({format_points(@sample_solution_total)}). Kann hier angepasst werden, z.B. wenn nicht alle Teile gewertet werden.
+            </p>
+            <%!-- Im freien Modus gibt es keine Musterlösung; die Maximalpunkte
+                 kommen aus dem Punkte-Tab der Prüfung. --%>
+            <p :if={@free_document} class="text-xs text-stone-500 mt-0.5">
+              Standardwert: die Maximalpunkte des Dokuments ({format_points(@sample_solution_total)}). Kann hier angepasst werden.
             </p>
           </div>
           <div class="shrink-0 inline-flex items-center gap-2">
@@ -236,7 +241,7 @@ defmodule TaskyWeb.ExamLive.Grading do
               </p>
 
               <ExamComponents.submission_view_option_checkbox
-                :for={option <- ExamComponents.submission_view_options()}
+                :for={option <- ExamComponents.submission_view_options(@exam)}
                 option={option}
                 checked={Map.fetch!(@export_options, option.key)}
                 disabled={option.requires && not Map.fetch!(@export_options, option.requires)}
@@ -297,7 +302,7 @@ defmodule TaskyWeb.ExamLive.Grading do
               </p>
 
               <ExamComponents.submission_view_option_checkbox
-                :for={option <- ExamComponents.submission_view_options()}
+                :for={option <- ExamComponents.submission_view_options(@exam)}
                 option={option}
                 checked={Map.fetch!(@return_options, option.key)}
                 disabled={option.requires && not Map.fetch!(@return_options, option.requires)}
@@ -447,6 +452,7 @@ defmodule TaskyWeb.ExamLive.Grading do
      socket
      |> assign(:page_title, exam.name <> " – Benotung")
      |> assign(:exam, exam)
+     |> assign(:free_document, Exams.free_document?(exam))
      |> assign(:submissions, submissions)
      |> assign(:sample_solution_total, sample_solution_total)
      |> assign(:effective_max_points, effective_max_points)

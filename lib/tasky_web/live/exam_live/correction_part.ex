@@ -209,7 +209,10 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 </div>
 
                 <div class="p-5 space-y-3">
+                  <%!-- Die Musterlösung ist antwortfeldbasiert; im freien Modus
+                       gibt es keine, der Dialog wäre immer leer. --%>
                   <button
+                    :if={not @free_document}
                     type="button"
                     phx-click="show_sample_solution_modal"
                     class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
@@ -695,6 +698,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     {:ok,
      socket
      |> assign(:exam, exam)
+     |> assign(:free_document, Exams.free_document?(exam))
      |> assign(:submissions, submissions)
      |> assign(:upload_fields, Exams.list_upload_fields(exam))
      |> assign(:show_sample_solution_modal, false)
@@ -715,7 +719,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     parts =
       submission
       |> Exams.correction_content()
-      |> Exams.split_content_into_parts()
+      |> Exams.split_content_into_parts(exam.answer_mode)
 
     current_part =
       Enum.find(parts, &(&1.id == part_id)) ||
@@ -780,7 +784,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   defp build_power_view(exam, submission, part_id) do
-    blocks = Exams.list_part_answer_blocks(submission, part_id)
+    blocks = Exams.list_part_answer_blocks(exam, submission, part_id)
     count = length(blocks)
     points_by_index = Exams.resolve_block_points(exam, part_id, blocks)
 
@@ -852,7 +856,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     nodes =
       exam
       |> Exams.sample_solution_doc()
-      |> Exams.split_content_into_parts()
+      |> Exams.split_content_into_parts(exam.answer_mode)
       |> Enum.find(&(&1.id == part.id))
       |> case do
         nil -> []
@@ -885,10 +889,10 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   def handle_event("set_block_verdict", %{"index" => index, "verdict" => verdict}, socket) do
-    %{submission: submission, current_part: part} = socket.assigns
+    %{exam: exam, submission: submission, current_part: part} = socket.assigns
     index_int = parse_index(index)
 
-    current = Exams.explicit_block_verdict(submission, part.id, index_int)
+    current = Exams.explicit_block_verdict(exam, submission, part.id, index_int)
 
     # Toggle-off only applies to the string verdicts; a stored manual number
     # never equals the clicked "correct"/"wrong".
@@ -976,7 +980,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   defp apply_block_verdict(socket, index_int, new_verdict) do
-    %{submission: submission, current_part: part} = socket.assigns
+    %{exam: exam, submission: submission, current_part: part} = socket.assigns
 
     case Exams.set_block_verdict(
            socket.assigns.current_scope,
@@ -989,7 +993,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         updated_part =
           updated
           |> Exams.correction_content()
-          |> Exams.split_content_into_parts()
+          |> Exams.split_content_into_parts(exam.answer_mode)
           |> Enum.find(&(&1.id == part.id))
 
         part_doc_json =
@@ -1090,7 +1094,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   defp fallback_part_from_exam(exam, part_id) do
     exam.content
     |> Kernel.||(%{})
-    |> Exams.split_content_into_parts()
+    |> Exams.split_content_into_parts(exam.answer_mode)
     |> Enum.find(&(&1.id == part_id))
   end
 end

@@ -1,8 +1,11 @@
 defmodule TaskyWeb.ExamLive.Cockpit do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.ExamComponents, only: [seb_derivation_alert: 1]
+
   alias Tasky.Exams
   alias TaskyWeb.Params
+  alias TaskyWeb.SebGuard
 
   @impl true
   def render(assigns) do
@@ -159,6 +162,8 @@ defmodule TaskyWeb.ExamLive.Cockpit do
             </div>
           </div>
         <% end %>
+
+        <.seb_derivation_alert :if={@seb_derivation_error} message={@seb_derivation_error} />
 
         <%!-- Submissions Card (no overflow-hidden: lets the per-row actions
               dropdown extend past the card edge without being clipped). --%>
@@ -737,6 +742,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:show_assign?, false)
      |> assign(:class_filter, nil)
      |> assign(:class_options, class_options(socket.assigns.current_scope))
+     |> assign(:seb_derivation_error, SebGuard.derivation_error(exam))
      |> assign_assignable()
      |> stream(:submissions, submissions)}
   end

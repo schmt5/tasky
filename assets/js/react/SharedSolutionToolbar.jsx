@@ -57,6 +57,7 @@ export default function SharedSolutionToolbar() {
           status={snap.activeStatus.status}
           errorMsg={snap.activeStatus.errorMsg}
           hideAnswers={true}
+          hideCallout={true}
           hideQuestion={true}
           lockHintEnabled={true}
           lockHintVisible={snap.lockHintVisible}

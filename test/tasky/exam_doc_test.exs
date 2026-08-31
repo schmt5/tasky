@@ -30,7 +30,7 @@ defmodule Tasky.ExamDocTest do
     end
   end
 
-  describe "split_content_into_parts/1" do
+  describe "split_content_into_parts/2 — answer_fields" do
     test "prefers the stable partId and falls back to positional ids" do
       d =
         doc([
@@ -41,7 +41,7 @@ defmodule Tasky.ExamDocTest do
         ])
 
       assert [%{id: "q-abc", label: "Erste"}, %{id: "q-2", label: "Zweite"}] =
-               ExamDoc.split_content_into_parts(d)
+               ExamDoc.split_content_into_parts(d, "answer_fields")
     end
 
     test "a callout following a heading belongs to that part" do
@@ -53,7 +53,7 @@ defmodule Tasky.ExamDocTest do
 
       d = doc([heading("Frage", %{"partId" => "q-a"}), callout])
 
-      assert [%{id: "q-a", nodes: nodes}] = ExamDoc.split_content_into_parts(d)
+      assert [%{id: "q-a", nodes: nodes}] = ExamDoc.split_content_into_parts(d, "answer_fields")
       assert callout in nodes
     end
 
@@ -72,7 +72,7 @@ defmodule Tasky.ExamDocTest do
           }
         ])
 
-      assert ExamDoc.split_content_into_parts(d) == []
+      assert ExamDoc.split_content_into_parts(d, "answer_fields") == []
     end
 
     test "reordering keeps part ids attached to their headings" do
@@ -80,10 +80,51 @@ defmodule Tasky.ExamDocTest do
       h2 = heading("Zweite", %{"partId" => "q-two"})
 
       assert [%{id: "q-one"}, %{id: "q-two"}] =
-               ExamDoc.split_content_into_parts(doc([h1, h2]))
+               ExamDoc.split_content_into_parts(doc([h1, h2]), "answer_fields")
 
       assert [%{id: "q-two"}, %{id: "q-one"}] =
-               ExamDoc.split_content_into_parts(doc([h2, h1]))
+               ExamDoc.split_content_into_parts(doc([h2, h1]), "answer_fields")
+    end
+  end
+
+  describe "split_content_into_parts/2 — free_document" do
+    test "the whole document is one part under the fixed id" do
+      d =
+        doc([
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Aufgabe"}]},
+          %{"type" => "paragraph"}
+        ])
+
+      assert [%{id: id, label: "Dokument", nodes: nodes}] =
+               ExamDoc.split_content_into_parts(d, "free_document")
+
+      assert id == ExamDoc.free_document_part_id()
+      assert nodes == d["content"]
+    end
+
+    test "an h3 does not split the document" do
+      d = doc([heading("Sieht aus wie eine Frage"), %{"type" => "paragraph"}])
+
+      assert [%{nodes: nodes}] = ExamDoc.split_content_into_parts(d, "free_document")
+      assert length(nodes) == 2
+    end
+
+    test "an empty document still yields exactly one part" do
+      assert [%{nodes: []}] = ExamDoc.split_content_into_parts(%{}, "free_document")
+    end
+
+    test "the preamble is empty, so assemble stays the inverse of split" do
+      d =
+        doc([
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Aufgabe"}]},
+          heading("Zwischentitel")
+        ])
+
+      parts = ExamDoc.split_content_into_parts(d, "free_document")
+      preamble = ExamDoc.content_preamble(d, "free_document")
+
+      assert preamble == []
+      assert ExamDoc.assemble_parts_into_content(preamble, parts) == d
     end
   end
 
@@ -95,8 +136,8 @@ defmodule Tasky.ExamDocTest do
         %{"type" => "paragraph"}
       ])
 
-    parts = ExamDoc.split_content_into_parts(d)
-    preamble = ExamDoc.content_preamble(d)
+    parts = ExamDoc.split_content_into_parts(d, "answer_fields")
+    preamble = ExamDoc.content_preamble(d, "answer_fields")
 
     assert ExamDoc.assemble_parts_into_content(preamble, parts) == d
   end

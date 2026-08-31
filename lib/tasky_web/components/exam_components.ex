@@ -164,10 +164,73 @@ defmodule TaskyWeb.ExamComponents do
   end
 
   @doc """
-  Die vier Optionen einer Submission-Ansicht — was ein PDF-Export bzw. eine
-  Rückgabe an die Teilnehmenden zeigt. Eine Quelle für beide Modals.
+  Die beiden Prüfungsarten, in der Reihenfolge, in der sie im Erstellen-Formular
+  stehen. `answer_fields` ist die Vorauswahl und bleibt der Normalfall.
+
+  Die Titel benennen, **wohin** die lernende Person schreiben darf — das ist der
+  eine Unterschied, aus dem alle anderen folgen (Werkzeugleiste, Sperre des
+  Prüfungstexts, Bewertung pro Antwortfeld vs. pro Dokument).
+
+  Bewusst nicht "Aufsatz": der freie Modus taugt auch für Protokolle, Berichte
+  oder Rechnungswege. "Freies Dokument" sagt, was die Prüfung ist, statt eine
+  Textsorte zu versprechen, die sie nicht erzwingt.
+
+  Anders als der Durchführungsmodus ist das hier ein echtes Formularfeld
+  (castable in `Exam.new_changeset/2`), deshalb `description` statt `sublabel`:
+  So passt die Liste direkt in `CoreComponents.radio_group/1`.
   """
-  def submission_view_options do
+  def answer_mode_options do
+    [
+      %{
+        value: "answer_fields",
+        label: "Antwortfelder",
+        state_label: "Prüfung mit Antwortfeldern",
+        description:
+          "Du stellst Fragen und setzt Antwortfelder. Lernende schreiben ausschliesslich in diese Felder — der Prüfungstext selbst ist gesperrt."
+      },
+      %{
+        value: "free_document",
+        label: "Freies Dokument",
+        state_label: "Freies Dokument",
+        description:
+          "Du gibst eine Aufgabenstellung vor, Lernende bearbeiten das ganze Dokument — für Aufsätze und offene Arbeiten. Keine Antwortfelder; bewertet wird das Dokument als Ganzes."
+      }
+    ]
+  end
+
+  @doc "Die Option zum gegebenen Wert (fällt auf die erste zurück)."
+  def answer_mode_option(value) do
+    Enum.find(answer_mode_options(), hd(answer_mode_options()), &(&1.value == value))
+  end
+
+  @doc "True für eine Prüfung, in der Lernende das ganze Dokument bearbeiten."
+  def free_document?(%{answer_mode: "free_document"}), do: true
+  def free_document?(_), do: false
+
+  @doc """
+  Der Editor-Preset (`EDITOR_MODES` in `assets/js/react/editor/modes.ts`) für
+  die Autoren-Fläche dieser Prüfung.
+
+  Im freien Modus teilen sich Lehrperson und Lernende denselben Preset — den
+  Unterschied macht allein `uploadImage`, das nur der Autoren-Hook mitgibt.
+  """
+  def author_editor_mode(exam), do: if(free_document?(exam), do: "freeDocument", else: "author")
+
+  @doc "Der Editor-Preset für die Schreibfläche der lernenden Person."
+  def student_editor_mode(exam), do: if(free_document?(exam), do: "freeDocument", else: "student")
+
+  @doc """
+  Die Optionen einer Submission-Ansicht — was ein PDF-Export bzw. eine Rückgabe
+  an die Teilnehmenden zeigt. Eine Quelle für beide Modals.
+
+  Im freien Modus fällt „Musterlösung anzeigen“ weg: eine Musterlösung wird über
+  Antwortfelder erfasst, und die gibt es dort nicht — die Option hätte immer
+  eine leere Seite angehängt. „Korrektur anzeigen“ bleibt, beschreibt dort aber
+  die Anmerkungen der Lehrperson statt der Antwortblock-Emoji.
+  """
+  def submission_view_options(exam) do
+    free? = free_document?(exam)
+
     [
       %{
         key: :show_points_and_mark,
@@ -185,16 +248,27 @@ defmodule TaskyWeb.ExamComponents do
         key: :show_correction,
         label: "Korrektur anzeigen",
         description:
-          "Markiert jeden Antwortblock mit einem 🟢 (richtig), 🟡 (halb richtig) oder 🔴 (falsch) Emoji. Nur verfügbar, wenn Inhalt angezeigt wird.",
+          if(free?,
+            do:
+              "Zeigt die korrigierte Fassung mit den Anmerkungen der Lehrperson. Nur verfügbar, wenn Inhalt angezeigt wird.",
+            else:
+              "Markiert jeden Antwortblock mit einem 🟢 (richtig), 🟡 (halb richtig) oder 🔴 (falsch) Emoji. Nur verfügbar, wenn Inhalt angezeigt wird."
+          ),
         requires: :show_content
-      },
-      %{
-        key: :show_sample_solution,
-        label: "Musterlösung anzeigen",
-        description: "Hängt die vollständige Musterlösung im Anschluss an.",
-        requires: nil
       }
-    ]
+    ] ++
+      if free? do
+        []
+      else
+        [
+          %{
+            key: :show_sample_solution,
+            label: "Musterlösung anzeigen",
+            description: "Hängt die vollständige Musterlösung im Anschluss an.",
+            requires: nil
+          }
+        ]
+      end
   end
 
   @doc """
@@ -228,6 +302,40 @@ defmodule TaskyWeb.ExamComponents do
         <p class="text-xs text-stone-500 mt-0.5 leading-relaxed">{@option.description}</p>
       </div>
     </label>
+    """
+  end
+
+  @doc """
+  Exam-day alarm: the SEB Config Key cannot be derived, so nobody is being
+  verified — and, deliberately, nobody is being blocked either.
+
+  `TaskyWeb.SebGuard.mode/1` degrades `enforce` to `observe` in this state,
+  because a bug of ours must not end a graded exam for a whole class. That
+  trade is only defensible if the teacher knows it happened, which is what this
+  is for.
+  """
+  attr :message, :string, required: true
+
+  def seb_derivation_alert(assigns) do
+    ~H"""
+    <div id="seb-derivation-error" class="bg-red-50 rounded-[14px] border border-red-200 p-5 mb-6">
+      <div class="flex items-start gap-3">
+        <.icon name="hero-exclamation-triangle" class="w-6 h-6 text-red-500 shrink-0" />
+        <div class="min-w-0">
+          <h2 class="text-base font-semibold text-red-800 mb-1">
+            Die SEB-Prüfung ist ausgefallen
+          </h2>
+          <p class="text-sm text-red-700 leading-relaxed">
+            Der erwartete SEB-Schlüssel kann auf diesem Server nicht berechnet werden.
+            Die Prüfung läuft <span class="font-semibold">normal weiter</span> — aber es wird
+            niemand verifiziert und niemand blockiert, auch unter «Erzwingen» nicht.
+            Die Aufsicht im Raum ist damit die einzige Kontrolle. Bitte diese Meldung
+            weitergeben.
+          </p>
+          <p class="mt-2 font-mono text-xs text-red-600 break-all select-all">{@message}</p>
+        </div>
+      </div>
+    </div>
     """
   end
 

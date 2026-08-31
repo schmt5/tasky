@@ -8,6 +8,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   alias Tasky.Accounts.Scope
   alias Tasky.Exams
   alias Tasky.Uploads
+  alias TaskyWeb.ExamComponents
   alias TaskyWeb.Params
   alias TaskyWeb.SebGuard
 
@@ -156,6 +157,7 @@ defmodule TaskyWeb.Guest.ExamLive do
                   phx-hook="ExamSubmissionEditor"
                   phx-update="ignore"
                   data-exam-token={@submission.exam_token}
+                  data-editor-mode={ExamComponents.student_editor_mode(@exam)}
                   data-content={@content_json}
                 >
                 </div>
@@ -654,7 +656,10 @@ defmodule TaskyWeb.Guest.ExamLive do
       case SebGuard.mode(exam) do
         :enforce -> verified?
         :observe -> verified? or in_seb
-        :off -> in_seb
+        # `:off` now means only one thing: this exam does not require SEB. The
+        # render `cond` already checks `seb_enabled`, so this is unreachable —
+        # but "nothing to gate" is the honest answer, not "sniff the browser".
+        :off -> true
       end
 
     seb_reason = if verified? or not in_seb, do: :no_header, else: :mismatch

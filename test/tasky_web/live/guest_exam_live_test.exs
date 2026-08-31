@@ -268,27 +268,18 @@ defmodule TaskyWeb.GuestExamLiveTest do
       Plug.Conn.put_req_header(conn, TaskyWeb.SebGuard.header_name(), hash)
     end
 
-    test "off: the user-agent hint still opens it, as before", %{
+    test "an exam that does not require SEB has no gate at all", %{
       conn: conn,
       exam: exam,
       submission: submission
     } do
-      set_mode(exam, "off")
-
-      {:ok, _view, html} = conn |> with_seb_ua() |> open_exam(submission)
-      assert html =~ "Abgeben"
-    end
-
-    test "off: without the hint the download gate is shown", %{
-      conn: conn,
-      exam: exam,
-      submission: submission
-    } do
-      set_mode(exam, "off")
+      # There is no "required but unchecked" mode any more; this is what saying
+      # no to SEB looks like.
+      {:ok, _exam} = exam |> Ecto.Changeset.change(%{seb_enabled: false}) |> Tasky.Repo.update()
 
       {:ok, _view, html} = open_exam(conn, submission)
-      assert html =~ "Safe Exam Browser erforderlich"
-      refute html =~ "Abgeben"
+      assert html =~ "Abgeben"
+      refute html =~ "Safe Exam Browser erforderlich"
     end
 
     test "observe: a spoofed user agent is still let through, deliberately", %{
@@ -327,6 +318,71 @@ defmodule TaskyWeb.GuestExamLiveTest do
       conn = conn |> with_seb_ua() |> get(~p"/guest/exam/#{submission.exam_token}")
 
       assert html_response(conn, 403) =~ "Safe Exam Browser erforderlich"
+    end
+
+    # The bug this replaced: `observe` returned `:ok` unconditionally, the plug
+    # read that as verification and stamped the session, and the hook then let a
+    # plain browser straight into the exam — no download link, and green in the
+    # cockpit. Observe must report without ever *granting* anything.
+    test "observe: a plain browser still gets the download gate", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      set_mode(exam, "observe")
+
+      {:ok, _view, html} = open_exam(conn, submission)
+      assert html =~ "Safe Exam Browser erforderlich"
+      refute html =~ "Abgeben"
+    end
+
+    test "observe: a tolerated request leaves no verification stamp behind", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      set_mode(exam, "observe")
+
+      conn = get(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      refute TaskyWeb.Plugs.SebGuard.stamped?(
+               Plug.Conn.get_session(conn),
+               submission.exam_token
+             )
+    end
+
+    # A stamp outlives the request by 12 hours, so one written while the mode was
+    # lax would have walked through `enforce` for the rest of the school day.
+    test "observe does not open a door that survives the switch to enforce", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      set_mode(exam, "observe")
+      conn = get(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      set_mode(exam, "enforce")
+      conn = get(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      assert html_response(conn, 403) =~ "Safe Exam Browser erforderlich"
+    end
+
+    test "a valid hash still stamps the session for the websocket", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      exam = set_mode(exam, "enforce")
+
+      conn =
+        conn
+        |> with_valid_hash(exam, submission)
+        |> get(~p"/guest/exam/#{submission.exam_token}")
+
+      assert TaskyWeb.Plugs.SebGuard.stamped?(
+               Plug.Conn.get_session(conn),
+               submission.exam_token
+             )
     end
   end
 end

@@ -31,6 +31,8 @@ defmodule Tasky.ExamsFixtures do
       lifecycle accordingly
     * `:participation_mode` - `"anonymous"` (default, so existing tests keep
       exercising the self-enrolment path) or `"assigned"`
+    * `:answer_mode` - `"answer_fields"` (default) or `"free_document"`. Goes
+      through `attrs` because it is castable on create only.
     * `:attrs` - attributes passed to `Exams.create_exam/2`
   """
   def exam_fixture(opts \\ []) do
@@ -44,6 +46,7 @@ defmodule Tasky.ExamsFixtures do
       |> Keyword.get(:attrs, %{})
       |> Enum.into(%{
         name: "Test Prüfung",
+        answer_mode: Keyword.get(opts, :answer_mode, "answer_fields"),
         content: %{"type" => "doc", "content" => []}
       })
 

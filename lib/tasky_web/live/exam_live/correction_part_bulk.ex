@@ -566,8 +566,20 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       Exams.subscribe_correction(exam.id)
     end
 
-    parts = Exams.split_content_into_parts(exam.content || %{})
+    parts = Exams.split_content_into_parts(exam.content || %{}, exam.answer_mode)
 
+    # Grouping identical answers across submissions needs answer fields to group
+    # by. A free-document exam has none, so this view could only ever render its
+    # "Keine Antwortfelder" placeholder — send the teacher to the grid instead of
+    # to a dead end they have to navigate back out of.
+    if Exams.free_document?(exam) do
+      {:ok, push_navigate(socket, to: ~p"/exams/#{exam}/correction")}
+    else
+      mount_part(socket, exam, parts, part_id)
+    end
+  end
+
+  defp mount_part(socket, exam, parts, part_id) do
     case Enum.find_index(parts, &(&1.id == part_id)) do
       nil ->
         {:ok,

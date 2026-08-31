@@ -4,7 +4,12 @@
 // flag combination gets its own preset rather than a call-site override.
 
 export interface EditorModePreset {
+  /** Hide the toolbar controls that CREATE answer fields. */
   hideAnswers?: boolean;
+  /** Load PreventNodeDeletion: existing answer fields cannot be removed. */
+  protectAnswers?: boolean;
+  /** Hide the "Hinweisbox" toolbar group. */
+  hideCallout?: boolean;
   lockContent?: boolean;
   correctionMode?: boolean;
   notFullWidth?: boolean;
@@ -24,13 +29,33 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
    * `hideQuestion` matters here: the "Frage" button inserts a question heading,
    * which is the teacher's authoring control. On a locked document it either
    * does nothing or turns the learner's own answer into a heading — it has no
-   * business being in the exam toolbar.
+   * business being in the exam toolbar. `hideCallout` is there for the same
+   * reason: on a locked skeleton the callout command is simply vetoed.
    */
-  student: { hideAnswers: true, hideQuestion: true, lockContent: true },
+  student: {
+    hideAnswers: true,
+    protectAnswers: true,
+    hideCallout: true,
+    hideQuestion: true,
+    lockContent: true,
+  },
+
+  /**
+   * Free-document exam (`answer_mode: "free_document"`): no answer fields and
+   * no question headings, but the whole document is editable.
+   *
+   * ONE preset for BOTH sides — teacher and learner. Nothing about the editing
+   * rules differs between them here; the only difference is `uploadImage`,
+   * which only the authoring hook passes, so the "Einfügen" group appears for
+   * the teacher and not for the learner.
+   */
+  freeDocument: { hideAnswers: true, hideQuestion: true },
 
   /** One sample-solution part editor under the shared toolbar. */
   solution: {
     hideAnswers: true,
+    protectAnswers: true,
+    hideCallout: true,
     hideQuestion: true,
     lockContent: true,
     notFullWidth: true,
@@ -47,13 +72,21 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
    */
   taskSolution: {
     hideAnswers: true,
+    protectAnswers: true,
+    hideCallout: true,
     hideQuestion: true,
     lockContent: true,
     solutionMode: true,
   },
 
   /** Teacher correcting one part of a submission. */
-  correction: { hideAnswers: true, correctionMode: true, notFullWidth: true },
+  correction: {
+    hideAnswers: true,
+    protectAnswers: true,
+    hideCallout: true,
+    correctionMode: true,
+    notFullWidth: true,
+  },
 
   /**
    * Teacher annotating a learner's answer document of a whole learning unit.

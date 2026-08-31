@@ -37,8 +37,8 @@ defmodule TaskyWeb.SebGuardHook do
   `:verified` — a valid Config Key hash on this very mount.
   `:stamped` — no header here, but a verified HTTP request earlier in this
   session (the normal case for a websocket).
-  `:unverified` — neither. Reaching the exam in this state means the exam is
-  in `off` or `observe` mode.
+  `:unverified` — neither. Reaching the exam in this state means SEB is not
+  required for it, the mode is `observe`, or the check could not be made.
   """
   @type seb_state :: :verified | :stamped | :unverified
 
@@ -50,17 +50,19 @@ defmodule TaskyWeb.SebGuardHook do
            Exams.get_exam_submission_by_token(token),
          exam = submission.exam,
          mode when mode != :off <- SebGuard.mode(exam) do
-      state = resolve(exam, submission, session, socket, token)
+      case resolve(exam, submission, session, socket, token) do
+        # The Config Key could not be derived at all. That is our bug, not this
+        # participant's, so it must never be the reason a graded exam ends —
+        # same call as `TaskyWeb.SebGuard.check/4` makes for HTTP. Still counted
+        # as unverified, so the cockpit stays honest.
+        :undecidable ->
+          {:cont, assign(socket, :seb_state, :unverified)}
 
-      cond do
-        state != :unverified ->
-          {:cont, assign(socket, :seb_state, state)}
-
-        mode == :enforce ->
+        :unverified when mode == :enforce ->
           {:halt, redirect(socket, to: "/guest/exam/#{token}/seb-required")}
 
-        true ->
-          {:cont, assign(socket, :seb_state, :unverified)}
+        state ->
+          {:cont, assign(socket, :seb_state, state)}
       end
     else
       # Not an exam mount, an unknown token (the LiveView gives its own "Link
@@ -70,26 +72,24 @@ defmodule TaskyWeb.SebGuardHook do
   end
 
   defp resolve(exam, submission, session, socket, token) do
-    cond do
-      header_verified?(exam, submission, socket) -> :verified
-      GuardPlug.stamped?(session, token) -> :stamped
-      true -> :unverified
+    case header_verdict(exam, submission, socket) do
+      :ok -> :verified
+      {:error, :undecidable} -> :undecidable
+      _ -> if GuardPlug.stamped?(session, token), do: :stamped, else: :unverified
     end
   end
 
-  defp header_verified?(exam, submission, socket) do
-    headers = x_headers(socket)
-
-    case SebGuard.observed_hash(headers) do
+  defp header_verdict(exam, submission, socket) do
+    case SebGuard.observed_hash(x_headers(socket)) do
       nil ->
-        false
+        {:error, :no_header}
 
       observed ->
         # The upgrade URL is not the page URL, and in tests `connect_info` is
         # derived from the dead-render conn — so a URL-salted comparison cannot
         # be trusted here. `expected_hashes/3` includes the unsalted hash, which
         # is what actually matches.
-        SebGuard.verdict(exam, submission, observed, uri(socket)) == :ok
+        SebGuard.verdict(exam, submission, observed, uri(socket))
     end
   end
 

@@ -43,7 +43,6 @@ import {
 } from "./constants";
 import {
   TextColorIcon,
-  FreitextIcon,
   FreitextAbcIcon,
   LueckentextIcon,
   MultipleChoiceIcon,
@@ -62,6 +61,7 @@ export interface ToolbarProps {
   status: string;
   errorMsg?: string | null;
   hideAnswers?: boolean;
+  hideCallout?: boolean;
   correctionMode?: boolean;
   hideQuestion?: boolean;
   uploadImage?: ((file: File) => Promise<{ url: string }>) | null;
@@ -75,6 +75,7 @@ export function Toolbar({
   status,
   errorMsg,
   hideAnswers = false,
+  hideCallout = false,
   correctionMode = false,
   hideQuestion = false,
   uploadImage = null,
@@ -363,7 +364,7 @@ export function Toolbar({
                 active.orderedList,
               ),
             ])}
-            {!hideAnswers && group("Hinweisbox", [calloutMenu])}
+            {!hideCallout && group("Hinweisbox", [calloutMenu])}
             {!hideQuestion &&
               group("Frage", [
                 btn(

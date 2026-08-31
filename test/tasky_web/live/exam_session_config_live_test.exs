@@ -187,6 +187,19 @@ defmodule TaskyWeb.ExamSessionConfigLiveTest do
       assert Exams.get_exam!(user_scope_fixture(teacher), exam.id).seb_enforcement == "enforce"
     end
 
+    test "the config page offers Melden and Erzwingen, and no third way", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = teacher_and_exam(status: "open")
+      {view, _reloaded} = enable_seb(conn, teacher, exam)
+
+      html = render(view)
+      assert html =~ "Melden"
+      assert html =~ "Erzwingen"
+
+      # "Aus" required SEB without checking it — a strictly worse "Melden", and
+      # an invitation to believe SEB had been turned off.
+      refute html =~ ~s(value="off")
+    end
+
     test "the kill switch appears only under enforce, and suspends it", %{conn: conn} do
       %{teacher: teacher, exam: exam} = teacher_and_exam(status: "open")
       {view, _reloaded} = enable_seb(conn, teacher, exam)

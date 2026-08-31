@@ -18,7 +18,7 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 | `Tasky.Tasks` | Learning units, student submissions, review flow. Same scoping rules. |
 | `Tasky.Courses` / `Tasky.Classes` | Course/class membership; `Courses.enrolled?/2` gates all student task access. A class belongs to one organization and is shared by its teachers; `Tasky.Classes` is the **only** context that threads a `%Scope{}` for this, because classes have no owner. Everywhere else **the organization comes from the owner of the resource, not from the caller's scope** — a course carries `teacher_id` and the teacher carries the organization, which keeps the signatures unchanged and makes the rule hold even when an admin acts. Resist re-introducing scope parameters. The **catalog stays global on purpose**: it is the cross-organization exchange, so a course author's name is visible across organizations. Trägt auch den Kurs-Katalog: `courses.catalog_published_at` ist dort das Lese-Credential (wie `share_slug` beim KI-Link) und `import_catalog_course_records/3` der einzige Pfad, auf dem eine Lehrperson Inhalte einer anderen kopieren darf. |
 | `Tasky.Feedback` | Anonymer Feedback-Briefkasten pro Kurs (`Course.feedback_box_enabled`, startet geschlossen). Die `student_id` wird gespeichert — sie trägt die Missbrauchsbremse — aber `list_messages/2` selektiert sie nicht, die Web-Schicht bekommt sie also nie zu sehen. Pseudonym, nicht absolut anonym: Texte gegenüber Lernenden sagen "die Lehrperson sieht deinen Namen nicht". |
-| `Tasky.ExamDoc` | Pure Tiptap document algebra: split into parts, preamble, reassembly, answer-block labels, **stable part ids**. |
+| `Tasky.ExamDoc` | Pure Tiptap document algebra: split into parts, preamble, reassembly, answer-block labels, **stable part ids**. Mode-aware: `split_content_into_parts/2` takes the exam's `answer_mode`. |
 | `Tasky.Grading` | Pure grading domain: quarter-point rounding, verdict semantics, part/total computation, the **one** Swiss mark formula (screen and PDF). |
 | `Tasky.Correction.AnswerKey` | Splits an answer-filled doc into answer-free `content` + an answers map keyed by `answerId`; merges them back. |
 | `Tasky.Correction.StringComparator` | Deterministic auto-correction of one part (no AI; an AI client can be swapped in behind the same contract). |
@@ -35,6 +35,27 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 The exam document is **Tiptap JSON**, stored as-is and rendered client-side
 everywhere (editors, read-only viewers, the PDF print view) — there is no
 server-side JSON→HTML rendering.
+
+- **Answer mode** (`exams.answer_mode`) picks between the two kinds of exam.
+  `"answer_fields"` is the original one: questions are `h3` headings, answers
+  go into `answerBlock` / `lueckentext` / `taskItem` nodes, and the learner's
+  editor vetoes every edit outside those nodes. `"free_document"` has neither:
+  the learner edits the teacher's document itself. It is **castable in
+  `Exam.new_changeset/2` only** — chosen once on the create form and never
+  again, because part ids, answer ids, verdicts and the sample solution all
+  hang off it and a switch would strand them rather than convert them.
+  `duplicate_exam/3` therefore has to carry it over explicitly.
+- **A free document is one part.** `ExamDoc.split_content_into_parts/2`
+  returns a single synthetic part (`ExamDoc.free_document_part_id/0`,
+  `"document"`) spanning the whole doc, and the preamble is empty. That one
+  decision is what lets `points_per_part`, `corrected_parts`,
+  `sample_solution_points`, the correction editor, the mark formula and the
+  PDF export work on an essay without knowing it is one. Grading happens
+  through `set_part_points/4` — with no answer blocks, `resolve_block_points/3`
+  is `nil`, so block verdicts write nothing. Auto-correction is short-circuited
+  to `[]` and the grouped "Korrektur nach Frage" view redirects away, since
+  both need answer fields to work on. The mode argument has **no default**: a
+  call site that forgot it would silently report "no parts" for every essay.
 
 - **Answer ids**: every answer-bearing node (`answerBlock`, `lueckentext`,
   `taskItem`) carries a stable `attrs.answerId` (client-generated
@@ -129,8 +150,16 @@ binding:
 ## Frontend (`assets/js/`)
 
 - One React/Tiptap component (`react/ExamContentEditor.jsx`) drives all
-  editor modes (author, sample solution, student, correction, read-only) via
-  props. Splitting it into typed TS modules is the open Phase-4.6 item.
+  editor modes (author, free document, sample solution, student, correction,
+  read-only) via props. Splitting it into typed TS modules is the open
+  Phase-4.6 item.
+- Presets live in `react/editor/modes.ts`; the server picks one per surface and
+  pushes it down as `data-editor-mode`. Three flags that used to be one:
+  `hideAnswers` (no answer-field buttons), `protectAnswers` (load
+  `PreventNodeDeletion`) and `hideCallout` (no Hinweisbox). The
+  `freeDocument` preset needs the first without the other two, and serves both
+  the teacher and the learner — only `uploadImage`, which just the authoring
+  hook passes, tells the two apart.
 - All React islands are built by `hooks/create_react_hook.jsx`: dynamic
   imports, destroyed-after-await guard, **loud failure** on corrupt
   `data-content` (refuses to mount so an autosave can't overwrite the server

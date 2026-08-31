@@ -130,7 +130,7 @@ defmodule TaskyWeb.Plugs.SebGuardTest do
     end
   end
 
-  describe "observe and off modes" do
+  describe "observe mode and exams without SEB" do
     test "observe never blocks, even with no header at all", %{conn: conn} do
       # The whole point of having a stage before enforce: the Config Key
       # derivation must be confirmed against a real SEB before it can lock
@@ -140,10 +140,15 @@ defmodule TaskyWeb.Plugs.SebGuardTest do
       assert conn |> get(~p"/guest/exam/#{submission.exam_token}") |> Map.get(:status) == 200
     end
 
-    test "off never blocks", %{conn: conn} do
-      {_exam, submission} = seb_exam("off")
+    # "off" used to mean "require SEB but never check it", which after the guard
+    # fix admitted exactly the people observe admits while reporting nothing.
+    # Saying no to SEB is `seb_enabled: false`, covered by the next test.
+    test "there is no mode for requiring SEB without checking it" do
+      exam = exam_fixture(status: "running")
 
-      assert conn |> get(~p"/guest/exam/#{submission.exam_token}") |> Map.get(:status) == 200
+      assert {:error, changeset} = Exams.set_seb_enforcement(:system, exam, "off")
+      refute changeset.valid?
+      assert Keyword.has_key?(changeset.errors, :seb_enforcement)
     end
 
     test "an exam without SEB enabled is never guarded", %{conn: conn} do

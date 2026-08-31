@@ -14,6 +14,7 @@ defmodule TaskyWeb.ExamLive.Content do
 
   alias Tasky.Exams
   alias Tasky.Uploads
+  alias TaskyWeb.ExamComponents
 
   @impl true
   def render(assigns) do
@@ -50,7 +51,7 @@ defmodule TaskyWeb.ExamLive.Content do
               patch={~p"/exams/#{@exam}/content?tab=inhalt"}
             />
             <.tab_link
-              label="Musterlösung"
+              label={solution_tab_label(@free_document)}
               active={@tab == "musterloesung"}
               patch={~p"/exams/#{@exam}/content?tab=musterloesung"}
             />
@@ -70,6 +71,7 @@ defmodule TaskyWeb.ExamLive.Content do
           phx-hook="ExamContentEditor"
           phx-update="ignore"
           data-exam-id={@exam.id}
+          data-editor-mode={ExamComponents.author_editor_mode(@exam)}
           data-content={@content_json}
         >
         </div>
@@ -79,7 +81,7 @@ defmodule TaskyWeb.ExamLive.Content do
       <div :if={@tab == "musterloesung"} class="bg-stone-100 min-h-[calc(100vh-54px)]">
         <%!-- Shared toolbar: one bar bound to the focused part editor --%>
         <div
-          :if={@part_views != []}
+          :if={@part_views != [] and not @free_document}
           id={"solution-toolbar-#{@exam.id}"}
           phx-hook="SolutionToolbar"
           phx-update="ignore"
@@ -88,8 +90,65 @@ defmodule TaskyWeb.ExamLive.Content do
         </div>
 
         <div class="max-w-7xl mx-auto px-8 py-6">
+          <%!-- Freies Dokument: keine Fragen, keine Antwortfelder — also auch
+               keine Musterlösung. Zu bestimmen bleibt genau eine Zahl: wie viele
+               Punkte das Dokument als Ganzes wert ist. --%>
+          <div :if={@free_document} class="max-w-md">
+            <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+              <div class="p-5 border-b border-stone-100">
+                <h2 class="text-base font-semibold text-stone-800">Punkte</h2>
+                <p class="text-xs text-stone-500 mt-1">
+                  Lernende bearbeiten das ganze Dokument, deshalb wird es als Ganzes bewertet.
+                  Die Punkte vergibst du in der Korrektur.
+                </p>
+              </div>
+              <div :for={pv <- @part_views} class="p-5">
+                <label class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+                  Max. Punkte
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    phx-click="adjust_max_points"
+                    phx-value-direction="down"
+                    phx-value-part-id={pv.id}
+                    disabled={is_nil(pv.max_points) or pv.max_points <= 0}
+                    aria-label="−0.25"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
+                  >
+                    <.icon name="hero-minus" class="w-4 h-4" />
+                  </button>
+                  <form phx-change="set_max_points" phx-submit="set_max_points" class="flex-1">
+                    <input type="hidden" name="part_id" value={pv.id} />
+                    <input
+                      type="number"
+                      name="points"
+                      value={pv.max_points || ""}
+                      step="0.25"
+                      min="0"
+                      inputmode="decimal"
+                      phx-debounce="500"
+                      placeholder="—"
+                      class="w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                    />
+                  </form>
+                  <button
+                    type="button"
+                    phx-click="adjust_max_points"
+                    phx-value-direction="up"
+                    phx-value-part-id={pv.id}
+                    aria-label="+0.25"
+                    class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 shrink-0"
+                  >
+                    <.icon name="hero-plus" class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div
-            :if={@part_views == []}
+            :if={@part_views == [] and not @free_document}
             class="flex flex-col items-center justify-center text-center py-24"
           >
             <div class="flex items-center justify-center w-14 h-14 rounded-2xl bg-stone-100 text-stone-400 mb-4">
@@ -102,7 +161,11 @@ defmodule TaskyWeb.ExamLive.Content do
             </p>
           </div>
 
-          <div :for={pv <- @part_views} class="grid grid-cols-4 gap-6 items-stretch mb-10">
+          <div
+            :for={pv <- @part_views}
+            :if={not @free_document}
+            class="grid grid-cols-4 gap-6 items-stretch mb-10"
+          >
             <div class="col-span-3 min-w-0">
               <div
                 id={"sample-solution-part-editor-#{@exam.id}-#{pv.id}"}
@@ -668,6 +731,7 @@ defmodule TaskyWeb.ExamLive.Content do
      # Assigned here rather than in the "musterloesung" branch of
      # handle_params/3 so the flag is defined on every tab.
      |> assign(:show_alternatives_help, false)
+     |> assign(:free_document, ExamComponents.free_document?(exam))
      |> allow_upload(:attachment,
        accept: Uploads.attachment_accept_exts(),
        max_entries: 3,
@@ -682,6 +746,7 @@ defmodule TaskyWeb.ExamLive.Content do
     # Reload exam each time params change so structure edits made in the
     # Inhalt tab are reflected when the teacher switches to Musterlösung.
     exam = Exams.get_exam!(socket.assigns.current_scope, socket.assigns.exam.id)
+    free_document? = ExamComponents.free_document?(exam)
 
     tab =
       case params["tab"] do
@@ -693,8 +758,9 @@ defmodule TaskyWeb.ExamLive.Content do
     socket =
       socket
       |> assign(:exam, exam)
+      |> assign(:free_document, free_document?)
       |> assign(:tab, tab)
-      |> assign(:page_title, "#{exam.name} – #{tab_label(tab)}")
+      |> assign(:page_title, "#{exam.name} – #{tab_label(tab, free_document?)}")
 
     case tab do
       "inhalt" ->
@@ -717,12 +783,12 @@ defmodule TaskyWeb.ExamLive.Content do
   # `doc_json` is only computed here (full navigation) — event handlers must
   # never touch it, so the phx-update="ignore" editor hooks stay untouched.
   defp build_part_views(exam) do
-    parts = Exams.split_content_into_parts(exam.content || %{})
+    parts = Exams.split_content_into_parts(exam.content || %{}, exam.answer_mode)
 
     sample_parts =
       exam
       |> Exams.sample_solution_doc()
-      |> Exams.split_content_into_parts()
+      |> Exams.split_content_into_parts(exam.answer_mode)
       |> Map.new(&{&1.id, &1})
 
     Enum.map(parts, fn part ->
@@ -1177,9 +1243,14 @@ defmodule TaskyWeb.ExamLive.Content do
     assign(socket, :part_views, part_views)
   end
 
-  defp tab_label("inhalt"), do: "Inhalt"
-  defp tab_label("musterloesung"), do: "Musterlösung"
-  defp tab_label("dateien"), do: "Dateien"
+  defp tab_label("inhalt", _free_document?), do: "Inhalt"
+  defp tab_label("musterloesung", free?), do: solution_tab_label(free?)
+  defp tab_label("dateien", _free_document?), do: "Dateien"
+
+  # Im freien Modus gibt es keine Musterlösung — der Tab trägt nur noch die
+  # Maximalpunkte, und "Musterlösung" wäre ein Versprechen, das er nicht hält.
+  defp solution_tab_label(true), do: "Punkte"
+  defp solution_tab_label(false), do: "Musterlösung"
 
   defp part_config_flag(exam, part_id, key) do
     (exam.ai_correction_config || %{})

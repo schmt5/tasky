@@ -26,6 +26,7 @@ defmodule Tasky.Exams.Exam do
     field :ai_correction_config, :map, default: %{}
     field :grading_max_points, :float
     field :participation_mode, :string, default: "anonymous"
+    field :answer_mode, :string, default: "answer_fields"
     field :returned_at, :utc_datetime
     field :return_show_points_and_mark, :boolean, default: true
     field :return_show_content, :boolean, default: true
@@ -43,6 +44,18 @@ defmodule Tasky.Exams.Exam do
   @doc "The two ways a session can be run. See `open_changeset/3`."
   def participation_modes, do: @participation_modes
 
+  @answer_modes ~w(answer_fields free_document)
+
+  @doc """
+  The two kinds of exam. See `new_changeset/2` and the migration.
+
+    * `"answer_fields"` — questions (h3) plus answer fields; the learner
+      may only type into those fields.
+    * `"free_document"` — no answer fields; the learner edits the whole
+      document. Graded as one part (`ExamDoc.free_document_part_id/0`).
+  """
+  def answer_modes, do: @answer_modes
+
   @doc false
   # :status, :enrollment_token and :participation_mode are deliberately not
   # castable — the exam lifecycle goes through Exams.update_exam_status/3 /
@@ -53,7 +66,7 @@ defmodule Tasky.Exams.Exam do
   # accept_seb_config_key/3 write. :seb_admin_password rides along with
   # :seb_quit_password: both are minted server-side in
   # CockpitConfig.maybe_generate_seb_passwords/2 and only ever reach cast/3
-  # from there.
+  # from there. :answer_mode is castable in new_changeset/2 only — see there.
   def changeset(exam, attrs) do
     exam
     |> cast(attrs, [
@@ -75,8 +88,27 @@ defmodule Tasky.Exams.Exam do
   @doc false
   def create_changeset(exam, attrs, scope) do
     exam
-    |> changeset(attrs)
+    |> new_changeset(attrs)
     |> put_change(:teacher_id, scope.user.id)
+  end
+
+  @doc """
+  Changeset for the create form. Identical to `changeset/2` except that it is
+  the **only** place `:answer_mode` is castable.
+
+  The mode is a one-time decision: part ids, answer ids, block verdicts and the
+  sample solution all hang off it, so switching later would strand data rather
+  than convert it. Keeping the cast out of `changeset/2` makes that structural
+  instead of a rule someone has to remember — `update_exam/3` cannot write the
+  column at all.
+  """
+  def new_changeset(exam, attrs) do
+    exam
+    |> changeset(attrs)
+    |> cast(attrs, [:answer_mode])
+    |> validate_required([:answer_mode])
+    |> validate_inclusion(:answer_mode, @answer_modes)
+    |> check_constraint(:answer_mode, name: :exams_answer_mode_check)
   end
 
   @doc """
@@ -101,7 +133,9 @@ defmodule Tasky.Exams.Exam do
     |> put_change(:seb_allow_files, allow_files?)
   end
 
-  @enforcement_modes ~w(off observe enforce)
+  # No "off": an exam that requires SEB always gets checked. Not wanting SEB is
+  # said by clearing :seb_enabled. See the DropSebEnforcementOff migration.
+  @enforcement_modes ~w(observe enforce)
 
   @doc "The SEB enforcement modes. See the migration for what each one means."
   def seb_enforcement_modes, do: @enforcement_modes

@@ -138,17 +138,18 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
                     </div>
                   </div>
 
-                  <%!-- Enforcement. Three states rather than a switch, because
-                        "observe" is what makes it safe to turn on at all: it
-                        reports without ever blocking, so the Config Key
-                        derivation can be confirmed against the SEB build in the
-                        room before it is allowed to lock anyone out. --%>
+                  <%!-- Enforcement. "observe" is what makes it safe to turn SEB
+                        on at all: it reports without ever blocking, so the
+                        Config Key derivation can be confirmed against the SEB
+                        build in the room before it is allowed to lock anyone
+                        out. --%>
                   <div class="rounded-xl border border-stone-200 p-4 space-y-3">
                     <div>
                       <h3 class="text-sm font-semibold text-stone-700">Serverseitige Prüfung</h3>
                       <p class="text-xs text-stone-500 leading-relaxed mt-0.5">
-                        Ohne diese Prüfung genügt ein manipulierter Browser-Kennstring, um die
-                        Prüfung im normalen Browser zu schreiben.
+                        Solange nur gemeldet wird, genügt ein manipulierter Browser-Kennstring,
+                        um die Prüfung im normalen Browser zu schreiben. Erst «Erzwingen»
+                        schliesst das.
                       </p>
                     </div>
 
@@ -292,14 +293,17 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
   @doc """
   The enforcement modes, in the order they appear on the config page.
 
-  `observe` is the default and the middle rung on purpose: the Config Key
-  derivation has to be confirmed against the SEB build actually installed in
-  the exam room before it is allowed to lock anybody out.
+  Two rather than three: there used to be an "Aus" that required SEB without
+  checking it, which after the guard fix let exactly the same people in as
+  `observe` while reporting nothing. "No Safe Exam Browser" is the checkbox
+  above, not a mode.
+
+  `observe` is the default on purpose: the Config Key derivation has to be
+  confirmed against the SEB build actually installed in the exam room before it
+  is allowed to lock anybody out.
   """
   def enforcement_options do
     [
-      {"off", "Aus",
-       "Keine serverseitige Prüfung. Der Safe-Exam-Browser-Hinweis bleibt ein Hinweis."},
       {"observe", "Melden",
        "Prüft und zeigt im Cockpit an, wer verifiziert ist — blockiert aber niemanden. " <>
          "Damit den Probelauf machen."},

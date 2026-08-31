@@ -28,18 +28,25 @@ Geräteumgebung und ist der Ausbaupfad, nicht der jetzige Stand.
 
 ---
 
-## Die drei Modi
+## Die zwei Modi
 
-Auf der Konfigurationsseite der Durchführung, unter «Serverseitige Prüfung»:
+Zuerst das Häkchen **«Safe Exam Browser aktivieren»**: ohne das wird nie
+geprüft und den Teilnehmenden nie ein Hinweis gezeigt. *Das* ist «kein SEB» —
+es gibt keinen Modus, der SEB verlangt und dann nicht prüft.
+
+Ist das Häkchen gesetzt, steht darunter unter «Serverseitige Prüfung»:
 
 | Modus | Verhalten |
 |---|---|
-| **Aus** | Keine Prüfung. Der SEB-Hinweis bleibt ein Hinweis. |
-| **Melden** (Standard) | Prüft und zeigt im Cockpit, wer verifiziert ist — **blockiert niemanden**. Damit wird der Probelauf gemacht. |
-| **Erzwingen** | Ohne gültigen SEB-Schlüssel kein Zugriff, auch nicht auf Speichern und Abgeben. |
+| **Melden** (Standard) | Prüft den SEB-Schlüssel und zeigt im Cockpit, wer verifiziert ist — **blockiert aber niemanden**, auch keinen SEB mit falschem Schlüssel. Damit wird der Probelauf gemacht. |
+| **Erzwingen** | Ohne gültigen SEB-Schlüssel kein Zugriff — auch nicht auf Speichern, Dateien und Abgeben. |
 
 `Melden` ist der Standard, damit das Einschalten von SEB niemals eine Klasse
-aussperren kann, bevor die Ableitung bestätigt ist.
+aussperren kann, bevor die Ableitung bestätigt ist. Was `Melden` **nicht** tut:
+jemandem Zugang gewähren. Es prüft und protokolliert — den Weg in die Prüfung
+öffnet unter «Melden» weiterhin nur ein gültiger Schlüssel oder der
+(fälschbare) Browser-Kennstring, und wer keines von beidem hat, sieht die
+Download-Seite.
 
 ---
 
@@ -91,11 +98,34 @@ läuft. Oder: der Editor meldet, dass die Prüfung nur im Safe Exam Browser läu
 
 **Sofortmassnahme:** Im Cockpit unter «Serverseitige Prüfung» der roten Schalter
 **«SEB-Zwang 15 Minuten aussetzen»**. Die Prüfung läuft sofort weiter; nach 15
-Minuten greift der Zwang von selbst wieder. Danach in Ruhe auf **Melden**
-zurückstellen und den beobachteten Schlüssel akzeptieren.
+Minuten greift der Zwang von selbst wieder.
+
+Diese 15 Minuten sind ein Zeitfenster zum Handeln, **keine Gnadenfrist für den
+Rest der Prüfung**: wer während des Aussetzens hereinkommt, gilt weiterhin als
+nicht verifiziert und ist beim nächsten Seitenaufbau wieder draussen. Also
+innerhalb des Fensters entweder den beobachteten Schlüssel akzeptieren oder auf
+**Melden** zurückstellen — dann bleibt es ruhig.
 
 Diesen Handgriff einmal vorher durchspielen — nicht zum ersten Mal, wenn 20
 Lernende warten.
+
+---
+
+## Wenn der rote Banner «Die SEB-Prüfung ist ausgefallen» erscheint
+
+Dann kann der Server den erwarteten SEB-Schlüssel überhaupt nicht berechnen —
+ein Fehler auf unserer Seite, nicht bei den Lernenden. Was dann gilt:
+
+* Die Prüfung **läuft normal weiter.** Niemand wird ausgesperrt, auch unter
+  «Erzwingen» nicht. Das ist eine bewusste Entscheidung: ein Fehler in unserem
+  Code darf keine 25 bewerteten Prüfungen beenden.
+* Es wird aber auch **niemand verifiziert.** «N verifiziert» bleibt bei 0, und
+  «Erzwingen» wirkt vorübergehend wie «Melden». Die Aufsicht im Raum ist damit
+  die einzige Kontrolle — entsprechend hinschauen.
+* Der Zwang greift **von selbst wieder**, sobald die Berechnung wieder geht. Am
+  Modus muss nichts umgestellt werden.
+* Die technische Meldung unter dem Banntext bitte weitergeben; sie sagt, was
+  genau fehlgeschlagen ist.
 
 ---
 
@@ -120,7 +150,7 @@ Lernende warten.
 
 | Anzeige | Bedeutung |
 |---|---|
-| **N verifiziert** | So viele Anwesende haben einen gültigen SEB-Schlüssel geschickt. |
+| **N verifiziert** | So viele Anwesende haben einen gültigen SEB-Schlüssel geschickt. Nur ein echter Treffer zählt — in keinem Modus zählt ein bloss geduldeter Zugriff mit. |
 | **M ohne SEB-Schlüssel** | So viele nicht. Unter «Melden» schreiben sie trotzdem mit. |
 | «SEB noch nicht gestartet» | Anwesend, aber (noch) nicht im SEB. Normal vor dem Start. |
 | «SEB nicht verifiziert» | Gibt sich als SEB aus, ohne gültigen Schlüssel. Entweder eine veraltete `.seb`-Datei — oder jemand, der es versucht. Hinschauen. |

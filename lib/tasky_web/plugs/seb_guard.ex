@@ -13,7 +13,8 @@ defmodule TaskyWeb.Plugs.SebGuard do
 
   ## The session stamp
 
-  On a verified request this writes `{token, at}` into the session. SEB keeps
+  On a request that carried a *valid* Config Key hash this writes `{token, at}`
+  into the session — never on one that `observe` merely tolerated. SEB keeps
   cookies within a session, so the stamp set on the dead render comes back on
   the websocket upgrade — which matters because whether SEB injects its headers
   into a WebSocket handshake is not something we can assume. The stamp is what
@@ -47,10 +48,18 @@ defmodule TaskyWeb.Plugs.SebGuard do
          exam = submission.exam,
          mode when mode != :off <- SebGuard.mode(exam) do
       case SebGuard.check(exam, submission, conn.req_headers, canonical_request_url(conn)) do
-        :ok ->
+        {:ok, :verified} ->
           conn
           |> assign(:seb_submission, submission)
           |> stamp(submission)
+
+        {:ok, :unverified} ->
+          # `observe` let this through, but nothing was proven — so no stamp.
+          # A stamp means "verified" to both `TaskyWeb.SebGuardHook` and the
+          # cockpit; writing one here made every plain browser look verified,
+          # skipped the download gate entirely and kept passing for 12 hours
+          # after a switch to `enforce`.
+          assign(conn, :seb_submission, submission)
 
         {:error, reason} ->
           reject(conn, on_reject, reason, submission)

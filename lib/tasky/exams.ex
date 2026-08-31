@@ -106,6 +106,9 @@ defmodule Tasky.Exams do
   defp insert_exam_duplicate(scope, source, name) do
     attrs = %{
       "name" => String.slice(name, 0, 255),
+      # Castable on create only, so the copy is the one chance to carry it over
+      # — a duplicated essay must not come back as an answer-field exam.
+      "answer_mode" => source.answer_mode,
       "sample_solution_points" => source.sample_solution_points || %{},
       "sample_solution_block_points" => source.sample_solution_block_points || %{},
       "seb_enabled" => source.seb_enabled,
@@ -384,7 +387,7 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Sets the SEB enforcement mode (`"off"` / `"observe"` / `"enforce"`).
+  Sets the SEB enforcement mode (`"observe"` / `"enforce"`).
 
   Not part of `update_exam/3`: the mode decides whether a participant can reach
   the exam at all, so it must not be reachable through a content form.
@@ -473,6 +476,14 @@ defmodule Tasky.Exams do
   """
   def change_exam(%Exam{} = exam, attrs \\ %{}) do
     Exam.changeset(exam, attrs)
+  end
+
+  @doc """
+  Changeset for the create form. Unlike `change_exam/2` this one carries
+  `:answer_mode`, which is only ever chosen here — see `Exam.new_changeset/2`.
+  """
+  def change_new_exam(%Exam{} = exam, attrs \\ %{}) do
+    Exam.new_changeset(exam, attrs)
   end
 
   # --- Guest / Submission functions ---
@@ -974,20 +985,20 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Splits a TipTap document into question-delimited parts.
+  Splits a TipTap document into parts, according to the exam's `answer_mode`.
 
-  Each part begins with a level-3 heading (`h3`) which represents the
-  question. Anything before the first `h3` is *preamble* (intro /
-  instructions) and is NOT returned — use `content_preamble/1` to access it.
-
-  Returns a list of `%{id, label, nodes}`:
-    * `id` — positional, `"q-1"`, `"q-2"`, …
-    * `label` — the heading's inline text content, or fallback `"Frage N"`
-    * `nodes` — the part's nodes, starting with the leading `h3` node
+  See `Tasky.ExamDoc.split_content_into_parts/2` — with `"answer_fields"` the
+  parts are question-delimited (`h3`), with `"free_document"` the whole
+  document is one part.
   """
-  defdelegate split_content_into_parts(doc), to: Tasky.ExamDoc
-  defdelegate content_preamble(doc), to: Tasky.ExamDoc
+  defdelegate split_content_into_parts(doc, answer_mode), to: Tasky.ExamDoc
+  defdelegate content_preamble(doc, answer_mode), to: Tasky.ExamDoc
   defdelegate assemble_parts_into_content(preamble, parts), to: Tasky.ExamDoc
+  defdelegate free_document_part_id(), to: Tasky.ExamDoc
+
+  @doc "True for an exam whose learners edit the whole document."
+  def free_document?(%Exam{answer_mode: "free_document"}), do: true
+  def free_document?(%Exam{}), do: false
 
   @doc """
   Returns the decoded submission content for correction.
@@ -1124,7 +1135,7 @@ defmodule Tasky.Exams do
   Persists the teacher's corrected content for a single part.
 
   `part_id` identifies the page boundary (the same id returned by
-  `split_content_into_parts/1`); `part_nodes` is the new list of nodes for
+  `split_content_into_parts/2`); `part_nodes` is the new list of nodes for
   that part. The function loads the current correction doc, splits it,
   replaces the matching part, reassembles, and saves back into
   `corrected_content`. Raises if `part_id` is not present.
@@ -1133,12 +1144,15 @@ defmodule Tasky.Exams do
       when is_binary(part_id) and is_list(part_nodes) do
     with :ok <- authorize_submission(scope, submission) do
       # Splice runs against a row locked FOR UPDATE so two near-simultaneous
-      # part saves can't clobber each other's parts.
+      # part saves can't clobber each other's parts. The exam is locked first
+      # (FOR SHARE — only its answer mode is read), keeping the table order of
+      # every other grading write.
       Repo.transaction(fn ->
+        exam = Repo.lock_one!(Exam, submission.exam_id, :share)
         locked = Repo.lock_one!(ExamSubmission, submission.id)
         doc = correction_content(locked)
-        parts = split_content_into_parts(doc)
-        preamble = content_preamble(doc)
+        parts = split_content_into_parts(doc, exam.answer_mode)
+        preamble = content_preamble(doc, exam.answer_mode)
 
         unless Enum.any?(parts, &(&1.id == part_id)) do
           raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
@@ -1183,6 +1197,7 @@ defmodule Tasky.Exams do
           {pruned_block_points, synced_points} =
             prune_orphan_block_points(
               new_content,
+              locked.answer_mode,
               locked.sample_solution_block_points || %{},
               locked.sample_solution_points || %{}
             )
@@ -1237,8 +1252,8 @@ defmodule Tasky.Exams do
         locked_exam = Repo.lock_one!(Exam, exam.id)
 
         content = locked_exam.content || %{}
-        parts = split_content_into_parts(content)
-        preamble = content_preamble(content)
+        parts = split_content_into_parts(content, locked_exam.answer_mode)
+        preamble = content_preamble(content, locked_exam.answer_mode)
 
         unless Enum.any?(parts, &(&1.id == part_id)) do
           raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
@@ -1259,6 +1274,7 @@ defmodule Tasky.Exams do
         {pruned_block_points, synced_points} =
           prune_orphan_block_points(
             new_content,
+            locked_exam.answer_mode,
             locked_exam.sample_solution_block_points || %{},
             locked_exam.sample_solution_points || %{}
           )
@@ -1296,9 +1312,9 @@ defmodule Tasky.Exams do
   # points, and an entry left behind for a deleted question inflates the grading
   # denominator forever — silently depressing every student's mark on screen and
   # in the PDF.
-  defp prune_orphan_block_points(content, block_points, points) do
+  defp prune_orphan_block_points(content, answer_mode, block_points, points) do
     keep_ids = AnswerKey.block_ids(content)
-    part_ids = content |> split_content_into_parts() |> MapSet.new(& &1.id)
+    part_ids = content |> split_content_into_parts(answer_mode) |> MapSet.new(& &1.id)
     part_id_list = MapSet.to_list(part_ids)
 
     pruned =
@@ -1491,7 +1507,7 @@ defmodule Tasky.Exams do
 
   defp exam_part_blocks(%Exam{} = exam, part_id) do
     (exam.content || %{})
-    |> split_content_into_parts()
+    |> split_content_into_parts(exam.answer_mode)
     |> Enum.find(&(&1.id == part_id))
     |> case do
       nil -> []
@@ -1555,12 +1571,12 @@ defmodule Tasky.Exams do
   Verdicts are keyed by the block's stable `answerId` in
   `submission.block_verdicts`.
   """
-  def list_part_answer_blocks(%ExamSubmission{} = submission, part_id)
+  def list_part_answer_blocks(%Exam{} = exam, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
     parts =
       submission
       |> correction_content()
-      |> split_content_into_parts()
+      |> split_content_into_parts(exam.answer_mode)
 
     case Enum.find(parts, &(&1.id == part_id)) do
       nil ->
@@ -1655,8 +1671,8 @@ defmodule Tasky.Exams do
   # failing the whole operation over one.
   defp part_verdict_changes(submission, exam, part_id, verdicts_by_index, opts \\ []) do
     doc = correction_content(submission)
-    parts = split_content_into_parts(doc)
-    preamble = content_preamble(doc)
+    parts = split_content_into_parts(doc, exam.answer_mode)
+    preamble = content_preamble(doc, exam.answer_mode)
 
     case Enum.find(parts, &(&1.id == part_id)) do
       nil ->
@@ -1780,8 +1796,8 @@ defmodule Tasky.Exams do
           exam = Repo.lock_one!(Exam, submission.exam_id, :share)
           locked = Repo.lock_one!(ExamSubmission, submission.id)
           doc = correction_content(locked)
-          parts = split_content_into_parts(doc)
-          preamble = content_preamble(doc)
+          parts = split_content_into_parts(doc, exam.answer_mode)
+          preamble = content_preamble(doc, exam.answer_mode)
 
           unless Enum.any?(parts, &(&1.id == part_id)) do
             Repo.rollback(:unknown_part)
@@ -2010,9 +2026,9 @@ defmodule Tasky.Exams do
   The teacher's explicit verdict for the block at `index` in the given part,
   or nil. Resolves the block's stable answerId from the submission's doc.
   """
-  def explicit_block_verdict(%ExamSubmission{} = submission, part_id, index)
+  def explicit_block_verdict(%Exam{} = exam, %ExamSubmission{} = submission, part_id, index)
       when is_binary(part_id) and is_integer(index) do
-    parts = submission |> correction_content() |> split_content_into_parts()
+    parts = submission |> correction_content() |> split_content_into_parts(exam.answer_mode)
 
     with %{} = part <- Enum.find(parts, &(&1.id == part_id)),
          %{answer_id: answer_id} when is_binary(answer_id) <-
@@ -2145,11 +2161,19 @@ defmodule Tasky.Exams do
   `ignore_case` flags from the per-part config. Excludes parts without a
   max-points entry or without content for that submission.
 
+  Always empty for a `free_document` exam: auto-correction compares answer
+  fields against a sample solution, and such an exam has neither. Without this
+  the runner would still produce jobs that each fail with `:no_answer_fields`.
+
   Jobs are grouped by `part_id` (all submissions for part A, then all for
   part B, ...) so that consecutive Anthropic calls reuse the same cached
   system prefix (rules + sample solution) within the 5-minute cache TTL.
   """
-  def list_bulk_correction_jobs(%Exam{} = exam, opts \\ []) do
+  def list_bulk_correction_jobs(exam, opts \\ [])
+
+  def list_bulk_correction_jobs(%Exam{answer_mode: "free_document"}, _opts), do: []
+
+  def list_bulk_correction_jobs(%Exam{} = exam, opts) do
     config = exam.ai_correction_config || %{}
     max_points_map = exam.sample_solution_points || %{}
     submission_filter = Keyword.get(opts, :submission_id)
@@ -2174,7 +2198,7 @@ defmodule Tasky.Exams do
         parts =
           submission
           |> correction_content()
-          |> split_content_into_parts()
+          |> split_content_into_parts(exam.answer_mode)
 
         for part <- parts,
             MapSet.member?(auto_correct_part_ids, part.id),
@@ -2231,7 +2255,7 @@ defmodule Tasky.Exams do
     sample_part =
       exam
       |> sample_solution_doc()
-      |> split_content_into_parts()
+      |> split_content_into_parts(exam.answer_mode)
       |> Enum.find(&(&1.id == part_id))
 
     sample_blocks =
@@ -2245,7 +2269,7 @@ defmodule Tasky.Exams do
 
     exam_part =
       (exam.content || %{})
-      |> split_content_into_parts()
+      |> split_content_into_parts(exam.answer_mode)
       |> Enum.find(&(&1.id == part_id))
 
     labels_by_index =
@@ -2270,7 +2294,7 @@ defmodule Tasky.Exams do
         blocks =
           sub
           |> correction_content()
-          |> split_content_into_parts()
+          |> split_content_into_parts(exam.answer_mode)
           |> Enum.find(&(&1.id == part_id))
           |> case do
             nil -> []

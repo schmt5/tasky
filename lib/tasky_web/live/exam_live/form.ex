@@ -3,6 +3,7 @@ defmodule TaskyWeb.ExamLive.Form do
 
   alias Tasky.Exams
   alias Tasky.Exams.Exam
+  alias TaskyWeb.ExamComponents
 
   @impl true
   def render(assigns) do
@@ -42,7 +43,8 @@ defmodule TaskyWeb.ExamLive.Form do
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
-              do: "Gib deiner neuen Prüfung einen Namen.",
+              do:
+                "Gib deiner neuen Prüfung einen Namen und lege fest, wie Lernende darin schreiben. Die Prüfungsart lässt sich später nicht mehr wechseln.",
               else: "Ändere den Namen der Prüfung."}
           </p>
         </div>
@@ -59,6 +61,13 @@ defmodule TaskyWeb.ExamLive.Form do
               class="space-y-6"
             >
               <.input field={@form[:name]} type="text" label="Prüfungsname" required />
+
+              <.radio_group
+                :if={@live_action == :new}
+                field={@form[:answer_mode]}
+                legend="Wie schreiben Lernende?"
+                options={ExamComponents.answer_mode_options()}
+              />
 
               <div class="flex items-center gap-3 pt-4 border-t border-stone-100">
                 <.button
@@ -109,12 +118,19 @@ defmodule TaskyWeb.ExamLive.Form do
     socket
     |> assign(:page_title, "Neue Prüfung")
     |> assign(:exam, exam)
-    |> assign(:form, to_form(Exams.change_exam(exam), as: :exam))
+    |> assign(:form, to_form(Exams.change_new_exam(exam), as: :exam))
   end
 
   @impl true
   def handle_event("validate", %{"exam" => exam_params}, socket) do
-    changeset = Exams.change_exam(socket.assigns.exam, exam_params)
+    # :new validates through the create changeset — it is the only one that
+    # casts :answer_mode, so anything else would drop the radio's value.
+    changeset =
+      case socket.assigns.live_action do
+        :new -> Exams.change_new_exam(socket.assigns.exam, exam_params)
+        :edit -> Exams.change_exam(socket.assigns.exam, exam_params)
+      end
+
     {:noreply, assign(socket, form: to_form(changeset, action: :validate, as: :exam))}
   end
 

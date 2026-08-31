@@ -29,8 +29,8 @@ defmodule Tasky.OrganizationsFixtures do
   The shared organization every fixture defaults into, created on first use.
 
   Memoised in the process dictionary because `user_fixture/1` asks for it on
-  every call and the test pool has no headroom (`pool_size` equals ExUnit's
-  `max_cases`). A test runs in its own process and its own sandbox transaction,
+  every call, and every one of those calls is a query against a pool the whole
+  suite shares. A test runs in its own process and its own sandbox transaction,
   so the cache is naturally per-test; a miss just re-queries and finds the same
   row.
   """
@@ -60,6 +60,37 @@ defmodule Tasky.OrganizationsFixtures do
           class
       end
     end)
+  end
+
+  @doc """
+  Creates the shared organization and class once, **committed**, before the
+  sandbox goes manual. Called from `test_helper.exs`; idempotent.
+
+  Without this, every async test inserted these rows itself. Both slugs are
+  unique-indexed and a sandbox transaction lives for the whole test, so the
+  inserts serialised on the index: sampling `pg_stat_activity` during a suite
+  run showed up to 16 connections blocked on the same
+  `INSERT INTO "organizations"` at once. A queue that long regularly blew past
+  the 15s ownership timeout, which surfaced as two to four failures in a
+  *different*, unrelated set of tests on every run — including runs with an
+  identical seed. It reads like flaky tests and is really one contended row.
+  """
+  def seed_defaults! do
+    organization =
+      case Repo.get_by(Organization, slug: Classes.Class.slugify(@default_name)) do
+        nil -> organization_fixture(%{name: @default_name})
+        organization -> organization
+      end
+
+    if is_nil(Classes.get_class_by_slug(Classes.Class.slugify(@default_class_name))) do
+      {:ok, _class} =
+        Classes.create_class(:system, %{
+          name: @default_class_name,
+          organization_id: organization.id
+        })
+    end
+
+    :ok
   end
 
   defp memoize(key, fun) do
