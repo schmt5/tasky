@@ -94,7 +94,10 @@ defmodule TaskyWeb.CourseLive.Show do
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
         <%!-- Navigation Cards --%>
-        <div class="grid grid-cols-3 gap-6">
+        <div class={[
+          "grid gap-6",
+          if(@course.feedback_box_enabled, do: "grid-cols-3", else: "grid-cols-2")
+        ]}>
           <%!-- Progress Card --%>
           <.link
             navigate={~p"/courses/#{@course}/progress"}
@@ -143,9 +146,10 @@ defmodule TaskyWeb.CourseLive.Show do
             </div>
           </.link>
 
-          <%!-- Feedback Card. Bleibt auch bei geschlossenem Briefkasten sichtbar:
-                bereits eingegangene Nachrichten müssen lesbar bleiben. --%>
+          <%!-- Feedback Card. Nur bei offenem Briefkasten: ohne aktivierten Briefkasten
+                gibt es hier nichts zu tun. /courses/:id/feedback bleibt per URL erreichbar. --%>
           <.link
+            :if={@course.feedback_box_enabled}
             navigate={~p"/courses/#{@course}/feedback"}
             class="group bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:border-amber-200"
           >
@@ -158,9 +162,7 @@ defmodule TaskyWeb.CourseLive.Show do
                   Feedback-Briefkasten
                 </h3>
                 <p class="text-sm text-stone-500 leading-relaxed">
-                  {if @course.feedback_box_enabled,
-                    do: "Anonyme Rückmeldungen der Lernenden zu diesem Kurs lesen",
-                    else: "Der Briefkasten ist geschlossen – im Kurs bearbeiten aktivieren"}
+                  Anonyme Rückmeldungen der Lernenden zu diesem Kurs lesen
                 </p>
               </div>
               <.icon

@@ -99,28 +99,16 @@ defmodule TaskyWeb.Layouts do
                   Kurse
                 </.link>
                 <.link
-                  navigate={~p"/catalog"}
+                  navigate={~p"/exams"}
                   class={[
                     "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
-                    if(String.starts_with?(@current_path || "", "/catalog"),
+                    if(String.starts_with?(@current_path || "", "/exams"),
                       do: "bg-sky-50 text-sky-600 font-semibold",
                       else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
                     )
                   ]}
                 >
-                  Katalog
-                </.link>
-                <.link
-                  navigate={~p"/classes"}
-                  class={[
-                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
-                    if(String.starts_with?(@current_path || "", "/classes"),
-                      do: "bg-sky-50 text-sky-600 font-semibold",
-                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
-                    )
-                  ]}
-                >
-                  Klassen
+                  Prüfungen
                 </.link>
                 <.link
                   navigate={~p"/students"}
@@ -135,16 +123,28 @@ defmodule TaskyWeb.Layouts do
                   Lernende
                 </.link>
                 <.link
-                  navigate={~p"/exams"}
+                  navigate={~p"/classes"}
                   class={[
                     "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
-                    if(String.starts_with?(@current_path || "", "/exams"),
+                    if(String.starts_with?(@current_path || "", "/classes"),
                       do: "bg-sky-50 text-sky-600 font-semibold",
                       else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
                     )
                   ]}
                 >
-                  Prüfungen
+                  Klassen
+                </.link>
+                <.link
+                  navigate={~p"/catalog"}
+                  class={[
+                    "text-sm font-medium px-3.5 py-2 rounded-[10px] transition-all duration-150",
+                    if(String.starts_with?(@current_path || "", "/catalog"),
+                      do: "bg-sky-50 text-sky-600 font-semibold",
+                      else: "text-stone-500 hover:bg-sky-50 hover:text-sky-600"
+                    )
+                  ]}
+                >
+                  Katalog
                 </.link>
               <% true -> %>
             <% end %>
