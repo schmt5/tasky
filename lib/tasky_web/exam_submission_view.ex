@@ -99,7 +99,13 @@ defmodule TaskyWeb.ExamSubmissionView do
   defp maybe_add_sample_solution_section(sections, exam, opts) do
     if opts.show_sample_solution do
       sections ++
-        [build_section(:sample, "Musterlösung", doc_nodes(Exams.sample_solution_doc(exam)))]
+        [
+          build_section(
+            :sample,
+            "Musterlösung",
+            doc_nodes(Exams.sample_solution_doc_for_learner(exam))
+          )
+        ]
     else
       sections
     end

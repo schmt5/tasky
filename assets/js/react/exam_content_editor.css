@@ -650,15 +650,18 @@
     background: #ede9fe;
 }
 
-/* Solution mode: model answers (input-block contents) rendered in red so the
-   teacher visually distinguishes their model answer from the question text. */
+/* Solution mode: model answers (input-block contents) rendered in violet so the
+   teacher visually distinguishes their model answer from the question text.
+   Violet rather than red because red already means two other things inside the
+   document: the "wrong" verdict and the teacher's own annotations
+   (`.teacher-comment`). */
 .exam-editor--solution-mode .exam-editor__content .ProseMirror .lueckentext,
 .exam-editor--solution-mode .exam-editor__content .ProseMirror .answer-block {
-    color: #dc2626;
+    color: #7c3aed;
 }
 
 .exam-editor--solution-mode .exam-editor__content .ProseMirror .answer-block * {
-    color: #dc2626;
+    color: #7c3aed;
 }
 
 /* Selbstkontrolle einer Lerneinheit: das Verdikt hängt als `data-verdict` am
@@ -701,13 +704,15 @@
     background: #fef2f2;
 }
 
-/* Die Musterlösung unter der eigenen Antwort. Dieselbe rote Sprache wie im
+/* Die Musterlösung unter der eigenen Antwort. Dieselbe violette Sprache wie im
    Musterlösungs-Editor (`.exam-editor--solution-mode`), plus ein Label, damit
-   klar ist, welches der beiden Felder die Vorgabe ist. */
+   klar ist, welches der beiden Felder die Vorgabe ist. Rot steht direkt
+   daneben für das Verdikt „falsch" — die Vorgabe darf nicht wie ein Fehler
+   aussehen. */
 .exam-editor__content .ProseMirror .solution-hint {
     margin: 0.25em 0 0.75em;
     padding-left: 0.75em;
-    border-left: 3px solid #fca5a5;
+    border-left: 3px solid #c4b5fd;
 }
 
 .exam-editor__content .ProseMirror .solution-hint::before {
@@ -718,18 +723,18 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #dc2626;
+    color: #7c3aed;
 }
 
 .exam-editor__content .ProseMirror .solution-hint,
 .exam-editor__content .ProseMirror .solution-hint * {
-    color: #dc2626;
+    color: #7c3aed;
 }
 
 .exam-editor__content .ProseMirror .solution-hint .answer-block,
 .exam-editor__content .ProseMirror .solution-hint .lueckentext {
-    border-color: #fca5a5;
-    background: #fef2f2;
+    border-color: #c4b5fd;
+    background: #f5f3ff;
 }
 
 .exam-editor__content .ProseMirror .page-break {

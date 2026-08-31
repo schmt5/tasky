@@ -27,6 +27,7 @@ defmodule Tasky.Tasks.SelfCheck do
   es setzen würde.
   """
 
+  alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.StringComparator
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskSubmission
@@ -142,13 +143,8 @@ defmodule Tasky.Tasks.SelfCheck do
 
   defp verdict_for(_node, _payload, _off?), do: nil
 
-  defp accepted_answers(payload) do
-    payload
-    |> plain_text_from_nodes()
-    |> String.split(";")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-  end
+  defp accepted_answers(payload),
+    do: payload |> plain_text_from_nodes() |> AnswerVariants.split()
 
   defp checked?(node), do: node |> Map.get("attrs", %{}) |> Map.get("checked") == true
 
@@ -249,7 +245,11 @@ defmodule Tasky.Tasks.SelfCheck do
     end
   end
 
-  defp sample_for(node, ctx), do: Map.get(ctx.sample, answer_id(node))
+  # Der Anzeigepfad, und nur er: `verdict_for/3` holt sein Payload in
+  # `evaluate/2` direkt aus `sample`. Bewertet wird also weiterhin gegen jede
+  # einzelne Variante, gezeigt wird der lesbare Satz.
+  defp sample_for(node, ctx),
+    do: AnswerVariants.humanize_answer(node, Map.get(ctx.sample, answer_id(node)))
 
   ## Gemeinsame Helfer
 

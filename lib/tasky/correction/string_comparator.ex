@@ -27,6 +27,8 @@ defmodule Tasky.Correction.StringComparator do
   `correct_count / total_count * max_points`), rounded to 0.25.
   """
 
+  alias Tasky.Correction.AnswerVariants
+
   @answer_types ["answerBlock", "lueckentext", "taskItem"]
   @fuzzy_threshold 0.85
   @fuzzy_min_length 4
@@ -74,11 +76,7 @@ defmodule Tasky.Correction.StringComparator do
     if student_trimmed == "" do
       "wrong"
     else
-      accepted =
-        (sample_text || "")
-        |> String.split(";")
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
+      accepted = AnswerVariants.split(sample_text)
 
       if Enum.any?(accepted, &text_match?(student_trimmed, &1, opts)),
         do: "correct",

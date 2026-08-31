@@ -148,5 +148,38 @@ defmodule TaskyWeb.ExamSubmissionViewTest do
                show_sample_solution: false
              }) == []
     end
+
+    # Das `;` trennt mehrere gültige Antworten und ist ein reines Autorenformat.
+    # Wer die zurückgegebene Prüfung liest, kann damit nichts anfangen.
+    test "the sample solution spells out alternative answers instead of showing the `;`" do
+      content = %{
+        "type" => "doc",
+        "content" => [
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "a"},
+            "content" => [%{"type" => "paragraph"}]
+          }
+        ]
+      }
+
+      sample = %{
+        "a" => [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "pdf;.pdf"}]}
+        ]
+      }
+
+      exam = exam_fixture(attrs: %{content: content, sample_solution: sample})
+      submission = submission_with(%{content: doc("Meine Antwort")})
+
+      assert [%{key: :sample, doc_json: json}] =
+               ExamSubmissionView.sections(exam, submission, %{
+                 show_content: false,
+                 show_sample_solution: true
+               })
+
+      assert json =~ "pdf oder .pdf"
+      refute json =~ ";"
+    end
   end
 end

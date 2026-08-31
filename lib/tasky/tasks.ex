@@ -9,6 +9,7 @@ defmodule Tasky.Tasks do
   alias Tasky.Accounts.Scope
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
+  alias Tasky.Correction.AnswerVariants
   alias Tasky.Policy
   alias Tasky.Tasks.SelfCheck
   alias Tasky.Tasks.Task
@@ -1124,7 +1125,7 @@ defmodule Tasky.Tasks do
     else
       # Ohne erfasste Antworten gibt es nichts zu vergleichen — ein Dokument
       # voller ❌ wäre irreführend. Dann bleibt es bei der reinen Musterlösung.
-      sample_solution_doc(task)
+      task |> sample_solution_doc() |> AnswerVariants.humanize_doc()
     end
   end
 

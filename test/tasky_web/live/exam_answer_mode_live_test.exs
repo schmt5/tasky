@@ -32,6 +32,24 @@ defmodule TaskyWeb.ExamAnswerModeLiveTest do
       assert html =~ "Freies Dokument"
     end
 
+    test "the panel explains the mode that is currently selected", %{conn: conn} do
+      {conn, _scope} = teacher_conn(conn)
+      {:ok, view, html} = live(conn, ~p"/exams/new")
+
+      assert html =~ "Musterlösung pro Antwortfeld möglich"
+      refute html =~ "Bewertet wird das Dokument als Ganzes"
+
+      # Der Picker braucht kein eigenes Event: `phx-change` baut den Changeset
+      # neu, und `@field.value` trägt die Auswahl zurück ins Panel.
+      changed =
+        view
+        |> form("#exam-form", exam: %{answer_mode: "free_document"})
+        |> render_change()
+
+      assert changed =~ "Bewertet wird das Dokument als Ganzes"
+      refute changed =~ "Musterlösung pro Antwortfeld möglich"
+    end
+
     test "creating with free_document persists the mode", %{conn: conn} do
       {conn, scope} = teacher_conn(conn)
       {:ok, view, _html} = live(conn, ~p"/exams/new")

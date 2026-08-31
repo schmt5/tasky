@@ -144,21 +144,38 @@ defmodule TaskyWeb.ExamComponents do
         <% end %>
       </div>
 
-      <div class="md:col-span-3 rounded-xl bg-stone-50 border border-stone-100 p-5">
-        <div class="flex items-center gap-2.5 mb-3">
-          <div class="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center shrink-0">
-            <.icon name={@selected.icon} class="w-4 h-4 text-sky-500" />
-          </div>
-          <p class="text-sm font-semibold text-stone-800">{@selected.state_label}</p>
+      <.mode_description option={@selected} />
+    </div>
+    """
+  end
+
+  # Das Beschreibungs-Panel neben einer Modus-Auswahl: Icon, Nominal-Titel, ein
+  # Absatz und die Stichpunkte der gewählten Option.
+  #
+  # Erwartet eine Option in der Form von `participation_mode_options/0` bzw.
+  # `answer_mode_options/0` — die beiden Listen sind deshalb gleich geformt.
+  #
+  # Die Spaltenbreite steckt bewusst in der Komponente: beide Picker spannen
+  # dasselbe Fünfer-Grid auf, und so bleibt das Panel ein Einzeiler an der
+  # Aufrufstelle.
+  attr :option, :map, required: true
+
+  defp mode_description(assigns) do
+    ~H"""
+    <div class="md:col-span-3 rounded-xl bg-stone-50 border border-stone-100 p-5">
+      <div class="flex items-center gap-2.5 mb-3">
+        <div class="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center shrink-0">
+          <.icon name={@option.icon} class="w-4 h-4 text-sky-500" />
         </div>
-        <p class="text-sm text-stone-600 leading-relaxed">{@selected.summary}</p>
-        <ul class="mt-4 space-y-2">
-          <li :for={point <- @selected.points} class="flex items-start gap-2">
-            <.icon name="hero-check-circle-mini" class="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-            <span class="text-[13px] text-stone-600 leading-relaxed">{point}</span>
-          </li>
-        </ul>
+        <p class="text-sm font-semibold text-stone-800">{@option.state_label}</p>
       </div>
+      <p class="text-sm text-stone-600 leading-relaxed">{@option.summary}</p>
+      <ul class="mt-4 space-y-2">
+        <li :for={point <- @option.points} class="flex items-start gap-2">
+          <.icon name="hero-check-circle-mini" class="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+          <span class="text-[13px] text-stone-600 leading-relaxed">{point}</span>
+        </li>
+      </ul>
     </div>
     """
   end
@@ -176,24 +193,40 @@ defmodule TaskyWeb.ExamComponents do
   Textsorte zu versprechen, die sie nicht erzwingt.
 
   Anders als der Durchführungsmodus ist das hier ein echtes Formularfeld
-  (castable in `Exam.new_changeset/2`), deshalb `description` statt `sublabel`:
-  So passt die Liste direkt in `CoreComponents.radio_group/1`.
+  (castable in `Exam.new_changeset/2`) — die Liste ist trotzdem gleich geformt
+  wie `participation_mode_options/0`, damit `mode_description/1` beide
+  schluckt: `sublabel` ist die kurze Zeile auf der Optionskarte, `summary` und
+  `points` füllen das Panel daneben.
   """
   def answer_mode_options do
     [
       %{
         value: "answer_fields",
         label: "Antwortfelder",
+        sublabel: "Lernende schreiben nur in die Antwortfelder",
         state_label: "Prüfung mit Antwortfeldern",
-        description:
-          "Du stellst Fragen und setzt Antwortfelder. Lernende schreiben ausschliesslich in diese Felder — der Prüfungstext selbst ist gesperrt."
+        icon: "hero-rectangle-group",
+        summary:
+          "Du stellst Fragen und setzt Antwortfelder. Lernende schreiben ausschliesslich in diese Felder — der Prüfungstext selbst ist gesperrt.",
+        points: [
+          "Jedes Antwortfeld wird einzeln bewertet",
+          "Der Prüfungstext bleibt für Lernende gesperrt",
+          "Musterlösung pro Antwortfeld möglich"
+        ]
       },
       %{
         value: "free_document",
         label: "Freies Dokument",
+        sublabel: "Lernende bearbeiten das ganze Dokument",
         state_label: "Freies Dokument",
-        description:
-          "Du gibst eine Aufgabenstellung vor, Lernende bearbeiten das ganze Dokument — für Aufsätze und offene Arbeiten. Keine Antwortfelder; bewertet wird das Dokument als Ganzes."
+        icon: "hero-document-text",
+        summary:
+          "Du gibst eine Aufgabenstellung vor, Lernende bearbeiten das ganze Dokument — für Aufsätze und offene Arbeiten. Keine Antwortfelder; bewertet wird das Dokument als Ganzes.",
+        points: [
+          "Für Aufsätze, Berichte, Protokolle oder Rechnungswege",
+          "Bewertet wird das Dokument als Ganzes",
+          "Keine Musterlösung — die gibt es nur mit Antwortfeldern"
+        ]
       }
     ]
   end
@@ -201,6 +234,67 @@ defmodule TaskyWeb.ExamComponents do
   @doc "Die Option zum gegebenen Wert (fällt auf die erste zurück)."
   def answer_mode_option(value) do
     Enum.find(answer_mode_options(), hd(answer_mode_options()), &(&1.value == value))
+  end
+
+  @doc """
+  Single-Choice-Auswahl der Prüfungsart, im selben Aufbau wie
+  `participation_mode_picker/1`: links die Optionskarten, rechts die
+  Beschreibung der gewählten Option.
+
+  Anders als der Durchführungsmodus braucht die Prüfungsart kein eigenes
+  Event. Sie ist ein Formularfeld, das Formular hat `phx-change`, und der neu
+  gebaute Changeset trägt die Auswahl über `@field.value` zurück ins Panel.
+
+  Die Optionskarten sind absichtlich Zeichen für Zeichen die von
+  `CoreComponents.radio_group/1`, `id` und `name` eingeschlossen. Was
+  `radio_group/1` nicht leisten kann, ist das Panel: es ist kein Nachfahre des
+  gecheckten `<label>`, dorthin reicht `has-[:checked]:` nicht.
+  """
+  attr :field, Phoenix.HTML.FormField, required: true
+  attr :legend, :string, default: nil
+
+  def answer_mode_picker(assigns) do
+    assigns = assign(assigns, :selected, answer_mode_option(assigns.field.value))
+
+    ~H"""
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
+      <fieldset class="md:col-span-2">
+        <legend :if={@legend} class="text-sm font-medium text-stone-700 mb-2">{@legend}</legend>
+        <div class="space-y-2.5">
+          <label
+            :for={option <- answer_mode_options()}
+            class="flex items-start gap-3 cursor-pointer rounded-lg border border-stone-200 px-3.5 py-3 transition-colors duration-150 hover:bg-stone-50/60 has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/60"
+          >
+            <input
+              type="radio"
+              id={"#{@field.id}-#{option.value}"}
+              name={@field.name}
+              value={option.value}
+              checked={to_string(@field.value) == option.value}
+              class="mt-0.5 w-[18px] h-[18px] border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer shrink-0"
+            />
+            <span class="min-w-0">
+              <span class="block text-sm font-medium text-stone-700">{option.label}</span>
+              <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
+                {option.sublabel}
+              </span>
+            </span>
+          </label>
+        </div>
+        <div
+          class="tooltip tooltip-right tooltip-delayed mt-2.5"
+          data-tip="Die Prüfungsart wird beim Erstellen festgelegt."
+        >
+          <p class="inline-flex items-center gap-1.5 text-xs text-stone-400">
+            <.icon name="hero-lock-closed-mini" class="w-3.5 h-3.5" />
+            Nach dem Erstellen nicht mehr änderbar
+          </p>
+        </div>
+      </fieldset>
+
+      <.mode_description option={@selected} />
+    </div>
+    """
   end
 
   @doc "True für eine Prüfung, in der Lernende das ganze Dokument bearbeiten."

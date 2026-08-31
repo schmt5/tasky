@@ -43,8 +43,7 @@ defmodule TaskyWeb.ExamLive.Form do
 
           <p class="text-[15px] text-stone-500 max-w-[560px] leading-[1.7]">
             {if @live_action == :new,
-              do:
-                "Gib deiner neuen Prüfung einen Namen und lege fest, wie Lernende darin schreiben. Die Prüfungsart lässt sich später nicht mehr wechseln.",
+              do: "Gib deiner neuen Prüfung einen Namen und lege fest, wie Lernende darin schreiben.",
               else: "Ändere den Namen der Prüfung."}
           </p>
         </div>
@@ -62,11 +61,10 @@ defmodule TaskyWeb.ExamLive.Form do
             >
               <.input field={@form[:name]} type="text" label="Prüfungsname" required />
 
-              <.radio_group
+              <ExamComponents.answer_mode_picker
                 :if={@live_action == :new}
                 field={@form[:answer_mode]}
                 legend="Wie schreiben Lernende?"
-                options={ExamComponents.answer_mode_options()}
               />
 
               <div class="flex items-center gap-3 pt-4 border-t border-stone-100">

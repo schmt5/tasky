@@ -431,7 +431,7 @@ defmodule TaskyWeb.ExamLive.Content do
                     <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
                       Musterlösung
                     </p>
-                    <p class="font-mono text-sm text-red-600 mt-0.5">
+                    <p class="font-mono text-sm text-violet-600 mt-0.5">
                       rasch; flink; zügig; geschwind
                     </p>
                   </div>
@@ -468,6 +468,14 @@ defmodule TaskyWeb.ExamLive.Content do
                     <span class="text-stone-400 shrink-0">•</span>
                     <span>
                       Leerzeichen rund um die Alternativen und leere Abschnitte werden ignoriert.
+                    </span>
+                  </li>
+                  <li class="flex gap-2">
+                    <span class="text-stone-400 shrink-0">•</span>
+                    <span>
+                      Teilnehmende sehen das Semikolon nie. Wird ihnen die Musterlösung gezeigt,
+                      steht dort <span class="font-medium text-stone-700">„rasch, flink, zügig
+                      oder geschwind"</span>.
                     </span>
                   </li>
                   <li class="flex gap-2">

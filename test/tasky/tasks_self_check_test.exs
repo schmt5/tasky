@@ -227,4 +227,48 @@ defmodule Tasky.TasksSelfCheckTest do
       refute hint |> Jason.encode!() |> String.contains?("so nicht!")
     end
   end
+
+  describe "mehrere gültige Antworten" do
+    test "das Semikolon ist ein Autorenformat und darf nicht in der Anzeige landen" do
+      task = task(%{"a" => [text_paragraph("pdf;.pdf")]})
+      base = doc([answer_block("a", ".pdf")])
+
+      %{"content" => [_answer, hint]} = SelfCheck.review_doc(task, base, %{"a" => "correct"})
+
+      json = Jason.encode!(hint)
+      assert String.contains?(json, "pdf oder .pdf")
+      refute String.contains?(json, ";")
+    end
+
+    test "im Lückentext liest sich der Zwilling als Satz" do
+      task = task(%{"a" => [%{"type" => "text", "text" => "Bern;Berne"}]})
+      base = doc([lueckentext_paragraph("a", "Berne")])
+
+      %{"content" => [_paragraph, hint]} = SelfCheck.review_doc(task, base, %{"a" => "correct"})
+
+      json = Jason.encode!(hint)
+      assert String.contains?(json, "Die Hauptstadt ist ")
+      assert String.contains?(json, "Bern oder Berne")
+      refute String.contains?(json, ";")
+    end
+
+    test "die Anzeige ändert die Bewertung nicht — jede Variante zählt weiter" do
+      task = task(%{"a" => [text_paragraph("pdf;.pdf")], "b" => [text_paragraph("pdf;.pdf")]})
+
+      assert %{verdicts: verdicts, correct: 2, total: 2} =
+               SelfCheck.evaluate(
+                 task,
+                 doc([answer_block("a", "pdf"), answer_block("b", ".pdf")])
+               )
+
+      assert verdicts == %{"a" => "correct", "b" => "correct"}
+    end
+
+    test "eine Antwort, die keiner Variante entspricht, bleibt falsch" do
+      task = task(%{"a" => [text_paragraph("pdf;.pdf")]})
+
+      assert %{verdicts: %{"a" => "wrong"}} =
+               SelfCheck.evaluate(task, doc([answer_block("a", "docx")]))
+    end
+  end
 end

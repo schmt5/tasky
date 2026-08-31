@@ -86,7 +86,7 @@ defmodule TaskyWeb.ExamLive.Show do
                  als Feststellung statt als Bedienelement. --%>
             <span
               class="tooltip tooltip-bottom tooltip-delayed text-[13px] text-stone-400 flex items-center gap-1"
-              data-tip={@answer_mode_option.description}
+              data-tip={@answer_mode_option.summary}
             >
               <.icon name="hero-pencil-square" class="w-3.5 h-3.5" />
               {@answer_mode_option.state_label}

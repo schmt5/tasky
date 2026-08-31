@@ -24,14 +24,15 @@ export const HIGHLIGHT_COLORS: ColorOption[] = [
   { name: "Lila", value: "#e9d5ff" },
 ];
 
-// "Rot" is intentionally omitted — red is reserved for sample-solution model
-// answers (rendered red automatically), so teachers can't pick it for content.
+// "Rot" and "Lila" are intentionally omitted. Both are already spoken for
+// inside the document and would be indistinguishable from body text a teacher
+// coloured by hand: violet renders sample-solution model answers, red renders
+// the "wrong" verdict and the teacher's own annotations (`.teacher-comment`).
 export const TEXT_COLORS: ColorOption[] = [
   { name: "Orange", value: "#ea580c" },
   { name: "Gelb", value: "#ca8a04" },
   { name: "Grün", value: "#16a34a" },
   { name: "Blau", value: "#2563eb" },
-  { name: "Lila", value: "#9333ea" },
 ];
 
 // Callout ("Hinweisbox") palette. Only the token lands in the document; the

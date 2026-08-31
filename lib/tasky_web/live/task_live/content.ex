@@ -103,7 +103,8 @@ defmodule TaskyWeb.TaskLive.Content do
               <p class="text-xs text-stone-500 mt-1 leading-relaxed">
                 Geprüfte Felder vergleicht Tasky nach der Freigabe automatisch mit der
                 Musterlösung. Gross-/Kleinschreibung wird ignoriert, mehrere gültige
-                Antworten trennst du mit <code class="font-mono">;</code>.
+                Antworten trennst du mit <code class="font-mono">;</code> — Lernenden werden
+                sie als „pdf oder .pdf" gezeigt.
               </p>
             </div>
 

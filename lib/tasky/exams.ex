@@ -10,6 +10,7 @@ defmodule Tasky.Exams do
   alias Tasky.Accounts.User
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
+  alias Tasky.Correction.AnswerVariants
   alias Tasky.Exams.Exam
   alias Tasky.Exams.ExamAttachment
   alias Tasky.Exams.ExamSubmission
@@ -2307,11 +2308,7 @@ defmodule Tasky.Exams do
     Enum.map(exam_block_indices, fn index ->
       sample_text = Map.get(sample_text_by_index, index)
 
-      sample_answers =
-        (sample_text || "")
-        |> String.split(";")
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
+      sample_answers = AnswerVariants.split(sample_text)
 
       groups = build_answer_groups(per_submission_blocks, index, sample_answers, opts)
 
@@ -2424,6 +2421,18 @@ defmodule Tasky.Exams do
   def sample_solution_doc(%Exam{} = exam) do
     AnswerKey.merge(exam.content || %{}, exam.sample_solution || %{})
   end
+
+  @doc """
+  Dieselbe Musterlösung, aber für Teilnehmende statt für die Korrektur.
+
+  Der einzige Unterschied ist das `;`: mehrere gültige Antworten werden zu
+  `"pdf oder .pdf"` aufgelöst (siehe `Tasky.Correction.AnswerVariants`). Das
+  darf **nicht** in `sample_solution_doc/1` selbst passieren — daran hängen die
+  Autokorrektur und die Editoren der Lehrperson, und beide brauchen das rohe
+  Trennzeichen.
+  """
+  def sample_solution_doc_for_learner(%Exam{} = exam),
+    do: exam |> sample_solution_doc() |> AnswerVariants.humanize_doc()
 
   @doc """
   Subscribes to correction-grid events for a given exam ID.
