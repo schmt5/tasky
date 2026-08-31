@@ -664,9 +664,10 @@
     color: #7c3aed;
 }
 
-/* Selbstkontrolle einer Lerneinheit: das Verdikt hängt als `data-verdict` am
-   Antwortknoten (siehe `Tasky.Tasks.SelfCheck`), das Zeichen setzt das
-   Stylesheet. So bleibt das Dokument frei von ✅/❌-Text. */
+/* Vergleichsansicht (Selbstkontrolle einer Lerneinheit und zurückgegebene
+   Prüfung): das Verdikt hängt als `data-verdict` am Antwortknoten (siehe
+   `Tasky.Correction.SolutionHints`), das Zeichen setzt das Stylesheet. So
+   bleibt das Dokument frei von ✅/❌-Text. */
 .exam-editor__content .ProseMirror .answer-block[data-verdict] {
     position: relative;
     padding-right: 2.25em;
@@ -690,6 +691,10 @@
     content: "\2705";
 }
 
+.exam-editor__content .ProseMirror [data-verdict="half"]::after {
+    content: "\1F7E1";
+}
+
 .exam-editor__content .ProseMirror [data-verdict="wrong"]::after {
     content: "\274C";
 }
@@ -697,6 +702,13 @@
 .exam-editor__content .ProseMirror .answer-block[data-verdict="correct"] {
     border-color: #34d399;
     background: #ecfdf5;
+}
+
+/* Teilpunkte gibt es nur in Prüfungen (`Tasky.Grading.marker_verdict/2`), in
+   der Selbstkontrolle einer Lerneinheit kann `half` nicht entstehen. */
+.exam-editor__content .ProseMirror .answer-block[data-verdict="half"] {
+    border-color: #fcd34d;
+    background: #fffbeb;
 }
 
 .exam-editor__content .ProseMirror .answer-block[data-verdict="wrong"] {

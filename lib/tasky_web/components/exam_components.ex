@@ -358,7 +358,8 @@ defmodule TaskyWeb.ExamComponents do
           %{
             key: :show_sample_solution,
             label: "Musterlösung anzeigen",
-            description: "Hängt die vollständige Musterlösung im Anschluss an.",
+            description:
+              "Zeigt die Musterlösung direkt unter jedem Antwortfeld. Ohne angezeigten Inhalt hängt sie als eigenes Dokument an.",
             requires: nil
           }
         ]

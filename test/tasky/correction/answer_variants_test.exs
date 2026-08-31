@@ -34,13 +34,13 @@ defmodule Tasky.Correction.AnswerVariantsTest do
       assert AnswerVariants.humanize("pdf") == "pdf"
     end
 
-    test "zwei Alternativen werden mit oder verbunden" do
-      assert AnswerVariants.humanize("pdf;.pdf") == "pdf oder .pdf"
+    test "zwei Alternativen werden mit Komma verbunden" do
+      assert AnswerVariants.humanize("pdf;.pdf") == "pdf, .pdf"
     end
 
-    test "mehr als zwei: Kommas, das letzte mit oder" do
+    test "mehr als zwei: alle mit Komma" do
       assert AnswerVariants.humanize("rasch; flink; zügig; geschwind") ==
-               "rasch, flink, zügig oder geschwind"
+               "rasch, flink, zügig, geschwind"
     end
 
     test "ohne Alternativen bleibt nichts übrig" do
@@ -49,19 +49,19 @@ defmodule Tasky.Correction.AnswerVariantsTest do
   end
 
   describe "humanize_answer/2" do
-    test "answerBlock: der Satz steht wieder in einem Paragraphen" do
+    test "answerBlock: die Liste steht wieder in einem Paragraphen" do
       nodes = [paragraph("pdf;.pdf")]
 
       assert AnswerVariants.humanize_answer(%{"type" => "answerBlock"}, nodes) == [
-               paragraph("pdf oder .pdf")
+               paragraph("pdf, .pdf")
              ]
     end
 
-    test "lueckentext: der Satz bleibt inline" do
+    test "lueckentext: die Liste bleibt inline" do
       nodes = [text("Bern;Berne")]
 
       assert AnswerVariants.humanize_answer(%{"type" => "lueckentext"}, nodes) == [
-               text("Bern oder Berne")
+               text("Bern, Berne")
              ]
     end
 
@@ -100,13 +100,13 @@ defmodule Tasky.Correction.AnswerVariantsTest do
       assert %{"content" => [heading, answer, sentence]} = AnswerVariants.humanize_doc(doc)
 
       assert heading == %{"type" => "heading", "content" => [text("Frage 1")]}
-      assert answer == %{"type" => "answerBlock", "content" => [paragraph("pdf oder .pdf")]}
+      assert answer == %{"type" => "answerBlock", "content" => [paragraph("pdf, .pdf")]}
 
       assert sentence == %{
                "type" => "paragraph",
                "content" => [
                  text("Die Hauptstadt ist "),
-                 %{"type" => "lueckentext", "content" => [text("Bern oder Berne")]}
+                 %{"type" => "lueckentext", "content" => [text("Bern, Berne")]}
                ]
              }
     end

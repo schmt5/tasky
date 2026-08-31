@@ -18,8 +18,11 @@ defmodule Tasky.Correction.AnswerVariants do
   ## Anzeige
 
   `humanize_answer/2` schreibt das gespeicherte Payload eines Antwortknotens
-  um: `"pdf;.pdf"` wird zu `"pdf oder .pdf"`, vier Varianten werden zu
-  `"rasch, flink, zügig oder geschwind"`. Zwei bewusste Grenzen:
+  um: `"pdf;.pdf"` wird zu `"pdf, .pdf"`, vier Varianten werden zu
+  `"rasch, flink, zügig, geschwind"`. Bewusst nur Kommas und kein „oder":
+  in Sprachprüfungen ist die Musterlösung eine Liste gültiger Formen, kein
+  deutscher Satz — `"sell oder selling"` liest sich dort falsch. Zwei bewusste
+  Grenzen:
 
     * **Nur bei mehreren Varianten.** Enthält der Text kein `;`, bleibt die
       Knotenliste unangetastet und Formatierungen überleben. Erst ab zwei
@@ -56,13 +59,13 @@ defmodule Tasky.Correction.AnswerVariants do
   def split(_text), do: []
 
   @doc """
-  Dieselben Alternativen als deutscher Satz.
+  Dieselben Alternativen als kommagetrennte Liste.
 
       iex> AnswerVariants.humanize("pdf;.pdf")
-      "pdf oder .pdf"
+      "pdf, .pdf"
 
       iex> AnswerVariants.humanize("rasch; flink; zügig; geschwind")
-      "rasch, flink, zügig oder geschwind"
+      "rasch, flink, zügig, geschwind"
   """
   @spec humanize(String.t() | nil) :: String.t()
   def humanize(text) do
@@ -104,12 +107,7 @@ defmodule Tasky.Correction.AnswerVariants do
 
   ## Intern
 
-  defp join([single]), do: single
-
-  defp join(variants) do
-    {init, [last]} = Enum.split(variants, -1)
-    Enum.join(init, ", ") <> " oder " <> last
-  end
+  defp join(variants), do: Enum.join(variants, ", ")
 
   defp rewrite(nodes, shape) do
     case nodes |> plain_text() |> split() do

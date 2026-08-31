@@ -236,7 +236,7 @@ defmodule Tasky.TasksSelfCheckTest do
       %{"content" => [_answer, hint]} = SelfCheck.review_doc(task, base, %{"a" => "correct"})
 
       json = Jason.encode!(hint)
-      assert String.contains?(json, "pdf oder .pdf")
+      assert String.contains?(json, "pdf, .pdf")
       refute String.contains?(json, ";")
     end
 
@@ -248,7 +248,7 @@ defmodule Tasky.TasksSelfCheckTest do
 
       json = Jason.encode!(hint)
       assert String.contains?(json, "Die Hauptstadt ist ")
-      assert String.contains?(json, "Bern oder Berne")
+      assert String.contains?(json, "Bern, Berne")
       refute String.contains?(json, ";")
     end
 

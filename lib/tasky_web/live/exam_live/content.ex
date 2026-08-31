@@ -474,8 +474,8 @@ defmodule TaskyWeb.ExamLive.Content do
                     <span class="text-stone-400 shrink-0">•</span>
                     <span>
                       Teilnehmende sehen das Semikolon nie. Wird ihnen die Musterlösung gezeigt,
-                      steht dort <span class="font-medium text-stone-700">„rasch, flink, zügig
-                      oder geschwind"</span>.
+                      steht dort <span class="font-medium text-stone-700">„rasch, flink, zügig,
+                      geschwind"</span>.
                     </span>
                   </li>
                   <li class="flex gap-2">

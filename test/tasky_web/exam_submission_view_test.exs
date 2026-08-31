@@ -20,6 +20,33 @@ defmodule TaskyWeb.ExamSubmissionViewTest do
 
   defp exam, do: exam_fixture()
 
+  # Ein Antwortfeld braucht eine Frage-Überschrift über sich: erst die macht es
+  # zum Teil eines Parts (siehe `Tasky.ExamDoc.split_content_into_parts/2`).
+  defp question_doc(answer \\ "") do
+    %{
+      "type" => "doc",
+      "content" => [
+        %{
+          "type" => "heading",
+          "attrs" => %{"level" => 3, "partId" => "q-1"},
+          "content" => [%{"type" => "text", "text" => "Frage 1"}]
+        },
+        %{
+          "type" => "answerBlock",
+          "attrs" => %{"answerId" => "a"},
+          "content" => [
+            %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => answer}]}
+          ]
+        }
+      ]
+    }
+  end
+
+  defp sample,
+    do: %{
+      "a" => [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "pdf;.pdf"}]}]
+    }
+
   describe "normalize_options/1" do
     test "atom and string keys produce the same result" do
       atoms = %{show_content: true, show_correction: true, show_sample_solution: false}
@@ -129,15 +156,58 @@ defmodule TaskyWeb.ExamSubmissionViewTest do
              }) == []
     end
 
-    test "the sample solution comes after the content and is headed" do
-      exam = exam_fixture(attrs: %{content: doc("Frage"), sample_solution: %{}})
-      submission = submission_with(%{content: doc("Meine Antwort")})
+    # Die Musterlösung gehört ans Antwortfeld, nicht in ein zweites Dokument:
+    # sonst muss zum Vergleichen gescrollt und zugeordnet werden.
+    test "the sample solution sits inside the content section, not next to it" do
+      exam = exam_fixture(attrs: %{content: question_doc(), sample_solution: sample()})
+      submission = submission_with(%{content: question_doc("pdf")})
 
-      assert [%{key: :content}, %{key: :sample, heading: "Musterlösung"}] =
+      assert [%{key: :content, heading: nil, doc_json: json}] =
                ExamSubmissionView.sections(exam, submission, %{
                  show_content: true,
                  show_sample_solution: true
                })
+
+      assert json =~ "solutionHint"
+      assert json =~ "pdf, .pdf"
+    end
+
+    test "the standalone section is what remains when the content is hidden" do
+      exam = exam_fixture(attrs: %{content: question_doc(), sample_solution: sample()})
+      submission = submission_with(%{content: question_doc("pdf")})
+
+      assert [%{key: :sample, heading: "Musterlösung", doc_json: json}] =
+               ExamSubmissionView.sections(exam, submission, %{
+                 show_content: false,
+                 show_sample_solution: true
+               })
+
+      refute json =~ "solutionHint"
+    end
+
+    # Das Verdikt *ist* die Korrektur — es grün/rot zu zeigen, während die
+    # Korrektur ausgeblendet ist, würde `show_correction` aushebeln.
+    test "the verdict rides along only when the correction is released" do
+      exam = exam_fixture(attrs: %{content: question_doc(), sample_solution: sample()})
+
+      submission =
+        submission_with(%{
+          content: question_doc("pdf"),
+          corrected_content: question_doc("pdf ✅"),
+          block_verdicts: %{"a" => "correct"}
+        })
+
+      opts = %{show_content: true, show_sample_solution: true}
+
+      [%{doc_json: without}] = ExamSubmissionView.sections(exam, submission, opts)
+      refute without =~ "verdict"
+
+      [%{doc_json: with_correction}] =
+        ExamSubmissionView.sections(exam, submission, Map.put(opts, :show_correction, true))
+
+      assert with_correction =~ ~s("verdict":"correct")
+      # Der Marker kommt aus dem Stylesheet; als Text stünde er doppelt da.
+      refute with_correction =~ "✅"
     end
 
     test "no options means no sections" do
@@ -178,7 +248,7 @@ defmodule TaskyWeb.ExamSubmissionViewTest do
                  show_sample_solution: true
                })
 
-      assert json =~ "pdf oder .pdf"
+      assert json =~ "pdf, .pdf"
       refute json =~ ";"
     end
   end

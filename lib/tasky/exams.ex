@@ -11,6 +11,7 @@ defmodule Tasky.Exams do
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.SolutionHints
   alias Tasky.Exams.Exam
   alias Tasky.Exams.ExamAttachment
   alias Tasky.Exams.ExamSubmission
@@ -2426,13 +2427,80 @@ defmodule Tasky.Exams do
   Dieselbe Musterlösung, aber für Teilnehmende statt für die Korrektur.
 
   Der einzige Unterschied ist das `;`: mehrere gültige Antworten werden zu
-  `"pdf oder .pdf"` aufgelöst (siehe `Tasky.Correction.AnswerVariants`). Das
+  `"pdf, .pdf"` aufgelöst (siehe `Tasky.Correction.AnswerVariants`). Das
   darf **nicht** in `sample_solution_doc/1` selbst passieren — daran hängen die
   Autokorrektur und die Editoren der Lehrperson, und beide brauchen das rohe
   Trennzeichen.
   """
   def sample_solution_doc_for_learner(%Exam{} = exam),
     do: exam |> sample_solution_doc() |> AnswerVariants.humanize_doc()
+
+  @doc """
+  Die Verdikte einer Abgabe, keyed by `answerId`, für die Anzeige bei Lernenden.
+
+  `"correct"`, `"half"` oder `"wrong"` — dasselbe Vokabular, das
+  `Tasky.Correction.SolutionHints` an den Antwortknoten schreibt. Manuell
+  vergebene Teilpunkte werden dafür über `Grading.marker_verdict/2` aufgelöst,
+  mit dem Blockmaximum aus `resolve_block_points/3`: derselbe Pfad, den auch
+  `set_block_verdict/5` beim Setzen der ✅/🟡/❌ nimmt.
+
+  `block_verdicts` ist die verbindliche Quelle. Der Textmarker im korrigierten
+  Dokument dient nur als Rückfall für Blöcke, die noch aus einer Bulk-Korrektur
+  stammen und deren Verdikt nie einzeln gespeichert wurde.
+  """
+  @spec learner_verdicts(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
+  def learner_verdicts(%Exam{} = exam, %ExamSubmission{} = submission) do
+    explicit = submission.block_verdicts || %{}
+
+    submission
+    |> correction_content()
+    |> split_content_into_parts(exam.answer_mode)
+    |> Enum.reduce(%{}, fn part, acc ->
+      blocks = NodePatcher.list_answer_blocks(part.nodes)
+      points = resolve_block_points(exam, part.id, blocks)
+
+      Enum.reduce(blocks, acc, fn entry, acc ->
+        verdict =
+          (entry.answer_id && Map.get(explicit, entry.answer_id)) || entry.inferred_verdict
+
+        if is_binary(entry.answer_id) and not is_nil(verdict) do
+          block_max = points && Map.get(points, entry.index)
+          Map.put(acc, entry.answer_id, Grading.marker_verdict(verdict, block_max))
+        else
+          acc
+        end
+      end)
+    end)
+  end
+
+  @doc """
+  Das zurückgegebene Dokument mit der Musterlösung an den Antwortfeldern.
+
+  `base_doc` ist, was die/der Lernende ohnehin zu sehen bekäme — die Korrektur
+  der Lehrperson oder die eigenen Antworten. `verdicts` ist `learner_verdicts/2`
+  oder `%{}`, wenn die Korrektur nicht freigegeben ist.
+
+  Sobald Verdikte mitkommen, fallen die Textmarker ✅/🟡/❌ weg: das Verdikt hängt
+  dann als Attribut am Knoten und wird vom Stylesheet gezeichnet. Stünden beide
+  da, hätte jedes korrigierte Feld zwei Marker. Ohne Verdikte wird der Text
+  nicht angefasst — dort gibt es keine Korrektur, und was die/der Lernende
+  geschrieben hat, bleibt stehen.
+  """
+  @spec return_doc_for_learner(Exam.t(), map() | nil, map()) :: map()
+  def return_doc_for_learner(%Exam{} = exam, base_doc, verdicts) when is_map(verdicts) do
+    base_doc = base_doc || %{}
+
+    base_doc
+    |> strip_markers(verdicts)
+    |> SolutionHints.annotate(exam.sample_solution, verdicts)
+  end
+
+  defp strip_markers(doc, verdicts) when map_size(verdicts) == 0, do: doc
+
+  defp strip_markers(doc, _verdicts) do
+    nodes = Map.get(doc, "content", []) || []
+    Map.put(doc, "content", NodePatcher.rewrite_markers(nodes, %{}))
+  end
 
   @doc """
   Subscribes to correction-grid events for a given exam ID.

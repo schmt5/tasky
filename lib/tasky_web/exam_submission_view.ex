@@ -11,6 +11,12 @@ defmodule TaskyWeb.ExamSubmissionView do
   columns. Normalizing at the single entry point removes a class of bug that
   type-checks and renders an empty page.
 
+  Die Musterlösung steht dabei am einzelnen Antwortfeld (siehe
+  `Tasky.Exams.return_doc_for_learner/3`), genau wie in der Selbstkontrolle
+  einer Lerneinheit. Als eigenes Dokument mit Überschrift erscheint sie nur
+  noch, wenn der Inhalt gar nicht gezeigt wird — dann gibt es keine Felder, an
+  die sie gehören könnte.
+
   Web layer rather than `lib/tasky`: no `Repo` involved, and the "Musterlösung"
   heading is UI copy.
   """
@@ -43,7 +49,7 @@ defmodule TaskyWeb.ExamSubmissionView do
     opts = normalize_options(opts)
 
     []
-    |> maybe_add_content_section(submission, opts)
+    |> maybe_add_content_section(exam, submission, opts)
     |> maybe_add_sample_solution_section(exam, opts)
   end
 
@@ -80,24 +86,41 @@ defmodule TaskyWeb.ExamSubmissionView do
     end)
   end
 
-  # The answers, optionally with the correction markers the teacher set.
-  defp maybe_add_content_section(sections, submission, opts) do
+  # The answers, optionally with the correction markers the teacher set and,
+  # when the sample solution is released, the model answer under each field.
+  defp maybe_add_content_section(sections, exam, submission, opts) do
     if opts.show_content do
-      nodes =
+      doc =
         if opts.show_correction do
-          doc_nodes(submission.corrected_content || submission.content)
+          submission.corrected_content || submission.content
         else
-          doc_nodes(submission.content)
+          submission.content
         end
 
-      sections ++ [build_section(:content, nil, nodes)]
+      doc =
+        if opts.show_sample_solution,
+          do: with_sample_solution(exam, submission, doc, opts),
+          else: doc
+
+      sections ++ [build_section(:content, nil, doc_nodes(doc))]
     else
       sections
     end
   end
 
+  # Die Musterlösung steht am Antwortfeld statt in einem zweiten Dokument. Das
+  # Verdikt kommt nur mit, wenn auch die Korrektur freigegeben ist — es *ist*
+  # die Korrektur, und `show_correction` entscheidet über sie.
+  defp with_sample_solution(exam, submission, doc, opts) do
+    verdicts = if opts.show_correction, do: Exams.learner_verdicts(exam, submission), else: %{}
+
+    Exams.return_doc_for_learner(exam, doc, verdicts)
+  end
+
+  # Nur noch als Rückfall: ohne angezeigten Inhalt gibt es kein Antwortdokument,
+  # an das sich die Musterlösung hängen liesse.
   defp maybe_add_sample_solution_section(sections, exam, opts) do
-    if opts.show_sample_solution do
+    if opts.show_sample_solution and not opts.show_content do
       sections ++
         [
           build_section(

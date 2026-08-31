@@ -14,6 +14,60 @@ defmodule TaskyWeb.Student.ExamsLiveTest do
     %{teacher: teacher, scope: scope, exam: exam}
   end
 
+  # Eine zurückgabefertige Prüfung mit einem beantworteten Antwortfeld und einer
+  # Musterlösung, die mehrere Varianten zulässt.
+  defp answered_exam(conn) do
+    teacher = user_fixture(%{role: "teacher"})
+    scope = user_scope_fixture(teacher)
+
+    exam =
+      exam_fixture(
+        scope: scope,
+        status: "running",
+        participation_mode: "assigned",
+        attrs: %{
+          content: answer_doc(""),
+          sample_solution: %{
+            "a" => [
+              %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "pdf;.pdf"}]}
+            ]
+          }
+        }
+      )
+
+    student = user_fixture(%{role: "student"})
+    {:ok, submission} = Exams.assign_student(scope, exam, student.id)
+    {:ok, submission} = Exams.update_exam_submission_content(submission, answer_doc("sello"))
+    {:ok, submission} = Exams.submit_exam_submission(submission)
+
+    %{
+      conn: log_in_user(conn, student),
+      scope: scope,
+      exam: finish(scope, exam),
+      submission: submission
+    }
+  end
+
+  defp answer_doc(answer) do
+    %{
+      "type" => "doc",
+      "content" => [
+        %{
+          "type" => "heading",
+          "attrs" => %{"level" => 3, "partId" => "q-1"},
+          "content" => [%{"type" => "text", "text" => "Frage 1"}]
+        },
+        %{
+          "type" => "answerBlock",
+          "attrs" => %{"answerId" => "a"},
+          "content" => [
+            %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => answer}]}
+          ]
+        }
+      ]
+    }
+  end
+
   defp finish(scope, exam) do
     {:ok, exam} = Exams.update_exam_status(scope, exam, "finished")
     exam
@@ -145,13 +199,34 @@ defmodule TaskyWeb.Student.ExamsLiveTest do
       refute html =~ "Musterlösung"
     end
 
-    test "adds the sample solution when released", %{conn: conn, scope: scope, exam: exam} do
+    # Die Musterlösung steht am Antwortfeld statt in einem zweiten Dokument. Sie
+    # reist als `solutionHint` im Payload des Viewers mit; die Beschriftung
+    # „Musterlösung" setzt das Stylesheet, sie steht darum nicht im HTML.
+    test "hangs the sample solution under the answered field", %{conn: conn} do
+      %{conn: conn, scope: scope, exam: exam} = answered_exam(conn)
+
       {:ok, _} =
         Exams.return_exam(scope, exam, %{show_content: true, show_sample_solution: true})
 
       {:ok, _view, html} = live(conn, ~p"/student/exams/#{exam.id}")
 
+      assert html =~ "solutionHint"
+      assert html =~ "pdf, .pdf"
+      refute html =~ "Musterlösung"
+    end
+
+    # Ohne angezeigten Inhalt gibt es kein Antwortfeld, an das sie gehören
+    # könnte — dann bleibt es beim eigenen Dokument samt Überschrift.
+    test "falls back to a section of its own when the content is hidden", %{conn: conn} do
+      %{conn: conn, scope: scope, exam: exam} = answered_exam(conn)
+
+      {:ok, _} =
+        Exams.return_exam(scope, exam, %{show_content: false, show_sample_solution: true})
+
+      {:ok, _view, html} = live(conn, ~p"/student/exams/#{exam.id}")
+
       assert html =~ "Musterlösung"
+      refute html =~ "solutionHint"
     end
 
     test "hides points and mark when they were not released", %{
