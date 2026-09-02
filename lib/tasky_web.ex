@@ -17,7 +17,9 @@ defmodule TaskyWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
+  # `compat` holds hand-written ES5 that must never pass through esbuild — see
+  # priv/static/compat/browser-check.js for why it cannot live in the bundle.
+  def static_paths, do: ~w(assets compat fonts images favicon.ico robots.txt)
 
   def router do
     quote do
