@@ -119,18 +119,29 @@ defmodule TaskyWeb.ExamLive.Grading do
             <table class="w-full text-left border-collapse">
               <thead class="bg-stone-50 border-b border-stone-100">
                 <tr>
-                  <th class="px-6 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                    Teilnehmer:in
-                  </th>
-                  <th class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide text-right">
-                    Punkte
-                  </th>
-                  <th class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide text-right">
-                    Berechnete Note
-                  </th>
-                  <th class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide text-right">
-                    Note
-                  </th>
+                  <.sortable_th
+                    field={:firstname}
+                    label="Vorname"
+                    sort={@sort}
+                    exam={@exam}
+                    class="px-6"
+                  />
+                  <.sortable_th field={:lastname} label="Nachname" sort={@sort} exam={@exam} />
+                  <.sortable_th
+                    field={:points}
+                    label="Punkte"
+                    sort={@sort}
+                    exam={@exam}
+                    align="right"
+                  />
+                  <.sortable_th
+                    field={:calculated_mark}
+                    label="Berechnete Note"
+                    sort={@sort}
+                    exam={@exam}
+                    align="right"
+                  />
+                  <.sortable_th field={:mark} label="Note" sort={@sort} exam={@exam} align="right" />
                 </tr>
               </thead>
               <tbody class="divide-y divide-stone-100">
@@ -139,9 +150,14 @@ defmodule TaskyWeb.ExamLive.Grading do
                     <div class="flex items-center gap-3">
                       <.participant_avatar person={row.submission} />
                       <span class="text-sm font-semibold text-stone-800">
-                        {row.submission.firstname} {row.submission.lastname}
+                        {row.submission.firstname}
                       </span>
                     </div>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class="text-sm font-semibold text-stone-800">
+                      {row.submission.lastname}
+                    </span>
                   </td>
                   <td class="px-4 py-3 text-right">
                     <span class="font-mono text-sm font-semibold text-stone-700">
@@ -341,6 +357,69 @@ defmodule TaskyWeb.ExamLive.Grading do
     """
   end
 
+  attr :field, :atom, required: true
+  attr :label, :string, required: true
+  attr :sort, :any, required: true, doc: "the active {field, direction} pair"
+  attr :exam, :map, required: true
+  attr :align, :string, default: "left", values: ~w(left right)
+  attr :class, :any, default: "px-4"
+
+  defp sortable_th(assigns) do
+    {active_field, active_dir} = assigns.sort
+    active? = active_field == assigns.field
+
+    assigns =
+      assigns
+      |> assign(:active?, active?)
+      |> assign(:dir, active_dir)
+      # A click on the active column flips its direction; every other column
+      # starts ascending.
+      |> assign(:next_dir, if(active? and active_dir == :asc, do: :desc, else: :asc))
+
+    ~H"""
+    <th
+      scope="col"
+      aria-sort={aria_sort(@active?, @dir)}
+      class={[
+        "py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide",
+        @class,
+        @align == "right" && "text-right"
+      ]}
+    >
+      <%!-- A patch link rather than phx-click: the sort lands in the URL and
+           so survives a reload and a reconnect. --%>
+      <.link
+        id={"sort-#{@field}"}
+        patch={~p"/exams/#{@exam}/correction/grading?#{[sort: @field, dir: @next_dir]}"}
+        class={[
+          "group inline-flex items-center gap-1 hover:text-stone-700 transition-colors duration-150",
+          @align == "right" && "justify-end",
+          @active? && "text-stone-700"
+        ]}
+      >
+        {@label}
+        <.icon
+          name={if @active?, do: sort_icon(@dir), else: "hero-chevron-up-down"}
+          class={[
+            "w-3.5 h-3.5 shrink-0",
+            if(@active?,
+              do: "text-stone-500",
+              else: "text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            )
+          ]}
+        />
+      </.link>
+    </th>
+    """
+  end
+
+  defp aria_sort(true, :desc), do: "descending"
+  defp aria_sort(true, _asc), do: "ascending"
+  defp aria_sort(_inactive, _dir), do: "none"
+
+  defp sort_icon(:desc), do: "hero-chevron-down"
+  defp sort_icon(_asc), do: "hero-chevron-up"
+
   attr :row, :map, required: true
   attr :step, :string, required: true
 
@@ -404,11 +483,11 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   @impl true
-  def mount(%{"id" => id}, _session, socket) do
+  def mount(%{"id" => id} = params, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
 
     if Exams.mark_step_configured?(exam) do
-      {:ok, mount_configured(socket, exam)}
+      {:ok, mount_configured(socket, exam, params)}
     else
       # The gate sits here rather than on the two "Zur Benotung" buttons, so a
       # bookmark or a pasted link walks through the decision as well — and
@@ -417,8 +496,8 @@ defmodule TaskyWeb.ExamLive.Grading do
     end
   end
 
-  defp mount_configured(socket, exam) do
-    submissions = load_sorted_submissions(exam)
+  defp mount_configured(socket, exam, params) do
+    submissions = Exams.list_exam_submissions(exam)
     sample_solution_total = sum_sample_solution_points(exam)
     effective_max_points = exam.grading_max_points || sample_solution_total
 
@@ -430,7 +509,9 @@ defmodule TaskyWeb.ExamLive.Grading do
     |> assign(:submissions, submissions)
     |> assign(:sample_solution_total, sample_solution_total)
     |> assign(:effective_max_points, effective_max_points)
-    |> assign(:rows, build_rows(exam, submissions))
+    # Sorted here and not only in handle_params/3: should that call not
+    # happen, :rows and :sort are set all the same.
+    |> apply_sort(params)
     |> assign(:pdf_enabled, Tasky.PDF.Gotenberg.enabled?())
     |> assign(:show_export_modal, false)
     |> assign(:export_options, %{
@@ -463,6 +544,17 @@ defmodule TaskyWeb.ExamLive.Grading do
         }
       end
     )
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    # On the redirect path — mark_step not configured — mount/3 loaded
+    # nothing, so there is nothing to sort either.
+    if Map.has_key?(socket.assigns, :submissions) do
+      {:noreply, apply_sort(socket, params)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -791,11 +883,61 @@ defmodule TaskyWeb.ExamLive.Grading do
     assign(socket, assign_key, updated)
   end
 
-  defp load_sorted_submissions(exam) do
-    exam
-    |> Exams.list_exam_submissions()
-    |> Enum.sort_by(fn s ->
-      {String.downcase(s.firstname || ""), String.downcase(s.lastname || "")}
-    end)
+  # Sorting happens on the rows, not on the submissions: points and marks
+  # only come into being in build_rows/2. @submissions is pulled into the same
+  # order because the PDF export iterates over it — the export should come out
+  # in the order the teacher sees.
+  defp apply_sort(socket, params) do
+    sort = {sort_field(params["sort"]), sort_dir(params["dir"])}
+
+    rows =
+      socket.assigns.exam
+      |> build_rows(socket.assigns.submissions)
+      |> sort_rows(sort)
+
+    socket
+    |> assign(:sort, sort)
+    |> assign(:rows, rows)
+    |> assign(:submissions, Enum.map(rows, & &1.submission))
   end
+
+  defp sort_rows(rows, {field, dir}) do
+    # A stable base order (Enum.sort_by/2 is stable): that way the tiebreak
+    # within equal point totals or marks is always alphabetical.
+    base =
+      Enum.sort_by(rows, &{name_key(&1.submission.lastname), name_key(&1.submission.firstname)})
+
+    # Empty values — no mark, no points, a missing name — always land at the
+    # end, whichever direction is chosen.
+    {present, blank} = Enum.split_with(base, &(sort_value(&1, field) != nil))
+
+    Enum.sort_by(present, &sort_value(&1, field), dir) ++ blank
+  end
+
+  defp sort_value(row, :firstname), do: name_value(row.submission.firstname)
+  defp sort_value(row, :lastname), do: name_value(row.submission.lastname)
+  defp sort_value(row, :points), do: row.points
+  defp sort_value(row, :calculated_mark), do: row.calculated_mark
+  defp sort_value(row, :mark), do: row.effective_mark
+
+  # A blank name counts as a missing one and sorts to the end; the tiebreak
+  # key must never be nil, though, or nil would compare against a string.
+  defp name_value(name) do
+    case String.trim(name || "") do
+      "" -> nil
+      trimmed -> String.downcase(trimmed)
+    end
+  end
+
+  defp name_key(name), do: name_value(name) || ""
+
+  # Explicit whitelist: client params must never mint or crash on atoms.
+  defp sort_field("lastname"), do: :lastname
+  defp sort_field("points"), do: :points
+  defp sort_field("calculated_mark"), do: :calculated_mark
+  defp sort_field("mark"), do: :mark
+  defp sort_field(_), do: :firstname
+
+  defp sort_dir("desc"), do: :desc
+  defp sort_dir(_), do: :asc
 end
