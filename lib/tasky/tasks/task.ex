@@ -23,6 +23,9 @@ defmodule Tasky.Tasks.Task do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @typedoc "A persisted Task row."
+  @type t :: %__MODULE__{}
+
   schema "tasks" do
     field :name, :string
     field :position, :integer

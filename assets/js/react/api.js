@@ -82,6 +82,17 @@ export function saveExamContent(examId, content, opts = {}) {
   });
 }
 
+// The paper-version editor autosaves here. It sends the whole document like
+// every other editor, but the server only keeps the answer-box line counts —
+// see Tasky.Exams.update_paper_layout/3. The exam's content is not touched.
+export function savePaperLayout(examId, content, opts = {}) {
+  return request(`/api/exams/${examId}/paper-layout`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+    ...opts,
+  });
+}
+
 export function saveTaskContent(taskId, content, opts = {}) {
   return request(`/api/tasks/${taskId}/content`, {
     method: "PUT",

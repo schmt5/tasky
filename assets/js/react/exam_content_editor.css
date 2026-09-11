@@ -275,9 +275,10 @@
 
 /* Links. StarterKit registriert die Link-Extension implizit, Tailwinds Preflight
    setzt Farbe und Unterstreichung aber auf `inherit` — ohne diese Regel sind
-   gepastete Links optisch nicht von normalem Text zu unterscheiden. Die
-   Spezifität schlägt bewusst das `a { color: inherit }` im @media-print-Block
-   von app.css, damit Links auch im PDF-Export als Links erkennbar bleiben. */
+   gepastete Links optisch nicht von normalem Text zu unterscheiden. Nötig auch
+   im Druck: Links sollen im PDF und auf Papier als Links erkennbar bleiben.
+   (Früher schlug die Spezifität hier zusätzlich ein `a { color: inherit }` im
+   @media-print-Block von app.css — der Block ist entfernt, Preflight bleibt.) */
 .exam-editor__content .ProseMirror a {
     color: #0284c7;
     text-decoration: underline;
@@ -681,9 +682,17 @@
     line-height: 1;
 }
 
-.exam-editor__content .ProseMirror .lueckentext[data-verdict]::after,
-.exam-editor__content .ProseMirror li[data-verdict]::after {
+.exam-editor__content .ProseMirror .lueckentext[data-verdict]::after {
     margin-left: 0.4em;
+    font-size: 0.95em;
+}
+
+/* Die Checkbox-Zeile ist ein Flex-Container, das `::after` also ein Flex-Item:
+   `margin-left: auto` schiebt es an die rechte Kante und erzeugt dieselbe
+   Verdikt-Spalte, die `.answer-block` über `position: absolute` bekommt. */
+.exam-editor__content .ProseMirror li[data-verdict]::after {
+    margin-left: auto;
+    padding-left: 0.5em;
     font-size: 0.95em;
 }
 
@@ -712,6 +721,41 @@
 }
 
 .exam-editor__content .ProseMirror .answer-block[data-verdict="wrong"] {
+    border-color: #fca5a5;
+    background: #fef2f2;
+}
+
+/* Dieselbe Farbsprache an der Checkbox-Zeile. Ohne sie trägt ein `taskItem`
+   nur den Marker und liest sich in der Vergleichsansicht als Fliesstext mit
+   angehängtem Emoji — in einer Lerneinheit, wo die Ansicht das Lernmaterial
+   ist und nicht die Bewertungsmarke neben einer Note, zu wenig.
+
+   Die Geometrie hängt an der Liste, nicht an der bewerteten Zeile: Felder in
+   `task.self_check_off` und Felder ohne Musterlösung bekommen kein Verdikt,
+   und sie dürfen nicht gegen ihre bewerteten Nachbarn springen. `> li` hält
+   die Regel auf einer Ebene, damit eine bewertete Unterzeile einer
+   verschachtelten Liste die Elternliste nicht umbaut. */
+.exam-editor__content .ProseMirror ul[data-type="taskList"]:has(> li[data-verdict]) > li {
+    padding: 6px 10px;
+    margin: 2px 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}
+
+.exam-editor__content .ProseMirror li[data-verdict="correct"] {
+    border-color: #34d399;
+    background: #ecfdf5;
+}
+
+/* `half` kann an einer Checkbox nur in einer Prüfung stehen — dort löst
+   `Tasky.Exams.learner_verdicts/2` manuelle Teilpunkte über
+   `Tasky.Grading.marker_verdict/2` auf. */
+.exam-editor__content .ProseMirror li[data-verdict="half"] {
+    border-color: #fcd34d;
+    background: #fffbeb;
+}
+
+.exam-editor__content .ProseMirror li[data-verdict="wrong"] {
     border-color: #fca5a5;
     background: #fef2f2;
 }
@@ -747,17 +791,6 @@
 .exam-editor__content .ProseMirror .solution-hint .lueckentext {
     border-color: #c4b5fd;
     background: #f5f3ff;
-}
-
-.exam-editor__content .ProseMirror .page-break {
-    position: relative;
-    border-top: 1px dashed #a8a29e;
-    margin: 2em 0 2.25em;
-    height: 0;
-}
-
-.exam-editor__content .ProseMirror .page-break.ProseMirror-selectednode {
-    border-top-color: #292524;
 }
 
 .exam-editor__content .ProseMirror p.is-editor-empty:first-child::before {
@@ -822,3 +855,170 @@
     border-radius: 2px;
 }
 
+/* ==========================================================================
+   Papierversion (TaskyWeb.ExamLive.Paper)
+   ==========================================================================
+   Alles hier ist mit `.paper-view` präfigiert — der Klasse am <main> jener
+   LiveView. Damit kann keine Regel in eine Editor-Oberfläche lecken, und der
+   Papiermodus braucht weder ein eigenes Preset-Flag noch eine React-Änderung.
+
+   WICHTIG: Linien, Kästen und Ankreuzfelder werden mit `border` gezeichnet,
+   nie mit `background`. Der Browser-Druck (Cmd/Ctrl+P) läuft standardmässig
+   mit ausgeschalteten Hintergrundgrafiken, und genau dieser Fallback ist der
+   Grund, warum es die Papierversion gibt — ein Hintergrund-Verlauf wäre dort
+   unsichtbar. Gotenberg bekommt zwar `printBackground: true` (für die
+   Hinweisbox-Tönungen), darauf darf sich aber nichts Tragendes stützen. */
+
+/* Der Seitengrund muss weiss sein. Das Root-Layout setzt einen Grauton auf
+   <html> und `bg-stone-50` auf <body>, und `layout: false` entfernt nur das
+   App-Layout, nicht das Root-Layout — mit `printBackground: true` malt
+   Chromium das mit aufs Papier.
+
+   Beide Elemente, nicht nur <body>: Chromium überträgt den Hintergrund des
+   Wurzelelements auf die Seitenleinwand, sodass unterhalb der Body-Box (also
+   am Fuss der letzten Seite) sonst ein grauer Streifen gedruckt wird. */
+html:has(.paper-view),
+body:has(.paper-view) {
+    background: #fff;
+}
+
+.paper-view .paper-sheet {
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 12mm 6mm 16mm;
+}
+
+/* Bildschirm-Chrome des Editors abräumen: auf Papier gibt es kein Blatt im
+   Blatt, keinen Rahmen und keinen Schatten. */
+.paper-view .exam-editor__content,
+.paper-view .exam-editor__content-inner {
+    min-height: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+}
+
+.paper-view .exam-editor__content .ProseMirror {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+    font-size: 12pt;
+    line-height: 1.5;
+}
+
+/* Antwortfeld = die Box zum Hineinschreiben. Ihre Höhe kommt aus der Anzahl
+   leerer Absätze (Tasky.ExamPaper), die die Lehrperson mit Enter steuert —
+   deshalb hat der Absatz die Zeilenhöhe und die Box selbst keine feste. */
+.paper-view .exam-editor__content .ProseMirror .answer-block {
+    display: block;
+    background: #fff;
+    border: 2px solid #44403c;
+    border-radius: 0;
+    padding: 2mm 3mm;
+    margin: 3mm 0 7mm;
+    min-height: 0;
+    break-inside: avoid;
+}
+
+.paper-view .exam-editor__content .ProseMirror .answer-block > p {
+    margin: 0;
+    min-height: 9mm;
+}
+
+.paper-view .exam-editor__content .ProseMirror .answer-block > * + * {
+    margin-top: 0;
+}
+
+/* Beim Einstellen muss sichtbar sein, in welcher Box der Cursor steht. */
+.paper-view .exam-editor__content .ProseMirror .answer-block:focus-within {
+    outline: 2px solid #0284c7;
+    outline-offset: 2px;
+}
+
+/* Inline-Lücke: Unterstrich in fester, gut beschreibbarer Breite. Eine Lücke
+   ist fast immer ein Wort oder eine Zahl, deshalb keine Einstellung pro Feld. */
+.paper-view .exam-editor__content .ProseMirror .lueckentext {
+    display: inline-block;
+    width: 40mm;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #57534e;
+    border-radius: 0;
+    padding: 0 1mm;
+    min-height: 0;
+    line-height: inherit;
+    vertical-align: baseline;
+}
+
+/* Aufgabenliste: leeres Kästchen zum Ankreuzen. Kein ::before am Label —
+   Tiptaps TaskItem rendert dort schon ein <span>. */
+.paper-view .exam-editor__content .ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 3.5mm;
+    height: 3.5mm;
+    margin: 0;
+    border: 1px solid #44403c;
+    border-radius: 0;
+    background: transparent;
+    cursor: default;
+}
+
+/* Umbruchkontrolle. Ohne diese Regeln zerschneidet Chromium eine Antwortbox,
+   eine Tabelle oder eine Hinweisbox am Seitenrand und lässt Frageüberschriften
+   allein am Seitenfuss stehen. Bewusst KEIN erzwungener Umbruch pro Frage:
+   pro Prüfung werden zwei Exemplare gedruckt, das kostet sonst das Doppelte. */
+.paper-view .exam-editor__content .ProseMirror :is(h1, h2, h3, h4) {
+    break-after: avoid;
+    break-inside: avoid;
+}
+
+.paper-view
+    .exam-editor__content
+    .ProseMirror
+    :is(table, .callout, blockquote, pre, img),
+.paper-view .exam-editor__content .ProseMirror ul[data-type="taskList"] > li {
+    break-inside: avoid;
+}
+
+.paper-view .exam-editor__content .ProseMirror p {
+    orphans: 2;
+    widows: 2;
+}
+
+/* Kopffelder und Blankoseiten (free_document). */
+.paper-view .paper-field {
+    border-bottom: 1px solid #57534e;
+    min-height: 7mm;
+}
+
+.paper-view .paper-lined-page {
+    break-before: page;
+    padding-top: 4mm;
+}
+
+.paper-view .paper-rule {
+    height: 9mm;
+    border-bottom: 1px solid #a8a29e;
+}
+
+/* Der Speicherfehler-Banner gehört auf den Bildschirm, nicht aufs Blatt: er
+   meldet, dass eine Grössenänderung nicht ankam, und das Blatt selbst soll
+   die Prüfung zeigen. Sichtbar bleibt er trotzdem — in der Ansicht, in der
+   die Lehrperson gerade einstellt. */
+@media print {
+    .paper-view .exam-editor__inline-error {
+        display: none;
+    }
+
+    .paper-view .paper-sheet {
+        max-width: none;
+        padding: 0;
+    }
+}

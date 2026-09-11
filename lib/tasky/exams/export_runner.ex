@@ -200,6 +200,15 @@ defmodule Tasky.Exams.ExportRunner do
 
   defp notify(_, _), do: :ok
 
+  @doc """
+  Turns a name into a filename component: umlauts transliterated, everything
+  outside `[A-Za-z0-9._-]` collapsed to a dash.
+
+  Public because the paper-version download needs the same rule, and this is
+  the one place it lives.
+  """
+  def sanitize_filename(s), do: sanitize(s)
+
   # Replace umlauts and non-ASCII with ASCII-safe equivalents, then sub spaces
   # and other non-filename characters for hyphens.
   defp sanitize(s) when is_binary(s) do

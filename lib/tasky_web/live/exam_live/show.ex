@@ -42,6 +42,18 @@ defmodule TaskyWeb.ExamLive.Show do
                   </.link>
                 </li>
                 <li>
+                  <%!-- Here as well as in the cockpit: the paper copies are
+                       prepared *before* the session is opened, while the exam
+                       is still a draft and the cockpit is not yet the
+                       affordance in front of the teacher. --%>
+                  <.link
+                    navigate={~p"/exams/#{@exam}/paper"}
+                    class="flex items-center gap-2 text-sm text-stone-700"
+                  >
+                    <.icon name="hero-printer" class="w-4 h-4 text-stone-400" /> Papierversion
+                  </.link>
+                </li>
+                <li>
                   <button
                     type="button"
                     phx-click="duplicate_exam"

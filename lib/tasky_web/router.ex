@@ -120,6 +120,10 @@ defmodule TaskyWeb.Router do
 
     put "/exams/:id/content", ExamContentApiController, :update
 
+    # Only the answer-box line counts land in the database (paper_layout);
+    # the exam's content is never written from here.
+    put "/exams/:id/paper-layout", ExamPaperLayoutApiController, :update
+
     post "/exams/:id/images", ExamImageApiController, :create
 
     put "/tasks/:id/content", TaskContentApiController, :update
@@ -204,6 +208,20 @@ defmodule TaskyWeb.Router do
         :inline
 
     get "/tasks/:id/solution-files/:file_id", TaskSolutionFileController, :download
+
+    get "/exams/:id/paper.pdf", ExamPaperController, :download
+
+    # Same module as the token-gated /print/exam-paper route below, on two
+    # routes in two live_sessions (a LiveView module is not bound to one).
+    # `layout: false` is a live_session option and the app chrome must not be
+    # on the page a teacher presses Cmd+P on. The param names differ ("id"
+    # here, "exam_id" there) so which credential was meant is decided by the
+    # mount clause that matches, not by a runtime guess.
+    live_session :print_authenticated,
+      layout: false,
+      on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
+      live "/exams/:id/paper", ExamLive.Paper, :paper
+    end
 
     live_session :tasks,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
@@ -306,6 +324,7 @@ defmodule TaskyWeb.Router do
 
     live_session :print, layout: false do
       live "/exam-submission/:exam_id/:submission_id", ExamLive.Print, :print
+      live "/exam-paper/:exam_id", ExamLive.Paper, :print
     end
   end
 

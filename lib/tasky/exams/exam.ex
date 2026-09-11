@@ -32,6 +32,13 @@ defmodule Tasky.Exams.Exam do
     field :return_show_content, :boolean, default: true
     field :return_show_correction, :boolean, default: false
     field :return_show_sample_solution, :boolean, default: false
+    # %{answer_id => lines} — how many writing lines each answer field gets on
+    # the printed paper version. Not part of :content, which is the document
+    # the learners sit: the paper version grows a box by putting empty
+    # paragraphs inside it, and those have no business in the digital exam.
+    # Written only by Exams.update_paper_layout/3 and the duplication path
+    # (see the migration).
+    field :paper_layout, :map
 
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :exam_submissions, Tasky.Exams.ExamSubmission
@@ -63,7 +70,9 @@ defmodule Tasky.Exams.Exam do
   # which only Exams.return_exam/3 writes, and for the SEB enforcement fields
   # (:seb_enforcement, :seb_bypass_until, :seb_accepted_config_keys), which
   # only Exams.set_seb_enforcement/3, bypass_seb/3 and
-  # accept_seb_config_key/3 write. :seb_admin_password rides along with
+  # accept_seb_config_key/3 write. :paper_layout is the same: only
+  # Exams.update_paper_layout/3 and the duplication path write it (both via
+  # change/2), so the exam form cannot reach the print geometry at all. :seb_admin_password rides along with
   # :seb_quit_password: both are minted server-side in
   # CockpitConfig.maybe_generate_seb_passwords/2 and only ever reach cast/3
   # from there. :answer_mode is castable in new_changeset/2 only — see there.

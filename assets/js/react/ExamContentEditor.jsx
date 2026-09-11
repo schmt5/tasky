@@ -24,6 +24,7 @@ import {
   TeacherComment,
   PreventNodeDeletion,
   LockExamContent,
+  PaperAnswerLines,
   unwrapAnswerSlice,
   withFreshAnswerIds,
 } from "./editor/extensions";
@@ -52,6 +53,8 @@ export default function ExamContentEditor({
   placeholder = "",
   uploadImage = null,
   externalToolbar = false,
+  hideToolbar = false,
+  paperMode = false,
   partId = null,
   apiRef = null,
   lockHintText = null,
@@ -71,6 +74,8 @@ export default function ExamContentEditor({
   editable = preset.editable ?? editable;
   solutionMode = preset.solutionMode ?? solutionMode;
   externalToolbar = preset.externalToolbar ?? externalToolbar;
+  hideToolbar = preset.hideToolbar ?? hideToolbar;
+  paperMode = preset.paperMode ?? paperMode;
 
   // Blocked-edit hint (lockContent mode): briefly explains why typing into
   // the exam text has no effect, and pulses the answer fields.
@@ -128,6 +133,9 @@ export default function ExamContentEditor({
       Image,
       ...(placeholder ? [Placeholder.configure({ placeholder })] : []),
       ...(protectAnswers ? [PreventNodeDeletion] : []),
+      // Must come after PreventNodeDeletion so its Backspace binding wins:
+      // later extensions take precedence for the same key in Tiptap.
+      ...(paperMode ? [PaperAnswerLines] : []),
       ...(lockContent
         ? [LockExamContent.configure({ onBlocked: showLockHint })]
         : []),
@@ -226,7 +234,7 @@ export default function ExamContentEditor({
         (lockHintVisible ? " exam-editor--lock-flash" : "")
       }
     >
-      {editable && !externalToolbar && (
+      {editable && !externalToolbar && !hideToolbar && (
         <Toolbar
           editor={editor}
           status={status}
@@ -241,7 +249,12 @@ export default function ExamContentEditor({
           lockHintText={lockHintText || undefined}
         />
       )}
-      {externalToolbar && status === "error" && (
+      {/* Whenever the Toolbar's StatusIndicator is not on screen, a failed
+          autosave has nowhere else to show. Both flags mean exactly that:
+          `externalToolbar` moves the toolbar away, `hideToolbar` removes it.
+          Without this the paper view would swallow an expired session while
+          still promising "wird automatisch gespeichert". */}
+      {(externalToolbar || hideToolbar) && status === "error" && (
         <div className="exam-editor__inline-error" role="alert">
           {errorMsg || "Fehler beim Speichern"}
         </div>

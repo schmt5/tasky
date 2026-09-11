@@ -416,71 +416,18 @@ body:has(.page-wrapper) {
     transform: scale(0.97);
 }
 
-/* Print media query */
-@media print {
-    .toc-sidebar {
-        display: none !important;
-    }
-    .fab {
-        display: none !important;
-    }
-    .page-wrapper {
-        display: block;
-    }
+/* Papierformat für den Browser-Druck (Cmd/Ctrl+P). Gotenberg übergibt die
+   Papiermasse explizit und setzt kein `preferCssPageSize`, ignoriert `@page
+   size` also — diese Regel bedient allein den Fallback-Pfad, und dort sind die
+   einzigen druckbaren Oberflächen die beiden Druckansichten.
 
-    .main-content {
-        max-width: 100%;
-        padding: 0;
-        margin: 0;
-    }
-
-    body:has(.page-wrapper) {
-        font-size: 13px;
-        color: #000;
-    }
-
-    .course-title {
-        font-size: 28px;
-    }
-
-    .task-title {
-        font-size: 22px;
-        break-before: page;
-    }
-
-    .task-section:first-of-type .task-title {
-        break-before: avoid;
-    }
-
-    .block-h2 {
-        font-size: 18px;
-        break-after: avoid;
-    }
-    .block-h3 {
-        font-size: 14px;
-        break-after: avoid;
-    }
-
-    .block-image img {
-        max-width: 100%;
-        box-shadow: none;
-    }
-
-    .block-video-link {
-        background: none;
-        border: 1px solid #ccc;
-    }
-
-    .block-page-break {
-        break-before: page;
-        border: none;
-        margin: 0;
-    }
-
-    a {
-        color: inherit;
-        text-decoration: none;
-    }
+   Der frühere @media-print-Block an dieser Stelle ist entfernt: er stylte
+   ausschliesslich Klassen (.toc-sidebar, .page-wrapper, .task-title, .block-*)
+   aus einem statischen Prototyp, die in lib/ und assets/js/ nirgends mehr
+   vorkommen. */
+@page {
+    size: A4;
+    margin: 12mm 14mm;
 }
 
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.

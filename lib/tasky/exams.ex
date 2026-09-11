@@ -128,10 +128,27 @@ defmodule Tasky.Exams do
 
     with {:ok, exam} <- create_exam(scope, attrs),
          {:ok, exam, image_jobs} <- copy_exam_content(exam, source),
+         {:ok, exam} <- copy_paper_layout(exam, source),
          {:ok, attachment_jobs} <- copy_exam_attachments(scope, exam, source),
          :ok <- copy_exam_upload_fields(scope, exam, source) do
       {:ok, exam, image_jobs ++ attachment_jobs}
     end
+  end
+
+  # The teacher's answer-box sizing for the paper version. Worth carrying over
+  # because the copy keeps the document's `answerId`s — only image URLs are
+  # rewritten above — so every entry still points at the box it was measured
+  # for, and the sizing is manual work that would otherwise be redone.
+  #
+  # Runs after copy_exam_content/2, which writes `content` and therefore hands
+  # back a fresh struct. Uses change/2 rather than cast: `:paper_layout` is
+  # absent from every changeset on purpose (see Exam), and nothing
+  # user-supplied reaches this value — it is copied from a row the caller was
+  # already authorized for.
+  defp copy_paper_layout(exam, %Exam{paper_layout: nil}), do: {:ok, exam}
+
+  defp copy_paper_layout(exam, %Exam{paper_layout: layout}) do
+    exam |> Ecto.Changeset.change(%{paper_layout: layout}) |> Repo.update()
   end
 
   # Both the exam body and the stored model answers can carry content images (a
@@ -1174,6 +1191,27 @@ defmodule Tasky.Exams do
           {:error, changeset} -> Repo.rollback(changeset)
         end
       end)
+    end
+  end
+
+  @doc """
+  Saves how big each answer field is on the printed paper version.
+
+  Takes the whole document the paper editor sends (like every other editor)
+  but persists only `Tasky.ExamPaper.extract_layout/1` of it — a
+  `%{answer_id => lines}` map in `paper_layout`. `content` is never touched:
+  the paper version sizes a box by putting empty paragraphs inside it, and
+  those have no business in the document the learners sit.
+
+  That narrowing is also the guard. The content lock lets the teacher type
+  inside an answer field, so the incoming document may carry stray text;
+  reading nothing but paragraph counts drops it instead of storing it.
+  """
+  def update_paper_layout(scope, %Exam{} = exam, doc) when is_map(doc) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      layout = Tasky.ExamPaper.extract_layout(doc)
+
+      update_exam_json(exam, fn _locked -> %{paper_layout: layout} end)
     end
   end
 

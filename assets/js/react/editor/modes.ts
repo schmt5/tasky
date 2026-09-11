@@ -17,6 +17,14 @@ export interface EditorModePreset {
   editable?: boolean;
   solutionMode?: boolean;
   externalToolbar?: boolean;
+  /**
+   * Editable, but with no toolbar at all. Distinct from `externalToolbar`,
+   * which means "the toolbar lives elsewhere" and is wired into
+   * `solutionEditorStore`.
+   */
+  hideToolbar?: boolean;
+  /** Load PaperAnswerLines: Enter/Backspace size an answer box. */
+  paperMode?: boolean;
 }
 
 export const EDITOR_MODES: Record<string, EditorModePreset> = {
@@ -95,6 +103,35 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
    * the task correction page has no points sidebar to make room for.
    */
   taskCorrection: { correctionMode: true },
+
+  /**
+   * Teacher sizing the paper version: the content is locked and only the
+   * answer boxes grow and shrink (Enter / Backspace).
+   *
+   * The lock is the same one the learner gets — `stripAnswers` keeps answer
+   * content out of the skeleton `LockExamContent` compares, so typing inside
+   * an answer field is exactly what passes and nothing else does. An
+   * `answerBlock` is `block+` and "empty" already means "one paragraph", so
+   * pressing Enter genuinely adds a writing line; no extra machinery.
+   *
+   * No toolbar: the only gesture here is Enter, and formatting a blank sheet
+   * would be meaningless. The flags coincide with `student` — this is its own
+   * preset because the file's rule is one named bundle per surface, and a
+   * later change to either must not silently move the other.
+   */
+  paper: {
+    hideAnswers: true,
+    protectAnswers: true,
+    hideCallout: true,
+    hideQuestion: true,
+    lockContent: true,
+    hideToolbar: true,
+    // On paper there is no sheet floating on a canvas — the sheet *is* the
+    // page. Full-width mode would paint the grey canvas and a drop shadow
+    // behind the document, and its rules out-specify the paper stylesheet.
+    notFullWidth: true,
+    paperMode: true,
+  },
 
   /** Read-only rendering (print view, previews). */
   readonly: { editable: false, notFullWidth: true },

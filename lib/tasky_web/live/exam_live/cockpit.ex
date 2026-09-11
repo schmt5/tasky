@@ -136,6 +136,36 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           </div>
         <% end %>
 
+        <%!-- Paper Version Card --%>
+        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+          <div class="p-6">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 bg-stone-100 text-stone-500">
+                  <.icon name="hero-printer" class="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 class="text-lg font-semibold text-stone-800">Papierversion</h2>
+                  <p class="text-sm text-stone-500 mt-0.5">
+                    Absicherung, falls ein Laptop oder der Safe Exam Browser ausfällt.
+                    Am besten zwei Exemplare drucken.
+                  </p>
+                </div>
+              </div>
+
+              <%!-- Links to the paper view, not straight to the PDF: the
+                   teacher sizes the answer boxes there first. --%>
+              <.link
+                navigate={~p"/exams/#{@exam}/paper"}
+                id="paper-version-link"
+                class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
+              >
+                <.icon name="hero-printer" class="w-4 h-4" /> Papierversion vorbereiten
+              </.link>
+            </div>
+          </div>
+        </div>
+
         <%= if @exam.status == "finished" do %>
           <%!-- Correction Ready Card --%>
           <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">

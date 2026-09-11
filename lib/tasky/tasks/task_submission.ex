@@ -25,6 +25,9 @@ defmodule Tasky.Tasks.TaskSubmission do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @typedoc "A persisted TaskSubmission row."
+  @type t :: %__MODULE__{}
+
   @valid_statuses ~w(not_started in_progress in_revision completed review_approved review_denied)
 
   # Freitext einer Lehrperson — grosszügig, aber nicht unbegrenzt.

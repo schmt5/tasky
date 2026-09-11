@@ -33,6 +33,7 @@ import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
 import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
 import { SolutionToolbar } from "./hooks/solution_toolbar_hook";
 import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
+import { ExamPaperEditor } from "./hooks/exam_paper_editor_hook";
 import { ExamReadOnlyViewer } from "./hooks/exam_readonly_viewer_hook";
 import { PowerView } from "./hooks/power_view_hook";
 import { BulkPowerKeys } from "./hooks/bulk_power_keys_hook";
@@ -58,6 +59,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ExamSampleSolutionPartEditor,
     SolutionToolbar,
     ExamCorrectionEditor,
+    ExamPaperEditor,
     ExamReadOnlyViewer,
     PowerView,
     BulkPowerKeys,

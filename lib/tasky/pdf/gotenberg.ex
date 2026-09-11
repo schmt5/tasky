@@ -32,8 +32,19 @@ defmodule Tasky.PDF.Gotenberg do
   @doc """
   Renders the given URL to PDF via Gotenberg's Chromium route.
 
-  `wait_for_expression` defaults to `"window.printReady === true"` — the
-  print-view LiveView sets that flag once its React renderer is done.
+  Options:
+
+    * `:wait_for_expression` — defaults to `"window.printReady === true"`, the
+      flag the print-view LiveView sets once its React renderer is done.
+    * `:print_background` — `false` by default, so Chromium drops backgrounds
+      and only borders print. Pass `true` where a tint carries meaning (the
+      callout colours). Borders print either way.
+    * `:max_retries` — defaults to #{@max_retries}. A background export can
+      afford `max_attempt_time_ms/0` worth of retries; an interactive click
+      cannot, so the paper route passes `0`.
+
+  Both of the latter are appended to the form **only when set**, which keeps
+  the existing submission-export request byte-identical.
   """
   def url_to_pdf(url, opts \\ []) when is_binary(url) do
     case base_url() do
@@ -54,6 +65,11 @@ defmodule Tasky.PDF.Gotenberg do
           marginRight: "0.4"
         ]
 
+        form =
+          if Keyword.get(opts, :print_background, false),
+            do: form ++ [printBackground: "true"],
+            else: form
+
         case Req.post(
                url: "#{base}/forms/chromium/convert/url",
                form_multipart: form,
@@ -62,7 +78,7 @@ defmodule Tasky.PDF.Gotenberg do
                # Transient failures (429/5xx/timeouts) get a couple of
                # backed-off retries instead of failing the whole export.
                retry: :transient,
-               max_retries: @max_retries
+               max_retries: Keyword.get(opts, :max_retries, @max_retries)
              ) do
           {:ok, %Req.Response{status: 200, body: pdf_binary}} ->
             {:ok, pdf_binary}

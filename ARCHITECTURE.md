@@ -19,6 +19,7 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 | `Tasky.Courses` / `Tasky.Classes` | Course/class membership; `Courses.enrolled?/2` gates all student task access. A class belongs to one organization and is shared by its teachers; `Tasky.Classes` is the **only** context that threads a `%Scope{}` for this, because classes have no owner. Everywhere else **the organization comes from the owner of the resource, not from the caller's scope** — a course carries `teacher_id` and the teacher carries the organization, which keeps the signatures unchanged and makes the rule hold even when an admin acts. Resist re-introducing scope parameters. The **catalog stays global on purpose**: it is the cross-organization exchange, so a course author's name is visible across organizations. Trägt auch den Kurs-Katalog: `courses.catalog_published_at` ist dort das Lese-Credential (wie `share_slug` beim KI-Link) und `import_catalog_course_records/3` der einzige Pfad, auf dem eine Lehrperson Inhalte einer anderen kopieren darf. |
 | `Tasky.Feedback` | Anonymer Feedback-Briefkasten pro Kurs (`Course.feedback_box_enabled`, startet geschlossen). Die `student_id` wird gespeichert — sie trägt die Missbrauchsbremse — aber `list_messages/2` selektiert sie nicht, die Web-Schicht bekommt sie also nie zu sehen. Pseudonym, nicht absolut anonym: Texte gegenüber Lernenden sagen "die Lehrperson sieht deinen Namen nicht". |
 | `Tasky.ExamDoc` | Pure Tiptap document algebra: split into parts, preamble, reassembly, answer-block labels, **stable part ids**. Mode-aware: `split_content_into_parts/2` takes the exam's `answer_mode`. |
+| `Tasky.ExamPaper` | Pure paper-version algebra: the layout map (`exams.paper_layout`) ↔ the printable document. Sizes each answer box to its stored line count (starting size derived from the question's points), clears the checkboxes and appends the points to each question heading. `extract_layout/1` is the inverse and the save path's guard — it reads paragraph *counts* and nothing else. |
 | `Tasky.Grading` | Pure grading domain: quarter-point rounding, verdict semantics, part/total computation, the **one** Swiss mark formula (screen and PDF). |
 | `Tasky.Correction.AnswerKey` | Splits an answer-filled doc into answer-free `content` + an answers map keyed by `answerId`; merges them back. |
 | `Tasky.Correction.StringComparator` | Deterministic auto-correction of one part (no AI; an AI client can be swapped in behind the same contract). |
@@ -37,6 +38,16 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 The exam document is **Tiptap JSON**, stored as-is and rendered client-side
 everywhere (editors, read-only viewers, the PDF print view) — there is no
 server-side JSON→HTML rendering.
+
+- **The paper version never touches `content`.** How tall each answer box is
+  on paper lives in its own column (`exams.paper_layout`, `%{answer_id =>
+  lines}`), written only by `Exams.update_paper_layout/3`. The teacher sizes a
+  box by pressing Enter in it — a box is made of empty paragraphs, so a line
+  *is* a paragraph — and writing that into `content` would put blank paragraphs
+  into the document the learners sit. Storing only the counts also means the
+  layout survives later edits: a new answer field starts from its points, a
+  stale entry is ignored. The invariant above still holds — `Tasky.ExamPaper`
+  transforms document → document, never document → HTML.
 
 - **Answer mode** (`exams.answer_mode`) picks between the two kinds of exam.
   `"answer_fields"` is the original one: questions are `h3` headings, answers
