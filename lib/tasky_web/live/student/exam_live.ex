@@ -113,8 +113,11 @@ defmodule TaskyWeb.Student.ExamLive do
 
   defp mount_returned(socket, exam, submission) do
     options = ExamSubmissionView.options_from_exam(exam)
-    max_points = exam.grading_max_points || Grading.sum_points(exam.sample_solution_points)
-    points = Grading.sum_points(submission.points_per_part)
+
+    # Same single call as the grading table and the PDF export — the learner
+    # must never be shown a different mark than the teacher graded.
+    %{points: points, max_points: max_points, effective_mark: mark} =
+      Exams.grading_result(exam, submission)
 
     socket
     |> assign(:page_title, exam.name)
@@ -123,7 +126,7 @@ defmodule TaskyWeb.Student.ExamLive do
     |> assign(:options, options)
     |> assign(:points, points)
     |> assign(:max_points, max_points)
-    |> assign(:mark, submission.mark || Grading.mark(points, max_points))
+    |> assign(:mark, mark)
     |> assign(:sections, ExamSubmissionView.sections(exam, submission, options))
   end
 

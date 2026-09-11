@@ -50,6 +50,15 @@ defmodule TaskyWeb.ExamLive.Grading do
                 </button>
               <% end %>
 
+              <.link
+                id="grading-config-btn"
+                navigate={~p"/exams/#{@exam}/correction/grading/config"}
+                class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
+              >
+                <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Konfigurieren
+                <span class="font-mono text-xs text-stone-400">{@mark_step}er-Schritte</span>
+              </.link>
+
               <%= if @pdf_enabled do %>
                 <button
                   type="button"
@@ -91,63 +100,14 @@ defmodule TaskyWeb.ExamLive.Grading do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-4">
-        <%!-- Max points config (inline, body) --%>
-        <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-5 flex items-center gap-6">
-          <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
-            <.icon name="hero-calculator" class="w-5 h-5 text-sky-500" />
-          </div>
-          <div class="flex-1">
-            <h2 class="text-sm font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
-            <p :if={not @free_document} class="text-xs text-stone-500 mt-0.5">
-              Standardwert: Summe aller Musterlösungs-Punkte ({format_points(@sample_solution_total)}). Kann hier angepasst werden, z.B. wenn nicht alle Teile gewertet werden.
-            </p>
-            <%!-- Im freien Modus gibt es keine Musterlösung; die Maximalpunkte
-                 kommen aus dem Punkte-Tab der Prüfung. --%>
-            <p :if={@free_document} class="text-xs text-stone-500 mt-0.5">
-              Standardwert: die Maximalpunkte des Dokuments ({format_points(@sample_solution_total)}). Kann hier angepasst werden.
-            </p>
-          </div>
-          <div class="shrink-0 inline-flex items-center gap-2">
-            <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte weniger">
-              <button
-                type="button"
-                phx-click="adjust_max_points"
-                phx-value-direction="down"
-                disabled={@effective_max_points <= 0}
-                aria-label="0.25 Punkte weniger"
-                class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-              >
-                <.icon name="hero-minus" class="w-4 h-4" />
-              </button>
-            </div>
-            <form phx-change="set_max_points" phx-submit="set_max_points">
-              <input
-                id="grading-max-points-input"
-                type="number"
-                name="max_points"
-                value={@effective_max_points}
-                step="0.25"
-                min="0"
-                inputmode="decimal"
-                phx-debounce="500"
-                class="w-24 font-mono text-base text-right text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
-              />
-            </form>
-            <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte mehr">
-              <button
-                type="button"
-                phx-click="adjust_max_points"
-                phx-value-direction="up"
-                aria-label="0.25 Punkte mehr"
-                class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"
-              >
-                <.icon name="hero-plus" class="w-4 h-4" />
-              </button>
-            </div>
-            <span class="text-sm text-stone-500 ml-1">Punkte</span>
-          </div>
-        </div>
-
+        <%!-- Max points config (inline, body): also on the grading config
+             page, but kept here too so the teacher can nudge it and watch
+             every row's mark move. --%>
+        <ExamComponents.max_points_card
+          value={@effective_max_points}
+          sample_solution_total={@sample_solution_total}
+          free_document={@free_document}
+        />
         <%!-- Table --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @submissions == [] do %>
@@ -200,7 +160,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                     </span>
                   </td>
                   <td class="px-4 py-3">
-                    <.mark_stepper row={row} />
+                    <.mark_stepper row={row} step={@mark_step} />
                   </td>
                 </tr>
               </tbody>
@@ -382,24 +342,27 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   attr :row, :map, required: true
+  attr :step, :string, required: true
 
   defp mark_stepper(assigns) do
     assigns =
       assign(assigns,
         can_dec: not is_nil(assigns.row.effective_mark) and assigns.row.effective_mark > 1.0,
-        can_inc: not is_nil(assigns.row.effective_mark) and assigns.row.effective_mark < 6.0
+        can_inc: not is_nil(assigns.row.effective_mark) and assigns.row.effective_mark < 6.0,
+        dec_label: "Note um #{assigns.step} senken",
+        inc_label: "Note um #{assigns.step} erhöhen"
       )
 
     ~H"""
     <div class="inline-flex items-center justify-end gap-1.5 w-full">
-      <div class="tooltip tooltip-left tooltip-delayed" data-tip="Note um 0.25 senken">
+      <div class="tooltip tooltip-left tooltip-delayed" data-tip={@dec_label}>
         <button
           type="button"
           phx-click="adjust_mark"
           phx-value-submission-id={@row.submission.id}
           phx-value-direction="down"
           disabled={not @can_dec}
-          aria-label="Note um 0.25 senken"
+          aria-label={@dec_label}
           class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <.icon name="hero-minus" class="w-3.5 h-3.5" />
@@ -415,7 +378,7 @@ defmodule TaskyWeb.ExamLive.Grading do
           type="number"
           name="mark"
           value={format_mark(@row.effective_mark)}
-          step="0.25"
+          step={@step}
           min="1"
           max="6"
           inputmode="decimal"
@@ -423,14 +386,14 @@ defmodule TaskyWeb.ExamLive.Grading do
           class="w-16 font-mono text-sm font-semibold text-center text-stone-700 bg-stone-50 border border-stone-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
         />
       </form>
-      <div class="tooltip tooltip-left tooltip-delayed" data-tip="Note um 0.25 erhöhen">
+      <div class="tooltip tooltip-left tooltip-delayed" data-tip={@inc_label}>
         <button
           type="button"
           phx-click="adjust_mark"
           phx-value-submission-id={@row.submission.id}
           phx-value-direction="up"
           disabled={not @can_inc}
-          aria-label="Note um 0.25 erhöhen"
+          aria-label={@inc_label}
           class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           <.icon name="hero-plus" class="w-3.5 h-3.5" />
@@ -444,30 +407,41 @@ defmodule TaskyWeb.ExamLive.Grading do
   def mount(%{"id" => id}, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
 
+    if Exams.mark_step_configured?(exam) do
+      {:ok, mount_configured(socket, exam)}
+    else
+      # The gate sits here rather than on the two "Zur Benotung" buttons, so a
+      # bookmark or a pasted link walks through the decision as well — and
+      # there is only one place that knows the rule.
+      {:ok, push_navigate(socket, to: ~p"/exams/#{exam}/correction/grading/config")}
+    end
+  end
+
+  defp mount_configured(socket, exam) do
     submissions = load_sorted_submissions(exam)
     sample_solution_total = sum_sample_solution_points(exam)
     effective_max_points = exam.grading_max_points || sample_solution_total
 
-    {:ok,
-     socket
-     |> assign(:page_title, exam.name <> " – Benotung")
-     |> assign(:exam, exam)
-     |> assign(:free_document, Exams.free_document?(exam))
-     |> assign(:submissions, submissions)
-     |> assign(:sample_solution_total, sample_solution_total)
-     |> assign(:effective_max_points, effective_max_points)
-     |> assign(:rows, build_rows(submissions, effective_max_points))
-     |> assign(:pdf_enabled, Tasky.PDF.Gotenberg.enabled?())
-     |> assign(:show_export_modal, false)
-     |> assign(:export_options, %{
-       show_points_and_mark: true,
-       show_content: true,
-       show_correction: false,
-       show_sample_solution: false
-     })
-     |> assign(:export_status, nil)
-     |> assign(:show_return_modal, false)
-     |> assign_return_state(exam)}
+    socket
+    |> assign(:page_title, exam.name <> " – Benotung")
+    |> assign(:exam, exam)
+    |> assign(:mark_step, Exams.mark_step(exam))
+    |> assign(:free_document, Exams.free_document?(exam))
+    |> assign(:submissions, submissions)
+    |> assign(:sample_solution_total, sample_solution_total)
+    |> assign(:effective_max_points, effective_max_points)
+    |> assign(:rows, build_rows(exam, submissions))
+    |> assign(:pdf_enabled, Tasky.PDF.Gotenberg.enabled?())
+    |> assign(:show_export_modal, false)
+    |> assign(:export_options, %{
+      show_points_and_mark: true,
+      show_content: true,
+      show_correction: false,
+      show_sample_solution: false
+    })
+    |> assign(:export_status, nil)
+    |> assign(:show_return_modal, false)
+    |> assign_return_state(exam)
   end
 
   # A returned exam pre-fills the modal with what it was released with, so
@@ -505,7 +479,7 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   def handle_event("set_mark", %{"submission_id" => sub_id, "mark" => raw}, socket) do
-    save_mark(socket, sub_id, parse_mark(raw))
+    save_mark(socket, sub_id, parse_mark(raw, socket.assigns.mark_step))
   end
 
   def handle_event(
@@ -518,9 +492,14 @@ defmodule TaskyWeb.ExamLive.Grading do
     if is_nil(row) or is_nil(row.effective_mark) do
       {:noreply, socket}
     else
-      delta = if dir == "up", do: 0.25, else: -0.25
-      new_mark = row.effective_mark + delta
-      save_mark(socket, sub_id, Grading.normalize_mark(new_mark))
+      step = socket.assigns.mark_step
+
+      delta =
+        if dir == "up", do: Grading.mark_step_size(step), else: -Grading.mark_step_size(step)
+
+      # normalize_mark/2 absorbs the float drift of the addition itself
+      # (4.7 + 0.1 == 4.800000000000001) and puts the result back on the grid.
+      save_mark(socket, sub_id, Grading.normalize_mark(row.effective_mark + delta, step))
     end
   end
 
@@ -712,7 +691,7 @@ defmodule TaskyWeb.ExamLive.Grading do
          socket
          |> assign(:exam, updated_exam)
          |> assign(:effective_max_points, effective)
-         |> assign(:rows, build_rows(socket.assigns.submissions, effective))}
+         |> assign(:rows, build_rows(updated_exam, socket.assigns.submissions))}
 
       {:error, :invalid_max_points} ->
         {:noreply, put_flash(socket, :error, "Maximalpunkte müssen grösser als 0 sein.")}
@@ -738,7 +717,7 @@ defmodule TaskyWeb.ExamLive.Grading do
           {:noreply,
            socket
            |> assign(:submissions, submissions)
-           |> assign(:rows, build_rows(submissions, socket.assigns.effective_max_points))}
+           |> assign(:rows, build_rows(socket.assigns.exam, submissions))}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Note konnte nicht gespeichert werden.")}
@@ -746,26 +725,19 @@ defmodule TaskyWeb.ExamLive.Grading do
     end
   end
 
-  defp build_rows(submissions, max_points) do
+  # Points, calculated mark and effective mark all come from
+  # Exams.grading_result/2 — the one place that precedence and the exam's
+  # mark step live, shared with the PDF export and the learner's view.
+  defp build_rows(exam, submissions) do
     Enum.map(submissions, fn s ->
-      points = total_points(s)
-      calculated = calculate_mark(points, max_points)
-      effective_mark = s.mark || calculated
-
-      %{
-        submission: s,
-        points: points,
-        calculated_mark: calculated,
-        effective_mark: effective_mark
-      }
+      s
+      |> then(&Exams.grading_result(exam, &1))
+      |> Map.take([:points, :calculated_mark, :effective_mark])
+      |> Map.put(:submission, s)
     end)
   end
 
-  defp total_points(submission), do: Grading.sum_points(submission.points_per_part)
-
   defp sum_sample_solution_points(exam), do: Grading.sum_points(exam.sample_solution_points)
-
-  defp calculate_mark(points, max), do: Grading.mark(points, max)
 
   defp format_mark(mark), do: Grading.format_mark(mark, "")
 
@@ -781,20 +753,22 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   defp parse_points(value), do: Grading.parse_points(value)
 
-  defp parse_mark(value) when is_binary(value) do
+  # The step matters here too, not just for the ± buttons: a 4.7 typed into
+  # an exam that grades on 0.25 has to come back as 4.75.
+  defp parse_mark(value, step) when is_binary(value) do
     case String.trim(value) do
       "" ->
         nil
 
       trimmed ->
         case Float.parse(trimmed) do
-          {n, ""} -> Grading.normalize_mark(n)
+          {n, ""} -> Grading.normalize_mark(n, step)
           _ -> nil
         end
     end
   end
 
-  defp parse_mark(_), do: nil
+  defp parse_mark(_, _step), do: nil
 
   # Explicit whitelist: client params must never mint or crash on atoms.
   defp view_option_key("show_points_and_mark"), do: :show_points_and_mark

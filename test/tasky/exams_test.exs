@@ -4,6 +4,8 @@ defmodule Tasky.ExamsTest do
   import Tasky.ExamsFixtures
 
   alias Tasky.Exams
+  alias Tasky.Exams.Exam
+  alias Tasky.Exams.ExamSubmission
 
   defp enrollment_attrs, do: valid_enrollment_attrs()
 
@@ -266,6 +268,163 @@ defmodule Tasky.ExamsTest do
 
       assert {:ok, cleared} = Exams.set_submission_mark(:system, rounded, nil)
       assert cleared.mark == nil
+    end
+  end
+
+  describe "mark_step/1 and set_mark_step/3" do
+    import Tasky.AccountsFixtures
+
+    test "a fresh exam has no step and falls back to 0.25" do
+      exam = exam_fixture()
+
+      refute Exams.mark_step_configured?(exam)
+      assert exam.mark_step == nil
+      # The fallback is what keeps a print or a hand-back correct before the
+      # teacher ever opens the Benotung.
+      assert Exams.mark_step(exam) == "0.25"
+    end
+
+    test "only a known step is accepted" do
+      exam = exam_fixture()
+
+      for bad <- ["0.2", "0.5", "1", "", nil, 0.1, 4] do
+        assert {:error, :invalid_mark_step} = Exams.set_mark_step(:system, exam, bad)
+      end
+
+      assert Tasky.Repo.reload!(exam).mark_step == nil
+    end
+
+    test "the owner's scope is required" do
+      exam = exam_fixture()
+      stranger = user_scope_fixture(user_fixture(%{role: "teacher"}))
+
+      assert {:error, :unauthorized} = Exams.set_mark_step(stranger, exam, "0.1")
+      assert Tasky.Repo.reload!(exam).mark_step == nil
+    end
+
+    test "setting a step configures the exam" do
+      exam = exam_fixture()
+
+      assert {:ok, updated, 0} = Exams.set_mark_step(:system, exam, "0.1")
+      assert updated.mark_step == "0.1"
+      assert Exams.mark_step_configured?(updated)
+      assert Exams.mark_step(updated) == "0.1"
+    end
+
+    test "stored manual marks are re-rounded onto the new grid" do
+      exam = exam_fixture(status: "open")
+
+      {:ok, a} =
+        Exams.create_exam_submission(exam, valid_enrollment_attrs(%{"email" => "a@example.com"}))
+
+      {:ok, b} =
+        Exams.create_exam_submission(exam, valid_enrollment_attrs(%{"email" => "b@example.com"}))
+
+      {:ok, c} =
+        Exams.create_exam_submission(exam, valid_enrollment_attrs(%{"email" => "c@example.com"}))
+
+      {:ok, a} = Exams.set_submission_mark(:system, a, 4.25)
+      {:ok, b} = Exams.set_submission_mark(:system, b, 4.0)
+
+      # 4.25 is not a point on the 0.1 grid; ties go away from zero, so it
+      # lands on 4.3 — in the learner's favour. 4.0 is already on the grid
+      # and must not be rewritten, hence a count of 1 rather than 2.
+      assert {:ok, updated, 1} = Exams.set_mark_step(:system, exam, "0.1")
+      assert updated.mark_step == "0.1"
+      assert Tasky.Repo.reload!(a).mark == 4.3
+      assert Tasky.Repo.reload!(b).mark == 4.0
+      assert Tasky.Repo.reload!(c).mark == nil
+
+      # And back: 4.3 is off the 0.25 grid again.
+      assert {:ok, _back, 1} = Exams.set_mark_step(:system, updated, "0.25")
+      assert Tasky.Repo.reload!(a).mark == 4.25
+      assert Tasky.Repo.reload!(b).mark == 4.0
+    end
+
+    test "a rejected step leaves every stored mark untouched" do
+      exam = exam_fixture(status: "open")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      {:ok, submission} = Exams.set_submission_mark(:system, submission, 4.25)
+
+      assert {:error, :invalid_mark_step} = Exams.set_mark_step(:system, exam, "0.2")
+      assert Tasky.Repo.reload!(submission).mark == 4.25
+    end
+
+    test "a typed mark is normalized on the exam's own grid" do
+      exam = exam_fixture(status: "open")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      {:ok, exam, 0} = Exams.set_mark_step(:system, exam, "0.1")
+
+      # The step is read off the exam inside the transaction, not taken from
+      # the caller, so a second tab cannot make this store an off-grid mark.
+      assert {:ok, tenth} = Exams.set_submission_mark(:system, submission, 4.7)
+      assert tenth.mark == 4.7
+
+      # Switching back re-rounds the stored 4.7 onto the 0.25 grid…
+      {:ok, _exam, 1} = Exams.set_mark_step(:system, exam, "0.25")
+      assert Tasky.Repo.reload!(tenth).mark == 4.75
+
+      # …and a freshly typed 4.7 lands there too.
+      assert {:ok, quarter} = Exams.set_submission_mark(:system, tenth, 4.7)
+      assert quarter.mark == 4.75
+    end
+
+    test "mark_step is not mass-assignable" do
+      exam = exam_fixture()
+
+      assert {:ok, updated} = Exams.update_exam(:system, exam, %{mark_step: "0.1"})
+      assert updated.mark_step == nil
+    end
+  end
+
+  describe "grading_result/2" do
+    test "the manual override wins over the calculated mark" do
+      exam = %Exam{
+        mark_step: "0.1",
+        grading_max_points: 10.0,
+        sample_solution_points: %{}
+      }
+
+      submission = %ExamSubmission{points_per_part: %{"p1" => 7.4}, mark: nil}
+
+      assert %{points: 7.4, max_points: 10.0, mark_step: "0.1"} =
+               result = Exams.grading_result(exam, submission)
+
+      assert result.calculated_mark == 4.7
+      assert result.effective_mark == 4.7
+
+      overridden = %{submission | mark: 5.2}
+      assert %{calculated_mark: 4.7, effective_mark: 5.2} = Exams.grading_result(exam, overridden)
+    end
+
+    test "the same points give a different mark per step" do
+      submission = %ExamSubmission{points_per_part: %{"p1" => 7.4}, mark: nil}
+
+      for {step, expected} <- [{"0.25", 4.75}, {"0.1", 4.7}] do
+        exam = %Exam{mark_step: step, grading_max_points: 10.0, sample_solution_points: %{}}
+        assert %{effective_mark: ^expected} = Exams.grading_result(exam, submission)
+      end
+    end
+
+    test "no max points, no mark" do
+      exam = %Exam{mark_step: "0.25", grading_max_points: nil, sample_solution_points: %{}}
+      submission = %ExamSubmission{points_per_part: %{"p1" => 3}, mark: nil}
+
+      assert %{max_points: nil, calculated_mark: nil, effective_mark: nil} =
+               Exams.grading_result(exam, submission)
+    end
+
+    test "falls back to the sample solution's points and honours the nil step" do
+      exam = %Exam{
+        mark_step: nil,
+        grading_max_points: nil,
+        sample_solution_points: %{"p1" => 8, "p2" => 2}
+      }
+
+      submission = %ExamSubmission{points_per_part: %{"p1" => 7.4}, mark: nil}
+
+      assert %{max_points: 10, mark_step: "0.25", effective_mark: 4.75} =
+               Exams.grading_result(exam, submission)
     end
   end
 

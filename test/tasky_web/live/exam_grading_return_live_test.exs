@@ -26,6 +26,11 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
     {:ok, submission} = Exams.submit_exam_submission(submission)
     {:ok, exam} = Exams.update_exam_status(scope, exam, "finished")
 
+    # The grading table sends an exam without a mark step to the configuration
+    # page first. `exam_fixture/1` deliberately leaves it nil — that is the
+    # honest state of a fresh exam — so these tests pick the step themselves.
+    {:ok, exam, 0} = Exams.set_mark_step(scope, exam, "0.25")
+
     %{teacher: teacher, scope: scope, exam: exam, submission: submission}
   end
 

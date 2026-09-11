@@ -211,7 +211,7 @@ defmodule TaskyWeb.ExamLive.Paper do
     |> assign(:page_title, "#{exam.name} – Papierversion")
     |> assign(:exam, exam)
     |> assign(:doc_json, Jason.encode!(doc))
-    |> assign(:max_points, max_points(exam))
+    |> assign(:max_points, Exams.grading_max_points(exam))
     |> assign(:free_document, free_document)
     |> assign(:lined_pages, if(free_document, do: ExamPaper.lined_page_count(), else: 0))
     |> assign(:rules_per_page, ExamPaper.rules_per_page())
@@ -224,15 +224,6 @@ defmodule TaskyWeb.ExamLive.Paper do
     socket
     |> assign(:page_title, "Papierversion")
     |> assign(:error, message)
-  end
-
-  # Same precedence as the submission print view: an explicit override wins
-  # over the sum of the sample solution's points.
-  defp max_points(exam) do
-    case exam.grading_max_points || Grading.sum_points(exam.sample_solution_points) do
-      n when is_number(n) and n > 0 -> n
-      _ -> nil
-    end
   end
 
   defp format_points(points), do: Grading.format_points(points)

@@ -268,6 +268,10 @@ defmodule TaskyWeb.Router do
 
       live "/exams/:id/correction/grading", ExamLive.Grading, :grading
 
+      live "/exams/:id/correction/grading/config",
+           ExamLive.GradingConfig,
+           :grading_config
+
       live "/exams/:id/content", ExamLive.Content, :content
     end
   end

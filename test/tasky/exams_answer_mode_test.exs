@@ -144,7 +144,7 @@ defmodule Tasky.ExamsAnswerModeTest do
       assert max_points == 12.0
       assert points == 6.0
       # Half the points on the Swiss 1–6 scale: 6/12 * 5 + 1
-      assert Grading.mark(points, max_points) == 3.5
+      assert Grading.mark(points, max_points, Exams.mark_step(ctx.exam)) == 3.5
     end
 
     test "marking the single part corrected completes the submission", ctx do

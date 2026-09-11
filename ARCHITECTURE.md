@@ -20,7 +20,7 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 | `Tasky.Feedback` | Anonymer Feedback-Briefkasten pro Kurs (`Course.feedback_box_enabled`, startet geschlossen). Die `student_id` wird gespeichert — sie trägt die Missbrauchsbremse — aber `list_messages/2` selektiert sie nicht, die Web-Schicht bekommt sie also nie zu sehen. Pseudonym, nicht absolut anonym: Texte gegenüber Lernenden sagen "die Lehrperson sieht deinen Namen nicht". |
 | `Tasky.ExamDoc` | Pure Tiptap document algebra: split into parts, preamble, reassembly, answer-block labels, **stable part ids**. Mode-aware: `split_content_into_parts/2` takes the exam's `answer_mode`. |
 | `Tasky.ExamPaper` | Pure paper-version algebra: the layout map (`exams.paper_layout`) ↔ the printable document. Sizes each answer box to its stored line count (starting size derived from the question's points), clears the checkboxes and appends the points to each question heading. `extract_layout/1` is the inverse and the save path's guard — it reads paragraph *counts* and nothing else. |
-| `Tasky.Grading` | Pure grading domain: quarter-point rounding, verdict semantics, part/total computation, the **one** Swiss mark formula (screen and PDF). |
+| `Tasky.Grading` | Pure grading domain: two rounding grids (points always 0.25, marks per exam), verdict semantics, part/total computation, the **one** Swiss mark formula (screen and PDF). |
 | `Tasky.Correction.AnswerKey` | Splits an answer-filled doc into answer-free `content` + an answers map keyed by `answerId`; merges them back. |
 | `Tasky.Correction.StringComparator` | Deterministic auto-correction of one part (no AI; an AI client can be swapped in behind the same contract). |
 | `Tasky.Correction.AnswerVariants` | Das `;` in einer Musterlösung: die eine Regel, was eine gültige Alternative ist. `split/1` für jeden Bewerter (`StringComparator`, `SelfCheck`, die Gruppen-Korrektur in `Exams`), `humanize_answer/2` und `humanize_doc/1` für die Anzeige. Das Trennzeichen ist ein **Autoren**-Format: Lernenden wird `"pdf;.pdf"` als „pdf, .pdf" vorgelegt, denn wer das `;` nicht kennt, liest es als Teil der Antwort. Anzeige und Bewertung teilen sich die Regel deshalb bewusst — liefen sie auseinander, würde eine Antwort als richtig gelten, die in der gezeigten Musterlösung gar nicht steht. Umgeschrieben wird nur für Lernende; die Editoren der Lehrperson zeigen weiter das rohe `;`. |
@@ -88,6 +88,18 @@ server-side JSON→HTML rendering.
   server-side on verdict changes and read back as an inference fallback for
   AI-corrected parts (making them fully render-only is the one open Phase-3
   item, 3.3).
+- **Two rounding grids, one formula.** Points are on the 0.25 grid for every
+  exam (`Grading.round_quarter/1` and everything built on it). The **mark** is
+  on `exams.mark_step` — 0.25 or 0.1, the teacher's choice, made once on the
+  way into the Benotung and changeable afterwards. `nil` means "not asked
+  yet": it falls back to 0.25 via `Exams.mark_step/1`, which is the only place
+  that fallback exists — `Grading.round_mark/2` raises for an unknown step so a
+  caller that forgets to resolve it fails loudly. `Exams.set_mark_step/3`
+  re-rounds the submissions' stored manual marks in the same transaction, so
+  the column and the marks can never disagree. The `submission.mark ||
+  calculated` precedence lives in `Exams.grading_result/2` **only** — grading
+  table, PDF export and the learner's view all call it, because this formula
+  once existed twice and the PDF printed a different mark than the screen.
 - **The auto-corrector never overwrites the teacher.** `auto_block_verdicts`
   records what the runner last wrote; a block whose current verdict differs
   from that is the teacher's and survives every re-run, markers included.
@@ -98,7 +110,11 @@ server-side JSON→HTML rendering.
   over the JSON columns runs in a transaction that first takes a row lock via
   `Repo.lock_one!/3`; bulk operations (grouped verdicts, mark-all) are single
   transactions locking every row they touch. Submit gates re-check inside the
-  transaction (TOCTOU). A plain `Repo.get!` inside a transaction is **not**
+  transaction (TOCTOU). `Exams.set_mark_step/3` is the one writer that takes
+  `FOR UPDATE` on `exams` rather than `FOR SHARE`: it writes that row *and*
+  must exclude a concurrent `set_submission_mark/3`, which reads the step
+  under `FOR SHARE` before writing the submission.
+  A plain `Repo.get!` inside a transaction is **not**
   enough under Postgres' READ COMMITTED: it sees the latest committed snapshot,
   so a concurrent writer can still commit between the check and the write.
 

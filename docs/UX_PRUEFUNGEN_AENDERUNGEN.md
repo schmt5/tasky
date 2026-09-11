@@ -80,6 +80,8 @@ Die Plus/Minus-Knöpfe in der Benotung und die Fragen-Chips in der Sammelkorrekt
 benutzten den grauen Browser-Tooltip (`title`), der eine Sekunde zu spät kommt und
 nicht zum Design passt. Jetzt der App-Tooltip. Nebeneffekt: die Knöpfe haben
 endlich eine Beschriftung für Screenreader («Note um 0.25 senken» statt «−0.25»).
+Die Zahl darin folgt inzwischen den Notenschritten der Prüfung — bei 0.1er-Schritten
+heisst es «Note um 0.1 senken».
 
 ### Klarere Hierarchie: ein Hauptbutton pro Zeile
 

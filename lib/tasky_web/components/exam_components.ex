@@ -14,6 +14,8 @@ defmodule TaskyWeb.ExamComponents do
 
   import TaskyWeb.CoreComponents, only: [icon: 1]
 
+  alias Tasky.Grading
+
   @doc """
   Die beiden Durchführungsmodi, in der Reihenfolge, in der sie auf der
   Config-Seite stehen. `assigned` ist die Vorauswahl.
@@ -429,6 +431,87 @@ defmodule TaskyWeb.ExamComponents do
           </p>
           <p class="mt-2 font-mono text-xs text-red-600 break-all select-all">{@message}</p>
         </div>
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  Die Karte „Maximalpunkte für Benotung“ — auf der Benotungskonfiguration und
+  über der Benotungstabelle.
+
+  Sie erscheint an zwei Stellen, weil die Lehrperson den Wert beim Einrichten
+  der Benotung setzt und ihn danach beim Blick auf die Tabelle nachjustiert
+  (nudgen und zusehen, wie sich die Noten verschieben). Beide Seiten
+  schreiben über `Exams.update_grading_max_points/3` und implementieren die
+  zwei Events `set_max_points` und `adjust_max_points`.
+
+  Die Schritte hier sind bewusst 0.25 und folgen *nicht* dem Notenraster der
+  Prüfung: Punkte liegen immer auf dem 0.25er-Gitter.
+  """
+  attr :value, :any, required: true, doc: "die effektiven Maximalpunkte"
+  attr :sample_solution_total, :any, required: true
+  attr :free_document, :boolean, required: true
+
+  def max_points_card(assigns) do
+    ~H"""
+    <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-5 flex items-center gap-6">
+      <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
+        <.icon name="hero-calculator" class="w-5 h-5 text-sky-500" />
+      </div>
+      <div class="flex-1">
+        <h2 class="text-sm font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
+        <p :if={not @free_document} class="text-xs text-stone-500 mt-0.5">
+          Standardwert: Summe aller Musterlösungs-Punkte ({Grading.format_points(
+            @sample_solution_total
+          )}). Kann hier angepasst werden, z.B. wenn nicht alle Teile gewertet werden.
+        </p>
+        <%!-- Im freien Modus gibt es keine Musterlösung; die Maximalpunkte
+             kommen aus dem Punkte-Tab der Prüfung. --%>
+        <p :if={@free_document} class="text-xs text-stone-500 mt-0.5">
+          Standardwert: die Maximalpunkte des Dokuments ({Grading.format_points(
+            @sample_solution_total
+          )}). Kann hier angepasst werden.
+        </p>
+      </div>
+      <div class="shrink-0 inline-flex items-center gap-2">
+        <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte weniger">
+          <button
+            type="button"
+            phx-click="adjust_max_points"
+            phx-value-direction="down"
+            disabled={@value <= 0}
+            aria-label="0.25 Punkte weniger"
+            class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <.icon name="hero-minus" class="w-4 h-4" />
+          </button>
+        </div>
+        <form phx-change="set_max_points" phx-submit="set_max_points">
+          <input
+            id="grading-max-points-input"
+            type="number"
+            name="max_points"
+            value={@value}
+            step="0.25"
+            min="0"
+            inputmode="decimal"
+            phx-debounce="500"
+            class="w-24 font-mono text-base text-right text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
+          />
+        </form>
+        <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte mehr">
+          <button
+            type="button"
+            phx-click="adjust_max_points"
+            phx-value-direction="up"
+            aria-label="0.25 Punkte mehr"
+            class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"
+          >
+            <.icon name="hero-plus" class="w-4 h-4" />
+          </button>
+        </div>
+        <span class="text-sm text-stone-500 ml-1">Punkte</span>
       </div>
     </div>
     """

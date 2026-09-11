@@ -25,6 +25,11 @@ defmodule Tasky.Exams.Exam do
     field :seb_allow_files, :boolean, default: false
     field :ai_correction_config, :map, default: %{}
     field :grading_max_points, :float
+    # The rounding grid for the *mark* (Note), one of `Tasky.Grading.mark_steps/0`.
+    # nil = the teacher has not been asked yet, which is what sends them
+    # through the grading configuration page. Points stay on 0.25 regardless.
+    # Written only by Exams.set_mark_step/3 (see the migration).
+    field :mark_step, :string
     field :participation_mode, :string, default: "anonymous"
     field :answer_mode, :string, default: "answer_fields"
     field :returned_at, :utc_datetime
@@ -76,6 +81,10 @@ defmodule Tasky.Exams.Exam do
   # :seb_quit_password: both are minted server-side in
   # CockpitConfig.maybe_generate_seb_passwords/2 and only ever reach cast/3
   # from there. :answer_mode is castable in new_changeset/2 only — see there.
+  # :mark_step is like :paper_layout: only Exams.set_mark_step/3 writes it,
+  # because that write also re-rounds every stored manual mark of the exam
+  # onto the new grid — a plain cast would move the grid and leave the marks
+  # behind.
   def changeset(exam, attrs) do
     exam
     |> cast(attrs, [
@@ -92,6 +101,22 @@ defmodule Tasky.Exams.Exam do
     ])
     |> validate_required([:name])
     |> validate_length(:name, min: 3, max: 255)
+  end
+
+  @doc """
+  Changeset for the mark rounding grid — the only way `:mark_step` is
+  written; see the comment above `changeset/2` and `Exams.set_mark_step/3`.
+
+  The allowed values come from `Tasky.Grading.mark_steps/0` rather than a
+  second list here: the grid module owns the enum, so the schema cannot
+  drift away from the rounding code.
+  """
+  def mark_step_changeset(exam, attrs) do
+    exam
+    |> cast(attrs, [:mark_step])
+    |> validate_required([:mark_step])
+    |> validate_inclusion(:mark_step, Tasky.Grading.mark_steps())
+    |> check_constraint(:mark_step, name: :exams_mark_step_check)
   end
 
   @doc false

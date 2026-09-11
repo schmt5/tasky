@@ -1020,6 +1020,64 @@ defmodule Tasky.Exams do
   def free_document?(%Exam{}), do: false
 
   @doc """
+  The exam's mark rounding grid. **The one place the `nil` fallback lives** —
+  `Grading.round_mark/2` raises for `nil` on purpose, so every mark
+  computation resolves the step through here.
+
+  An exam whose teacher has not chosen yet grades on 0.25, exactly as the
+  app always did, which is what keeps a print or a hand-back correct before
+  they ever open the Benotung.
+  """
+  def mark_step(%Exam{mark_step: nil}), do: Grading.default_mark_step()
+  def mark_step(%Exam{mark_step: step}), do: step
+
+  @doc """
+  True once the teacher has chosen a mark step. The grading table gates on
+  this and sends an unconfigured exam to the configuration page first.
+  """
+  def mark_step_configured?(%Exam{mark_step: nil}), do: false
+  def mark_step_configured?(%Exam{}), do: true
+
+  @doc """
+  The max points every mark of the exam divides by: the teacher's explicit
+  override, else the sum of the sample solution's points. `nil` when that
+  leaves nothing to divide by — no max, no mark.
+  """
+  def grading_max_points(%Exam{} = exam) do
+    case exam.grading_max_points || Grading.sum_points(exam.sample_solution_points) do
+      n when is_number(n) and n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Everything the grading surfaces need for one submission, in one call:
+
+      %{points:, max_points:, mark_step:, calculated_mark:, effective_mark:}
+
+  **This is the only place the `submission.mark || calculated` precedence
+  exists.** It used to be inlined in the grading table, the PDF export and
+  the learner's view, and the PDF once printed a different mark than the
+  screen because the formula had drifted (`docs/ROBUSTNESS_PLAN.md`). With a
+  per-exam mark step there are two things to keep in sync instead of one, so
+  they all go through here. Pure — no `Repo`, works on bare structs.
+  """
+  def grading_result(%Exam{} = exam, %ExamSubmission{} = submission) do
+    step = mark_step(exam)
+    max_points = grading_max_points(exam)
+    points = Grading.sum_points(submission.points_per_part)
+    calculated = Grading.mark(points, max_points, step)
+
+    %{
+      points: points,
+      max_points: max_points,
+      mark_step: step,
+      calculated_mark: calculated,
+      effective_mark: submission.mark || calculated
+    }
+  end
+
+  @doc """
   Returns the decoded submission content for correction.
   Prefers `corrected_content` if present, falls back to the original `content`.
   Both are stored as maps; this helper exists to centralise the precedence rule.
@@ -2131,25 +2189,107 @@ defmodule Tasky.Exams do
   defp normalize_grading_max_points(_), do: {:error, :invalid_max_points}
 
   @doc """
-  Sets (or clears, when `mark` is `nil`) the teacher-adjusted final mark for
-  a submission. The mark is stored as a float; when `nil`, callers should
-  fall back to the calculated mark from `points / max_points`.
+  Sets the exam's mark rounding grid and re-rounds every stored manual mark
+  onto it, in one transaction.
+
+  The re-rounding is the whole reason this is not a plain column write. A
+  manually set 4.25 is not a point on the 0.1 grid, so leaving it would put
+  a value into the grading table that the ± buttons cannot reproduce and the
+  number input flags as a step mismatch. Rounding is silent and needs no
+  decision from the teacher: ties go away from zero, so 4.25 becomes 4.3 —
+  in the learner's favour — and the teacher sees the result in the table.
+
+  Marks already on the new grid are not rewritten, so switching back and
+  forth does not touch rows it does not have to. Returns
+  `{:ok, exam, rounded_count}`.
   """
-  def set_submission_mark(scope, %ExamSubmission{} = submission, mark) do
-    with :ok <- authorize_submission(scope, submission),
-         {:ok, normalized} <- normalize_submission_mark(mark) do
-      submission
-      |> Ecto.Changeset.change(%{mark: normalized})
-      |> Repo.update()
+  def set_mark_step(scope, %Exam{} = exam, step) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_mark_step(step) do
+      case do_set_mark_step(exam, step) do
+        {:ok, {updated, changed}} ->
+          Enum.each(changed, &broadcast_submission_change/1)
+          broadcast_exam_update(updated)
+          {:ok, updated, length(changed)}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
-  defp normalize_submission_mark(nil), do: {:ok, nil}
+  defp validate_mark_step(step) do
+    if Grading.mark_step?(step), do: :ok, else: {:error, :invalid_mark_step}
+  end
 
-  defp normalize_submission_mark(mark) when is_number(mark),
-    do: {:ok, Grading.normalize_mark(mark) / 1}
+  # Locks the exam FOR UPDATE (it is written here) and then its submissions,
+  # parent before child and ascending id within the table — the ordering rule
+  # in ARCHITECTURE.md. Taking FOR UPDATE rather than FOR SHARE on the exam
+  # is deliberate: this transaction writes the exam row *and* must exclude a
+  # concurrent set_submission_mark/3, which reads the step under FOR SHARE.
+  defp do_set_mark_step(%Exam{} = exam, step) do
+    Repo.transaction(fn ->
+      locked = Repo.lock_one!(Exam, exam.id, :update)
 
-  defp normalize_submission_mark(_), do: {:error, :invalid_mark}
+      changed =
+        locked
+        |> lock_exam_submissions!()
+        |> Enum.filter(&(not is_nil(&1.mark)))
+        |> Enum.map(fn submission ->
+          {submission, Grading.normalize_mark(submission.mark, step) / 1}
+        end)
+        |> Enum.filter(fn {submission, rounded} -> submission.mark != rounded end)
+        |> Enum.map(fn {submission, rounded} ->
+          submission
+          |> Ecto.Changeset.change(%{mark: rounded})
+          |> Repo.update!()
+        end)
+
+      updated =
+        locked
+        |> Exam.mark_step_changeset(%{mark_step: step})
+        |> Repo.update!()
+
+      {updated, changed}
+    end)
+  end
+
+  @doc """
+  Sets (or clears, when `mark` is `nil`) the teacher-adjusted final mark for
+  a submission. The mark is stored as a float; when `nil`, callers should
+  fall back to the calculated mark (see `grading_result/2`).
+
+  The rounding grid is read off the exam inside the transaction rather than
+  taken from the caller: a teacher typing 4.7 while a second tab switches the
+  exam to 0.25 steps must not be able to store an off-grid mark.
+  """
+  def set_submission_mark(scope, %ExamSubmission{} = submission, mark) do
+    with :ok <- authorize_submission(scope, submission) do
+      # Exam FOR SHARE before submission FOR UPDATE — the same order as
+      # do_set_block_verdict/5, so the two cannot deadlock against each other.
+      Repo.transaction(fn ->
+        exam = Repo.lock_one!(Exam, submission.exam_id, :share)
+        locked = Repo.lock_one!(ExamSubmission, submission.id, :update)
+
+        case normalize_submission_mark(mark, mark_step(exam)) do
+          {:ok, normalized} ->
+            locked
+            |> Ecto.Changeset.change(%{mark: normalized})
+            |> Repo.update!()
+
+          {:error, reason} ->
+            Repo.rollback(reason)
+        end
+      end)
+    end
+  end
+
+  defp normalize_submission_mark(nil, _step), do: {:ok, nil}
+
+  defp normalize_submission_mark(mark, step) when is_number(mark),
+    do: {:ok, Grading.normalize_mark(mark, step) / 1}
+
+  defp normalize_submission_mark(_, _step), do: {:error, :invalid_mark}
 
   @doc """
   Updates the AI correction configuration for a single part of an exam.

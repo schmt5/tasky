@@ -106,10 +106,10 @@ defmodule TaskyWeb.ExamLive.Print do
     exam = Exams.get_exam!(scope, exam_id)
     submission = Exams.get_submission!(exam, submission_id)
 
-    sample_solution_total = sum_map_points(exam.sample_solution_points)
-    max_points = exam.grading_max_points || sample_solution_total
-    points = total_points(submission)
-    mark = submission.mark || calculate_mark(points, max_points)
+    # Points, max points and the mark all come out of one call, so the PDF
+    # cannot print a different mark than the grading table shows.
+    %{points: points, max_points: max_points, effective_mark: mark} =
+      Exams.grading_result(exam, submission)
 
     sections = ExamSubmissionView.sections(exam, submission, opts)
 
@@ -131,13 +131,6 @@ defmodule TaskyWeb.ExamLive.Print do
     |> assign(:page_title, "Druckansicht")
     |> assign(:error, message)
   end
-
-  defp sum_map_points(map), do: Grading.sum_points(map)
-
-  defp total_points(submission), do: Grading.sum_points(submission.points_per_part)
-
-  # One mark formula for screen and PDF — Tasky.Grading is the source of truth.
-  defp calculate_mark(points, max), do: Grading.mark(points, max)
 
   defp format_mark(mark), do: Grading.format_mark(mark)
 
