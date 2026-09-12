@@ -327,22 +327,24 @@ defmodule TaskyWeb.TaskLive.Files do
   # directly would silently never match.
   defp build_preview(assigns, file_id) do
     Enum.find_value(assigns.students, fn student ->
-      Enum.find_value(assigns.upload_fields, fn field ->
-        with %{file: file, submission_id: submission_id} <-
-               Map.get(assigns.files, {student.id, field.id}),
-             true <- to_string(file.id) == file_id,
-             "image" <- type_key(file) do
-          %{
-            file: file,
-            submission_id: submission_id,
-            student_name: student_full_name(student),
-            field_label: field.label
-          }
-        else
-          _ -> nil
-        end
-      end)
+      Enum.find_value(assigns.upload_fields, &preview_for(assigns, student, &1, file_id))
     end)
+  end
+
+  defp preview_for(assigns, student, field, file_id) do
+    with %{file: file, submission_id: submission_id} <-
+           Map.get(assigns.files, {student.id, field.id}),
+         true <- to_string(file.id) == file_id,
+         "image" <- type_key(file) do
+      %{
+        file: file,
+        submission_id: submission_id,
+        student_name: student_full_name(student),
+        field_label: field.label
+      }
+    else
+      _ -> nil
+    end
   end
 
   defp type_key(file), do: file.stored_filename |> Path.extname() |> Uploads.type_key_for_ext()

@@ -116,19 +116,23 @@ defmodule Tasky.Tasks.SelfCheck do
         nil
 
       accepted ->
-        case String.trim(plain_text(node)) do
-          "" ->
-            "wrong"
-
-          given ->
-            if Enum.any?(accepted, &StringComparator.text_match?(given, &1, @match_opts)),
-              do: "correct",
-              else: "wrong"
-        end
+        text_verdict(plain_text(node), accepted)
     end
   end
 
   defp verdict_for(_node, _payload, _off?), do: nil
+
+  defp text_verdict(given, accepted) do
+    case String.trim(given) do
+      "" ->
+        "wrong"
+
+      given ->
+        if Enum.any?(accepted, &StringComparator.text_match?(given, &1, @match_opts)),
+          do: "correct",
+          else: "wrong"
+    end
+  end
 
   defp accepted_answers(payload),
     do: payload |> plain_text_from_nodes() |> AnswerVariants.split()

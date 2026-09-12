@@ -14,8 +14,6 @@ defmodule TaskyWeb.ExamComponents do
 
   import TaskyWeb.CoreComponents, only: [icon: 1]
 
-  alias Tasky.Grading
-
   @doc """
   Die beiden Durchführungsmodi, in der Reihenfolge, in der sie auf der
   Config-Seite stehen. `assigned` ist die Vorauswahl.
