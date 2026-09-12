@@ -8,6 +8,9 @@ defmodule Tasky.Accounts do
 
   alias Tasky.Accounts.{User, UserNotifier, UserToken}
   alias Tasky.Classes
+  alias Tasky.Courses.CourseEnrollment
+  alias Tasky.Exams.ExamSubmission
+  alias Tasky.Tasks.TaskSubmission
 
   ## Database getters
 
@@ -494,6 +497,72 @@ defmodule Tasky.Accounts do
   def reset_student_password(scope, %User{} = student, new_password) do
     with :ok <- authorize_student(scope, student) do
       do_admin_reset_password(student, new_password)
+    end
+  end
+
+  @doc """
+  What hangs off a learner's account, for the deletion confirmation.
+
+  Deliberately three separate numbers rather than one total, because they do
+  *not* share a fate — see `delete_student/2`. A duplicate account shows zero
+  everywhere, which is exactly what the teacher needs to see before confirming.
+  """
+  def student_data_summary(scope, %User{} = student) do
+    with :ok <- authorize_student(scope, student) do
+      {:ok,
+       %{
+         task_submissions: count_rows(where(TaskSubmission, [s], s.student_id == ^student.id)),
+         exam_submissions: count_rows(where(ExamSubmission, [s], s.user_id == ^student.id)),
+         course_enrollments: count_rows(where(CourseEnrollment, [e], e.student_id == ^student.id))
+       }}
+    end
+  end
+
+  defp count_rows(query), do: Repo.aggregate(query, :count)
+
+  @doc """
+  Deletes a learner's account for good, on behalf of a teacher or admin.
+
+  The use case is a learner who registered twice: one of the two accounts has
+  to go. `authorize_student/2` is what makes this safe to expose to teachers —
+  it refuses anything that is not a *student* visible to the scope, so the
+  `courses.teacher_id` / `exams.teacher_id` cascades (which would take
+  colleagues' whole courses and every participant's exam with them) are
+  unreachable from here, and nobody can delete themselves.
+
+  What the row's disappearance does to the rest of the data is decided by the
+  foreign keys, and the three outcomes are all intentional:
+
+    * **gone** — sessions, course enrolments, and the learner's learning-unit
+      submissions with their teacher feedback (`:delete_all`),
+    * **kept, anonymised** — exam submissions (`:nilify_all`); the copied
+      firstname/lastname/email on the row are what keep a graded exam gradable,
+      which is the whole reason that FK nilifies. Anonymous course feedback
+      survives the same way.
+
+  The stored bytes of those cascaded submissions are nobody's job but ours —
+  no FK reaches into storage — so they are collected *before* the delete and
+  cleared after it, the same shape as `Tasky.Exams.delete_exam/2`. Exam
+  submission files stay, because their rows do.
+  """
+  def delete_student(scope, %User{} = student) do
+    with :ok <- authorize_student(scope, student) do
+      submission_dirs =
+        TaskSubmission
+        |> where([s], s.student_id == ^student.id)
+        |> select([s], {s.task_id, s.id})
+        |> Repo.all()
+
+      case Repo.delete(student) do
+        {:ok, deleted} ->
+          # After the commit, and never inside it: a storage hiccup must not
+          # roll back a deletion the teacher already confirmed.
+          Tasky.Uploads.delete_task_submission_dirs(submission_dirs)
+          {:ok, deleted}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
     end
   end
 

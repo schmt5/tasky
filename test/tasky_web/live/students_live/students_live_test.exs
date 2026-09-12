@@ -189,4 +189,116 @@ defmodule TaskyWeb.StudentsLiveTest do
       assert Tasky.Accounts.get_user_by_email_and_password(student.email, "frisch-gesetzt-123")
     end
   end
+
+  describe "delete" do
+    defp open_delete_modal(conn, teacher, student) do
+      conn = log_in_user(conn, teacher)
+      {:ok, view, _html} = live(conn, ~p"/students/#{student.id}/edit")
+      view |> element("button[phx-click=open_delete_modal]") |> render_click()
+      {conn, view}
+    end
+
+    defp type_confirmation(view, student, typed) do
+      view
+      |> form("#delete-student-form-#{student.id}", delete_confirmation: %{email: typed})
+      |> render_change()
+
+      view
+    end
+
+    test "the modal lists what hangs off the account", %{
+      conn: conn,
+      teacher: teacher,
+      student: student
+    } do
+      {_conn, view} = open_delete_modal(conn, teacher, student)
+
+      assert has_element?(view, "#delete-student-form-#{student.id}")
+      # The duplicate the teacher means to delete is the one showing zeroes.
+      assert render(view) =~ "Konto endgültig löschen"
+    end
+
+    test "the submit button stays disabled until the email matches", %{
+      conn: conn,
+      teacher: teacher,
+      student: student
+    } do
+      {_conn, view} = open_delete_modal(conn, teacher, student)
+
+      assert has_element?(view, "#delete-student-form-#{student.id} button[disabled]")
+
+      view = type_confirmation(view, student, "tippfehler@example.com")
+      assert has_element?(view, "#delete-student-form-#{student.id} button[disabled]")
+
+      view = type_confirmation(view, student, student.email)
+      refute has_element?(view, "#delete-student-form-#{student.id} button[disabled]")
+    end
+
+    test "a teacher deletes the account and lands back on the list", %{
+      conn: conn,
+      teacher: teacher,
+      student: student
+    } do
+      {conn, view} = open_delete_modal(conn, teacher, student)
+
+      result =
+        view
+        |> form("#delete-student-form-#{student.id}",
+          delete_confirmation: %{email: student.email}
+        )
+        |> render_submit()
+
+      assert {:ok, _index, html} = follow_redirect(result, conn, ~p"/students")
+      assert html =~ "gelöscht"
+      # They were the teacher's only learner, so the directory is empty now.
+      assert html =~ "Keine Lernenden gefunden"
+      refute Tasky.Repo.get(Tasky.Accounts.User, student.id)
+    end
+
+    test "the typed address is checked again on submit, not just in the UI", %{
+      conn: conn,
+      teacher: teacher,
+      student: student
+    } do
+      {_conn, view} = open_delete_modal(conn, teacher, student)
+
+      html =
+        view
+        |> form("#delete-student-form-#{student.id}",
+          delete_confirmation: %{email: "jemand.anders@example.com"}
+        )
+        |> render_submit()
+
+      assert html =~ "stimmt nicht überein"
+      assert Tasky.Repo.get(Tasky.Accounts.User, student.id)
+    end
+
+    test "closing the modal resets the typed confirmation", %{
+      conn: conn,
+      teacher: teacher,
+      student: student
+    } do
+      {_conn, view} = open_delete_modal(conn, teacher, student)
+      view = type_confirmation(view, student, student.email)
+
+      view |> element("button[phx-click=close_delete_modal]") |> render_click()
+      refute has_element?(view, "#delete-student-form-#{student.id}")
+
+      # Reopening must not carry the earlier confirmation over.
+      view |> element("button[phx-click=open_delete_modal]") |> render_click()
+      assert has_element?(view, "#delete-student-form-#{student.id} button[disabled]")
+    end
+
+    test "a foreign student cannot be reached at all", %{
+      conn: conn,
+      teacher: teacher,
+      foreign_student: foreign
+    } do
+      assert_raise Ecto.NoResultsError, fn ->
+        live(log_in_user(conn, teacher), ~p"/students/#{foreign.id}/edit")
+      end
+
+      assert Tasky.Repo.get(Tasky.Accounts.User, foreign.id)
+    end
+  end
 end

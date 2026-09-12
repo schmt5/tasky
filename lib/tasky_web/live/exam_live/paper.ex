@@ -59,7 +59,7 @@ defmodule TaskyWeb.ExamLive.Paper do
 
           <p class="text-sm text-stone-600 flex-1 min-w-[16rem]">
             Klicke in ein Antwortfeld und drücke <kbd class="kbd kbd-sm">Enter</kbd>, um es zu
-            vergrössern. Die Grösse wird automatisch gespeichert.
+            vergrössern.
           </p>
 
           <.link

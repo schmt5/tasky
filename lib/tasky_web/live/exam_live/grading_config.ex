@@ -39,6 +39,14 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
+        <div class="max-w-3xl">
+          <ExamComponents.max_points_card
+            value={@effective_max_points}
+            sample_solution_total={@sample_solution_total}
+            free_document={@free_document}
+          />
+        </div>
+
         <%!-- Mark step card --%>
         <div class="max-w-3xl bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6 border-b border-stone-100">
@@ -76,24 +84,7 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
                 </span>
               </label>
             </div>
-
-            <%!-- Die Punkte bleiben unabhängig davon auf 0.25 — das ist die
-                  Frage, die hier sonst offen bliebe. --%>
-            <p class="text-xs text-stone-400 leading-relaxed border-t border-stone-100 pt-4">
-              Die Schritte gelten nur für die Note. Punkte vergibst du weiterhin in
-              0.25er-Schritten, unabhängig von dieser Einstellung. Du kannst die Notenschritte
-              später jederzeit wechseln.
-            </p>
           </div>
-        </div>
-
-        <%!-- Max points, dieselbe Karte wie über der Benotungstabelle --%>
-        <div class="max-w-3xl">
-          <ExamComponents.max_points_card
-            value={@effective_max_points}
-            sample_solution_total={@sample_solution_total}
-            free_document={@free_document}
-          />
         </div>
 
         <div class="max-w-3xl flex items-center justify-between">
@@ -142,12 +133,10 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
   defp step_title("0.1"), do: "Zehntelnoten (4.7, 4.8, 4.9)"
 
   defp step_hint("0.25"),
-    do: "Der übliche Fall und die Voreinstellung: die Note rastert auf Viertel."
+    do: "Die Schritte der Note sind 0.25."
 
   defp step_hint("0.1"),
-    do:
-      "Feineres Raster für Lehrpersonen, die in Zehnteln benoten. " <>
-        "Bereits gesetzte Noten werden auf das neue Raster gerundet."
+    do: "Die Schritte der Note sind 0.1."
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do

@@ -174,6 +174,28 @@ defmodule TaskyWeb.StudentsLive.Edit do
             <.icon name="hero-arrow-path" class="w-4 h-4" /> Zurücksetzen
           </button>
         </div>
+
+        <%!-- Danger zone --%>
+        <div class="bg-white rounded-[14px] border border-red-100 px-6 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-[10px] bg-red-50 flex items-center justify-center shrink-0">
+              <.icon name="hero-trash" class="w-5 h-5 text-red-500" />
+            </div>
+            <div>
+              <h2 class="text-[15px] font-semibold text-stone-800">Konto löschen</h2>
+              <p class="text-[13px] text-stone-500">
+                Entfernt das Konto endgültig — etwa wenn sich jemand zweimal registriert hat.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            phx-click="open_delete_modal"
+            class="inline-flex items-center gap-1.5 text-sm font-medium text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-2 rounded-lg transition-all duration-150 shrink-0"
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> Löschen
+          </button>
+        </div>
       </div>
 
       <%= if @show_password_modal do %>
@@ -245,6 +267,115 @@ defmodule TaskyWeb.StudentsLive.Edit do
           </div>
         </dialog>
       <% end %>
+
+      <%= if @show_delete_modal do %>
+        <dialog
+          class="modal modal-open"
+          phx-window-keydown="close_delete_modal"
+          phx-key="escape"
+        >
+          <div class="modal-box max-w-md">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                <.icon name="hero-exclamation-triangle" class="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-stone-900">Konto endgültig löschen</h3>
+                <p class="text-sm text-stone-500">{full_name(@student)}</p>
+              </div>
+            </div>
+
+            <%!-- The inventory: what actually hangs off this account. All zeroes
+                  is how a teacher recognises the duplicate they meant to pick. --%>
+            <ul class="text-[13px] text-stone-600 space-y-2 mb-4">
+              <li class="flex items-start gap-2">
+                <.icon name="hero-trash" class="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                <span>
+                  <strong>{@delete_summary.task_submissions}</strong>
+                  {noun(@delete_summary.task_submissions, "Abgabe", "Abgaben")} in Lerneinheiten {verb(
+                    @delete_summary.task_submissions,
+                    "wird",
+                    "werden"
+                  )} mit allen Dateien
+                  und Rückmeldungen gelöscht.
+                </span>
+              </li>
+              <li class="flex items-start gap-2">
+                <.icon name="hero-trash" class="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                <span>
+                  <strong>{@delete_summary.course_enrollments}</strong>
+                  {noun(
+                    @delete_summary.course_enrollments,
+                    "Kurseinschreibung",
+                    "Kurseinschreibungen"
+                  )}
+                  {verb(@delete_summary.course_enrollments, "wird", "werden")} aufgehoben.
+                </span>
+              </li>
+              <li class="flex items-start gap-2">
+                <.icon name="hero-archive-box" class="w-4 h-4 text-stone-400 mt-0.5 shrink-0" />
+                <span>
+                  <strong>{@delete_summary.exam_submissions}</strong>
+                  {noun(@delete_summary.exam_submissions, "Prüfungsabgabe", "Prüfungsabgaben")}
+                  {verb(@delete_summary.exam_submissions, "bleibt", "bleiben")} erhalten — mit
+                  Name und E-Mail, aber ohne Konto dahinter.
+                </span>
+              </li>
+            </ul>
+
+            <div class="bg-red-50 border border-red-200 rounded-[10px] p-3 mb-4">
+              <div class="flex items-start gap-2">
+                <.icon
+                  name="hero-exclamation-triangle"
+                  class="w-4 h-4 text-red-600 mt-0.5 shrink-0"
+                />
+                <p class="text-xs text-red-800 leading-[1.5]">
+                  Das lässt sich nicht rückgängig machen. Gibt es zwei Konten derselben
+                  Person, unterscheiden sie sich genau in der E-Mail-Adresse — tippe sie
+                  deshalb zur Bestätigung ab.
+                </p>
+              </div>
+            </div>
+
+            <.form
+              for={@delete_form}
+              id={"delete-student-form-#{@student.id}"}
+              phx-submit="delete_student"
+              phx-change="validate_delete"
+            >
+              <.input
+                field={@delete_form[:email]}
+                type="text"
+                label={"Zur Bestätigung #{@student.email} eingeben"}
+                autocomplete="off"
+                phx-mounted={JS.focus()}
+                class="w-full px-4 py-3 text-[15px] text-stone-900 bg-white border border-stone-200 rounded-[10px] transition-all duration-150 placeholder:text-stone-400 focus:outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100"
+              />
+
+              <div class="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  phx-click="close_delete_modal"
+                  class="px-4 py-2.5 text-sm font-medium text-stone-700 bg-white border border-stone-200 rounded-[10px] hover:bg-stone-50 transition-all duration-150"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  disabled={not @delete_confirmed}
+                  phx-disable-with="Wird gelöscht..."
+                  class="px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-[10px] shadow-[0_2px_8px_rgba(220,38,38,0.25)] hover:bg-red-700 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                >
+                  Konto löschen
+                </button>
+              </div>
+            </.form>
+          </div>
+          <div class="modal-backdrop bg-black/50" phx-click="close_delete_modal">
+            <button class="cursor-default">close</button>
+          </div>
+        </dialog>
+      <% end %>
     </Layouts.app>
     """
   end
@@ -261,7 +392,8 @@ defmodule TaskyWeb.StudentsLive.Edit do
      |> assign(:classes, Classes.list_classes(scope))
      |> assign(:profile_form, profile_form(student))
      |> assign(:show_password_modal, false)
-     |> assign(:password_form, blank_password_form())}
+     |> assign(:password_form, blank_password_form())
+     |> close_delete_modal()}
   end
 
   @impl true
@@ -333,6 +465,92 @@ defmodule TaskyWeb.StudentsLive.Edit do
         {:noreply, assign(socket, :password_form, to_form(changeset, as: "password_reset"))}
     end
   end
+
+  def handle_event("open_delete_modal", _params, socket) do
+    scope = socket.assigns.current_scope
+
+    case Accounts.student_data_summary(scope, socket.assigns.student) do
+      {:ok, summary} ->
+        {:noreply,
+         socket
+         |> assign(:show_delete_modal, true)
+         |> assign(:delete_summary, summary)
+         |> assign(:delete_form, blank_delete_form())
+         |> assign(:delete_confirmed, false)}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Dazu fehlt dir die Berechtigung.")}
+    end
+  end
+
+  def handle_event("close_delete_modal", _params, socket) do
+    {:noreply, close_delete_modal(socket)}
+  end
+
+  def handle_event("validate_delete", %{"delete_confirmation" => %{"email" => typed}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:delete_form, to_form(%{"email" => typed}, as: "delete_confirmation"))
+     |> assign(:delete_confirmed, matches_email?(typed, socket.assigns.student.email))}
+  end
+
+  def handle_event("delete_student", %{"delete_confirmation" => %{"email" => typed}}, socket) do
+    student = socket.assigns.student
+
+    # The disabled submit button is a hint, not the gate — a crafted event can
+    # skip it, so the typed address is checked again here.
+    if matches_email?(typed, student.email) do
+      delete_student(socket, student)
+    else
+      {:noreply,
+       put_flash(socket, :error, "Die eingegebene E-Mail-Adresse stimmt nicht überein.")}
+    end
+  end
+
+  defp delete_student(socket, student) do
+    case Accounts.delete_student(socket.assigns.current_scope, student) do
+      {:ok, _student} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Konto von #{student.email} wurde gelöscht.")
+         |> push_navigate(to: ~p"/students")}
+
+      {:error, :unauthorized} ->
+        {:noreply,
+         socket
+         |> close_delete_modal()
+         |> put_flash(:error, "Dazu fehlt dir die Berechtigung.")}
+
+      {:error, _changeset} ->
+        {:noreply,
+         socket
+         |> close_delete_modal()
+         |> put_flash(:error, "Das Konto konnte nicht gelöscht werden.")}
+    end
+  end
+
+  # Emails are citext in the database, so the comparison here is
+  # case-insensitive too — otherwise a teacher who types the address with a
+  # capital letter is told it does not match their own screen.
+  defp matches_email?(typed, email) do
+    String.downcase(String.trim(typed)) == String.downcase(email || "")
+  end
+
+  defp close_delete_modal(socket) do
+    socket
+    |> assign(:show_delete_modal, false)
+    |> assign(:delete_summary, nil)
+    |> assign(:delete_form, blank_delete_form())
+    |> assign(:delete_confirmed, false)
+  end
+
+  defp blank_delete_form, do: to_form(%{"email" => ""}, as: "delete_confirmation")
+
+  defp noun(1, singular, _plural), do: singular
+  defp noun(_count, _singular, plural), do: plural
+
+  defp verb(1, singular, _plural), do: singular
+  defp verb(_count, _singular, plural), do: plural
 
   defp profile_form(student) do
     to_form(Accounts.change_user_admin(student, %{}, validate_unique: false))

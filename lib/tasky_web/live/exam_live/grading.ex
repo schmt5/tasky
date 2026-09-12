@@ -56,7 +56,6 @@ defmodule TaskyWeb.ExamLive.Grading do
                 class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
               >
                 <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Konfigurieren
-                <span class="font-mono text-xs text-stone-400">{@mark_step}er-Schritte</span>
               </.link>
 
               <%= if @pdf_enabled do %>
@@ -100,14 +99,6 @@ defmodule TaskyWeb.ExamLive.Grading do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-4">
-        <%!-- Max points config (inline, body): also on the grading config
-             page, but kept here too so the teacher can nudge it and watch
-             every row's mark move. --%>
-        <ExamComponents.max_points_card
-          value={@effective_max_points}
-          sample_solution_total={@sample_solution_total}
-          free_document={@free_document}
-        />
         <%!-- Table --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @submissions == [] do %>
@@ -505,9 +496,7 @@ defmodule TaskyWeb.ExamLive.Grading do
     |> assign(:page_title, exam.name <> " – Benotung")
     |> assign(:exam, exam)
     |> assign(:mark_step, Exams.mark_step(exam))
-    |> assign(:free_document, Exams.free_document?(exam))
     |> assign(:submissions, submissions)
-    |> assign(:sample_solution_total, sample_solution_total)
     |> assign(:effective_max_points, effective_max_points)
     # Sorted here and not only in handle_params/3: should that call not
     # happen, :rows and :sort are set all the same.
@@ -558,18 +547,6 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   @impl true
-  def handle_event("set_max_points", %{"max_points" => raw}, socket) do
-    save_max_points(socket, parse_points(raw))
-  end
-
-  def handle_event("adjust_max_points", %{"direction" => dir}, socket) do
-    delta = if dir == "up", do: 0.25, else: -0.25
-    # Floor at 0.25, not 0: a max of 0 means "no mark for anybody", so the
-    # minus button must not be able to walk the exam into it.
-    new_value = max((socket.assigns.effective_max_points || 0) + delta, 0.25)
-    save_max_points(socket, new_value)
-  end
-
   def handle_event("set_mark", %{"submission_id" => sub_id, "mark" => raw}, socket) do
     save_mark(socket, sub_id, parse_mark(raw, socket.assigns.mark_step))
   end
@@ -772,27 +749,6 @@ defmodule TaskyWeb.ExamLive.Grading do
   defp pdf_word(1), do: "PDF"
   defp pdf_word(_), do: "PDFs"
 
-  defp save_max_points(socket, value) do
-    case Exams.update_grading_max_points(socket.assigns.current_scope, socket.assigns.exam, value) do
-      {:ok, updated_exam} ->
-        # Read the effective value back off the exam, not off the input: the
-        # context normalizes (quarter-rounds) what it stores.
-        effective = updated_exam.grading_max_points || socket.assigns.sample_solution_total
-
-        {:noreply,
-         socket
-         |> assign(:exam, updated_exam)
-         |> assign(:effective_max_points, effective)
-         |> assign(:rows, build_rows(updated_exam, socket.assigns.submissions))}
-
-      {:error, :invalid_max_points} ->
-        {:noreply, put_flash(socket, :error, "Maximalpunkte müssen grösser als 0 sein.")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Maximalpunkte konnten nicht gespeichert werden.")}
-    end
-  end
-
   defp save_mark(socket, sub_id, mark) do
     submission = Enum.find(socket.assigns.submissions, &(to_string(&1.id) == to_string(sub_id)))
 
@@ -842,8 +798,6 @@ defmodule TaskyWeb.ExamLive.Grading do
   defp mark_color_class(n) when n >= 5.5, do: "text-emerald-600"
   defp mark_color_class(n) when n >= 4.0, do: "text-stone-700"
   defp mark_color_class(_), do: "text-red-600"
-
-  defp parse_points(value), do: Grading.parse_points(value)
 
   # The step matters here too, not just for the ± buttons: a 4.7 typed into
   # an exam that grades on 0.25 has to come back as 4.75.

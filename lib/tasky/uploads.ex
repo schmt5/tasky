@@ -561,6 +561,56 @@ defmodule Tasky.Uploads do
     end)
   end
 
+  @doc """
+  Removes the stored answer files of several learning-unit submissions at once.
+
+  Used when a learner's account is deleted: the DB cascade takes the
+  `task_submissions` rows (and with them `task_submission_files`), so
+  `Tasky.Tasks.delete_submission_file/2` — the only other place that clears a
+  submission's bytes — never gets a chance to run. Takes `{task_id,
+  submission_id}` pairs because the bytes live under the *task*, not under the
+  learner.
+
+  Best-effort and never raises, like `delete_task_files_many/1`, and must not
+  run inside a `Repo.transaction/1`.
+  """
+  @spec delete_task_submission_dirs([{term(), term()}]) :: :ok
+  def delete_task_submission_dirs(pairs) do
+    Tasky.TaskSupervisor
+    |> Task.Supervisor.async_stream_nolink(
+      pairs,
+      fn {task_id, submission_id} -> delete_task_submission_dir(task_id, submission_id) end,
+      max_concurrency: @copy_concurrency,
+      timeout: @copy_timeout,
+      on_timeout: :kill_task,
+      ordered: false
+    )
+    |> Enum.each(fn
+      {:ok, _} ->
+        :ok
+
+      {:exit, reason} ->
+        Logger.warning("delete: submission file cleanup failed #{inspect(reason)}")
+    end)
+  end
+
+  defp delete_task_submission_dir(task_id, submission_id) do
+    segments = [to_string(task_id), to_string(submission_id)]
+
+    case validate_segments(segments) do
+      :ok ->
+        Tasky.Storage.delete_prefix("tasks/#{task_id}/submissions/#{submission_id}")
+
+      {:error, :invalid} ->
+        Logger.warning(
+          "upload: refusing to clear submission files for invalid ids " <>
+            "#{inspect(task_id)}/#{inspect(submission_id)}"
+        )
+    end
+
+    :ok
+  end
+
   @doc "Canonical content type for an allowed extension, or nil."
   def content_type_for_ext(ext), do: Map.get(@ext_content_types, String.downcase(ext))
 

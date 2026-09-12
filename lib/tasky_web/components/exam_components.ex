@@ -460,18 +460,12 @@ defmodule TaskyWeb.ExamComponents do
         <.icon name="hero-calculator" class="w-5 h-5 text-sky-500" />
       </div>
       <div class="flex-1">
-        <h2 class="text-sm font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
-        <p :if={not @free_document} class="text-xs text-stone-500 mt-0.5">
-          Standardwert: Summe aller Musterlösungs-Punkte ({Grading.format_points(
-            @sample_solution_total
-          )}). Kann hier angepasst werden, z.B. wenn nicht alle Teile gewertet werden.
+        <h2 class="text-md font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
+        <p class="text-xs text-stone-500 mt-0.5">
+          Note = (erreichte Punkte / Maximalpunkte) × 5 + 1.
         </p>
-        <%!-- Im freien Modus gibt es keine Musterlösung; die Maximalpunkte
-             kommen aus dem Punkte-Tab der Prüfung. --%>
-        <p :if={@free_document} class="text-xs text-stone-500 mt-0.5">
-          Standardwert: die Maximalpunkte des Dokuments ({Grading.format_points(
-            @sample_solution_total
-          )}). Kann hier angepasst werden.
+        <p class="text-xs text-stone-500 mt-0.5">
+          Mit dieser Formel wird die Note berechnet. Du kannst jede Note danach selber anpassen.
         </p>
       </div>
       <div class="shrink-0 inline-flex items-center gap-2">

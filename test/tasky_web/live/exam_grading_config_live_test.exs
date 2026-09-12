@@ -50,9 +50,11 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       {:ok, _view, html} =
         conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/grading")
 
-      assert html =~ "Maximalpunkte für Benotung"
       assert html =~ "Konfigurieren"
       assert html =~ "grading-config-btn"
+      # The max points live on the configuration page only.
+      refute html =~ "Maximalpunkte für Benotung"
+      refute html =~ "er-Schritte"
     end
   end
 
@@ -124,10 +126,6 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       assert html =~ "Note um 0.1 erhöhen"
       assert html =~ ~s|step="0.1"|
       refute html =~ "Note um 0.25 senken"
-
-      # The points grid is untouched: the max-points card stays on 0.25.
-      assert html =~ "0.25 Punkte mehr"
-      assert html =~ ~s|step="0.25"|
     end
 
     test "the plus button moves a mark by a tenth", %{conn: conn} do
