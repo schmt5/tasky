@@ -153,6 +153,12 @@ defmodule TaskyWeb.Student.ExamsLive do
     {:noreply, assign_exams(socket, Exams.list_assigned_exams(socket.assigns.current_scope))}
   end
 
+  # Only one participant is affected, but the list is short and refetching it
+  # is the simplest way to tell whether it was this student.
+  def handle_info({:participant_removed, _submission_id}, socket) do
+    {:noreply, assign_exams(socket, Exams.list_assigned_exams(socket.assigns.current_scope))}
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp assign_exams(socket, submissions) do

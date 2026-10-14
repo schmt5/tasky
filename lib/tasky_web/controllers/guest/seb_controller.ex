@@ -65,9 +65,10 @@ defmodule TaskyWeb.Guest.SebController do
   When SEB navigates to this URL it recognises it as the configured quit link
   and auto-exits. The HTML body is a simple fallback for non-SEB browsers.
   """
-  def quit(conn, %{"exam_token" => exam_token}) do
-    _submission = Exams.get_exam_submission_by_token!(exam_token)
-
+  # No token lookup: a participant removed from the exam no longer has a
+  # submission, but is still sitting in SEB and needs this way out. The page
+  # reveals nothing about the token.
+  def quit(conn, %{"exam_token" => _exam_token}) do
     conn
     |> put_resp_content_type("text/html")
     |> send_resp(200, """

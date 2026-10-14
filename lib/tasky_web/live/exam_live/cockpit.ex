@@ -364,17 +364,17 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                         <span class="copy-label">Teilnahmelink kopieren</span>
                       </button>
                     </li>
-                    <li :if={@assigned_mode? and not submission.submitted}>
+                    <li>
                       <button
-                        id={"unassign-#{submission.id}"}
+                        id={"remove-participant-#{submission.id}"}
                         type="button"
-                        phx-click="unassign_student"
+                        phx-click="remove_participant"
                         phx-value-submission_id={submission.id}
-                        data-confirm={unassign_confirm(submission)}
+                        data-confirm={remove_confirm(submission)}
                         class="flex items-center gap-2 text-sm text-red-600"
                       >
                         <.icon name="hero-user-minus" class="w-4 h-4 text-red-400" />
-                        <span>Zuweisung entfernen</span>
+                        <span>Aus Prüfung entfernen</span>
                       </button>
                     </li>
                   </ul>
@@ -866,11 +866,24 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     Enum.map(Tasky.Classes.list_classes(scope), &{&1.name, &1.id})
   end
 
-  defp unassign_confirm(%{content: content}) when is_map(content) and map_size(content) > 0 do
-    "Diese Person hat bereits Antworten erfasst. Zuweisung samt Antworten wirklich entfernen?"
+  # The removal deletes answers and files for good, so the confirmation says
+  # what is at stake for this particular person.
+  defp remove_confirm(%{submitted: true} = submission) do
+    "#{full_name(submission)} hat bereits abgegeben. Aus der Prüfung entfernen und die " <>
+      "Abgabe samt Antworten und Dateien endgültig löschen?"
   end
 
-  defp unassign_confirm(_submission), do: "Zuweisung wirklich entfernen?"
+  defp remove_confirm(%{content: content} = submission)
+       when is_map(content) and map_size(content) > 0 do
+    "#{full_name(submission)} hat bereits Antworten erfasst. Aus der Prüfung entfernen und " <>
+      "die Antworten endgültig löschen? Eine laufende Sitzung wird sofort beendet."
+  end
+
+  defp remove_confirm(submission),
+    do: "#{full_name(submission)} aus der Prüfung entfernen?"
+
+  defp full_name(submission),
+    do: String.trim("#{submission.firstname} #{submission.lastname}")
 
   # Map of present exam_token => %{in_seb: bool}. A participant counts as in SEB
   # if any of their tracked sessions reports it (e.g. the SEB window alongside a
@@ -1021,6 +1034,14 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     {:noreply, refresh_submissions(socket)}
   end
 
+  # A removal from a second cockpit tab — this one only learns about it here.
+  def handle_info({:participant_removed, _submission_id}, socket) do
+    {:noreply,
+     socket
+     |> refresh_submissions()
+     |> assign_assignable()}
+  end
+
   @impl true
   def handle_event("open_assign", _params, socket) do
     {:noreply, assign(socket, :show_assign?, true)}
@@ -1090,27 +1111,20 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     end
   end
 
-  def handle_event("unassign_student", %{"submission_id" => raw}, socket) do
+  def handle_event("remove_participant", %{"submission_id" => raw}, socket) do
     exam = socket.assigns.exam
 
     with id when not is_nil(id) <- Params.int(raw),
          submission when not is_nil(submission) <- Exams.get_submission(exam, id),
-         {:ok, _} <- Exams.unassign_student(socket.assigns.current_scope, exam, submission) do
+         {:ok, _} <- Exams.remove_participant(socket.assigns.current_scope, exam, submission) do
       {:noreply,
        socket
        |> refresh_submissions()
-       |> assign_assignable()}
+       |> assign_assignable()
+       |> put_flash(:info, "#{full_name(submission)} wurde aus der Prüfung entfernt.")}
     else
-      {:error, :already_submitted} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           "Diese Prüfung wurde bereits abgegeben und kann nicht mehr entfernt werden."
-         )}
-
       _ ->
-        {:noreply, put_flash(socket, :error, "Zuweisung konnte nicht entfernt werden.")}
+        {:noreply, put_flash(socket, :error, "Teilnehmende:r konnte nicht entfernt werden.")}
     end
   end
 

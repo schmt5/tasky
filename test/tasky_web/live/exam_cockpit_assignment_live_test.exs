@@ -87,7 +87,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       refute html =~ "/guest/exam/"
       refute html =~ submission.exam_token
       refute html =~ "Teilnahmelink kopieren"
-      assert html =~ "Zuweisung entfernen"
+      assert html =~ "Aus Prüfung entfernen"
     end
 
     test "assigns a single student and updates the roster", %{conn: conn} do
@@ -188,22 +188,42 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       {:ok, submission} = Exams.assign_student(scope, exam, student.id)
       {:ok, view, _html} = open_cockpit(conn, teacher, exam)
 
-      view |> element("#unassign-#{submission.id}") |> render_click()
+      view |> element("#remove-participant-#{submission.id}") |> render_click()
 
       assert Exams.list_exam_submissions(exam) == []
       assert open_assign_dialog(view) =~ "assign-student-#{student.id}"
     end
 
-    test "offers no removal once the participant has submitted", %{conn: conn} do
+    test "removes a participant who already handed in, after the exam was stopped", %{
+      conn: conn
+    } do
       %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
       student = user_fixture(%{role: "student"})
       {:ok, submission} = Exams.assign_student(scope, exam, student.id)
-      {:ok, _submission} = Exams.submit_exam_submission(submission)
+      {:ok, submission} = Exams.submit_exam_submission(submission)
+      {:ok, exam} = Exams.update_exam_status(scope, exam, "finished")
 
-      {:ok, _view, html} = open_cockpit(conn, teacher, exam)
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
 
-      assert html =~ "Abgegeben"
-      refute html =~ "unassign-#{submission.id}"
+      assert has_element?(
+               view,
+               ~s{#remove-participant-#{submission.id}[data-confirm*="bereits abgegeben"]}
+             )
+
+      view |> element("#remove-participant-#{submission.id}") |> render_click()
+
+      assert Exams.list_exam_submissions(exam) == []
+      refute has_element?(view, "#submissions-#{submission.id}")
+    end
+
+    test "removes an anonymous participant", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam("anonymous", "running")
+      submission = exam_submission_fixture(exam)
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      view |> element("#remove-participant-#{submission.id}") |> render_click()
+
+      assert Exams.list_exam_submissions(exam) == []
     end
 
     test "assignment stays possible while the exam is running", %{conn: conn} do

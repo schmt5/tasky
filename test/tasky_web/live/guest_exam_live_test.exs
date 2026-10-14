@@ -17,6 +17,39 @@ defmodule TaskyWeb.GuestExamLiveTest do
     live(conn, ~p"/guest/exam/#{submission.exam_token}")
   end
 
+  describe "removed by the teacher" do
+    test "the running session ends at once", %{conn: conn} do
+      %{exam: exam, submission: submission} = running_exam_with_submission()
+      {:ok, view, _html} = open_exam(conn, submission)
+      refute has_element?(view, "#participant-removed")
+
+      scope = Tasky.Accounts.Scope.for_user(Tasky.Accounts.get_user!(exam.teacher_id))
+      {:ok, _} = Exams.remove_participant(scope, exam, submission)
+
+      assert has_element?(view, "#participant-removed", "Aus der Prüfung entfernt")
+    end
+
+    test "someone else's removal leaves the session alone", %{conn: conn} do
+      %{exam: exam, submission: submission} = running_exam_with_submission()
+      other = exam_submission_fixture(exam, %{"email" => "other@example.com"})
+      {:ok, view, _html} = open_exam(conn, submission)
+
+      scope = Tasky.Accounts.Scope.for_user(Tasky.Accounts.get_user!(exam.teacher_id))
+      {:ok, _} = Exams.remove_participant(scope, exam, other)
+
+      refute has_element?(view, "#participant-removed")
+    end
+
+    test "the SEB quit page still works afterwards", %{conn: conn} do
+      %{exam: exam, submission: submission} = running_exam_with_submission()
+      scope = Tasky.Accounts.Scope.for_user(Tasky.Accounts.get_user!(exam.teacher_id))
+      {:ok, _} = Exams.remove_participant(scope, exam, submission)
+
+      conn = get(conn, ~p"/guest/exam/#{submission.exam_token}/seb-quit")
+      assert conn.status == 200
+    end
+  end
+
   describe "enrollment" do
     test "enroll page is reachable while the exam is running", %{conn: conn} do
       %{exam: exam} = running_exam_with_submission()

@@ -752,13 +752,22 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Removes an assignment, including any answer files the participant uploaded
-  (rows via FK cascade, bytes on disk explicitly — otherwise they leak
-  forever). Refuses once the exam has been submitted.
+  Removes a participant from the exam for good: their submission, answers and
+  uploaded files (rows via FK cascade, bytes on disk explicitly — otherwise
+  they leak forever).
+
+  Allowed at any point of the session — before the start, while it runs and
+  after it has been stopped, handed in or not — and in both participation
+  modes. The typical case is someone who turns out not to come after the exam
+  has already started; their empty submission would otherwise sit in the
+  correction and the grade overview.
+
+  Broadcasts `{:participant_removed, submission_id}` on the exam topic so an
+  open participant view ends the session at once.
   """
-  def unassign_student(scope, %Exam{} = exam, %ExamSubmission{} = submission) do
+  def remove_participant(scope, %Exam{} = exam, %ExamSubmission{} = submission) do
     with :ok <- Policy.authorize(scope, exam.teacher_id),
-         :ok <- validate_unassignable(exam, submission) do
+         :ok <- validate_removable(exam, submission) do
       files =
         Repo.all(
           from sf in ExamSubmissionFile,
@@ -773,6 +782,12 @@ defmodule Tasky.Exams do
             Tasky.Uploads.delete_submission_file_from_disk(exam.id, submission.id, stored)
           end)
 
+          Phoenix.PubSub.broadcast(
+            Tasky.PubSub,
+            "exam:#{exam.id}",
+            {:participant_removed, deleted.id}
+          )
+
           {:ok, deleted}
 
         error ->
@@ -781,13 +796,8 @@ defmodule Tasky.Exams do
     end
   end
 
-  defp validate_unassignable(%Exam{} = exam, %ExamSubmission{} = submission) do
-    cond do
-      submission.exam_id != exam.id -> {:error, :not_found}
-      is_nil(submission.user_id) -> {:error, :not_assigned}
-      submission.submitted -> {:error, :already_submitted}
-      true -> :ok
-    end
+  defp validate_removable(%Exam{} = exam, %ExamSubmission{} = submission) do
+    if submission.exam_id == exam.id, do: :ok, else: {:error, :not_found}
   end
 
   @doc """

@@ -47,6 +47,32 @@ defmodule TaskyWeb.Guest.ExamLive do
           hidden
         />
         <%= cond do %>
+          <% @removed -> %>
+            <%!-- The teacher removed this participant; the submission is gone.
+                  Only the way out is left — inside SEB that is the quit route. --%>
+            <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">
+              <div id="participant-removed" class="w-full max-w-md text-center">
+                <div class="w-16 h-16 rounded-2xl bg-stone-100 flex items-center justify-center mx-auto mb-4">
+                  <.icon name="hero-user-minus" class="w-8 h-8 text-stone-400" />
+                </div>
+                <h1 class="font-serif text-3xl text-stone-900 font-normal mb-2">
+                  Aus der Prüfung entfernt
+                </h1>
+                <p class="text-stone-500 text-sm leading-relaxed mb-6">
+                  Deine Lehrperson hat dich aus der Prüfung
+                  <span class="font-semibold text-stone-600">{@exam.name}</span>
+                  entfernt. Wende dich bei Fragen an sie.
+                </p>
+                <div class="flex items-center justify-center gap-3">
+                  <.exam_end_actions
+                    exam={@exam}
+                    submission={@submission}
+                    current_scope={@current_scope}
+                    in_seb={@in_seb}
+                  />
+                </div>
+              </div>
+            </div>
           <% @exam.seb_enabled and not @seb_ok and not @submission.submitted and @exam.status in ["open", "running"] -> %>
             <.seb_gate exam_token={@submission.exam_token} reason={@seb_reason} />
           <% @exam.status == "open" -> %>
@@ -699,6 +725,7 @@ defmodule TaskyWeb.Guest.ExamLive do
     socket =
       socket
       |> assign(:not_found, false)
+      |> assign(:removed, false)
       |> assign(:page_title, exam.name)
       |> assign(:exam, exam)
       |> assign(:submission, submission)
@@ -874,6 +901,24 @@ defmodule TaskyWeb.Guest.ExamLive do
   @impl true
   def handle_info({:exam_status_changed, updated_exam}, socket) do
     {:noreply, assign(socket, :exam, updated_exam)}
+  end
+
+  # The teacher removed this participant. Their submission no longer exists,
+  # so the session ends here: no more answers, and no presence entry left
+  # behind to count as "online" in the cockpit.
+  def handle_info({:participant_removed, submission_id}, socket) do
+    %{exam: exam, submission: submission} = socket.assigns
+
+    if submission.id == submission_id do
+      TaskyWeb.Presence.untrack(self(), "exam_waiting:#{exam.id}", submission.exam_token)
+
+      {:noreply,
+       socket
+       |> assign(:removed, true)
+       |> assign(:show_submit_modal, false)}
+    else
+      {:noreply, socket}
+    end
   end
 
   # Consumes a finished answer upload: stores the bytes, upserts the

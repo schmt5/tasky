@@ -618,7 +618,7 @@ defmodule Tasky.ExamsTest do
     end
   end
 
-  describe "unassign_student/3" do
+  describe "remove_participant/3" do
     import Tasky.AccountsFixtures
 
     test "removes the assignment" do
@@ -627,27 +627,65 @@ defmodule Tasky.ExamsTest do
       scope = teacher_scope(exam)
       {:ok, submission} = Exams.assign_student(scope, exam, student.id)
 
-      assert {:ok, _} = Exams.unassign_student(scope, exam, submission)
+      assert {:ok, _} = Exams.remove_participant(scope, exam, submission)
       assert Exams.list_exam_submissions(exam) == []
       assert student.id in Enum.map(Exams.list_assignable_students(exam), & &1.id)
     end
 
-    test "refuses once the participant has submitted" do
-      exam = exam_fixture(participation_mode: "assigned", status: "running")
-      student = user_fixture(%{role: "student"})
-      scope = teacher_scope(exam)
-      {:ok, submission} = Exams.assign_student(scope, exam, student.id)
-      {:ok, submission} = Exams.submit_exam_submission(submission)
+    test "works while the exam runs and after it was stopped, handed in or not" do
+      for status <- ~w(running finished), submitted? <- [false, true] do
+        exam = exam_fixture(participation_mode: "assigned", status: "running")
+        scope = teacher_scope(exam)
+        student = user_fixture(%{role: "student"})
+        {:ok, submission} = Exams.assign_student(scope, exam, student.id)
 
-      assert {:error, :already_submitted} = Exams.unassign_student(scope, exam, submission)
+        submission =
+          if submitted? do
+            {:ok, s} = Exams.submit_exam_submission(submission)
+            s
+          else
+            submission
+          end
+
+        exam =
+          if status == "running" do
+            exam
+          else
+            {:ok, exam} = Exams.update_exam_status(scope, exam, status)
+            exam
+          end
+
+        assert {:ok, _} = Exams.remove_participant(scope, exam, submission)
+        assert Exams.list_exam_submissions(exam) == []
+      end
     end
 
-    test "refuses an anonymous submission" do
-      exam = exam_fixture(participation_mode: "anonymous", status: "open")
+    test "removes an anonymous participant too" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
       {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
 
-      assert {:error, :not_assigned} =
-               Exams.unassign_student(teacher_scope(exam), exam, submission)
+      assert {:ok, _} = Exams.remove_participant(teacher_scope(exam), exam, submission)
+      assert Exams.list_exam_submissions(exam) == []
+    end
+
+    test "tells an open participant view" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      Exams.subscribe_exam(exam.id)
+
+      {:ok, _} = Exams.remove_participant(teacher_scope(exam), exam, submission)
+
+      submission_id = submission.id
+      assert_receive {:participant_removed, ^submission_id}
+    end
+
+    test "refuses a submission of another exam" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+      other = exam_fixture(participation_mode: "anonymous", status: "running")
+      {:ok, submission} = Exams.create_exam_submission(other, enrollment_attrs())
+
+      assert {:error, :not_found} =
+               Exams.remove_participant(teacher_scope(exam), exam, submission)
     end
   end
 
