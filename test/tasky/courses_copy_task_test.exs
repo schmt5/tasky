@@ -72,7 +72,7 @@ defmodule Tasky.CoursesCopyTaskTest do
       assert copy.position == 0
     end
 
-    test "the copy arrives as an unpublished, unlocked draft", ctx do
+    test "the copy arrives as a draft", ctx do
       %{scope: scope, source_course: source, target_course: target} = ctx
 
       source_task =
@@ -80,8 +80,7 @@ defmodule Tasky.CoursesCopyTaskTest do
           name: "Kapitel 3",
           position: 0,
           course_id: source.id,
-          status: "published",
-          locked: true,
+          status: "locked",
           extended: true
         })
 
@@ -91,7 +90,6 @@ defmodule Tasky.CoursesCopyTaskTest do
       assert {:ok, [copy], []} = Courses.copy_task_into_courses(scope, source_task, [target.id])
 
       assert copy.status == "draft"
-      refute copy.locked
       assert copy.solution_release_mode == "never"
 
       # `extended` ist Inhalt, keine Freigabe — der freiwillige Zusatzauftrag
@@ -223,7 +221,7 @@ defmodule Tasky.CoursesCopyTaskTest do
           name: "Einheit",
           position: 0,
           course_id: source.id,
-          status: "published"
+          status: "open"
         })
 
       student = user_fixture(%{role: "student"})

@@ -25,7 +25,7 @@ defmodule TaskyWeb.Student.CourseLiveTest do
       task_fixture(teacher_scope, %{
         name: "Testaufgabe",
         course_id: course.id,
-        status: "published"
+        status: "open"
       })
 
     {:ok, _} = Courses.enroll_student(course.id, student.id)
@@ -124,7 +124,7 @@ defmodule TaskyWeb.Student.CourseLiveTest do
     defp add_unit(teacher_scope, course, name, attrs) do
       task_fixture(
         teacher_scope,
-        Map.merge(%{name: name, course_id: course.id, status: "published"}, attrs)
+        Map.merge(%{name: name, course_id: course.id, status: "open"}, attrs)
       )
     end
 

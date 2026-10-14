@@ -60,19 +60,19 @@ tasks = [
   %{
     name: "Introduction to Elixir",
     link: "https://elixir-lang.org/getting-started/introduction.html",
-    status: "published",
+    status: "open",
     position: 1
   },
   %{
     name: "Phoenix Framework Basics",
     link: "https://hexdocs.pm/phoenix/overview.html",
-    status: "published",
+    status: "open",
     position: 2
   },
   %{
     name: "LiveView Tutorial",
     link: "https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html",
-    status: "published",
+    status: "open",
     position: 3
   },
   %{

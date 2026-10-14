@@ -11,7 +11,7 @@ defmodule Tasky.CourseExportTest do
 
   defp task(attrs) do
     struct(
-      %Task{name: "Einheit", status: "published", attachments: [], upload_fields: []},
+      %Task{name: "Einheit", status: "open", attachments: [], upload_fields: []},
       attrs
     )
   end
@@ -62,22 +62,20 @@ defmodule Tasky.CourseExportTest do
     refute markdown =~ "Legende"
   end
 
-  test "marks drafts, archived, extended and locked units" do
+  test "marks drafts, extended and locked units" do
     markdown =
       CourseExport.to_markdown(course(), [
         task(%{name: "A", status: "draft"}),
-        task(%{name: "B", status: "archived"}),
-        task(%{name: "C", extended: true, locked: true})
+        task(%{name: "C", status: "locked", extended: true})
       ])
 
     assert markdown =~ "_Entwurf_"
-    assert markdown =~ "_Archiviert_"
 
     assert markdown =~
-             "_Erweiterte (freiwillige) Lerneinheit · Für Lernende noch nicht freigeschaltet_"
+             "_Für Lernende noch nicht freigeschaltet · Erweiterte (freiwillige) Lerneinheit_"
   end
 
-  test "a published, mandatory, unlocked unit carries no status line" do
+  test "an open, mandatory unit carries no status line" do
     markdown = CourseExport.to_markdown(course(), [task(%{name: "A", content: content("Text")})])
 
     refute markdown =~ "Entwurf"

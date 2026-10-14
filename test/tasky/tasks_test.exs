@@ -51,13 +51,13 @@ defmodule Tasky.TasksTest do
       update_attrs = %{
         name: "some updated name",
         position: 43,
-        status: "published"
+        status: "open"
       }
 
       assert {:ok, %Task{} = task} = Tasks.update_task(scope, task, update_attrs)
       assert task.name == "some updated name"
       assert task.position == 43
-      assert task.status == "published"
+      assert task.status == "open"
     end
 
     test "update_task/3 with invalid scope returns unauthorized" do
@@ -198,14 +198,14 @@ defmodule Tasky.TasksTest do
       task_fixture(scope, %{
         name: "Pflicht",
         position: 0,
-        status: "published",
+        status: "open",
         course_id: course.id
       })
 
       task_fixture(scope, %{
         name: "Vertiefung",
         position: 1,
-        status: "published",
+        status: "open",
         course_id: course.id,
         extended: true
       })

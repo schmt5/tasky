@@ -163,8 +163,8 @@ defmodule Tasky.Tasks do
     * `:source_authorized` — skips the ownership check on the source unit. Set
       only by `Tasky.Courses.import_catalog_course_records/3`, never from the
       web layer; see `authorize_duplicate_source/3`.
-    * `:reset_release_state` — writes the copy as an unpublished, unlocked
-      draft instead of carrying the source's release state over.
+    * `:reset_release_state` — writes the copy as a draft instead of carrying
+      the source's release state over.
     * `:position` — where the copy lands in the target course. Defaults to the
       source's own position, which is what duplicating a whole course wants;
       copying a single unit into an *existing* course passes
@@ -198,11 +198,10 @@ defmodule Tasky.Tasks do
       else: Policy.authorize(scope, source.user_id)
   end
 
-  # `reset_release_state`: status, locked und der Freigabe-Modus der
-  # Musterlösung sind Freigabe-Zustände für die Klasse der Autorin in ihrem
-  # Semester, nicht Teil des Inhalts. Beim Katalog-Import startet jede Einheit
-  # darum als unveröffentlichter, offener Entwurf mit ausgeblendeter
-  # Musterlösung; die importierende Lehrperson gibt selbst frei. `extended`
+  # `reset_release_state`: Status und der Freigabe-Modus der Musterlösung sind
+  # Freigabe-Zustände für die Klasse der Autorin in ihrem Semester, nicht Teil
+  # des Inhalts. Beim Katalog-Import startet jede Einheit darum als Entwurf mit
+  # ausgeblendeter Musterlösung; die importierende Lehrperson gibt selbst frei. `extended`
   # bleibt: ein freiwilliger Zusatzauftrag ist eine inhaltliche Eigenschaft,
   # keine Freigabe.
   defp duplicate_attrs(source, course_id, opts) do
@@ -214,11 +213,10 @@ defmodule Tasky.Tasks do
     }
 
     if Keyword.get(opts, :reset_release_state, false) do
-      Map.merge(base, %{status: "draft", locked: false, solution_release_mode: "never"})
+      Map.merge(base, %{status: "draft", solution_release_mode: "never"})
     else
       Map.merge(base, %{
         status: source.status,
-        locked: source.locked,
         solution_release_mode: source.solution_release_mode
       })
     end
@@ -355,24 +353,33 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Toggles the locked status of a task.
-  Only the owner (teacher) can toggle locked status.
+  Sets the release state of a task (`"draft"`, `"locked"` or `"open"`, see
+  `Tasky.Tasks.Task`). Any state may follow any other — a teacher can go back
+  as well as forward. Only the owner (teacher) can change it.
 
   ## Examples
 
-      iex> toggle_locked(scope, task)
+      iex> set_status(scope, task, "open")
       {:ok, %Task{}}
 
+      iex> set_status(scope, task, "bogus")
+      {:error, :invalid_status}
+
   """
-  def toggle_locked(%Scope{} = scope, %Task{} = task) do
+  def set_status(%Scope{} = scope, %Task{} = task, status) do
     with :ok <- Policy.authorize(scope, task.user_id),
+         :ok <- validate_status(status),
          {:ok, task = %Task{}} <-
            task
-           |> Ecto.Changeset.change(%{locked: !task.locked})
+           |> Ecto.Changeset.change(%{status: status})
            |> Repo.update() do
       broadcast_task(scope, {:updated, task})
       {:ok, task}
     end
+  end
+
+  defp validate_status(status) do
+    if status in Task.statuses(), do: :ok, else: {:error, :invalid_status}
   end
 
   @doc """
@@ -547,7 +554,7 @@ defmodule Tasky.Tasks do
   @doc """
   Lists all submissions for a specific course for a student.
   Students can only view their own submissions.
-  Automatically creates submissions for published tasks that don't have one yet.
+  Automatically creates submissions for open tasks that don't have one yet.
 
   ## Examples
 
@@ -557,16 +564,16 @@ defmodule Tasky.Tasks do
   """
   def list_course_submissions(%Scope{user: user} = scope, course_id)
       when user.role == "student" do
-    # Get all published tasks for the course, including draft ones so students see "Bald verfügbar"
+    # Every unit students may see: open ones, and locked ones as "Bald verfügbar"
     tasks =
       Task
-      |> where([t], t.course_id == ^course_id and t.status == "published")
+      |> where([t], t.course_id == ^course_id and t.status in ^Task.student_visible_statuses())
       |> order_by([t], asc: t.position)
       |> Repo.all()
 
-    # Ensure a submission row exists for every non-locked task
+    # Ensure a submission row exists for every open task
     Enum.each(tasks, fn task ->
-      unless task.locked do
+      unless Task.locked?(task) do
         get_or_create_submission(scope, task.id)
       end
     end)
@@ -585,7 +592,7 @@ defmodule Tasky.Tasks do
     tasks
     |> Enum.map(fn task ->
       case Map.get(submissions_by_task, task.id) do
-        nil when task.locked ->
+        nil when task.status == "locked" ->
           # Return a virtual submission struct so the UI can render "Bald verfügbar"
           %TaskSubmission{
             task_id: task.id,
@@ -877,18 +884,19 @@ defmodule Tasky.Tasks do
 
   @doc """
   Gets a task by id for a student, or `nil` when the task does not exist, is
-  not published, or the student is not enrolled in the task's course. This is
+  not visible to students (a draft), or the student is not enrolled in the task's course. This is
   the single entry point for student-facing task access — enrollment and
   visibility are checked here, not in the callers.
 
   The `status` check belongs here and not only in `list_tasks_for_course/1`:
   task ids are sequential, so without it any enrolled student could open a
-  draft or archived unit of their course by URL, answer it, and reach its
+  draft unit of their course by URL, answer it, and reach its
   solution files.
   """
   def get_task_for_student(%Scope{user: user} = _scope, task_id)
       when user.role == "student" do
-    with %Task{status: "published"} = task <- Repo.get(Task, task_id),
+    with %Task{status: status} = task when status in ["locked", "open"] <-
+           Repo.get(Task, task_id),
          true <- Tasky.Courses.enrolled?(task.course_id, user.id) do
       task
     else

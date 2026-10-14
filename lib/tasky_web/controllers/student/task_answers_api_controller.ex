@@ -2,7 +2,7 @@ defmodule TaskyWeb.Student.TaskAnswersApiController do
   @moduledoc """
   Autosave endpoint for a student's answer doc on a learning unit (task).
   Session-authenticated; the student must be enrolled in the task's course,
-  the unit must be open (not `locked`), and the submission still editable
+  the unit must be `open` (not `locked`), and the submission still editable
   (not completed/approved).
   """
   use TaskyWeb, :controller
@@ -19,7 +19,7 @@ defmodule TaskyWeb.Student.TaskAnswersApiController do
     # `locked` ("Bald verfügbar") must be refused here too — `TaskLive.mount`
     # redirects away from a locked unit, so without this the autosave endpoint
     # is the one way into it.
-    with %Task{locked: false} = task <- Tasks.get_task_for_student(scope, task_id),
+    with %Task{status: "open"} = task <- Tasks.get_task_for_student(scope, task_id),
          %TaskSubmission{} = submission <- Tasks.get_submission_for_student(task.id, user.id) do
       case Tasks.save_student_answers(scope, submission, content) do
         {:error, :not_editable} ->

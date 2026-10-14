@@ -120,7 +120,7 @@ defmodule TaskyWeb.CourseLive.ReorderTest do
       a: a
     } do
       scope = user_scope_fixture(teacher)
-      {:ok, _} = Tasks.update_task(scope, a, %{status: "archived"})
+      {:ok, _} = Tasks.set_status(scope, a, "locked")
 
       {:ok, _lv, reorder_html} = live(conn, ~p"/courses/#{course}/reorder")
       {:ok, _lv, show_html} = live(conn, ~p"/courses/#{course}")
@@ -128,10 +128,9 @@ defmodule TaskyWeb.CourseLive.ReorderTest do
       for html <- [reorder_html, show_html] do
         assert html =~ "bg-amber-100 text-amber-700"
         assert html =~ "Entwurf"
-        assert html =~ "Archiviert"
+        assert html =~ "Gesperrt"
         refute html =~ "Draft"
-        refute html =~ "Published"
-        refute html =~ "Archived"
+        refute html =~ "Locked"
       end
     end
   end

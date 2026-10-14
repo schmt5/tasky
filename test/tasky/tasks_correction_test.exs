@@ -20,7 +20,7 @@ defmodule Tasky.TasksCorrectionTest do
     course = course_fixture(scope: teacher_scope)
     {:ok, _} = Tasky.Courses.enroll_student(course.id, student.id)
 
-    task = task_fixture(teacher_scope, %{status: "published", course_id: course.id})
+    task = task_fixture(teacher_scope, %{status: "open", course_id: course.id})
     {:ok, submission} = Tasks.get_or_create_submission(student_scope, task.id)
 
     %{

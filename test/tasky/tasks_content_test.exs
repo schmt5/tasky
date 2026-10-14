@@ -21,7 +21,7 @@ defmodule Tasky.TasksContentTest do
     student = user_fixture(%{role: "student"})
     teacher_scope = user_scope_fixture(teacher)
     student_scope = user_scope_fixture(student)
-    task = task_fixture(teacher_scope, %{status: "published"})
+    task = task_fixture(teacher_scope, %{status: "open"})
 
     %{
       teacher_scope: teacher_scope,

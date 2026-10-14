@@ -195,7 +195,7 @@ defmodule Tasky.CoursesCatalogTest do
       assert copy.teacher_id == importer.user.id
     end
 
-    test "every copied unit starts as an unlocked draft", %{
+    test "every copied unit starts as a draft", %{
       author: author,
       importer: importer,
       course: course
@@ -203,22 +203,21 @@ defmodule Tasky.CoursesCatalogTest do
       task_fixture(author, %{
         name: "Freigegeben",
         position: 0,
-        status: "published",
-        locked: true,
+        status: "locked",
         course_id: course.id
       })
 
       task_fixture(author, %{
-        name: "Archiviert",
+        name: "Offen",
         position: 1,
-        status: "archived",
+        status: "open",
         course_id: course.id
       })
 
       task_fixture(author, %{
         name: "Vertiefung",
         position: 2,
-        status: "published",
+        status: "open",
         extended: true,
         course_id: course.id
       })
@@ -231,12 +230,11 @@ defmodule Tasky.CoursesCatalogTest do
 
       for unit <- [one, two, three] do
         assert unit.status == "draft"
-        refute unit.locked
         assert unit.user_id == importer.user.id
       end
 
       assert one.name == "Freigegeben"
-      assert two.name == "Archiviert"
+      assert two.name == "Offen"
 
       # `extended` is a property of the content, not a release state.
       assert three.name == "Vertiefung"
@@ -248,8 +246,7 @@ defmodule Tasky.CoursesCatalogTest do
       task_fixture(author, %{
         name: "Freigegeben",
         position: 0,
-        status: "published",
-        locked: true,
+        status: "locked",
         course_id: course.id
       })
 
@@ -259,8 +256,7 @@ defmodule Tasky.CoursesCatalogTest do
 
       assert Repo.reload!(published).catalog_published_at
       assert [original] = Tasks.list_tasks_by_course(published.id)
-      assert original.status == "published"
-      assert original.locked
+      assert original.status == "locked"
       assert original.user_id == author.user.id
     end
 

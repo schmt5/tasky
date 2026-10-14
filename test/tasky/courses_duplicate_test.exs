@@ -51,11 +51,16 @@ defmodule Tasky.CoursesDuplicateTest do
       task_fixture(scope, %{
         name: "Einheit 1",
         position: 0,
-        status: "published",
+        status: "open",
         course_id: course.id
       })
 
-      task_fixture(scope, %{name: "Einheit 2", position: 1, course_id: course.id, locked: true})
+      task_fixture(scope, %{
+        name: "Einheit 2",
+        position: 1,
+        course_id: course.id,
+        status: "locked"
+      })
 
       task_fixture(scope, %{
         name: "Vertiefung",
@@ -69,10 +74,9 @@ defmodule Tasky.CoursesDuplicateTest do
       assert [one, two, three] = Tasks.list_tasks_by_course(copy.id)
       assert one.name == "Einheit 1"
       assert one.position == 0
-      assert one.status == "published"
-      refute one.locked
+      assert one.status == "open"
       assert two.name == "Einheit 2"
-      assert two.locked
+      assert two.status == "locked"
 
       # A voluntary extension must not be silently demoted to a mandatory unit.
       refute one.extended
@@ -194,7 +198,7 @@ defmodule Tasky.CoursesDuplicateTest do
         task_fixture(scope, %{
           name: "Mit Freigabe",
           position: 0,
-          status: "published",
+          status: "open",
           course_id: course.id
         })
 

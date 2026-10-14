@@ -221,20 +221,12 @@ defmodule TaskyWeb.CourseLive.Show do
 
                   <.task_status_chip status={task.status} />
 
-                  <%= if task.locked do %>
-                    <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em] bg-red-100 text-red-700">
-                      <.icon name="hero-lock-closed" class="w-3 h-3" /> Gesperrt
-                    </span>
-                  <% end %>
-
                   <.extended_chip :if={task.extended} />
                 </div>
 
-                <%= if task.locked do %>
-                  <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
-                    Lernende sehen diese Aufgabe, können sie aber nicht starten.
-                  </p>
-                <% end %>
+                <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
+                  {status_hint(task.status)}
+                </p>
 
                 <%= if task.extended do %>
                   <p class="text-[12px] text-stone-400 leading-snug mt-0.5">
@@ -281,34 +273,35 @@ defmodule TaskyWeb.CourseLive.Show do
                       Kopieren nach…
                     </button>
                   </li>
-                  <li>
+                  <li class="menu-title px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+                    Status
+                  </li>
+                  <li :for={{status, icon} <- status_steps()}>
                     <button
                       type="button"
-                      phx-click="toggle_status"
+                      id={"task-status-#{task.id}-#{status}"}
+                      phx-click="set_status"
                       phx-value-id={task.id}
-                      class="flex items-center gap-2 text-sm text-stone-700"
+                      phx-value-status={status}
+                      aria-pressed={to_string(task.status == status)}
+                      class={[
+                        "flex items-center gap-2 text-sm",
+                        if(task.status == status,
+                          do: "text-stone-900 font-semibold",
+                          else: "text-stone-700"
+                        )
+                      ]}
                     >
-                      <%= if task.status == "draft" do %>
-                        <.icon name="hero-eye" class="w-4 h-4 text-stone-400" /> Veröffentlichen
-                      <% else %>
-                        <.icon name="hero-eye-slash" class="w-4 h-4 text-stone-400" /> Verbergen
-                      <% end %>
+                      <.icon name={icon} class="w-4 h-4 text-stone-400" />
+                      <span class="flex-1">{task_status_label(status)}</span>
+                      <.icon
+                        :if={task.status == status}
+                        name="hero-check"
+                        class="w-4 h-4 text-sky-500"
+                      />
                     </button>
                   </li>
-                  <li>
-                    <button
-                      type="button"
-                      phx-click="toggle_locked"
-                      phx-value-id={task.id}
-                      class="flex items-center gap-2 text-sm text-stone-700"
-                    >
-                      <%= if task.locked do %>
-                        <.icon name="hero-lock-open" class="w-4 h-4 text-stone-400" /> Freigeben
-                      <% else %>
-                        <.icon name="hero-lock-closed" class="w-4 h-4 text-stone-400" /> Sperren
-                      <% end %>
-                    </button>
-                  </li>
+                  <li class="my-1 h-px bg-stone-100 p-0" aria-hidden="true"></li>
                   <li>
                     <button
                       type="button"
@@ -636,8 +629,8 @@ defmodule TaskyWeb.CourseLive.Show do
                     />
                     <p class="text-xs text-stone-500 leading-relaxed">
                       Die Kopie wird am Schluss eingefügt und ist ein Entwurf — Lernende sehen sie
-                      erst, wenn Sie sie dort veröffentlichen. Abgaben und Fortschritt werden nicht
-                      kopiert.
+                      erst, wenn Sie dort den Status auf «Gesperrt» oder «Offen» setzen. Abgaben
+                      und Fortschritt werden nicht kopiert.
                     </p>
                   </div>
                 </div>
@@ -992,22 +985,16 @@ defmodule TaskyWeb.CourseLive.Show do
   end
 
   @impl true
-  def handle_event("toggle_locked", %{"id" => id}, socket) do
+  def handle_event("set_status", %{"id" => id, "status" => status}, socket) do
     task = Tasks.get_task!(socket.assigns.current_scope, id)
-    {:ok, updated_task} = Tasks.toggle_locked(socket.assigns.current_scope, task)
 
-    {:noreply, stream_insert(socket, :tasks, updated_task)}
-  end
+    case Tasks.set_status(socket.assigns.current_scope, task, status) do
+      {:ok, updated_task} ->
+        {:noreply, stream_insert(socket, :tasks, updated_task)}
 
-  @impl true
-  def handle_event("toggle_status", %{"id" => id}, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
-    new_status = if task.status == "draft", do: "published", else: "draft"
-
-    {:ok, updated_task} =
-      Tasks.update_task(socket.assigns.current_scope, task, %{status: new_status})
-
-    {:noreply, stream_insert(socket, :tasks, updated_task)}
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Status konnte nicht geändert werden.")}
+    end
   end
 
   @impl true
@@ -1170,6 +1157,19 @@ defmodule TaskyWeb.CourseLive.Show do
 
   @impl true
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  # The release states in the order a unit passes through them.
+  defp status_steps do
+    [
+      {"draft", "hero-pencil-square"},
+      {"locked", "hero-lock-closed"},
+      {"open", "hero-lock-open"}
+    ]
+  end
+
+  defp status_hint("draft"), do: "Lernende sehen diese Aufgabe noch nicht."
+  defp status_hint("locked"), do: "Lernende sehen diese Aufgabe, können sie aber nicht starten."
+  defp status_hint(_open), do: "Lernende können diese Aufgabe bearbeiten."
 
   defp format_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%d.%m.%Y")
   defp format_date(_), do: ""

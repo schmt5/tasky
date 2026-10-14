@@ -515,7 +515,7 @@ defmodule Tasky.Courses do
   eine Millisekunde früher legal), und ein `FOR SHARE` auf `courses` würde eine
   neue Lock-Order-Frage aufwerfen, ohne etwas zu sichern.
 
-  Jede kopierte Lerneinheit entsteht als unveröffentlichter, offener Entwurf
+  Jede kopierte Lerneinheit entsteht als Entwurf
   (siehe `Tasky.Tasks.duplicate_task_into_course/4`). Die Kopie ist nicht im
   Katalog, hat keine Lernenden, keine Abgaben und keinen offenen
   Feedback-Briefkasten.

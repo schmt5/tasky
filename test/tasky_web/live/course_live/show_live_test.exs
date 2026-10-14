@@ -244,33 +244,35 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       refute has_element?(lv, ~s{a[href="/tasks/#{task.id}/content"]}, "Bearbeiten")
     end
 
-    test "toggle_status flips the unit between draft and published", %{
+    test "the status steps through draft, locked and open, and back", %{
       conn: conn,
       course: course,
       task: task
     } do
       {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
-      selector = ~s{button[phx-click="toggle_status"][phx-value-id="#{task.id}"]}
+      step = fn status -> lv |> element("#task-status-#{task.id}-#{status}") |> render_click() end
 
-      lv |> element(selector) |> render_click()
-      assert reload(task).status == "published"
+      assert has_element?(lv, ~s{#task-status-#{task.id}-draft[aria-pressed="true"]})
 
-      lv |> element(selector) |> render_click()
+      html = step.("locked")
+      assert reload(task).status == "locked"
+      assert html =~ "Gesperrt"
+      assert html =~ "können sie aber nicht starten"
+
+      step.("open")
+      assert reload(task).status == "open"
+      assert has_element?(lv, ~s{#task-status-#{task.id}-open[aria-pressed="true"]})
+
+      step.("draft")
       assert reload(task).status == "draft"
     end
 
-    test "toggle_locked locks and releases the unit", %{conn: conn, course: course, task: task} do
+    test "an unknown status is refused", %{conn: conn, course: course, task: task} do
       {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
-      selector = ~s{button[phx-click="toggle_locked"][phx-value-id="#{task.id}"]}
 
-      html = lv |> element(selector) |> render_click()
+      render_click(lv, "set_status", %{"id" => to_string(task.id), "status" => "archived"})
 
-      assert reload(task).locked
-      assert html =~ "Gesperrt"
-      assert html =~ "Freigeben"
-
-      lv |> element(selector) |> render_click()
-      refute reload(task).locked
+      assert reload(task).status == "draft"
     end
 
     test "delete_task removes the unit", %{conn: conn, course: course, task: task} do

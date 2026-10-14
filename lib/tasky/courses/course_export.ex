@@ -8,7 +8,7 @@ defmodule Tasky.Courses.CourseExport do
   must come from `Tasky.Tasks.list_tasks_for_export/1`, which orders them by
   position and preloads attachments and upload fields.
 
-  Every unit is exported, including drafts, archived and locked ones — an
+  Every unit is exported, including drafts and locked ones — an
   annotated line says which is which, and the reader decides what to weigh.
   """
 
@@ -74,8 +74,7 @@ defmodule Tasky.Courses.CourseExport do
     markers =
       [
         status_marker(task.status),
-        task.extended && "Erweiterte (freiwillige) Lerneinheit",
-        task.locked && "Für Lernende noch nicht freigeschaltet"
+        task.extended && "Erweiterte (freiwillige) Lerneinheit"
       ]
       |> Enum.filter(&is_binary/1)
 
@@ -86,7 +85,7 @@ defmodule Tasky.Courses.CourseExport do
   end
 
   defp status_marker("draft"), do: "Entwurf"
-  defp status_marker("archived"), do: "Archiviert"
+  defp status_marker("locked"), do: "Für Lernende noch nicht freigeschaltet"
   defp status_marker(_status), do: nil
 
   defp content(task, opts) do

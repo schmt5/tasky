@@ -46,7 +46,7 @@ defmodule TaskyWeb.CourseShareControllerTest do
     unit(scope, course, %{
       name: "Einstieg",
       position: 0,
-      status: "published",
+      status: "open",
       content: paragraph("HTML ist eine Auszeichnungssprache.")
     })
 

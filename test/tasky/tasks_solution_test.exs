@@ -24,7 +24,7 @@ defmodule Tasky.TasksSolutionTest do
     :ok = ensure_enrolled(course, student)
 
     task =
-      task_fixture(teacher_scope, %{status: "published", course_id: course.id})
+      task_fixture(teacher_scope, %{status: "open", course_id: course.id})
 
     %{
       teacher_scope: teacher_scope,
@@ -317,7 +317,7 @@ defmodule Tasky.TasksSolutionTest do
       course: course
     } do
       other_task =
-        task_fixture(scope, %{status: "published", course_id: course.id, position: 99})
+        task_fixture(scope, %{status: "open", course_id: course.id, position: 99})
 
       foreign = submission(student_scope, other_task)
 
@@ -601,18 +601,28 @@ defmodule Tasky.TasksSolutionTest do
       assert id == task.id
     end
 
-    for status <- ["draft", "archived"] do
-      test "verweigert eine Einheit im Status #{status}", %{
-        teacher_scope: teacher_scope,
-        student_scope: scope,
-        task: task
-      } do
-        {:ok, task} = Tasks.update_task(teacher_scope, task, %{status: unquote(status)})
+    test "verweigert einen Entwurf", %{
+      teacher_scope: teacher_scope,
+      student_scope: scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.set_status(teacher_scope, task, "draft")
 
-        # Task-Ids sind fortlaufend: ohne diese Prüfung könnte jede
-        # eingeschriebene Person Entwürfe des Kurses per URL öffnen.
-        refute Tasks.get_task_for_student(scope, task.id)
-      end
+      # Task-Ids sind fortlaufend: ohne diese Prüfung könnte jede
+      # eingeschriebene Person Entwürfe des Kurses per URL öffnen.
+      refute Tasks.get_task_for_student(scope, task.id)
+    end
+
+    # Gesperrt heisst sichtbar («Bald verfügbar»); das Starten verhindern die
+    # Aufrufer (TaskLive, Autosave-API), nicht diese Funktion.
+    test "gibt eine gesperrte Einheit zurück", %{
+      teacher_scope: teacher_scope,
+      student_scope: scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.set_status(teacher_scope, task, "locked")
+
+      assert %Tasky.Tasks.Task{status: "locked"} = Tasks.get_task_for_student(scope, task.id)
     end
   end
 

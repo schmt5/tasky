@@ -18,7 +18,7 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       task_fixture(teacher, %{
         name: "Testaufgabe",
         course_id: course.id,
-        status: "published"
+        status: "open"
       })
 
     %{conn: log_in_user(conn, student), student: student, course: course, task: task}
@@ -39,17 +39,19 @@ defmodule TaskyWeb.Student.TaskLiveTest do
     refute Tasky.Tasks.get_submission_for_student(draft.id, student.id)
   end
 
-  test "enrolled student cannot open an archived unit of their course", %{
+  test "enrolled student cannot start a locked unit of their course", %{
     conn: conn,
     student: student,
     course: course,
     task: task
   } do
     {:ok, _} = Courses.enroll_student(course.id, student.id)
-    {:ok, archived} = Tasky.Tasks.update_task(teacher_scope(task), task, %{status: "archived"})
+    {:ok, locked} = Tasky.Tasks.set_status(teacher_scope(task), task, "locked")
 
-    assert {:error, {:live_redirect, %{to: "/student/courses"}}} =
-             live(conn, ~p"/student/tasks/#{archived.id}")
+    course_path = ~p"/student/courses/#{course.id}"
+
+    assert {:error, {:live_redirect, %{to: ^course_path}}} =
+             live(conn, ~p"/student/tasks/#{locked.id}")
   end
 
   defp teacher_scope(task),

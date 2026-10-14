@@ -29,8 +29,10 @@ defmodule Tasky.Tasks.Task do
   schema "tasks" do
     field :name, :string
     field :position, :integer
+    # Release state for students, passed through in this order:
+    # "draft" (invisible) → "locked" (visible as "Bald verfügbar", not
+    # startable) → "open" (workable). Going back is allowed.
     field :status, :string
-    field :locked, :boolean, default: false
     # An "erweiterte Lerneinheit" is voluntary: students may do it, but it does
     # not count towards the mandatory progress bar.
     field :extended, :boolean, default: false
@@ -49,8 +51,18 @@ defmodule Tasky.Tasks.Task do
     timestamps(type: :utc_datetime)
   end
 
-  @statuses ~w(draft published archived)
+  @statuses ~w(draft locked open)
+  @student_visible_statuses ~w(locked open)
   @release_modes ~w(never manual on_complete)
+
+  @doc "Die gültigen Freigabe-Zustände, in der Reihenfolge, in der sie durchlaufen werden."
+  def statuses, do: @statuses
+
+  @doc "Die Zustände, in denen Lernende die Einheit sehen (gesperrt oder offen)."
+  def student_visible_statuses, do: @student_visible_statuses
+
+  @doc "True, wenn Lernende die Einheit sehen, aber noch nicht starten können."
+  def locked?(%__MODULE__{status: status}), do: status == "locked"
 
   @doc "Die gültigen Freigabe-Modi der Musterlösung."
   def release_modes, do: @release_modes
@@ -63,7 +75,6 @@ defmodule Tasky.Tasks.Task do
       :position,
       :status,
       :course_id,
-      :locked,
       :extended,
       :solution_release_mode
     ])

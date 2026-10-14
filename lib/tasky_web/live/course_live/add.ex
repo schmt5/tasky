@@ -65,7 +65,7 @@ defmodule TaskyWeb.CourseLive.Add do
               />
               <p class="text-xs text-stone-400 mt-2 leading-relaxed">
                 Die Lerneinheit wird als Entwurf erstellt und ist für Lernende erst sichtbar,
-                wenn Sie sie veröffentlichen.
+                wenn Sie den Status auf «Gesperrt» oder «Offen» setzen.
               </p>
             </div>
 

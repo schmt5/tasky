@@ -837,7 +837,7 @@ defmodule TaskyWeb.CoreComponents do
   end
 
   @doc """
-  Status chip for a learning unit (`draft`, `published` or `archived`).
+  Status chip for a learning unit (`draft`, `locked` or `open`).
 
   Shared so the course overview and the reorder page cannot drift apart.
   """
@@ -846,28 +846,30 @@ defmodule TaskyWeb.CoreComponents do
   def task_status_chip(assigns) do
     ~H"""
     <span class={[
-      "inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em]",
+      "inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap tracking-[0.01em]",
       case @status do
-        "published" -> "bg-emerald-100 text-emerald-700"
-        "archived" -> "bg-stone-100 text-stone-600"
+        "open" -> "bg-emerald-100 text-emerald-700"
+        "locked" -> "bg-red-100 text-red-700"
         _ -> "bg-amber-100 text-amber-700"
       end
     ]}>
-      {case @status do
-        "published" -> "Veröffentlicht"
-        "archived" -> "Archiviert"
-        _ -> "Entwurf"
-      end}
+      <.icon :if={@status == "locked"} name="hero-lock-closed" class="w-3 h-3" />
+      {task_status_label(@status)}
     </span>
     """
   end
+
+  @doc "German label of a learning unit's release state."
+  def task_status_label("open"), do: "Offen"
+  def task_status_label("locked"), do: "Gesperrt"
+  def task_status_label(_status), do: "Entwurf"
 
   @doc """
   Chip marking a learning unit as an "erweiterte Lerneinheit" — a voluntary
   extra that does not count towards the mandatory progress bar.
 
   Violet is reserved for this axis: it must not collide with the status chip
-  (emerald/amber/stone) or the "Gesperrt" chip (red).
+  (emerald/amber/red).
   """
   attr :label, :string, default: "Erweitert"
 

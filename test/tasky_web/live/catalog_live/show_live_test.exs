@@ -41,8 +41,7 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
     task_fixture(author, %{
       name: "Freigegebene Einheit",
       position: 0,
-      status: "published",
-      locked: true,
+      status: "locked",
       course_id: course.id
     })
 
@@ -107,7 +106,7 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
     assert html =~ "Lernende und Abgaben werden nicht kopiert"
   end
 
-  test "importing creates an own copy of unlocked drafts and navigates there", %{
+  test "importing creates an own copy as drafts and navigates there", %{
     conn: conn,
     author: author,
     course: course,
@@ -116,8 +115,7 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
     task_fixture(author, %{
       name: "Freigegebene Einheit",
       position: 0,
-      status: "published",
-      locked: true,
+      status: "locked",
       course_id: course.id
     })
 
@@ -134,7 +132,6 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
 
     assert [unit] = Tasks.list_tasks_by_course(copy.id)
     assert unit.status == "draft"
-    refute unit.locked
   end
 
   test "a course with files shows the progress modal before redirecting", %{

@@ -31,7 +31,7 @@ defmodule TaskyWeb.TaskSolutionFileControllerTest do
     course = course_fixture(scope: teacher_scope)
 
     task =
-      task_fixture(teacher_scope, %{status: "published", course_id: course.id})
+      task_fixture(teacher_scope, %{status: "open", course_id: course.id})
 
     student = user_fixture(%{role: "student"})
     {:ok, _} = Courses.enroll_student(course.id, student.id)

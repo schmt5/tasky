@@ -757,7 +757,7 @@ defmodule TaskyWeb.Student.TaskLive do
 
     submission = %{submission | task: task}
 
-    if task.locked do
+    if task.status == "locked" do
       {:ok,
        socket
        |> put_flash(:info, "Diese Aufgabe ist noch nicht verfügbar.")
