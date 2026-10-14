@@ -1,7 +1,8 @@
 # Offene Verbesserungen
 
-Sammlung von Verbesserungen. Offen ist nur noch «Später: eigenes UI für die
-Korrektur-Optionen»; alle anderen Punkte sind umgesetzt.
+Sammlung von Verbesserungen. Offen sind nur noch «Später: eigenes UI für die
+Korrektur-Optionen» und «Spalte `tasks.locked` entfernen»; alle anderen
+Punkte sind umgesetzt.
 
 ## Lerneinheiten
 
@@ -25,6 +26,15 @@ durchlaufen wird, statt zwei Schalter zu kombinieren.
 
 Zurückschalten bleibt möglich. Der heute ungenutzte Wert «archiviert» fällt
 weg.
+
+### Später: Spalte `tasks.locked` entfernen
+
+Die Migration `MergeTaskReleaseStateIntoStatus` überführt `locked` in den
+neuen Status, lässt die Spalte aber stehen: Migrationen laufen beim Start der
+neuen Maschine, während die alte Version noch Anfragen beantwortet und
+`locked` noch liest. Sobald die neue Version überall läuft, in einem
+**separaten, späteren Deploy** die Spalte mit einer eigenen Migration
+entfernen.
 
 ### Modal «Lerneinheit kopieren»
 
