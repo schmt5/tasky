@@ -18,6 +18,10 @@ defmodule Tasky.Correction.StringComparator do
   * `:ignore_case`     — lowercase both sides before comparing.
   * `:ignore_spelling` — fuzzy match via `String.jaro_distance/2 >= 0.85`
                          (fallback to exact match for very short strings).
+  * `:ignore_punctuation` — drop punctuation (`.`, `,`, `!`, `?`, quotes, …)
+                         from both sides and collapse the whitespace left
+                         behind. Applied per alternative, i.e. after the
+                         sample has been split on `;`.
   * `:block_points`    — optional `%{index => points}` map (zero-based block
                          index, as from `Tasky.Exams.resolve_block_points/3`).
                          When present, each correct block contributes its own
@@ -87,8 +91,25 @@ defmodule Tasky.Correction.StringComparator do
   defp verdict_for(_sub, _sample, _opts), do: "wrong"
 
   @doc """
+  The comparison options stored in a part's `ai_correction_config` entry, as
+  the map `correct_part/4` and `text_match?/3` take. The one place that reads
+  the text flags, so auto-correction and the bulk correction view cannot
+  disagree about which ones exist.
+  """
+  def match_opts(part_config) when is_map(part_config) do
+    %{
+      ignore_case: Map.get(part_config, "ignore_case") == true,
+      ignore_spelling: Map.get(part_config, "ignore_spelling") == true,
+      ignore_punctuation: Map.get(part_config, "ignore_punctuation") == true
+    }
+  end
+
+  def match_opts(_part_config), do: match_opts(%{})
+
+  @doc """
   Returns true if a single `student` answer matches a single `accepted`
-  alternative under `opts` (`:ignore_case`, `:ignore_spelling`). Exposed so the
+  alternative under `opts` (`:ignore_case`, `:ignore_spelling`,
+  `:ignore_punctuation`). Exposed so the
   bulk-correction grouping in `Tasky.Exams` derives its default verdicts with
   exactly the same rule as auto-correction.
   """
@@ -111,8 +132,18 @@ defmodule Tasky.Correction.StringComparator do
   end
 
   defp normalize(text, opts) do
-    text = String.trim(text)
-    if Map.get(opts, :ignore_case, false), do: String.downcase(text), else: text
+    text
+    |> then(&if Map.get(opts, :ignore_punctuation, false), do: strip_punctuation(&1), else: &1)
+    |> String.trim()
+    |> then(&if Map.get(opts, :ignore_case, false), do: String.downcase(&1), else: &1)
+  end
+
+  # Removed rather than replaced by a space, so "Hallo, Welt!" and "Hallo Welt"
+  # compare equal; the whitespace collapse then absorbs "Hallo , Welt".
+  defp strip_punctuation(text) do
+    text
+    |> String.replace(~r/\p{P}/u, "")
+    |> String.replace(~r/\s+/u, " ")
   end
 
   # The `__ai_id` assigned by NodePatcher.annotate/1 is always `index + 1`,

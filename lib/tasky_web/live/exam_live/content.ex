@@ -16,6 +16,10 @@ defmodule TaskyWeb.ExamLive.Content do
   alias Tasky.Uploads
   alias TaskyWeb.ExamComponents
 
+  # Keys of the per-part text comparison options in `ai_correction_config`
+  # (see `Tasky.Correction.StringComparator.match_opts/1`).
+  @text_option_keys ~w(ignore_case ignore_spelling ignore_punctuation)
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -335,49 +339,54 @@ defmodule TaskyWeb.ExamLive.Content do
                     </span>
                   </label>
 
-                  <label class={[
-                    "flex items-start gap-3",
-                    if(pv.auto_correct, do: "cursor-pointer", else: "cursor-not-allowed opacity-40")
-                  ]}>
-                    <input
-                      type="checkbox"
-                      checked={pv.ignore_case}
-                      disabled={!pv.auto_correct}
-                      phx-click="toggle_ignore_case"
-                      phx-value-part-id={pv.id}
-                      class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 transition-colors duration-150 shrink-0 disabled:cursor-not-allowed"
-                    />
-                    <span class="min-w-0">
-                      <span class="block text-sm font-medium text-stone-700">
-                        Gross-/Kleinschreibung ignorieren
+                  <%!-- Text options only make sense where text is compared. A
+                        checkbox is right or wrong by its tick alone, so a part
+                        with nothing but checkboxes gets no text options. --%>
+                  <%= if pv.has_text_answers do %>
+                    <p
+                      :if={pv.has_checkboxes}
+                      id={"text-options-note-#{pv.id}"}
+                      class="text-xs text-stone-500 leading-relaxed"
+                    >
+                      Die folgenden Optionen gelten nur für Textantworten, nicht für Checkboxen.
+                    </p>
+                    <label
+                      :for={{key, label, hint} <- text_options()}
+                      class={[
+                        "flex items-start gap-3",
+                        if(pv.auto_correct,
+                          do: "cursor-pointer",
+                          else: "cursor-not-allowed opacity-40"
+                        )
+                      ]}
+                    >
+                      <input
+                        type="checkbox"
+                        id={"#{key}-#{pv.id}"}
+                        checked={Map.fetch!(pv, key)}
+                        disabled={!pv.auto_correct}
+                        phx-click="toggle_text_option"
+                        phx-value-part-id={pv.id}
+                        phx-value-option={key}
+                        class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 transition-colors duration-150 shrink-0 disabled:cursor-not-allowed"
+                      />
+                      <span class="min-w-0">
+                        <span class="block text-sm font-medium text-stone-700">{label}</span>
+                        <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
+                          {hint}
+                        </span>
                       </span>
-                      <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
-                        Bei der Auto-Korrektur dieser Aufgabe wird Gross-/Kleinschreibung nicht bewertet.
-                      </span>
-                    </span>
-                  </label>
-
-                  <label class={[
-                    "flex items-start gap-3",
-                    if(pv.auto_correct, do: "cursor-pointer", else: "cursor-not-allowed opacity-40")
-                  ]}>
-                    <input
-                      type="checkbox"
-                      checked={pv.ignore_spelling}
-                      disabled={!pv.auto_correct}
-                      phx-click="toggle_ignore_spelling"
-                      phx-value-part-id={pv.id}
-                      class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 transition-colors duration-150 shrink-0 disabled:cursor-not-allowed"
-                    />
-                    <span class="min-w-0">
-                      <span class="block text-sm font-medium text-stone-700">
-                        Rechtschreibung ignorieren
-                      </span>
-                      <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
-                        Bei der Auto-Korrektur dieser Aufgabe werden Rechtschreibfehler nicht streng bewertet (Fuzzy-Matching ab Jaro-Ähnlichkeit ≥ 0,85).
-                      </span>
-                    </span>
-                  </label>
+                    </label>
+                  <% else %>
+                    <p
+                      :if={pv.has_checkboxes}
+                      id={"checkbox-only-note-#{pv.id}"}
+                      class="text-xs text-stone-500 leading-relaxed"
+                    >
+                      Checkboxen werden pro Checkbox korrigiert: Jede richtig angekreuzte oder
+                      richtig leer gelassene Checkbox gibt ihren Anteil der Punkte.
+                    </p>
+                  <% end %>
                 </div>
               </div>
             </aside>
@@ -460,8 +469,8 @@ defmodule TaskyWeb.ExamLive.Content do
                     <span class="text-stone-400 shrink-0">•</span>
                     <span>
                       Jede Alternative wird mit denselben Regeln geprüft wie eine einzelne
-                      Musterlösung – auch „Gross-/Kleinschreibung ignorieren“ und
-                      „Rechtschreibung ignorieren“.
+                      Musterlösung – auch „Gross-/Kleinschreibung ignorieren“,
+                      „Rechtschreibung ignorieren“ und „Satzzeichen ignorieren“.
                     </span>
                   </li>
                   <li class="flex gap-2">
@@ -820,6 +829,7 @@ defmodule TaskyWeb.ExamLive.Content do
 
           %{
             answer_id: entry.answer_id,
+            type: entry.type,
             snippet: snippet,
             points: Map.get(custom, entry.answer_id)
           }
@@ -832,9 +842,12 @@ defmodule TaskyWeb.ExamLive.Content do
         max_points: Map.get(exam.sample_solution_points || %{}, part.id),
         blocks: blocks,
         custom_points: map_size(custom) > 0,
+        has_text_answers: Enum.any?(blocks, &(&1.type in ["answerBlock", "lueckentext"])),
+        has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem")),
         auto_correct: part_config_flag(exam, part.id, "auto_correct"),
         ignore_case: part_config_flag(exam, part.id, "ignore_case"),
-        ignore_spelling: part_config_flag(exam, part.id, "ignore_spelling")
+        ignore_spelling: part_config_flag(exam, part.id, "ignore_spelling"),
+        ignore_punctuation: part_config_flag(exam, part.id, "ignore_punctuation")
       }
     end)
   end
@@ -943,7 +956,7 @@ defmodule TaskyWeb.ExamLive.Content do
           |> then(fn cfg ->
             if new_val,
               do: cfg,
-              else: cfg |> Map.put("ignore_spelling", false) |> Map.put("ignore_case", false)
+              else: Enum.reduce(@text_option_keys, cfg, &Map.put(&2, &1, false))
           end)
 
         case Exams.update_ai_correction_config(
@@ -956,7 +969,12 @@ defmodule TaskyWeb.ExamLive.Content do
             changes =
               if new_val,
                 do: %{auto_correct: true},
-                else: %{auto_correct: false, ignore_case: false, ignore_spelling: false}
+                else: %{
+                  auto_correct: false,
+                  ignore_case: false,
+                  ignore_spelling: false,
+                  ignore_punctuation: false
+                }
 
             {:noreply,
              socket
@@ -969,13 +987,12 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
-  def handle_event("toggle_ignore_case", %{"part-id" => part_id}, socket) do
-    toggle_flag_if_auto(socket, part_id, "ignore_case", :ignore_case)
+  def handle_event("toggle_text_option", %{"part-id" => part_id, "option" => option}, socket)
+      when option in @text_option_keys do
+    toggle_flag_if_auto(socket, part_id, option, String.to_existing_atom(option))
   end
 
-  def handle_event("toggle_ignore_spelling", %{"part-id" => part_id}, socket) do
-    toggle_flag_if_auto(socket, part_id, "ignore_spelling", :ignore_spelling)
-  end
+  def handle_event("toggle_text_option", _params, socket), do: {:noreply, socket}
 
   def handle_event("open_alternatives_help", _params, socket) do
     {:noreply, assign(socket, :show_alternatives_help, true)}
@@ -1235,6 +1252,20 @@ defmodule TaskyWeb.ExamLive.Content do
     else
       {:noreply, socket}
     end
+  end
+
+  # The text comparison options of a part, in display order. Keys match both
+  # the part view and `ai_correction_config` (see
+  # `Tasky.Correction.StringComparator.match_opts/1`).
+  defp text_options do
+    [
+      {:ignore_case, "Gross-/Kleinschreibung ignorieren",
+       "Bei der Auto-Korrektur dieser Aufgabe wird Gross-/Kleinschreibung nicht bewertet."},
+      {:ignore_spelling, "Rechtschreibung ignorieren",
+       "Bei der Auto-Korrektur dieser Aufgabe werden Rechtschreibfehler nicht streng bewertet (Fuzzy-Matching ab Jaro-Ähnlichkeit ≥ 0,85)."},
+      {:ignore_punctuation, "Satzzeichen ignorieren",
+       "Punkt, Komma, Ausrufe- und Fragezeichen usw. werden beim Vergleich nicht beachtet."}
+    ]
   end
 
   defp part_view(socket, part_id),

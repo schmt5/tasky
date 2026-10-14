@@ -205,6 +205,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           <.config_chip active={@auto_correct} label="Auto-Korrektur" />
           <.config_chip active={@ignore_case} label="Gross/Klein ignorieren" />
           <.config_chip active={@ignore_spelling} label="Fuzzy-Matching" />
+          <.config_chip active={@ignore_punctuation} label="Satzzeichen ignorieren" />
         </div>
       </div>
       <div class="p-5">
@@ -616,7 +617,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:max_points, max_points)
          |> assign(:auto_correct, Map.get(part_config, "auto_correct") == true)
          |> assign(:ignore_case, Map.get(part_config, "ignore_case") == true)
-         |> assign(:ignore_spelling, Map.get(part_config, "ignore_spelling") == true)}
+         |> assign(:ignore_spelling, Map.get(part_config, "ignore_spelling") == true)
+         |> assign(:ignore_punctuation, Map.get(part_config, "ignore_punctuation") == true)}
     end
   end
 

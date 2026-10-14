@@ -32,6 +32,54 @@ defmodule TaskyWeb.ExamContentLiveTest do
     }
   end
 
+  defp heading(text) do
+    %{
+      "type" => "heading",
+      "attrs" => %{"level" => 3},
+      "content" => [%{"type" => "text", "text" => text}]
+    }
+  end
+
+  defp answer_block(id) do
+    %{
+      "type" => "answerBlock",
+      "attrs" => %{"answerId" => id},
+      "content" => [%{"type" => "paragraph"}]
+    }
+  end
+
+  defp task_list(ids) do
+    %{
+      "type" => "taskList",
+      "content" =>
+        Enum.map(ids, fn id ->
+          %{
+            "type" => "taskItem",
+            "attrs" => %{"checked" => false, "answerId" => id},
+            "content" => [
+              %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => id}]}
+            ]
+          }
+        end)
+    }
+  end
+
+  # q-1: text only, q-2: checkboxes only, q-3: both.
+  defp mixed_answer_content do
+    %{
+      "type" => "doc",
+      "content" => [
+        heading("Text"),
+        answer_block("t1"),
+        heading("Ankreuzen"),
+        task_list(["c1", "c2"]),
+        heading("Gemischt"),
+        answer_block("t2"),
+        task_list(["c3"])
+      ]
+    }
+  end
+
   defp create_exam(content) do
     teacher = user_fixture(%{role: "teacher"})
     scope = user_scope_fixture(teacher)
@@ -98,9 +146,9 @@ defmodule TaskyWeb.ExamContentLiveTest do
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
 
       render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      render_click(view, "toggle_ignore_case", %{"part-id" => "q-1"})
+      render_click(view, "toggle_text_option", %{"part-id" => "q-1", "option" => "ignore_case"})
       # q-2 has auto_correct off, so its sub-flag toggle must be a no-op
-      render_click(view, "toggle_ignore_case", %{"part-id" => "q-2"})
+      render_click(view, "toggle_text_option", %{"part-id" => "q-2", "option" => "ignore_case"})
 
       exam = Exams.get_exam!(scope, exam.id)
       assert get_in(exam.ai_correction_config, ["q-1", "auto_correct"]) == true
@@ -113,12 +161,58 @@ defmodule TaskyWeb.ExamContentLiveTest do
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
 
       render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      render_click(view, "toggle_ignore_case", %{"part-id" => "q-1"})
+      render_click(view, "toggle_text_option", %{"part-id" => "q-1", "option" => "ignore_case"})
       render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
 
       exam = Exams.get_exam!(scope, exam.id)
       assert get_in(exam.ai_correction_config, ["q-1", "auto_correct"]) == false
       assert get_in(exam.ai_correction_config, ["q-1", "ignore_case"]) == false
+    end
+  end
+
+  describe "correction options per answer type" do
+    test "text options appear only where text answers are compared", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      for key <- ~w(ignore_case ignore_spelling ignore_punctuation) do
+        assert has_element?(view, "##{key}-q-1")
+        refute has_element?(view, "##{key}-q-2")
+        assert has_element?(view, "##{key}-q-3")
+      end
+
+      # Checkbox-only: an explanation instead of options that would do nothing.
+      assert has_element?(view, "#checkbox-only-note-q-2")
+      # Mixed: the options say they skip the checkboxes.
+      assert has_element?(view, "#text-options-note-q-3")
+      refute has_element?(view, "#text-options-note-q-1")
+    end
+
+    test "\"Satzzeichen ignorieren\" is stored per part", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
+      view |> element("#ignore_punctuation-q-1") |> render_click()
+
+      exam = Exams.get_exam!(scope, exam.id)
+      assert get_in(exam.ai_correction_config, ["q-1", "ignore_punctuation"]) == true
+
+      # Switching auto-correction off clears it with the other text options.
+      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
+      exam = Exams.get_exam!(scope, exam.id)
+      assert get_in(exam.ai_correction_config, ["q-1", "ignore_punctuation"]) == false
+    end
+
+    test "an unknown option is ignored", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
+      render_click(view, "toggle_text_option", %{"part-id" => "q-1", "option" => "bogus"})
+
+      exam = Exams.get_exam!(scope, exam.id)
+      refute Map.has_key?(exam.ai_correction_config["q-1"], "bogus")
     end
   end
 

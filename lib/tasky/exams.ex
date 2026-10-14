@@ -12,6 +12,7 @@ defmodule Tasky.Exams do
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.SolutionHints
+  alias Tasky.Correction.StringComparator
   alias Tasky.Exams.Exam
   alias Tasky.Exams.ExamAttachment
   alias Tasky.Exams.ExamSubmission
@@ -2348,8 +2349,8 @@ defmodule Tasky.Exams do
 
   @doc """
   Enumerates correction job descriptors eligible for bulk AI correction across
-  all submissions of the exam. Each job carries `ignore_spelling` and
-  `ignore_case` flags from the per-part config. Excludes parts without a
+  all submissions of the exam. Each job carries the part's text comparison
+  options as `match_opts` (see `Tasky.Correction.StringComparator.match_opts/1`). Excludes parts without a
   max-points entry or without content for that submission.
 
   Always empty for a `free_document` exam: auto-correction compares answer
@@ -2400,8 +2401,7 @@ defmodule Tasky.Exams do
           %{
             submission_id: submission.id,
             part_id: part.id,
-            ignore_spelling: Map.get(part_cfg, "ignore_spelling", false) == true,
-            ignore_case: Map.get(part_cfg, "ignore_case", false) == true
+            match_opts: StringComparator.match_opts(part_cfg)
           }
         end
       end)
@@ -2431,17 +2431,13 @@ defmodule Tasky.Exams do
 
   `current_verdict` is `nil` when no submission in the group has an explicit
   teacher verdict, `:mixed` when submissions disagree, otherwise the shared
-  value. `default_verdict` honors the part's `ignore_case`/`ignore_spelling`
-  options, using the same matcher (`Tasky.Correction.StringComparator.text_match?/3`)
+  value. `default_verdict` honors the part's text comparison options
+  (`ignore_case`, `ignore_spelling`, `ignore_punctuation`), using the same matcher (`Tasky.Correction.StringComparator.text_match?/3`)
   as auto-correction.
   """
   def list_part_answer_groups(%Exam{} = exam, part_id) when is_binary(part_id) do
     part_cfg = Map.get(exam.ai_correction_config || %{}, part_id, %{})
-
-    opts = %{
-      ignore_case: Map.get(part_cfg, "ignore_case", false) == true,
-      ignore_spelling: Map.get(part_cfg, "ignore_spelling", false) == true
-    }
+    opts = StringComparator.match_opts(part_cfg)
 
     sample_part =
       exam
@@ -2581,7 +2577,7 @@ defmodule Tasky.Exams do
     trimmed = String.trim(text)
 
     if trimmed != "" and
-         Enum.any?(samples, &Tasky.Correction.StringComparator.text_match?(trimmed, &1, opts)),
+         Enum.any?(samples, &StringComparator.text_match?(trimmed, &1, opts)),
        do: "correct",
        else: "wrong"
   end

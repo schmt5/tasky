@@ -171,8 +171,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
   defp run_job(exam, %{
          submission_id: submission_id,
          part_id: part_id,
-         ignore_spelling: ignore_spelling,
-         ignore_case: ignore_case
+         match_opts: match_opts
        }) do
     with {:ok, submission} <- fetch_submission(exam.id, submission_id),
          {:ok, submission_nodes} <- fetch_part_nodes(exam, submission, part_id),
@@ -187,11 +186,7 @@ defmodule Tasky.AI.BulkCorrectionRunner do
              annotated_nodes,
              sample_nodes,
              max_points,
-             %{
-               ignore_spelling: ignore_spelling,
-               ignore_case: ignore_case,
-               block_points: block_points
-             }
+             Map.put(match_opts, :block_points, block_points)
            ),
          corrected_nodes = NodePatcher.apply_verdicts(annotated_nodes, verdicts),
          {:ok, _updated} <-
