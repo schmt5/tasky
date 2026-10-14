@@ -1,10 +1,13 @@
 # Offene Verbesserungen
 
-Sammlung von Verbesserungen, die noch umgesetzt werden sollen.
+Sammlung von Verbesserungen. Offen ist nur noch «Später: eigenes UI für die
+Korrektur-Optionen»; alle anderen Punkte sind umgesetzt.
 
 ## Lerneinheiten
 
 ### Freigabe und Sperre als ein fortlaufender Status
+
+**Status:** umgesetzt.
 
 Eine Lerneinheit hat heute zwei voneinander unabhängige Zustände:
 
@@ -25,6 +28,8 @@ weg.
 
 ### Modal «Lerneinheit kopieren»
 
+**Status:** umgesetzt.
+
 Betrifft das Kopier-Modal in `TaskyWeb.CourseLive.Show` (`#copy-task-modal`).
 
 - **Modal ist zu klein.** Es sollte mehr Platz bekommen.
@@ -36,6 +41,8 @@ Betrifft das Kopier-Modal in `TaskyWeb.CourseLive.Show` (`#copy-task-modal`).
 ## Prüfungen
 
 ### Korrektur-Optionen je nach Antworttyp
+
+**Status:** umgesetzt.
 
 Beim Erfassen der Musterlösung stehen heute immer dieselben Optionen zur
 Verfügung, also auch «Gross-/Kleinschreibung ignorieren» und «Rechtschreibung
@@ -58,6 +65,8 @@ werden, wo die typabhängigen Optionen leben.
 
 ### Option «Satzzeichen ignorieren» für Textantworten
 
+**Status:** umgesetzt.
+
 Neue Korrektur-Option für Textantworten: **Satzzeichen ignorieren**. Ist sie
 aktiv, spielt es keine Rolle, ob Punkt, Komma, Ausrufezeichen, Fragezeichen
 usw. geschrieben wurden.
@@ -75,6 +84,8 @@ Vorerst bleibt das UI, wie es ist. In einem nächsten Schritt prüfen, ob die
 Optionen ein kompakteres, übersichtlicheres UI brauchen.
 
 ### Checkboxen in der Korrektur als Gruppe darstellen
+
+**Status:** umgesetzt.
 
 In der Korrekturansicht ist bei Checkboxen nicht verständlich, was passiert
 ist:
@@ -96,11 +107,15 @@ Das ist voraussichtlich eine grössere Änderung.
 
 ### Cockpit: Lernende nach Status filtern
 
+**Status:** umgesetzt.
+
 Im Prüfungs-Cockpit sollen sich die Lernenden nach Status filtern lassen.
 Wichtigster Fall: nur noch die Lernenden anzeigen, die **noch in Bearbeitung**
 sind.
 
 ### Lernende aus einer laufenden oder gestoppten Prüfung entfernen
+
+**Status:** umgesetzt.
 
 Lernende sollen sich auch dann noch aus einer Prüfung entfernen lassen, wenn
 die Prüfung bereits **gestartet** oder sogar schon **gestoppt** ist.
@@ -116,6 +131,8 @@ beendet.
 ## Allgemein
 
 ### Lernende per Namenssuche auswählen
+
+**Status:** umgesetzt.
 
 Beim Auswählen von Lernenden, etwa für eine Prüfung oder einen Kurs, gibt es
 heute nur ein Select nach Klasse. Zusätzlich soll es ein **Suchfeld** geben,
