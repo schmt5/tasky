@@ -244,6 +244,40 @@ defmodule TaskyWeb.ExamLive.Cockpit do
             </div>
           </div>
           <div class="p-6">
+            <div
+              :if={@submissions_count > 0}
+              id="status-filter"
+              role="group"
+              aria-label="Nach Status filtern"
+              class="inline-flex items-center gap-1 p-1 mb-4 bg-stone-100 rounded-lg"
+            >
+              <button
+                :for={{value, label, count} <- status_filter_options(assigns)}
+                id={"status-filter-#{value}"}
+                type="button"
+                phx-click="filter_status"
+                phx-value-status={value}
+                aria-pressed={to_string(@status_filter == value)}
+                class={[
+                  "inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
+                  if(@status_filter == value,
+                    do: "bg-white text-stone-800 shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+                    else: "text-stone-500 hover:text-stone-700"
+                  )
+                ]}
+              >
+                {label}
+                <span class={[
+                  "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-full",
+                  if(@status_filter == value,
+                    do: "bg-stone-100 text-stone-600",
+                    else: "bg-stone-200/70 text-stone-500"
+                  )
+                ]}>
+                  {count}
+                </span>
+              </button>
+            </div>
             <div id="submissions" phx-update="stream">
               <div
                 id="submissions-empty"
@@ -251,10 +285,15 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               >
                 <.icon name="hero-user-group" class="w-10 h-10 mb-3 text-stone-300" />
                 <p class="text-sm font-medium">
-                  <%= if @assigned_mode? do %>
-                    Noch keine Teilnehmenden zugewiesen.
-                  <% else %>
-                    Noch keine Teilnehmenden eingeschrieben.
+                  <%= cond do %>
+                    <% @status_filter == "in_progress" -> %>
+                      Alle haben abgegeben.
+                    <% @status_filter == "submitted" -> %>
+                      Noch hat niemand abgegeben.
+                    <% @assigned_mode? -> %>
+                      Noch keine Teilnehmenden zugewiesen.
+                    <% true -> %>
+                      Noch keine Teilnehmenden eingeschrieben.
                   <% end %>
                 </p>
               </div>
@@ -766,7 +805,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:exam, exam)
      |> assign(:assigned_mode?, Exams.assigned_mode?(exam))
      |> assign(:anonymous_mode?, Exams.anonymous_mode?(exam))
-     |> assign(:submissions_count, length(submissions))
+     |> assign(:status_filter, "all")
      |> assign(:present, presence_state(exam.id))
      |> assign(:confirm_action, nil)
      |> assign(:show_assign?, false)
@@ -774,7 +813,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:class_options, class_options(socket.assigns.current_scope))
      |> assign(:seb_derivation_error, SebGuard.derivation_error(exam))
      |> assign_assignable()
-     |> stream(:submissions, submissions)}
+     |> assign_submissions(submissions)}
   end
 
   # Only assigned sessions have anything to assign; the query is skipped
@@ -893,8 +932,36 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
     socket
     |> assign(:present, presence_state(socket.assigns.exam.id))
+    |> assign_submissions(submissions)
+  end
+
+  # The one place the list is (re)streamed, so the status filter and the
+  # counters cannot drift apart. The counters always cover everyone; only the
+  # stream is filtered.
+  defp assign_submissions(socket, submissions) do
+    visible = Enum.filter(submissions, &matches_status?(&1, socket.assigns.status_filter))
+
+    socket
     |> assign(:submissions_count, length(submissions))
-    |> stream(:submissions, submissions, reset: true)
+    |> assign(:submitted_count, Enum.count(submissions, & &1.submitted))
+    |> stream(:submissions, visible, reset: true)
+  end
+
+  @status_filters ~w(all in_progress submitted)
+
+  # "In Bearbeitung" is everyone who has not handed in yet — including those
+  # who have not started or dropped off, since they are exactly the ones still
+  # outstanding.
+  defp matches_status?(_submission, "all"), do: true
+  defp matches_status?(submission, "in_progress"), do: not submission.submitted
+  defp matches_status?(submission, "submitted"), do: submission.submitted
+
+  defp status_filter_options(assigns) do
+    [
+      {"all", "Alle", assigns.submissions_count},
+      {"in_progress", "In Bearbeitung", assigns.submissions_count - assigns.submitted_count},
+      {"submitted", "Abgegeben", assigns.submitted_count}
+    ]
   end
 
   @impl true
@@ -917,8 +984,10 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> refresh_submissions()}
   end
 
-  def handle_info({:submission_submitted, submission}, socket) do
-    {:noreply, stream_insert(socket, :submissions, submission)}
+  # Re-streamed rather than inserted: under "In Bearbeitung" the row has to
+  # leave the list, and the counters move with it.
+  def handle_info({:submission_submitted, _submission}, socket) do
+    {:noreply, refresh_submissions(socket)}
   end
 
   @impl true
@@ -930,6 +999,16 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     {:noreply, assign(socket, :show_assign?, false)}
   end
 
+  def handle_event("filter_status", %{"status" => status}, socket)
+      when status in @status_filters do
+    {:noreply,
+     socket
+     |> assign(:status_filter, status)
+     |> refresh_submissions()}
+  end
+
+  def handle_event("filter_status", _params, socket), do: {:noreply, socket}
+
   def handle_event("filter_by_class", %{"class_id" => raw}, socket) do
     {:noreply,
      socket
@@ -939,11 +1018,10 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
   def handle_event("assign_student", %{"student_id" => raw}, socket) do
     case Exams.assign_student(socket.assigns.current_scope, socket.assigns.exam, Params.int(raw)) do
-      {:ok, submission} ->
+      {:ok, _submission} ->
         {:noreply,
          socket
-         |> stream_insert(:submissions, submission)
-         |> assign(:submissions_count, socket.assigns.submissions_count + 1)
+         |> refresh_submissions()
          |> assign_assignable()}
 
       {:error, reason} ->
@@ -963,12 +1041,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                class_id
              ) do
           {:ok, %{assigned: assigned, skipped: skipped}} ->
-            submissions = Exams.list_exam_submissions(socket.assigns.exam)
-
             {:noreply,
              socket
-             |> assign(:submissions_count, length(submissions))
-             |> stream(:submissions, submissions, reset: true)
+             |> refresh_submissions()
              |> assign_assignable()
              |> put_flash(:info, assign_all_message(assigned, skipped))}
 
@@ -986,8 +1061,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
          {:ok, _} <- Exams.unassign_student(socket.assigns.current_scope, exam, submission) do
       {:noreply,
        socket
-       |> stream_delete(:submissions, submission)
-       |> assign(:submissions_count, max(socket.assigns.submissions_count - 1, 0))
+       |> refresh_submissions()
        |> assign_assignable()}
     else
       {:error, :already_submitted} ->

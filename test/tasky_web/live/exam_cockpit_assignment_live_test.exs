@@ -25,6 +25,10 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
     view |> element("#add-participants-btn") |> render_click()
   end
 
+  # The participant rows only — "In Bearbeitung" is also a status filter
+  # above the list, so a whole-page match cannot tell the two apart.
+  defp rows_html(view), do: view |> element("#submissions") |> render()
+
   describe "anonymous mode" do
     test "still shows the enrollment link and no assignment card", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam("anonymous")
@@ -235,7 +239,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       # or ExamLive.Show takes. The cockpit has to pick it up over PubSub.
       {:ok, _exam} = Exams.update_exam_status(scope, exam, "running")
 
-      html = render(view)
+      html = rows_html(view)
       assert html =~ "In Bearbeitung"
       refute html =~ "Im Warteraum"
     end
@@ -255,7 +259,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       # The label arrives with the broadcast the event handler triggered, which
       # lands in the mailbox after the event itself — so it is not in the click's
       # own diff.
-      html = render(view)
+      html = rows_html(view)
 
       assert html =~ "In Bearbeitung"
       refute html =~ "Im Warteraum"
@@ -272,8 +276,72 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       html = render(view)
       refute html =~ "add-participants-btn"
-      refute html =~ "In Bearbeitung"
+      refute rows_html(view) =~ "In Bearbeitung"
       assert html =~ "Prüfung beendet"
+    end
+  end
+  describe "status filter" do
+    defp assign_two(scope, exam) do
+      writing = user_fixture(%{role: "student"})
+      done = user_fixture(%{role: "student"})
+      {:ok, writing_sub} = Exams.assign_student(scope, exam, writing.id)
+      {:ok, done_sub} = Exams.assign_student(scope, exam, done.id)
+      {:ok, done_sub} = Exams.submit_exam_submission(done_sub)
+      {writing_sub, done_sub}
+    end
+
+    test "shows everyone by default, with a count per status", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
+      {writing, done} = assign_two(scope, exam)
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+      assert has_element?(view, ~s{#status-filter-all[aria-pressed="true"]}, "2")
+      assert has_element?(view, "#status-filter-in_progress", "1")
+      assert has_element?(view, "#status-filter-submitted", "1")
+      assert has_element?(view, "#submissions-#{writing.id}")
+      assert has_element?(view, "#submissions-#{done.id}")
+    end
+
+    test "\"In Bearbeitung\" hides who has handed in", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
+      {writing, done} = assign_two(scope, exam)
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      view |> element("#status-filter-in_progress") |> render_click()
+
+      assert has_element?(view, ~s{#status-filter-in_progress[aria-pressed="true"]})
+      assert has_element?(view, "#submissions-#{writing.id}")
+      refute has_element?(view, "#submissions-#{done.id}")
+
+      view |> element("#status-filter-submitted") |> render_click()
+      refute has_element?(view, "#submissions-#{writing.id}")
+      assert has_element?(view, "#submissions-#{done.id}")
+    end
+
+    test "a hand-in drops the row out of \"In Bearbeitung\" live", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
+      {writing, _done} = assign_two(scope, exam)
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      view |> element("#status-filter-in_progress") |> render_click()
+
+      {:ok, _} = Exams.submit_exam_submission(writing)
+
+      refute has_element?(view, "#submissions-#{writing.id}")
+      assert has_element?(view, "#submissions-empty", "Alle haben abgegeben.")
+      assert has_element?(view, "#status-filter-submitted", "2")
+    end
+
+    test "an unknown filter value is ignored", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
+      assign_two(scope, exam)
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+      render_click(view, "filter_status", %{"status" => "bogus"})
+
+      assert has_element?(view, ~s{#status-filter-all[aria-pressed="true"]})
     end
   end
 end
