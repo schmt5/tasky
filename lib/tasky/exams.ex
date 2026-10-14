@@ -1676,13 +1676,16 @@ defmodule Tasky.Exams do
   Lists the answer-bearing blocks in a single part of a submission, paired
   with the teacher's current verdict for each (if any).
 
-  Each entry is `%{index: i, text: t, verdict: v}` where `v` is `"correct"`,
-  `"half"` (legacy), `"wrong"`, a number (manual points) or `nil`.
-  Verdicts are keyed by the block's stable `answerId` in
-  `submission.block_verdicts`.
+  Each entry is a `Tasky.AI.NodePatcher.list_answer_blocks/1` entry plus
+  `verdict` — `"correct"`, `"half"` (legacy), `"wrong"`, a number (manual
+  points) or `nil` — and `expected_checked`, whether the sample solution ticks
+  that checkbox (`nil` for anything but a `taskItem`). Verdicts are keyed by
+  the block's stable `answerId` in `submission.block_verdicts`.
   """
   def list_part_answer_blocks(%Exam{} = exam, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
+    expected_checked = sample_checked_by_index(exam, part_id)
+
     parts =
       submission
       |> correction_content()
@@ -1701,8 +1704,28 @@ defmodule Tasky.Exams do
           verdict =
             (entry.answer_id && Map.get(explicit, entry.answer_id)) || entry.inferred_verdict
 
-          Map.put(entry, :verdict, verdict)
+          entry
+          |> Map.put(:verdict, verdict)
+          |> Map.put(:expected_checked, Map.get(expected_checked, entry.index))
         end)
+    end
+  end
+
+  # Whether the sample solution ticks each checkbox of the part, by block
+  # index — the same positional index the submission's blocks carry.
+  defp sample_checked_by_index(exam, part_id) do
+    exam
+    |> sample_solution_doc()
+    |> split_content_into_parts(exam.answer_mode)
+    |> Enum.find(&(&1.id == part_id))
+    |> case do
+      nil ->
+        %{}
+
+      part ->
+        for %{type: "taskItem"} = b <- NodePatcher.list_answer_blocks(part.nodes),
+            into: %{},
+            do: {b.index, b.checked}
     end
   end
 
@@ -2414,10 +2437,15 @@ defmodule Tasky.Exams do
   unique answer text, paired with the system's pre-judged verdict against the
   sample solution and the teacher's current verdict (if any).
 
-  Returns a list of `%{index, label, max_points, sample_answers, groups}` —
-  one entry per answer-bearing block in the part, in document order.
-  `max_points` is the block's share resolved via `resolve_block_points/3`
-  (`nil` when the part has no points configured). Within `groups`:
+  Returns a list of `%{index, type, group, label, max_points, sample_answers,
+  groups}` — one entry per answer-bearing block in the part, in document
+  order. `max_points` is the block's share resolved via
+  `resolve_block_points/3` (`nil` when the part has no points configured).
+
+  A checkbox (`type: "taskItem"`) is grouped by its tick, not by its text:
+  the group texts are `"angekreuzt"` and `"nicht angekreuzt"`, `label` is the
+  checkbox's own label, and `group` names the checkbox list it belongs to
+  (see `Tasky.AI.NodePatcher.list_answer_blocks/1`). Within `groups`:
 
       %{
         text: "fliegen" | nil,            # nil = "no answer"
@@ -2471,8 +2499,8 @@ defmodule Tasky.Exams do
         p -> NodePatcher.list_answer_blocks(p.nodes)
       end
 
-    exam_block_indices = Enum.map(exam_blocks, & &1.index)
     points_by_index = resolve_block_points(exam, part_id, exam_blocks)
+    sample_block_by_index = Map.new(sample_blocks, &{&1.index, &1})
 
     submissions = list_exam_submissions(exam)
 
@@ -2491,29 +2519,67 @@ defmodule Tasky.Exams do
         {sub, blocks}
       end)
 
-    Enum.map(exam_block_indices, fn index ->
-      sample_text = Map.get(sample_text_by_index, index)
-
-      sample_answers = AnswerVariants.split(sample_text)
-
-      groups = build_answer_groups(per_submission_blocks, index, sample_answers, opts)
-
-      %{
+    Enum.map(exam_blocks, fn %{index: index} = exam_block ->
+      base = %{
         index: index,
-        label: Map.get(labels_by_index, index),
-        max_points: points_by_index && Map.get(points_by_index, index),
-        sample_answers: sample_answers,
-        groups: groups
+        type: exam_block.type,
+        group: exam_block[:group],
+        max_points: points_by_index && Map.get(points_by_index, index)
       }
+
+      if exam_block.type == "taskItem" do
+        # A checkbox's label is the same for everyone; what differs is the
+        # tick. Grouping by the label put the whole class in one "correct"
+        # group, ticked or not.
+        expected =
+          case Map.get(sample_block_by_index, index) do
+            %{checked: checked} -> checkbox_state_text(checked)
+            nil -> nil
+          end
+
+        sample_answers = if expected, do: [expected], else: []
+
+        Map.merge(base, %{
+          label: exam_block.text,
+          sample_answers: sample_answers,
+          groups:
+            build_answer_groups(
+              per_submission_blocks,
+              index,
+              &checkbox_state_text(&1.checked),
+              sample_answers,
+              %{}
+            )
+        })
+      else
+        sample_answers = AnswerVariants.split(Map.get(sample_text_by_index, index))
+
+        Map.merge(base, %{
+          label: Map.get(labels_by_index, index),
+          sample_answers: sample_answers,
+          groups:
+            build_answer_groups(
+              per_submission_blocks,
+              index,
+              &normalize_group_text(&1.text),
+              sample_answers,
+              opts
+            )
+        })
+      end
     end)
   end
 
-  defp build_answer_groups(per_submission_blocks, index, sample_answers, opts) do
+  # The group text of a checkbox answer — also what the teacher sees.
+  defp checkbox_state_text(true), do: "angekreuzt"
+  defp checkbox_state_text(_unchecked), do: "nicht angekreuzt"
+
+  defp build_answer_groups(per_submission_blocks, index, key_fun, sample_answers, opts) do
     entries =
       Enum.map(per_submission_blocks, fn {sub, blocks} ->
         case Enum.find(blocks, &(&1.index == index)) do
           nil -> {sub, nil, nil}
-          %{text: t, answer_id: id} -> {sub, normalize_group_text(t), id}
+          %{answer_id: id} = block -> {sub, key_fun.(block), id}
         end
       end)
 

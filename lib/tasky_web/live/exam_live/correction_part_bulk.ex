@@ -53,8 +53,26 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
             <div class="mt-4">
               <%= if @is_multi_input do %>
                 <div class="space-y-4">
-                  <%= for block <- @answer_blocks do %>
-                    {render_block_section(assigns, block)}
+                  <%= for section <- block_sections(@answer_blocks) do %>
+                    <%= if section.kind == :checkboxes do %>
+                      <%!-- The checkboxes of one list are one question. --%>
+                      <div
+                        id={"bulk-checkbox-group-#{section.id}"}
+                        class="rounded-[16px] border border-stone-200 bg-stone-50/60 p-3 space-y-3"
+                      >
+                        <div class="flex items-center gap-2 px-2 pt-1">
+                          <.icon name="hero-check-circle" class="w-4 h-4 text-stone-400" />
+                          <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                            Checkboxen · {length(section.blocks)} Stück
+                          </span>
+                        </div>
+                        <%= for block <- section.blocks do %>
+                          {render_block_section(assigns, block)}
+                        <% end %>
+                      </div>
+                    <% else %>
+                      {render_block_section(assigns, section.block)}
+                    <% end %>
                   <% end %>
                 </div>
               <% else %>
@@ -307,7 +325,31 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     """
   end
 
+  # Consecutive checkboxes of the same list become one section; every other
+  # block stands alone.
+  defp block_sections(blocks) do
+    blocks
+    |> Enum.chunk_by(fn b -> (b.type == "taskItem" && b.group) || {:single, b.index} end)
+    |> Enum.map(fn
+      [%{type: "taskItem", group: group} | _] = items when not is_nil(group) ->
+        %{kind: :checkboxes, id: group, blocks: items}
+
+      [block] ->
+        %{kind: :single, block: block}
+    end)
+  end
+
   # "fliegen → fly" — label and sample answers as one equal-weight heading.
+  # For a checkbox: "Option B → angekreuzt", i.e. what the solution expects.
+  defp block_heading(%{type: "taskItem"} = block) do
+    label = if block.label in [nil, ""], do: "Checkbox #{block.index + 1}", else: block.label
+
+    case block.sample_answers do
+      [] -> label
+      [expected] -> label <> " → " <> expected
+    end
+  end
+
   defp block_heading(block) do
     label = block.label || "Antwort #{block.index + 1}"
 

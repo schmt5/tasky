@@ -27,20 +27,34 @@ defmodule Tasky.AI.NodePatcher do
   the power-view to enumerate blocks for keyboard correction.
 
   Each entry is `%{index: i, answer_id: id, type: t, text: plain_text,
-  inferred_verdict: v}` where `answer_id` is the node's stable `answerId`
-  attribute as a string (or `nil`), and `inferred_verdict` reflects the
-  trailing ✅/🟡/❌ marker on the node (or `nil` if absent). Useful as a
-  default verdict when the teacher has not yet explicitly overridden the
-  AI's call.
+  inferred_verdict: v, checked: c, group: g}` where `answer_id` is the node's
+  stable `answerId` attribute as a string (or `nil`), and `inferred_verdict`
+  reflects the trailing ✅/🟡/❌ marker on the node (or `nil` if absent).
+  Useful as a default verdict when the teacher has not yet explicitly
+  overridden the AI's call.
+
+  For a `taskItem`, `text` is the checkbox's label, `checked` whether it is
+  ticked, and `group` identifies the checkbox list it belongs to — the index
+  of the list's first answer node, so it is the same in the exam, the sample
+  solution and every submission. Checkboxes of one list belong together and
+  are shown as one question. Other node types carry `checked: nil, group: nil`.
   """
   def list_answer_blocks(nodes) when is_list(nodes) do
-    {entries, _} = collect_blocks(nodes, [], 0)
+    {entries, _} = collect_blocks(nodes, [], 0, nil)
     Enum.reverse(entries)
   end
 
-  defp collect_blocks([], acc, counter), do: {acc, counter}
+  defp collect_blocks(nodes, acc, counter, group)
 
-  defp collect_blocks([%{"type" => type} = node | rest], acc, counter)
+  defp collect_blocks([], acc, counter, _group), do: {acc, counter}
+
+  defp collect_blocks([%{"type" => "taskList", "content" => content} | rest], acc, counter, group)
+       when is_list(content) do
+    {acc, next} = collect_blocks(content, acc, counter, counter)
+    collect_blocks(rest, acc, next, group)
+  end
+
+  defp collect_blocks([%{"type" => type} = node | rest], acc, counter, group)
        when type in @answer_types do
     raw_text = node |> Map.get("content", []) |> extract_plain_text()
     text = raw_text |> strip_marker_text()
@@ -52,23 +66,32 @@ defmodule Tasky.AI.NodePatcher do
         id -> to_string(id)
       end
 
+    {checked, group} =
+      if type == "taskItem",
+        do: {get_in(node, ["attrs", "checked"]) == true, group},
+        else: {nil, nil}
+
     entry = %{
       index: counter,
       answer_id: answer_id,
       type: type,
       text: text,
-      inferred_verdict: inferred
+      inferred_verdict: inferred,
+      checked: checked,
+      group: group
     }
 
-    collect_blocks(rest, [entry | acc], counter + 1)
+    collect_blocks(rest, [entry | acc], counter + 1, group)
   end
 
-  defp collect_blocks([%{"content" => content} | rest], acc, counter) when is_list(content) do
-    {acc, counter} = collect_blocks(content, acc, counter)
-    collect_blocks(rest, acc, counter)
+  defp collect_blocks([%{"content" => content} | rest], acc, counter, group)
+       when is_list(content) do
+    {acc, counter} = collect_blocks(content, acc, counter, group)
+    collect_blocks(rest, acc, counter, group)
   end
 
-  defp collect_blocks([_ | rest], acc, counter), do: collect_blocks(rest, acc, counter)
+  defp collect_blocks([_ | rest], acc, counter, group),
+    do: collect_blocks(rest, acc, counter, group)
 
   defp extract_plain_text(content) when is_list(content) do
     Enum.map_join(content, "", fn

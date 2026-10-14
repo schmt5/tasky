@@ -344,112 +344,37 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
               </div>
 
               <div class="px-6 py-5 overflow-y-auto flex-1 space-y-2">
-                <%= for block <- @power_blocks do %>
-                  <div
-                    tabindex="0"
-                    data-power-row={block.index}
-                    class="grid grid-cols-[64px_1fr_auto] items-center gap-4 px-4 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
-                  >
-                    <div class="text-center">
-                      <span class={[
-                        "inline-flex items-center justify-center min-w-[36px] h-8 px-2 rounded-lg font-mono text-base font-semibold",
-                        power_points_class(block.verdict)
-                      ]}>
-                        {power_row_points(block.verdict, block.max_points)}
-                      </span>
-                      <span :if={block.max_points} class="block text-[10px] text-stone-400 mt-0.5">
-                        max {format_points(block.max_points)}
-                      </span>
-                    </div>
-
-                    <div class="min-w-0">
-                      <%= if block.text == "" do %>
-                        <span class="text-sm italic text-stone-400">— leer —</span>
-                      <% else %>
-                        <span class="text-base text-stone-800 break-words">{block.text}</span>
-                      <% end %>
-                    </div>
-
-                    <%= if @power_manual_index == block.index do %>
-                      <form
-                        phx-submit="set_block_verdict_manual"
-                        data-power-manual-form
-                        class="flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
-                      >
-                        <input type="hidden" name="index" value={block.index} />
-                        <input
-                          id={"power-manual-input-#{block.index}"}
-                          type="number"
-                          name="points"
-                          value={@power_manual_value}
-                          step="0.25"
-                          min="0"
-                          max={block.max_points}
-                          inputmode="decimal"
-                          class="w-20 font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 focus:border-yellow-400"
-                        />
-                        <button
-                          type="submit"
-                          class="inline-flex items-center text-xs font-semibold px-2.5 py-1.5 rounded-md bg-yellow-400 text-white hover:bg-yellow-500 transition-colors duration-100"
-                        >
-                          OK
-                        </button>
-                        <button
-                          type="button"
-                          phx-click="cancel_block_manual_input"
-                          aria-label="Abbrechen"
-                          class="inline-flex items-center justify-center w-7 h-7 rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-100"
-                        >
-                          <.icon name="hero-x-mark" class="w-4 h-4" />
-                        </button>
-                      </form>
-                    <% else %>
-                      <div class="flex items-center gap-1.5">
-                        <.power_verdict_button
-                          verdict="correct"
-                          active={block.verdict == "correct"}
-                          index={block.index}
-                          label="J"
-                          icon="hero-check"
-                          active_class="bg-green-500 text-white border-green-500 shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
-                        />
-                        <button
-                          type="button"
-                          tabindex="-1"
-                          phx-click="open_block_manual_input"
-                          phx-value-index={block.index}
-                          class={[
-                            "inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all duration-100 focus:outline-none",
-                            if(is_number(block.verdict) or block.verdict == "half",
-                              do:
-                                "bg-yellow-400 text-white border-yellow-400 shadow-[0_2px_8px_rgba(250,204,21,0.3)]",
-                              else:
-                                "bg-white text-stone-500 border-stone-200 hover:bg-stone-50 hover:border-stone-300"
-                            )
-                          ]}
-                        >
-                          <.icon name="hero-pencil" class="w-3.5 h-3.5" />
-                          <kbd class={[
-                            "px-1.5 py-0.5 rounded font-mono text-[10px] border",
-                            if(is_number(block.verdict) or block.verdict == "half",
-                              do: "bg-white/25 border-white/40 text-white",
-                              else: "bg-stone-100 border-stone-200 text-stone-700"
-                            )
-                          ]}>
-                            K
-                          </kbd>
-                        </button>
-                        <.power_verdict_button
-                          verdict="wrong"
-                          active={block.verdict == "wrong"}
-                          index={block.index}
-                          label="L"
-                          icon="hero-x-mark"
-                          active_class="bg-red-500 text-white border-red-500 shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
-                        />
+                <%= for section <- @power_sections do %>
+                  <%= if section.kind == :checkboxes do %>
+                    <%!-- Checkboxes of one list are one question: shown
+                          together, each with what was ticked and what the
+                          sample solution ticks. --%>
+                    <div
+                      id={"power-checkbox-group-#{section.id}"}
+                      class="rounded-xl border border-stone-200 bg-stone-50/60 p-2 space-y-2"
+                    >
+                      <div class="flex items-center justify-between gap-3 px-2 pt-1">
+                        <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          Checkboxen
+                        </span>
+                        <span class="text-xs text-stone-500">
+                          {checkbox_matches(section.blocks)} von {length(section.blocks)} wie in der Musterlösung
+                        </span>
                       </div>
-                    <% end %>
-                  </div>
+                      <.power_row
+                        :for={block <- section.blocks}
+                        block={block}
+                        manual_index={@power_manual_index}
+                        manual_value={@power_manual_value}
+                      />
+                    </div>
+                  <% else %>
+                    <.power_row
+                      block={section.block}
+                      manual_index={@power_manual_index}
+                      manual_value={@power_manual_value}
+                    />
+                  <% end %>
                 <% end %>
 
                 <div class="w-full flex items-center gap-2.5">
@@ -614,6 +539,163 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
     """
   end
 
+  attr :block, :map, required: true
+  attr :manual_index, :integer, default: nil
+  attr :manual_value, :any, default: 0
+
+  # One correctable answer block of the power view: points, the answer, and
+  # the verdict buttons (or the manual points form while it is open).
+  defp power_row(assigns) do
+    ~H"""
+    <div
+      tabindex="0"
+      data-power-row={@block.index}
+      class="grid grid-cols-[64px_1fr_auto] items-center gap-4 px-4 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
+    >
+      <div class="text-center">
+        <span class={[
+          "inline-flex items-center justify-center min-w-[36px] h-8 px-2 rounded-lg font-mono text-base font-semibold",
+          power_points_class(@block.verdict)
+        ]}>
+          {power_row_points(@block.verdict, @block.max_points)}
+        </span>
+        <span :if={@block.max_points} class="block text-[10px] text-stone-400 mt-0.5">
+          max {format_points(@block.max_points)}
+        </span>
+      </div>
+
+      <div class="min-w-0">
+        <%= cond do %>
+          <% @block.type == "taskItem" -> %>
+            <.checkbox_answer block={@block} />
+          <% @block.text == "" -> %>
+            <span class="text-sm italic text-stone-400">— leer —</span>
+          <% true -> %>
+            <span class="text-base text-stone-800 break-words">{@block.text}</span>
+        <% end %>
+      </div>
+
+      <%= if @manual_index == @block.index do %>
+        <form
+          phx-submit="set_block_verdict_manual"
+          data-power-manual-form
+          class="flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
+        >
+          <input type="hidden" name="index" value={@block.index} />
+          <input
+            id={"power-manual-input-#{@block.index}"}
+            type="number"
+            name="points"
+            value={@manual_value}
+            step="0.25"
+            min="0"
+            max={@block.max_points}
+            inputmode="decimal"
+            class="w-20 font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 focus:border-yellow-400"
+          />
+          <button
+            type="submit"
+            class="inline-flex items-center text-xs font-semibold px-2.5 py-1.5 rounded-md bg-yellow-400 text-white hover:bg-yellow-500 transition-colors duration-100"
+          >
+            OK
+          </button>
+          <button
+            type="button"
+            phx-click="cancel_block_manual_input"
+            aria-label="Abbrechen"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-100"
+          >
+            <.icon name="hero-x-mark" class="w-4 h-4" />
+          </button>
+        </form>
+      <% else %>
+        <div class="flex items-center gap-1.5">
+          <.power_verdict_button
+            verdict="correct"
+            active={@block.verdict == "correct"}
+            index={@block.index}
+            label="J"
+            icon="hero-check"
+            active_class="bg-green-500 text-white border-green-500 shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
+          />
+          <button
+            type="button"
+            tabindex="-1"
+            phx-click="open_block_manual_input"
+            phx-value-index={@block.index}
+            class={[
+              "inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all duration-100 focus:outline-none",
+              if(is_number(@block.verdict) or @block.verdict == "half",
+                do:
+                  "bg-yellow-400 text-white border-yellow-400 shadow-[0_2px_8px_rgba(250,204,21,0.3)]",
+                else:
+                  "bg-white text-stone-500 border-stone-200 hover:bg-stone-50 hover:border-stone-300"
+              )
+            ]}
+          >
+            <.icon name="hero-pencil" class="w-3.5 h-3.5" />
+            <kbd class={[
+              "px-1.5 py-0.5 rounded font-mono text-[10px] border",
+              if(is_number(@block.verdict) or @block.verdict == "half",
+                do: "bg-white/25 border-white/40 text-white",
+                else: "bg-stone-100 border-stone-200 text-stone-700"
+              )
+            ]}>
+              K
+            </kbd>
+          </button>
+          <.power_verdict_button
+            verdict="wrong"
+            active={@block.verdict == "wrong"}
+            index={@block.index}
+            label="L"
+            icon="hero-x-mark"
+            active_class="bg-red-500 text-white border-red-500 shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
+          />
+        </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+
+  # A checkbox in the power view: the label, what the participant ticked and
+  # whether that matches the sample solution. The label alone said nothing —
+  # a green row could be a ticked or an untouched box.
+  defp checkbox_answer(assigns) do
+    ~H"""
+    <div class="flex items-center gap-3 min-w-0">
+      <span
+        class={[
+          "inline-flex items-center justify-center w-5 h-5 rounded-md border-2 shrink-0",
+          if(@block.checked,
+            do: "bg-sky-500 border-sky-500 text-white",
+            else: "bg-white border-stone-300"
+          )
+        ]}
+        aria-label={if @block.checked, do: "angekreuzt", else: "nicht angekreuzt"}
+      >
+        <.icon :if={@block.checked} name="hero-check-mini" class="w-3.5 h-3.5" />
+      </span>
+      <span class="text-base text-stone-800 break-words min-w-0">
+        {if @block.text == "", do: "Checkbox", else: @block.text}
+      </span>
+      <%= if is_boolean(@block.expected_checked) do %>
+        <span class={[
+          "ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0",
+          if(@block.checked == @block.expected_checked,
+            do: "bg-green-50 text-green-700",
+            else: "bg-red-50 text-red-700"
+          )
+        ]}>
+          Lösung: {if @block.expected_checked, do: "ankreuzen", else: "leer lassen"}
+        </span>
+      <% end %>
+    </div>
+    """
+  end
+
   attr :verdict, :string, required: true
   attr :active, :boolean, required: true
   attr :index, :integer, required: true
@@ -774,6 +856,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
          sibling_submission_path(exam, submissions, submission_index, current_part.id, +1)
        )
        |> assign(:power_blocks, power_data.blocks)
+       |> assign(:power_sections, power_data.sections)
        |> assign(:power_blocks_count, power_data.count)
        |> assign(:power_per_block, power_data.per_block)
        |> assign(:power_current_total, power_data.current_total)
@@ -820,8 +903,31 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       end)
       |> normalize_points()
 
-    %{blocks: blocks, count: count, per_block: per_block, current_total: current_total}
+    %{
+      blocks: blocks,
+      sections: power_sections(blocks),
+      count: count,
+      per_block: per_block,
+      current_total: current_total
+    }
   end
+
+  # Consecutive checkboxes of the same list become one section; every other
+  # block stands alone.
+  defp power_sections(blocks) do
+    blocks
+    |> Enum.chunk_by(fn b -> b.group || {:single, b.index} end)
+    |> Enum.map(fn
+      [%{group: group} | _] = items when not is_nil(group) ->
+        %{kind: :checkboxes, id: group, blocks: items}
+
+      [block] ->
+        %{kind: :single, block: block}
+    end)
+  end
+
+  defp checkbox_matches(blocks),
+    do: Enum.count(blocks, &(&1.checked == &1.expected_checked))
 
   defp refresh_power_view(socket) do
     %{exam: exam, submission: submission, current_part: part} = socket.assigns
@@ -829,6 +935,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
     socket
     |> assign(:power_blocks, data.blocks)
+    |> assign(:power_sections, data.sections)
     |> assign(:power_blocks_count, data.count)
     |> assign(:power_per_block, data.per_block)
     |> assign(:power_current_total, data.current_total)
