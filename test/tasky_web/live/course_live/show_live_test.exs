@@ -319,6 +319,29 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       refute has_element?(lv, "#copy-task-modal")
     end
 
+    test "each target shows its description to tell similar courses apart", %{
+      conn: conn,
+      course: course,
+      scope: scope
+    } do
+      described =
+        course_fixture(
+          scope: scope,
+          attrs: %{name: "Mathematik", description: "Grundlagenkurs 1. Lehrjahr"}
+        )
+
+      plain = course_fixture(scope: scope, attrs: %{name: "Mathematik", description: nil})
+
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+      lv |> element(~s{button[phx-click="open_copy"]}) |> render_click()
+
+      assert lv
+             |> element("#copy-target-description-#{described.id}")
+             |> render() =~ "Grundlagenkurs 1. Lehrjahr"
+
+      refute has_element?(lv, "#copy-target-description-#{plain.id}")
+    end
+
     test "a target course with a same-named unit is flagged", %{
       conn: conn,
       course: course,

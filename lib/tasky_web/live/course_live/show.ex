@@ -568,7 +568,7 @@ defmodule TaskyWeb.CourseLive.Show do
           phx-key="escape"
         >
           <div class="modal-backdrop bg-stone-900/50" phx-click="close_copy"></div>
-          <div class="modal-box max-w-lg p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+          <div class="modal-box w-11/12 max-w-3xl p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
             <div class="p-6 border-b border-stone-100">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
@@ -594,7 +594,7 @@ defmodule TaskyWeb.CourseLive.Show do
                   In welche Kurse soll die Lerneinheit kopiert werden?
                 </p>
 
-                <div class="space-y-2 max-h-64 overflow-y-auto">
+                <div class="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
                   <label
                     :for={target <- @copy_targets}
                     id={"copy-target-#{target.course.id}"}
@@ -611,7 +611,14 @@ defmodule TaskyWeb.CourseLive.Show do
                       <span class="block text-sm font-semibold text-stone-800">
                         {target.course.name}
                       </span>
-                      <span class="block text-xs text-stone-400 mt-0.5">
+                      <span
+                        :if={target.course.description not in [nil, ""]}
+                        id={"copy-target-description-#{target.course.id}"}
+                        class="block text-[13px] text-stone-500 leading-[1.5] mt-1 whitespace-pre-line line-clamp-4"
+                      >
+                        {target.course.description}
+                      </span>
+                      <span class="block text-xs text-stone-400 mt-1">
                         {length(target.course.tasks)} Lerneinheiten
                       </span>
                       <span :if={target.conflict} class="block text-xs text-amber-700 mt-1">
