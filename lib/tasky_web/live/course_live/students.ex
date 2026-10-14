@@ -54,6 +54,7 @@ defmodule TaskyWeb.CourseLive.Students do
 
             <button
               type="button"
+              id="open-enroll-modal"
               phx-click="show_enroll_modal"
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
             >
@@ -119,25 +120,43 @@ defmodule TaskyWeb.CourseLive.Students do
           <%!-- Modal backdrop --%>
           <div class="modal-backdrop bg-stone-900/50" phx-click="hide_enroll_modal"></div>
           <%!-- Modal box --%>
-          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+          <div class="modal-box max-w-xl p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
             <div class="p-6 border-b border-stone-100">
               <h3 class="text-lg font-semibold text-stone-800">Lernende einschreiben</h3>
             </div>
 
             <div class="p-6">
-              <%!-- Class Filter --%>
-              <.form for={%{}} phx-change="filter_by_class" class="mb-4">
+              <%!-- Name search + class filter --%>
+              <.form
+                for={%{}}
+                phx-change="filter_candidates"
+                phx-submit="filter_candidates"
+                id="enroll-filter"
+                class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4"
+              >
+                <.input
+                  type="search"
+                  name="search"
+                  id="enroll-search"
+                  value={@search}
+                  label="Name"
+                  placeholder="Vor- oder Nachname"
+                  autocomplete="off"
+                  phx-debounce="200"
+                />
                 <.input
                   type="select"
                   name="class_id"
-                  label="Nach Klasse filtern"
+                  id="enroll-class"
+                  label="Klasse"
                   value={@selected_class_id}
                   prompt="Alle Klassen"
                   options={Enum.map(@classes, fn class -> {class.name, class.id} end)}
                 />
               </.form>
-              <%!-- Batch Enroll Button --%>
-              <%= if @selected_class_id && !Enum.empty?(@unenrolled_students) do %>
+              <%!-- Batch Enroll Button. Enrolls the whole class, so it is only
+                    offered while no name search narrows the list. --%>
+              <%= if @selected_class_id && String.trim(@search) == "" && !Enum.empty?(@unenrolled_students) do %>
                 <div class="mb-4 p-4 bg-sky-50 rounded-[10px] border border-sky-100">
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex-1">
@@ -164,13 +183,19 @@ defmodule TaskyWeb.CourseLive.Students do
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <div
                   :for={student <- @unenrolled_students}
-                  class="flex items-center justify-between p-3 bg-stone-50 rounded-[10px] hover:bg-stone-100 transition-colors duration-150"
+                  id={"enroll-candidate-#{student.id}"}
+                  class="flex items-center justify-between gap-3 p-3 bg-stone-50 rounded-[10px] hover:bg-stone-100 transition-colors duration-150"
                 >
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-3 min-w-0">
                     <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-stone-200 text-stone-600">
                       <.icon name="hero-user-circle" class="w-5 h-5" />
                     </div>
-                    <span class="text-[15px] text-stone-800">{student.email}</span>
+                    <div class="min-w-0">
+                      <p class="text-[15px] font-medium text-stone-800 truncate">
+                        {student.firstname} {student.lastname}
+                      </p>
+                      <p class="text-xs text-stone-400 truncate">{student.email}</p>
+                    </div>
                   </div>
 
                   <button
@@ -186,13 +211,22 @@ defmodule TaskyWeb.CourseLive.Students do
 
               <div
                 :if={Enum.empty?(@unenrolled_students)}
+                id="enroll-empty"
                 class="text-center py-12 text-stone-500"
               >
-                <div class="w-12 h-12 rounded-[10px] bg-stone-100 flex items-center justify-center text-stone-400 mx-auto mb-3">
-                  <.icon name="hero-check-circle" class="w-6 h-6" />
-                </div>
+                <%= if String.trim(@search) == "" and is_nil(@selected_class_id) do %>
+                  <div class="w-12 h-12 rounded-[10px] bg-stone-100 flex items-center justify-center text-stone-400 mx-auto mb-3">
+                    <.icon name="hero-check-circle" class="w-6 h-6" />
+                  </div>
 
-                <p class="text-sm">Alle Lernenden sind bereits in diesem Kurs eingeschrieben.</p>
+                  <p class="text-sm">Alle Lernenden sind bereits in diesem Kurs eingeschrieben.</p>
+                <% else %>
+                  <div class="w-12 h-12 rounded-[10px] bg-stone-100 flex items-center justify-center text-stone-400 mx-auto mb-3">
+                    <.icon name="hero-magnifying-glass" class="w-6 h-6" />
+                  </div>
+
+                  <p class="text-sm">Keine passenden Lernenden gefunden.</p>
+                <% end %>
               </div>
             </div>
 
@@ -225,6 +259,7 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:unenrolled_students, [])
      |> assign(:classes, [])
      |> assign(:selected_class_id, nil)
+     |> assign(:search, "")
      |> assign(:has_students, enrolled_students != [])
      |> assign(:student_count, length(enrolled_students))
      |> stream(:enrolled_students, enrolled_students)}
@@ -240,7 +275,8 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:show_enroll_modal, true)
      |> assign(:unenrolled_students, unenrolled_students)
      |> assign(:classes, classes)
-     |> assign(:selected_class_id, nil)}
+     |> assign(:selected_class_id, nil)
+     |> assign(:search, "")}
   end
 
   def handle_event("hide_enroll_modal", _params, socket) do
@@ -249,26 +285,18 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:show_enroll_modal, false)
      |> assign(:unenrolled_students, [])
      |> assign(:classes, [])
-     |> assign(:selected_class_id, nil)}
+     |> assign(:selected_class_id, nil)
+     |> assign(:search, "")}
   end
 
-  def handle_event("filter_by_class", %{"class_id" => ""}, socket) do
-    unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id)
+  def handle_event("filter_candidates", params, socket) do
+    search = if is_binary(params["search"]), do: params["search"], else: ""
 
     {:noreply,
      socket
-     |> assign(:unenrolled_students, unenrolled_students)
-     |> assign(:selected_class_id, nil)}
-  end
-
-  def handle_event("filter_by_class", %{"class_id" => raw_class_id}, socket) do
-    class_id = TaskyWeb.Params.int(raw_class_id)
-
-    if is_nil(class_id) do
-      {:noreply, socket}
-    else
-      filter_by_class(socket, class_id)
-    end
+     |> assign(:selected_class_id, TaskyWeb.Params.int(params["class_id"]))
+     |> assign(:search, search)
+     |> load_candidates()}
   end
 
   def handle_event("enroll_all_from_class", _params, socket) do
@@ -295,6 +323,7 @@ defmodule TaskyWeb.CourseLive.Students do
           |> assign(:student_count, new_count)
           |> assign(:unenrolled_students, unenrolled_students)
           |> assign(:selected_class_id, nil)
+          |> assign(:search, "")
           |> stream(:enrolled_students, enrolled_students, reset: true)
 
         {:noreply,
@@ -365,12 +394,15 @@ defmodule TaskyWeb.CourseLive.Students do
     end
   end
 
-  defp filter_by_class(socket, class_id) do
-    unenrolled_students = Courses.list_unenrolled_students(socket.assigns.course.id, class_id)
-
-    {:noreply,
-     socket
-     |> assign(:unenrolled_students, unenrolled_students)
-     |> assign(:selected_class_id, class_id)}
+  defp load_candidates(socket) do
+    assign(
+      socket,
+      :unenrolled_students,
+      Courses.list_unenrolled_students(
+        socket.assigns.course.id,
+        socket.assigns.selected_class_id,
+        socket.assigns.search
+      )
+    )
   end
 end

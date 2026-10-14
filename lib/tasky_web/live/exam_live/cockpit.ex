@@ -625,10 +625,27 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               </div>
             </div>
             <div class="p-6 space-y-4">
-              <.form for={%{}} phx-change="filter_by_class" id="assign-class-filter">
+              <.form
+                for={%{}}
+                phx-change="filter_assignable"
+                phx-submit="filter_assignable"
+                id="assign-filter"
+                class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+              >
+                <.input
+                  type="search"
+                  name="search"
+                  id="assign-search"
+                  value={@assign_search}
+                  label="Name"
+                  placeholder="Vor- oder Nachname"
+                  autocomplete="off"
+                  phx-debounce="200"
+                />
                 <.input
                   type="select"
                   name="class_id"
+                  id="assign-class"
                   value={@class_filter}
                   label="Klasse"
                   prompt="Alle Klassen"
@@ -636,7 +653,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                 />
               </.form>
 
-              <%= if @class_filter && @assignable != [] do %>
+              <%!-- "Alle zuweisen" takes the whole class, not the search hits —
+                    so it is only offered while no search narrows the list. --%>
+              <%= if @class_filter && String.trim(@assign_search) == "" && @assignable != [] do %>
                 <div class="flex items-center justify-between gap-4 bg-sky-50 border border-sky-100 rounded-xl px-4 py-3">
                   <p class="text-sm text-sky-900">
                     {length(@assignable)} Lernende dieser Klasse sind noch nicht zugewiesen.
@@ -654,8 +673,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
               <div class="max-h-72 overflow-y-auto -mx-2 px-2">
                 <%= if @assignable == [] do %>
-                  <p class="text-sm text-stone-400 py-6 text-center">
-                    Keine weiteren Lernenden zum Zuweisen.
+                  <p id="assign-empty" class="text-sm text-stone-400 py-6 text-center">
+                    <%= if String.trim(@assign_search) == "" do %>
+                      Keine weiteren Lernenden zum Zuweisen.
+                    <% else %>
+                      Niemand gefunden für «{String.trim(@assign_search)}».
+                    <% end %>
                   </p>
                 <% else %>
                   <div
@@ -810,6 +833,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:confirm_action, nil)
      |> assign(:show_assign?, false)
      |> assign(:class_filter, nil)
+     |> assign(:assign_search, "")
      |> assign(:class_options, class_options(socket.assigns.current_scope))
      |> assign(:seb_derivation_error, SebGuard.derivation_error(exam))
      |> assign_assignable()
@@ -823,13 +847,20 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
     assignable =
       if Exams.assigned_mode?(exam) and exam.status in ["open", "running"] do
-        Exams.list_assignable_students(exam, socket.assigns.class_filter)
+        Exams.list_assignable_students(
+          exam,
+          socket.assigns.class_filter,
+          socket.assigns.assign_search
+        )
       else
         []
       end
 
     assign(socket, :assignable, assignable)
   end
+
+  defp search_param(%{"search" => search}) when is_binary(search), do: search
+  defp search_param(_params), do: ""
 
   defp class_options(scope) do
     Enum.map(Tasky.Classes.list_classes(scope), &{&1.name, &1.id})
@@ -996,7 +1027,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   end
 
   def handle_event("close_assign", _params, socket) do
-    {:noreply, assign(socket, :show_assign?, false)}
+    {:noreply,
+     socket
+     |> assign(:show_assign?, false)
+     |> assign(:class_filter, nil)
+     |> assign(:assign_search, "")
+     |> assign_assignable()}
   end
 
   def handle_event("filter_status", %{"status" => status}, socket)
@@ -1009,10 +1045,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
   def handle_event("filter_status", _params, socket), do: {:noreply, socket}
 
-  def handle_event("filter_by_class", %{"class_id" => raw}, socket) do
+  def handle_event("filter_assignable", params, socket) do
     {:noreply,
      socket
-     |> assign(:class_filter, Params.int(raw))
+     |> assign(:class_filter, Params.int(params["class_id"]))
+     |> assign(:assign_search, search_param(params))
      |> assign_assignable()}
   end
 

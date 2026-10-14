@@ -594,6 +594,20 @@ defmodule Tasky.ExamsTest do
                Exams.assign_students_from_class(scope, exam, class.id)
     end
 
+    test "a name search ignores case and matches each word" do
+      exam = exam_fixture(participation_mode: "assigned", status: "open")
+      anna = user_fixture(%{role: "student", firstname: "Anna", lastname: "Müller"})
+      _ben = user_fixture(%{role: "student", firstname: "Ben", lastname: "Meier"})
+
+      ids = fn search -> Enum.map(Exams.list_assignable_students(exam, nil, search), & &1.id) end
+
+      assert ids.("anna") == [anna.id]
+      assert ids.("MÜLLER") == [anna.id]
+      assert ids.("müller anna") == [anna.id]
+      assert ids.("anna meier") == []
+      assert length(ids.("  ")) == length(ids.(nil))
+    end
+
     test "already-assigned students drop out of the candidate list" do
       exam = exam_fixture(participation_mode: "assigned", status: "open")
       student = user_fixture(%{role: "student"})

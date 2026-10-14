@@ -628,14 +628,14 @@ defmodule Tasky.Exams do
 
   @doc """
   Lists the students who could still be assigned to this exam, optionally
-  narrowed to one class.
+  narrowed to one class and/or a name search (see `Tasky.Accounts.search_users/2`).
 
   Limited to the organization of the exam's **owner** — the same rule
   `fetch_assignable_user/2` enforces on the write path. Deriving it from
   `exam.teacher_id` rather than from a caller scope keeps the signature unchanged
   and holds even when an admin performs the assignment.
   """
-  def list_assignable_students(%Exam{} = exam, class_id \\ nil) do
+  def list_assignable_students(%Exam{} = exam, class_id \\ nil, search \\ nil) do
     exam.teacher_id
     |> Organizations.teacher_organization_id()
     |> Organizations.students_query()
@@ -648,6 +648,7 @@ defmodule Tasky.Exams do
       )
     )
     |> then(fn q -> if class_id, do: where(q, [u], u.class_id == ^class_id), else: q end)
+    |> Tasky.Accounts.search_users(search)
     |> order_by([u], asc: u.lastname, asc: u.firstname, asc: u.email)
     |> Repo.all()
   end

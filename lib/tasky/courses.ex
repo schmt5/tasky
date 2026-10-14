@@ -618,12 +618,12 @@ defmodule Tasky.Courses do
 
   @doc """
   Returns the students who could still be enrolled in this course, optionally
-  narrowed to one class.
+  narrowed to one class and/or a name search (see `Tasky.Accounts.search_users/2`).
 
   Limited to the organization of the course's **owner**, which is also what
   `enroll_student/2` enforces on the write path.
   """
-  def list_unenrolled_students(course_id, class_id \\ nil) do
+  def list_unenrolled_students(course_id, class_id \\ nil, search \\ nil) do
     owner_organization_id =
       Repo.one(from c in Course, where: c.id == ^course_id, select: c.teacher_id)
       |> Organizations.teacher_organization_id()
@@ -639,7 +639,8 @@ defmodule Tasky.Courses do
       )
     )
     |> then(fn q -> if class_id, do: where(q, [u], u.class_id == ^class_id), else: q end)
-    |> order_by([u], asc: u.email)
+    |> Tasky.Accounts.search_users(search)
+    |> order_by([u], asc: u.lastname, asc: u.firstname, asc: u.email)
     |> Repo.all()
   end
 

@@ -408,22 +408,33 @@ defmodule Tasky.Accounts do
   end
 
   defp apply_user_filter({:search, term}, query) when is_binary(term) do
-    trimmed = String.trim(term)
-
-    if trimmed == "" do
-      query
-    else
-      pattern = "%" <> String.replace(trimmed, ["%", "_"], &("\\" <> &1)) <> "%"
-
-      from u in query,
-        where:
-          like(u.firstname, ^pattern) or
-            like(u.lastname, ^pattern) or
-            like(u.email, ^pattern)
-    end
+    search_users(query, term)
   end
 
   defp apply_user_filter(_, query), do: query
+
+  @doc """
+  Narrows a `User` query to the people matching a free-text search.
+
+  Case-insensitive (`ILIKE`). Every word of `term` has to appear in the first
+  name, last name or e-mail, so "anna müller" and "müller anna" both find
+  Anna Müller. A blank term leaves the query untouched.
+  """
+  def search_users(query, term) when is_binary(term) do
+    term
+    |> String.split()
+    |> Enum.reduce(query, fn word, q ->
+      pattern = "%" <> String.replace(word, ["\\", "%", "_"], &("\\" <> &1)) <> "%"
+
+      from u in q,
+        where:
+          ilike(u.firstname, ^pattern) or
+            ilike(u.lastname, ^pattern) or
+            ilike(u.email, ^pattern)
+    end)
+  end
+
+  def search_users(query, nil), do: query
 
   ## Student directory (organization-scoped)
 

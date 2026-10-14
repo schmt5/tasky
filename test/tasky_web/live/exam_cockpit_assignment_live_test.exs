@@ -116,7 +116,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       html =
         view
-        |> form("#assign-class-filter", %{"class_id" => to_string(class.id)})
+        |> form("#assign-filter", %{"class_id" => to_string(class.id)})
         |> render_change()
 
       assert html =~ "Alle zuweisen"
@@ -141,11 +141,45 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       html =
         view
-        |> form("#assign-class-filter", %{"class_id" => to_string(class.id)})
+        |> form("#assign-filter", %{"class_id" => to_string(class.id)})
         |> render_change()
 
       assert html =~ inside.email
       refute html =~ outside.email
+    end
+
+    test "the name search narrows the candidate list, ignoring case", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam("assigned")
+      anna = user_fixture(%{role: "student", firstname: "Anna", lastname: "Müller"})
+      ben = user_fixture(%{role: "student", firstname: "Ben", lastname: "Meier"})
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      open_assign_dialog(view)
+
+      view |> form("#assign-filter", %{"search" => "MÜLL"}) |> render_change()
+
+      assert has_element?(view, "#assign-student-#{anna.id}")
+      refute has_element?(view, "#assign-student-#{ben.id}")
+
+      view |> form("#assign-filter", %{"search" => "nobody"}) |> render_change()
+      assert has_element?(view, "#assign-empty", "Niemand gefunden")
+    end
+
+    test "\"Alle zuweisen\" is not offered while a search narrows the class", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam("assigned")
+      class = class_fixture()
+      _a = user_fixture(%{role: "student", class_id: class.id, firstname: "Anna"})
+      _b = user_fixture(%{role: "student", class_id: class.id, firstname: "Ben"})
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      open_assign_dialog(view)
+
+      view |> form("#assign-filter", %{"class_id" => to_string(class.id)}) |> render_change()
+      assert has_element?(view, "#assign-all-btn")
+
+      view
+      |> form("#assign-filter", %{"class_id" => to_string(class.id), "search" => "anna"})
+      |> render_change()
+
+      refute has_element?(view, "#assign-all-btn")
     end
 
     test "removes an assignment and puts the student back on the list", %{conn: conn} do
@@ -280,6 +314,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       assert html =~ "Prüfung beendet"
     end
   end
+
   describe "status filter" do
     defp assign_two(scope, exam) do
       writing = user_fixture(%{role: "student"})
