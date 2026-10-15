@@ -416,19 +416,6 @@ body:has(.page-wrapper) {
     transform: scale(0.97);
 }
 
-/* Papierformat für den Browser-Druck (Cmd/Ctrl+P) der Papierversion. Das PDF
-   setzt seine Seite selbst (`priv/typst/paper.typ`, gleiche Ränder) — diese
-   Regel bedient allein den Fallback-Pfad.
-
-   Der frühere @media-print-Block an dieser Stelle ist entfernt: er stylte
-   ausschliesslich Klassen (.toc-sidebar, .page-wrapper, .task-title, .block-*)
-   aus einem statischen Prototyp, die in lib/ und assets/js/ nirgends mehr
-   vorkommen. */
-@page {
-    size: A4;
-    margin: 12mm 14mm;
-}
-
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";

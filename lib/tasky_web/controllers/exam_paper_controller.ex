@@ -42,7 +42,7 @@ defmodule TaskyWeb.ExamPaperController do
         |> put_status(:internal_server_error)
         |> text(
           "Die Papierversion konnte nicht erstellt werden. " <>
-            "Bitte im Browser drucken (Cmd/Ctrl+P)."
+            "Bitte versuche es in einem Moment noch einmal."
         )
     end
   end

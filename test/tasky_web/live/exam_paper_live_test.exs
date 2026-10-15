@@ -52,13 +52,14 @@ defmodule TaskyWeb.ExamPaperLiveTest do
       assert html =~ "paper-field"
     end
 
-    test "offers the PDF download and the browser-print fallback", %{conn: conn} do
+    test "offers the PDF download under the app's page header", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam()
 
-      {:ok, view, html} = live(log_in_user(conn, teacher), ~p"/exams/#{exam}/paper")
+      {:ok, view, _html} = live(log_in_user(conn, teacher), ~p"/exams/#{exam}/paper")
 
       assert has_element?(view, ~s(#paper-pdf-download[href="/exams/#{exam.id}/paper.pdf"]))
-      assert html =~ "drucken"
+      # Breadcrumb and back button lead to the exam, like the other exam pages.
+      assert has_element?(view, ~s(nav a[href="/exams/#{exam.id}"]))
     end
 
     test "another teacher cannot open it", %{conn: conn} do

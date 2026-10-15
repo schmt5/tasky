@@ -858,34 +858,26 @@
 /* ==========================================================================
    Papierversion (TaskyWeb.ExamLive.Paper)
    ==========================================================================
-   Alles hier ist mit `.paper-view` präfigiert — der Klasse am <main> jener
+   Alles hier ist mit `.paper-view` präfigiert — der Klasse am Inhalt jener
    LiveView. Damit kann keine Regel in eine Editor-Oberfläche lecken, und der
    Papiermodus braucht weder ein eigenes Preset-Flag noch eine React-Änderung.
 
-   WICHTIG: Linien, Kästen und Ankreuzfelder werden mit `border` gezeichnet,
-   nie mit `background`. Der Browser-Druck (Cmd/Ctrl+P) läuft standardmässig
-   mit ausgeschalteten Hintergrundgrafiken, und genau dieser Fallback ist der
-   Grund, warum es die Papierversion gibt — ein Hintergrund-Verlauf wäre dort
-   unsichtbar. Das PDF (Typst, `priv/typst/tiptap.typ`) zeichnet dieselben
-   Kästen selbst und ist von diesen Regeln unabhängig. */
+   Die Ansicht ist nur noch Vorschau und Werkzeug zum Einstellen der
+   Antwortfelder; gedruckt wird das PDF (Typst, `priv/typst/paper.typ` und
+   `tiptap.typ`), das dieselben Kästen selbst zeichnet. */
 
-/* Der Seitengrund muss weiss sein. Das Root-Layout setzt einen Grauton auf
-   <html> und `bg-stone-50` auf <body>, und `layout: false` entfernt nur das
-   App-Layout, nicht das Root-Layout — mit `printBackground: true` malt
-   Chromium das mit aufs Papier.
-
-   Beide Elemente, nicht nur <body>: Chromium überträgt den Hintergrund des
-   Wurzelelements auf die Seitenleinwand, sodass unterhalb der Body-Box (also
-   am Fuss der letzten Seite) sonst ein grauer Streifen gedruckt wird. */
-html:has(.paper-view),
-body:has(.paper-view) {
-    background: #fff;
-}
-
+/* Das Blatt als A4-Seite mit den Rändern des PDFs (14 mm seitlich), damit
+   ein Antwortfeld hier gleich umbricht wie auf Papier. */
 .paper-view .paper-sheet {
     max-width: 210mm;
     margin: 0 auto;
-    padding: 12mm 6mm 16mm;
+    padding: 12mm 14mm 16mm;
+    background: #fff;
+    border: 1px solid #f5f5f4;
+    border-radius: 14px;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.07),
+        0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 /* Bildschirm-Chrome des Editors abräumen: auf Papier gibt es kein Blatt im
@@ -998,27 +990,15 @@ body:has(.paper-view) {
     min-height: 7mm;
 }
 
+/* Auf dem Bildschirm eine gestrichelte Seitengrenze; im PDF beginnt jede
+   Blankoseite auf einem eigenen Blatt. */
 .paper-view .paper-lined-page {
-    break-before: page;
-    padding-top: 4mm;
+    margin-top: 12mm;
+    padding-top: 12mm;
+    border-top: 1px dashed #d6d3d1;
 }
 
 .paper-view .paper-rule {
     height: 9mm;
     border-bottom: 1px solid #a8a29e;
-}
-
-/* Der Speicherfehler-Banner gehört auf den Bildschirm, nicht aufs Blatt: er
-   meldet, dass eine Grössenänderung nicht ankam, und das Blatt selbst soll
-   die Prüfung zeigen. Sichtbar bleibt er trotzdem — in der Ansicht, in der
-   die Lehrperson gerade einstellt. */
-@media print {
-    .paper-view .exam-editor__inline-error {
-        display: none;
-    }
-
-    .paper-view .paper-sheet {
-        max-width: none;
-        padding: 0;
-    }
 }

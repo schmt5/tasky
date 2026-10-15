@@ -211,14 +211,6 @@ defmodule TaskyWeb.Router do
 
     get "/exams/:id/paper.pdf", ExamPaperController, :download
 
-    # Its own live_session because `layout: false` is a live_session option,
-    # and the app chrome must not be on the page a teacher presses Cmd+P on.
-    live_session :print_authenticated,
-      layout: false,
-      on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
-      live "/exams/:id/paper", ExamLive.Paper, :paper
-    end
-
     live_session :tasks,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
       live "/courses", CourseLive.Index, :index
@@ -250,6 +242,7 @@ defmodule TaskyWeb.Router do
       live "/exams/new", ExamLive.Form, :new
       live "/exams/:id", ExamLive.Show, :show
       live "/exams/:id/edit", ExamLive.Form, :edit
+      live "/exams/:id/paper", ExamLive.Paper, :paper
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
       live "/exams/:id/cockpit/config", ExamLive.CockpitConfig, :config
       live "/exams/:id/correction", ExamLive.Correction, :correction

@@ -4,9 +4,9 @@ defmodule TaskyWeb.ExamLive.Paper do
   fallback for when a laptop or the Safe Exam Browser dies mid-session.
 
   The teacher sizes the answer boxes here and downloads the PDF
-  (`TaskyWeb.ExamPaperController`, rendered by `Tasky.ExamPaperPdf`). The page
-  is also the browser-print fallback: the chrome is `print:hidden`, so
-  Cmd/Ctrl+P prints the sheet as it stands.
+  (`TaskyWeb.ExamPaperController`, rendered by `Tasky.ExamPaperPdf`). The sheet
+  on screen is a preview with the PDF's text column (A4, 14 mm side margins),
+  so a box sized here wraps the same way on paper.
 
   Sizing the boxes is a locked edit: `EDITOR_MODES.paper` loads the same
   content lock the learner gets, and `stripAnswers` keeps answer content out
@@ -24,100 +24,110 @@ defmodule TaskyWeb.ExamLive.Paper do
   @impl true
   def render(assigns) do
     ~H"""
-    <main class="paper-view bg-white text-stone-900">
-      <div class="print:hidden sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-stone-200 px-6 py-3">
-        <div class="max-w-[210mm] mx-auto flex items-center gap-4 flex-wrap">
-          <.link
-            navigate={~p"/exams/#{@exam}"}
-            class="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 transition-colors duration-150"
-          >
-            <.icon name="hero-arrow-left" class="w-4 h-4" /> {@exam.name}
-          </.link>
+    <Layouts.app flash={@flash} current_scope={@current_scope} current_path={~p"/exams/#{@exam}"}>
+      <%!-- Page Header --%>
+      <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
+        <div class="max-w-6xl mx-auto">
+          <div class="mb-3">
+            <.breadcrumbs crumbs={[
+              %{label: "Prüfungen", navigate: ~p"/exams"},
+              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+              %{label: "Papierversion"}
+            ]} />
+          </div>
 
-          <p class="text-sm text-stone-600 flex-1 min-w-[16rem]">
-            Klicke in ein Antwortfeld und drücke <kbd class="kbd kbd-sm">Enter</kbd>, um es zu
-            vergrössern.
-          </p>
+          <div class="flex items-center justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3">
+              <.back_button navigate={~p"/exams/#{@exam}"} tooltip="Zurück zur Prüfung" />
+              <div>
+                <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
+                  Papierversion
+                </h1>
+                <p class="text-sm text-stone-500 mt-1">
+                  Klicke in ein Antwortfeld und drücke <kbd class="kbd kbd-sm">Enter</kbd>, um es zu
+                  vergrössern.
+                </p>
+              </div>
+            </div>
 
-          <.link
-            id="paper-pdf-download"
-            href={~p"/exams/#{@exam}/paper.pdf"}
-            target="_blank"
-            rel="noopener"
-            class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 px-4 py-2.5 rounded-lg hover:bg-stone-50 transition-colors duration-150"
-          >
-            <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> PDF erstellen
-          </.link>
-
-          <span class="text-sm text-stone-500">
-            oder mit <kbd class="kbd kbd-sm">Cmd/Ctrl</kbd> + <kbd class="kbd kbd-sm">P</kbd> drucken
-          </span>
+            <.link
+              id="paper-pdf-download"
+              href={~p"/exams/#{@exam}/paper.pdf"}
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+            >
+              <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> PDF erstellen
+            </.link>
+          </div>
         </div>
       </div>
 
-      <div class="paper-sheet">
-        <header class="mb-8">
-          <p class="text-[10px] uppercase tracking-[0.14em] text-stone-500 mb-1">Papierversion</p>
-          <h1 class="font-serif text-[26px] leading-tight text-stone-900 mb-6">{@exam.name}</h1>
+      <div class="paper-view px-8 pb-12 text-stone-900">
+        <div class="paper-sheet">
+          <header class="mb-8">
+            <p class="text-[10px] uppercase tracking-[0.14em] text-stone-500 mb-1">Papierversion</p>
+            <h1 class="font-serif text-[26px] leading-tight text-stone-900 mb-6">{@exam.name}</h1>
 
-          <div class="flex items-end gap-6 text-sm">
-            <label class="flex-[2] min-w-0">
-              <span class="block text-xs text-stone-500 mb-1">Name</span>
-              <span class="paper-field block"></span>
-            </label>
-            <label class="flex-1 min-w-0">
-              <span class="block text-xs text-stone-500 mb-1">Klasse</span>
-              <span class="paper-field block"></span>
-            </label>
-            <label class="flex-1 min-w-0">
-              <span class="block text-xs text-stone-500 mb-1">Datum</span>
-              <span class="paper-field block"></span>
-            </label>
+            <div class="flex items-end gap-6 text-sm">
+              <label class="flex-[2] min-w-0">
+                <span class="block text-xs text-stone-500 mb-1">Name</span>
+                <span class="paper-field block"></span>
+              </label>
+              <label class="flex-1 min-w-0">
+                <span class="block text-xs text-stone-500 mb-1">Klasse</span>
+                <span class="paper-field block"></span>
+              </label>
+              <label class="flex-1 min-w-0">
+                <span class="block text-xs text-stone-500 mb-1">Datum</span>
+                <span class="paper-field block"></span>
+              </label>
+            </div>
+
+            <div class="flex items-end gap-6 text-sm mt-4">
+              <label class="flex-1 min-w-0">
+                <span class="block text-xs text-stone-500 mb-1">
+                  Punkte <span :if={@max_points}>von {format_points(@max_points)}</span>
+                </span>
+                <span class="paper-field block"></span>
+              </label>
+              <label class="flex-1 min-w-0">
+                <span class="block text-xs text-stone-500 mb-1">Note</span>
+                <span class="paper-field block"></span>
+              </label>
+            </div>
+          </header>
+
+          <div
+            id={"exam-paper-#{@exam.id}"}
+            phx-hook="ExamPaperEditor"
+            phx-update="ignore"
+            data-exam-id={@exam.id}
+            data-content={@doc_json}
+          >
           </div>
 
-          <div class="flex items-end gap-6 text-sm mt-4">
-            <label class="flex-1 min-w-0">
-              <span class="block text-xs text-stone-500 mb-1">
-                Punkte <span :if={@max_points}>von {format_points(@max_points)}</span>
-              </span>
-              <span class="paper-field block"></span>
-            </label>
-            <label class="flex-1 min-w-0">
-              <span class="block text-xs text-stone-500 mb-1">Note</span>
-              <span class="paper-field block"></span>
-            </label>
-          </div>
-        </header>
-
-        <div
-          id={"exam-paper-#{@exam.id}"}
-          phx-hook="ExamPaperEditor"
-          phx-update="ignore"
-          data-exam-id={@exam.id}
-          data-content={@doc_json}
-        >
-        </div>
-
-        <%!-- A free document has no answer fields to size, so the writing
+          <%!-- A free document has no answer fields to size, so the writing
              space has to be blank pages instead. --%>
-        <section
-          :for={page <- 1..@lined_pages//1}
-          :if={@free_document}
-          class="paper-lined-page"
-        >
-          <div class="flex items-end gap-6 text-sm mb-6">
-            <label class="flex-[2] min-w-0">
-              <span class="block text-xs text-stone-500 mb-1">Name</span>
-              <span class="paper-field block"></span>
-            </label>
-            <span class="text-xs text-stone-500 pb-1 whitespace-nowrap">
-              Seite {page + 1} von {@lined_pages + 1}
-            </span>
-          </div>
-          <div :for={_ <- 1..@rules_per_page//1} class="paper-rule"></div>
-        </section>
+          <section
+            :for={page <- 1..@lined_pages//1}
+            :if={@free_document}
+            class="paper-lined-page"
+          >
+            <div class="flex items-end gap-6 text-sm mb-6">
+              <label class="flex-[2] min-w-0">
+                <span class="block text-xs text-stone-500 mb-1">Name</span>
+                <span class="paper-field block"></span>
+              </label>
+              <span class="text-xs text-stone-500 pb-1 whitespace-nowrap">
+                Seite {page + 1} von {@lined_pages + 1}
+              </span>
+            </div>
+            <div :for={_ <- 1..@rules_per_page//1} class="paper-rule"></div>
+          </section>
+        </div>
       </div>
-    </main>
+    </Layouts.app>
     """
   end
 
