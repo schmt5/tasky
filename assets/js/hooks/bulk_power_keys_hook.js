@@ -52,17 +52,20 @@ export const BulkPowerKeys = {
 
       const key = e.key.toLowerCase();
 
-      // A checkbox pattern card judges all checkboxes of the pattern at once;
-      // it has no manual-points input, so K does nothing there.
+      // A checkbox pattern card judges all checkboxes of the pattern at once.
       if (row.dataset.patternKey) {
+        const pattern = { group: row.dataset.patternGroup, pattern: row.dataset.patternKey };
+
+        if (key === "k") {
+          e.preventDefault();
+          this.pushEvent("open_pattern_manual_input", pattern);
+          return;
+        }
+
         const verdict = { j: "correct", l: "wrong" }[key];
         if (!verdict) return;
         e.preventDefault();
-        this.pushEvent("set_pattern_verdict", {
-          group: row.dataset.patternGroup,
-          pattern: row.dataset.patternKey,
-          verdict,
-        });
+        this.pushEvent("set_pattern_verdict", { ...pattern, verdict });
         return;
       }
 

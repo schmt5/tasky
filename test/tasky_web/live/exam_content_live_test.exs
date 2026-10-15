@@ -141,78 +141,169 @@ defmodule TaskyWeb.ExamContentLiveTest do
       assert exam.sample_solution_points == %{"q-1" => 6}
     end
 
-    test "auto-correct toggles are scoped per part", %{conn: conn} do
-      %{teacher: teacher, scope: scope, exam: exam} = create_exam(two_part_content())
+    test "the sidebar lists the active options without descriptions", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
 
-      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      render_click(view, "toggle_text_option", %{"part-id" => "q-1", "option" => "ignore_case"})
-      # q-2 has auto_correct off, so its sub-flag toggle must be a no-op
-      render_click(view, "toggle_text_option", %{"part-id" => "q-2", "option" => "ignore_case"})
+      assert view |> element("#correction-options-summary-q-1") |> render() =~
+               "Keine Korrekturoptionen aktiv"
 
-      exam = Exams.get_exam!(scope, exam.id)
-      assert get_in(exam.ai_correction_config, ["q-1", "auto_correct"]) == true
-      assert get_in(exam.ai_correction_config, ["q-1", "ignore_case"]) == true
-      refute get_in(exam.ai_correction_config, ["q-2", "ignore_case"])
-    end
+      assert view |> element("#correction-options-summary-q-2") |> render() =~
+               "Checkboxen: pro Checkbox"
 
-    test "disabling auto-correct resets the sub-flags of that part", %{conn: conn} do
-      %{teacher: teacher, scope: scope, exam: exam} = create_exam(two_part_content())
-      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
-
-      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      render_click(view, "toggle_text_option", %{"part-id" => "q-1", "option" => "ignore_case"})
-      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-
-      exam = Exams.get_exam!(scope, exam.id)
-      assert get_in(exam.ai_correction_config, ["q-1", "auto_correct"]) == false
-      assert get_in(exam.ai_correction_config, ["q-1", "ignore_case"]) == false
+      refute has_element?(view, "#correction-options-modal")
     end
   end
 
-  describe "correction options per answer type" do
+  describe "Korrekturoptionen dialog" do
+    defp open_options(view, part_id) do
+      view |> element("#correction-options-btn-#{part_id}") |> render_click()
+      assert has_element?(view, "#correction-options-modal")
+    end
+
+    # Text options are disabled until auto-correction is on, as in the browser.
+    defp enable_auto_correct(view, part_id) do
+      view
+      |> form("#correction-options-form-#{part_id}", %{"options" => %{"auto_correct" => "true"}})
+      |> render_change()
+    end
+
+    defp submit_options(view, part_id, params) do
+      view
+      |> form("#correction-options-form-#{part_id}", %{"options" => params})
+      |> render_submit()
+    end
+
+    test "nothing is saved before \"Übernehmen\"", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-1")
+
+      view
+      |> form("#correction-options-form-q-1", %{"options" => %{"auto_correct" => "true"}})
+      |> render_change()
+
+      view |> element("#correction-options-modal .modal-backdrop") |> render_click()
+
+      refute has_element?(view, "#correction-options-modal")
+      assert Exams.get_exam!(scope, exam.id).ai_correction_config == %{}
+    end
+
+    test "applies points and options of one part and summarizes them", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-1")
+      enable_auto_correct(view, "q-1")
+
+      submit_options(view, "q-1", %{
+        "max_points" => "3",
+        "auto_correct" => "true",
+        "ignore_case" => "true",
+        "ignore_punctuation" => "true"
+      })
+
+      refute has_element?(view, "#correction-options-modal")
+
+      exam = Exams.get_exam!(scope, exam.id)
+      assert exam.sample_solution_points == %{"q-1" => 3}
+      assert get_in(exam.ai_correction_config, ["q-1", "auto_correct"]) == true
+      assert get_in(exam.ai_correction_config, ["q-1", "ignore_case"]) == true
+      assert get_in(exam.ai_correction_config, ["q-1", "ignore_spelling"]) == false
+      refute Map.has_key?(exam.ai_correction_config, "q-2")
+
+      summary = view |> element("#correction-options-summary-q-1") |> render()
+      assert summary =~ "Auto-Korrektur"
+      assert summary =~ "Gross-/Kleinschreibung ignorieren"
+      assert summary =~ "Satzzeichen ignorieren"
+      refute summary =~ "Rechtschreibung ignorieren"
+      refute summary =~ "nicht bewertet"
+    end
+
+    test "text options go off together with auto-correction", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-1")
+      enable_auto_correct(view, "q-1")
+      submit_options(view, "q-1", %{"auto_correct" => "true", "ignore_punctuation" => "true"})
+
+      open_options(view, "q-1")
+      submit_options(view, "q-1", %{"auto_correct" => "false"})
+
+      exam = Exams.get_exam!(scope, exam.id)
+      assert get_in(exam.ai_correction_config, ["q-1", "auto_correct"]) == false
+      assert get_in(exam.ai_correction_config, ["q-1", "ignore_punctuation"]) == false
+    end
+
     test "text options appear only where text answers are compared", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
 
-      for key <- ~w(ignore_case ignore_spelling ignore_punctuation) do
-        assert has_element?(view, "##{key}-q-1")
-        refute has_element?(view, "##{key}-q-2")
-        assert has_element?(view, "##{key}-q-3")
-      end
+      open_options(view, "q-1")
+      assert has_element?(view, "#options_ignore_case")
+      refute has_element?(view, "#checkbox-scoring")
+      refute has_element?(view, "#text-options-note")
 
-      # Checkbox-only: an explanation instead of options that would do nothing.
-      assert has_element?(view, "#checkbox-only-note-q-2")
-      # Mixed: the options say they skip the checkboxes.
-      assert has_element?(view, "#text-options-note-q-3")
-      refute has_element?(view, "#text-options-note-q-1")
+      open_options(view, "q-2")
+      refute has_element?(view, "#options_ignore_case")
+      assert has_element?(view, "#checkbox-scoring")
+
+      # Mixed: the text options say they skip the checkboxes.
+      open_options(view, "q-3")
+      assert has_element?(view, "#options_ignore_case")
+      assert has_element?(view, "#text-options-note")
     end
 
-    test "\"Satzzeichen ignorieren\" is stored per part", %{conn: conn} do
+    test "the checkbox scoring rule is stored per part", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
 
-      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      view |> element("#ignore_punctuation-q-1") |> render_click()
+      open_options(view, "q-2")
+      assert has_element?(view, ~s(#checkbox-scoring-per_checkbox[aria-checked="true"]))
+
+      view |> element("#checkbox-scoring-deduction") |> render_click()
+
+      submit_options(view, "q-2", %{
+        "checkbox_rule" => "deduction",
+        "checkbox_deduction" => "0.25"
+      })
 
       exam = Exams.get_exam!(scope, exam.id)
-      assert get_in(exam.ai_correction_config, ["q-1", "ignore_punctuation"]) == true
+      assert Exams.checkbox_scoring(exam, "q-2") == %{rule: "deduction", deduction: 0.25}
+      assert Exams.checkbox_scoring(exam, "q-3").rule == "per_checkbox"
 
-      # Switching auto-correction off clears it with the other text options.
-      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      exam = Exams.get_exam!(scope, exam.id)
-      assert get_in(exam.ai_correction_config, ["q-1", "ignore_punctuation"]) == false
+      assert view |> element("#correction-options-summary-q-2") |> render() =~
+               "Checkboxen: −0.25 P. pro Fehler"
     end
 
-    test "an unknown option is ignored", %{conn: conn} do
+    test "a custom distribution starts from the equal split and sets the total", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
 
-      render_click(view, "toggle_auto_correct", %{"part-id" => "q-1"})
-      render_click(view, "toggle_text_option", %{"part-id" => "q-1", "option" => "bogus"})
+      open_options(view, "q-3")
+
+      view
+      |> form("#correction-options-form-q-3", %{
+        "options" => %{"max_points" => "2", "custom_points" => "true"}
+      })
+      |> render_change()
+
+      # 2 points over the text field and the checkbox: 1 each.
+      assert has_element?(view, ~s(#options-block-points-t2[value="1"]))
+
+      submit_options(view, "q-3", %{
+        "custom_points" => "true",
+        "block_points" => %{"t2" => "1.5", "c3" => "0.5"}
+      })
 
       exam = Exams.get_exam!(scope, exam.id)
-      refute Map.has_key?(exam.ai_correction_config["q-1"], "bogus")
+      assert exam.sample_solution_block_points == %{"q-3" => %{"t2" => 1.5, "c3" => 0.5}}
+      assert exam.sample_solution_points == %{"q-3" => 2}
+
+      assert view |> element("#correction-options-summary-q-3") |> render() =~
+               "Punkte pro Antwortfeld"
     end
   end
 

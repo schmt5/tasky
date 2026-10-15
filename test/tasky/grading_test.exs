@@ -89,6 +89,48 @@ defmodule Tasky.GradingTest do
     end
   end
 
+  describe "checkbox_list_points/3" do
+    # Three checkboxes worth 0.25 · 0.25 · 0.5; the second one is wrong.
+    @one_wrong [{"correct", 0.25}, {"wrong", 0.25}, {"correct", 0.5}]
+
+    test "per checkbox sums the shares" do
+      assert Grading.checkbox_list_points(@one_wrong, "per_checkbox") == 0.75
+    end
+
+    test "all or nothing gives the list's points only without a mistake" do
+      assert Grading.checkbox_list_points(@one_wrong, "all_or_nothing") == 0
+
+      all_right = Enum.map(@one_wrong, fn {_v, max} -> {"correct", max} end)
+      assert Grading.checkbox_list_points(all_right, "all_or_nothing") == 1.0
+    end
+
+    test "deduction takes a fixed amount per wrong checkbox, never below 0" do
+      assert Grading.checkbox_list_points(@one_wrong, "deduction", 0.5) == 0.5
+
+      all_wrong = Enum.map(@one_wrong, fn {_v, max} -> {"wrong", max} end)
+      assert Grading.checkbox_list_points(all_wrong, "deduction", 0.5) == 0
+    end
+
+    test "manual points on any checkbox keep the typed total under every rule" do
+      manual = [{0.25, 0.25}, {0, 0.25}, {0.5, 0.5}]
+
+      for rule <- Grading.checkbox_rules() do
+        assert Grading.checkbox_list_points(manual, rule, 0.5) == 0.75
+      end
+    end
+  end
+
+  describe "part_points/3 with checkbox lists" do
+    test "scores a listed checkbox list by its rule and every other block alone" do
+      points = %{0 => 2, 1 => 0.5, 2 => 0.5}
+      verdicts = %{0 => "correct", 1 => "correct", 2 => "wrong"}
+      lists = [%{indices: [1, 2], rule: "all_or_nothing", deduction: nil}]
+
+      assert Grading.part_points(verdicts, points, lists) == 2
+      assert Grading.part_points(verdicts, points) == 2.5
+    end
+  end
+
   describe "sum_points/1" do
     test "sums numeric values, ignores garbage, nil-safe" do
       assert Grading.sum_points(%{"a" => 1, "b" => 2.5, "c" => "x"}) == 3.5

@@ -230,6 +230,85 @@ defmodule Tasky.ExamsCheckboxGroupsTest do
     end
   end
 
+  describe "checkbox scoring rule" do
+    test "equal shares stay on the 0.25 grid" do
+      %{exam: exam} = setup_exam()
+
+      blocks =
+        exam.content |> part_nodes() |> NodePatcher.list_answer_blocks()
+
+      # 4 points over 4 blocks is 1 each; 3 points over 4 would be 0.75 each.
+      assert Exams.resolve_block_points(exam, "q-1", blocks) == %{0 => 1, 1 => 1, 2 => 1, 3 => 1}
+
+      {:ok, exam} = Exams.set_sample_solution_part_points(:system, exam, "q-1", 1)
+      shares = Exams.resolve_block_points(exam, "q-1", blocks)
+
+      assert shares |> Map.values() |> Enum.sum() == 1
+      assert Enum.all?(Map.values(shares), &(&1 * 4 == trunc(&1 * 4)))
+    end
+
+    test "changing the rule rescores everyone already graded", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam()
+      cara = submit(exam, "cara", [false, true, false])
+
+      # Text field right; Bern and Zürich wrong, Genf right — 1 point each.
+      {:ok, _} =
+        Exams.set_block_verdicts_bulk(
+          scope,
+          exam,
+          "q-1",
+          %{0 => "correct", 1 => "wrong", 2 => "wrong", 3 => "correct"},
+          [cara.id]
+        )
+
+      assert Exams.get_submission(exam, cara.id).points_per_part["q-1"] == 2
+
+      {:ok, view, _html} =
+        conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/content?tab=musterloesung")
+
+      view |> element("#correction-options-btn-q-1") |> render_click()
+      view |> element("#checkbox-scoring-all_or_nothing") |> render_click()
+
+      view
+      |> form("#correction-options-form-q-1", %{
+        "options" => %{"checkbox_rule" => "all_or_nothing"}
+      })
+      |> render_submit()
+
+      assert Exams.get_submission(exam, cara.id).points_per_part["q-1"] == 1
+
+      {:ok, view, _html} = open_bulk(conn, teacher, exam)
+      assert view |> element("#bulk-pattern-1-010") |> render() =~ "0 / 3 P."
+    end
+
+    test "manual points for a pattern are kept under all or nothing", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam()
+      cara = submit(exam, "cara", [false, true, false])
+
+      {:ok, _} =
+        Exams.update_ai_correction_config(scope, exam, "q-1", %{
+          "checkbox_scoring" => "all_or_nothing"
+        })
+
+      {:ok, view, _html} = open_bulk(conn, teacher, exam)
+      view |> element("#bulk-pattern-manual-1-010") |> render_click()
+
+      view
+      |> form("#bulk-pattern-manual-form-1-010", %{"points" => "2"})
+      |> render_submit()
+
+      assert Exams.get_submission(exam, cara.id).points_per_part["q-1"] == 2
+      assert view |> element("#bulk-pattern-1-010") |> render() =~ "2 / 3 P."
+
+      # Back to the rule: all or nothing, and Cara has two checkboxes wrong.
+      view |> element("#bulk-pattern-reset-1-010") |> render_click()
+
+      assert verdicts(exam, cara) == %{}
+      assert view |> element("#bulk-pattern-1-010") |> render() =~ "0 / 3 P."
+      refute has_element?(view, "#bulk-pattern-reset-1-010")
+    end
+  end
+
   defp open_bulk(conn, teacher, exam) do
     conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/bulk/q-1")
   end

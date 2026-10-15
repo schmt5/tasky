@@ -12,7 +12,7 @@ defmodule Tasky.Grading do
   There are two independent rounding grids, and they must not be confused:
 
     * **Points** — always 0.25, for every exam. `round_quarter/1` and
-      everything built on it (`normalize_manual_points/2`, `part_points/2`,
+      everything built on it (`normalize_manual_points/2`, `part_points/3`,
       `normalize_points/1`, `half_of/1`).
     * **Marks** — per exam, one of `mark_steps/0`. `round_mark/2` and
       everything built on it (`mark/3`, `normalize_mark/2`). The step comes
@@ -100,16 +100,76 @@ defmodule Tasky.Grading do
   points (both keyed by block index). Returns `nil` when the part has no
   points configured (`points_by_index` is nil); whole numbers come back as
   integers.
-  """
-  def part_points(_verdicts_by_index, nil), do: nil
 
-  def part_points(verdicts_by_index, points_by_index) when is_map(points_by_index) do
-    verdicts_by_index
-    |> Enum.reduce(0.0, fn {idx, verdict}, acc ->
-      acc + awarded_points(verdict, points_by_index[idx])
-    end)
+  `checkbox_lists` (`[%{indices, rule, deduction}]`, see
+  `Tasky.Exams.checkbox_lists/3`) names the checkbox lists scored by a rule
+  other than per checkbox; their blocks are scored together by
+  `checkbox_list_points/3`, every other block by its own verdict.
+  """
+  def part_points(verdicts_by_index, points_by_index, checkbox_lists \\ [])
+
+  def part_points(_verdicts_by_index, nil, _checkbox_lists), do: nil
+
+  def part_points(verdicts_by_index, points_by_index, checkbox_lists)
+      when is_map(points_by_index) do
+    in_lists = checkbox_lists |> Enum.flat_map(& &1.indices) |> MapSet.new()
+
+    loose =
+      Enum.reduce(verdicts_by_index, 0.0, fn {idx, verdict}, acc ->
+        if MapSet.member?(in_lists, idx),
+          do: acc,
+          else: acc + awarded_points(verdict, points_by_index[idx])
+      end)
+
+    listed =
+      Enum.reduce(checkbox_lists, 0.0, fn list, acc ->
+        entries = Enum.map(list.indices, &{Map.get(verdicts_by_index, &1), points_by_index[&1]})
+        acc + checkbox_list_points(entries, list.rule, list.deduction)
+      end)
+
+    (loose + listed)
     |> round_quarter()
     |> integerize()
+  end
+
+  ## Checkbox lists
+
+  @checkbox_rules ~w(per_checkbox all_or_nothing deduction)
+
+  @doc """
+  How the checkboxes of one list are scored, chosen per question:
+
+    * `"per_checkbox"` — every checkbox earns its share (the default)
+    * `"all_or_nothing"` — the list's points only when every checkbox is right
+    * `"deduction"` — the list's points minus a fixed amount per wrong
+      checkbox, never below 0
+  """
+  def checkbox_rules, do: @checkbox_rules
+
+  @doc "The deduction per wrong checkbox when none is configured."
+  def default_checkbox_deduction, do: 0.5
+
+  @doc """
+  Points of one checkbox list from its `[{verdict, block_max}]` entries under
+  `rule`. A manual verdict (a number, or legacy `"half"`) on any checkbox means
+  the teacher set the points by hand, so the list then simply sums its
+  checkboxes — no rule overrides what was typed.
+  """
+  def checkbox_list_points(entries, rule, deduction \\ nil) do
+    total = entries |> Enum.map(fn {_v, max} -> points_value(max) end) |> Enum.sum()
+    manual? = Enum.any?(entries, fn {v, _max} -> is_number(v) or v == "half" end)
+    errors = Enum.count(entries, fn {v, _max} -> v != "correct" end)
+
+    cond do
+      manual? or rule not in ["all_or_nothing", "deduction"] ->
+        entries |> Enum.map(fn {v, max} -> awarded_points(v, max) end) |> Enum.sum()
+
+      rule == "all_or_nothing" ->
+        if errors == 0, do: total, else: 0
+
+      rule == "deduction" ->
+        max(total - errors * (deduction || default_checkbox_deduction()), 0)
+    end
   end
 
   @doc "Sums the numeric values of a points map (nil-safe); non-numbers count 0."

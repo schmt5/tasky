@@ -211,6 +211,10 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           <.config_chip active={@ignore_case} label="Gross/Klein ignorieren" />
           <.config_chip active={@ignore_spelling} label="Fuzzy-Matching" />
           <.config_chip active={@ignore_punctuation} label="Satzzeichen ignorieren" />
+          <.config_chip
+            active={@checkbox_scoring.rule != "per_checkbox"}
+            label={checkbox_rule_label(@checkbox_scoring)}
+          />
         </div>
       </div>
       <div class="p-5">
@@ -237,6 +241,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     </span>
     """
   end
+
+  defp checkbox_rule_label(%{rule: "all_or_nothing"}), do: "Checkboxen: alles oder nichts"
+
+  defp checkbox_rule_label(%{rule: "deduction", deduction: d}),
+    do: "Checkboxen: −#{format_max_points(d)} P. pro Fehler"
+
+  defp checkbox_rule_label(_scoring), do: "Checkboxen: pro Checkbox"
 
   defp config_chip_classes(true),
     do: "text-stone-600 bg-stone-100 border border-stone-200"
@@ -319,7 +330,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     assigns =
       assigns
       |> assign(:section, section)
-      |> assign(:patterns, CheckboxPatterns.build(section.blocks))
+      |> assign(:patterns, CheckboxPatterns.build(section.blocks, assigns.checkbox_scoring))
 
     ~H"""
     <div
@@ -357,7 +368,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   end
 
   defp render_pattern_card(assigns, pattern) do
-    assigns = assign(assigns, :pattern, pattern)
+    # The list id as the client sends it back with a manual input.
+    group = to_string(assigns.section.id)
+    key = pattern.key
+
+    assigns =
+      assigns
+      |> assign(:pattern, pattern)
+      |> assign(
+        :manual_open,
+        match?(%{pattern_group: ^group, pattern_key: ^key}, assigns.manual_input)
+      )
 
     ~H"""
     <div
@@ -366,10 +387,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       data-bulk-power-row="true"
       data-pattern-group={@section.id}
       data-pattern-key={@pattern.key}
-      class="bg-white rounded-[12px] border border-stone-200 px-5 py-4 flex items-start gap-6 outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
+      class="bg-white rounded-[12px] border border-stone-200 p-4 space-y-3 outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 transition-all duration-100"
     >
-      <ul class="flex-1 min-w-0 space-y-1">
+      <ul class="space-y-1.5">
         <li :for={option <- @pattern.options}>
+          <%!-- The row is the toggle: a click flips this checkbox between
+               counted right and counted wrong for the whole pattern. --%>
           <button
             type="button"
             tabindex="-1"
@@ -378,71 +401,171 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
             phx-value-group={@section.id}
             phx-value-pattern={@pattern.key}
             phx-value-index={option.index}
-            data-verdict={option_verdict_key(option.verdict)}
+            data-verdict={option_verdict_key(option_marker_verdict(option))}
             class={[
-              "group w-full flex items-center gap-3 rounded-md px-2 py-1 -mx-2 text-left transition-colors duration-100 hover:bg-stone-50",
-              option_text_class(option.verdict)
+              "w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-100 hover:brightness-[0.98] active:scale-[0.995]",
+              option_row_class(option_marker_verdict(option))
             ]}
           >
             <.checkbox_mark checked={option.state == :checked} missing={option.state == :missing} />
-            <span class="font-serif text-lg leading-snug">{checkbox_label(option)}</span>
+            <span class="text-base text-stone-800 leading-snug">{checkbox_label(option)}</span>
             <span
-              :if={option.deviation == :extra}
-              class="text-[11px] font-semibold uppercase tracking-wide text-red-500"
+              class="ml-auto tooltip tooltip-left tooltip-delayed"
+              data-tip={option_tooltip(option)}
             >
-              zu viel angekreuzt
-            </span>
-            <span
-              :if={option.deviation == :missing}
-              class="text-[11px] font-semibold uppercase tracking-wide text-red-500"
-            >
-              fehlt
-            </span>
-            <span class="ml-auto inline-flex items-center gap-1 text-xs font-medium text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-              <.icon name={option_verdict_icon(option.verdict)} class="w-4 h-4" />
-              {option_points_label(option)}
+              <span class="text-lg leading-none">
+                {option_marker(option_marker_verdict(option))}
+              </span>
             </span>
           </button>
         </li>
       </ul>
 
-      <div class="shrink-0 flex flex-col items-end gap-2 max-w-[22rem]">
-        <span
-          :if={@pattern.matches_solution?}
-          class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5"
-        >
-          <.icon name="hero-check" class="w-3.5 h-3.5" /> entspricht der Lösung
-        </span>
-        <div class="text-xs text-stone-500 text-right">
-          {@pattern.count}× abgegeben<span :if={@pattern.points != nil and @pattern.max_points}> · {format_max_points(@pattern.points)} / {format_max_points(@pattern.max_points)} P.</span>
+      <div class="flex items-center justify-between gap-4 flex-wrap pt-1">
+        <div class="min-w-0 space-y-1">
+          <div class="flex items-center gap-2 flex-wrap text-xs text-stone-500">
+            <span
+              :if={@pattern.matches_solution?}
+              class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5"
+            >
+              <.icon name="hero-check" class="w-3.5 h-3.5" /> entspricht der Lösung
+            </span>
+            <span>
+              {@pattern.count}× abgegeben<span :if={@pattern.points != nil and @pattern.max_points}> · {format_max_points(@pattern.points)} / {format_max_points(@pattern.max_points)} P.</span>
+            </span>
+          </div>
+          <div class="text-xs text-stone-500">
+            {Enum.map_join(@pattern.students, " · ", &student_name/1)}
+          </div>
         </div>
-        <div class="text-xs text-stone-500 text-right">
-          {Enum.map_join(@pattern.students, " · ", &student_name/1)}
-        </div>
-        <div class="inline-flex items-center gap-0 rounded-lg border border-stone-200 bg-white p-0.5">
-          <.pattern_verdict_button
-            group={@section.id}
-            pattern={@pattern.key}
-            verdict="correct"
-            active={@pattern.verdict == "correct"}
-            label={full_points_label(@pattern.max_points)}
-            kbd_label="J"
-            active_class="bg-green-500 text-white shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
-          />
-          <.pattern_verdict_button
-            group={@section.id}
-            pattern={@pattern.key}
-            verdict="wrong"
-            active={@pattern.verdict == "wrong"}
-            label="0 Punkte"
-            kbd_label="L"
-            active_class="bg-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
-          />
+
+        <div class="shrink-0 flex items-center gap-3">
+          <button
+            :if={@pattern.verdict == :manual and not @manual_open}
+            type="button"
+            tabindex="-1"
+            id={"bulk-pattern-reset-#{@section.id}-#{@pattern.key}"}
+            phx-click="reset_pattern_verdicts"
+            phx-value-group={@section.id}
+            phx-value-pattern={@pattern.key}
+            class="text-xs font-semibold text-stone-500 hover:text-stone-800 underline-offset-2 hover:underline transition-colors duration-100"
+          >
+            Auf Regel zurücksetzen
+          </button>
+          <%= if @manual_open do %>
+            {render_pattern_manual_input(assigns)}
+          <% else %>
+            {render_pattern_verdict_pill(assigns)}
+          <% end %>
         </div>
       </div>
     </div>
     """
   end
+
+  defp render_pattern_verdict_pill(assigns) do
+    ~H"""
+    <div class="inline-flex items-center gap-0 rounded-lg border border-stone-200 bg-white p-0.5">
+      <.pattern_verdict_button
+        group={@section.id}
+        pattern={@pattern.key}
+        verdict="correct"
+        active={@pattern.verdict == "correct"}
+        label={full_points_label(@pattern.max_points)}
+        kbd_label="J"
+        active_class="bg-green-500 text-white shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
+      />
+      <button
+        :if={@pattern.max_points}
+        type="button"
+        tabindex="-1"
+        id={"bulk-pattern-manual-#{@section.id}-#{@pattern.key}"}
+        phx-click="open_pattern_manual_input"
+        phx-value-group={@section.id}
+        phx-value-pattern={@pattern.key}
+        class={[
+          "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-100",
+          if(@pattern.verdict == :manual,
+            do: "bg-yellow-400 text-white shadow-[0_2px_8px_rgba(250,204,21,0.3)]",
+            else: "text-stone-500 hover:bg-stone-50 hover:text-stone-700"
+          )
+        ]}
+      >
+        <span>
+          {if @pattern.verdict == :manual and @pattern.points != nil,
+            do: "Manuell (#{format_max_points(@pattern.points)})",
+            else: "Manuell"}
+        </span>
+        <kbd class={[
+          "px-1.5 py-0.5 rounded font-mono text-[10px] border",
+          if(@pattern.verdict == :manual,
+            do: "bg-white/25 border-white/40 text-white",
+            else: "bg-stone-100 border-stone-200 text-stone-700"
+          )
+        ]}>
+          K
+        </kbd>
+      </button>
+      <.pattern_verdict_button
+        group={@section.id}
+        pattern={@pattern.key}
+        verdict="wrong"
+        active={@pattern.verdict == "wrong"}
+        label="0 Punkte"
+        kbd_label="L"
+        active_class="bg-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
+      />
+    </div>
+    """
+  end
+
+  defp render_pattern_manual_input(assigns) do
+    ~H"""
+    <form
+      id={"bulk-pattern-manual-form-#{@section.id}-#{@pattern.key}"}
+      phx-submit="set_pattern_manual"
+      class="inline-flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1.5"
+    >
+      <input type="hidden" name="group" value={@section.id} />
+      <input type="hidden" name="pattern" value={@pattern.key} />
+      <input
+        id={pattern_manual_input_id(@section.id, @pattern.key)}
+        type="number"
+        name="points"
+        value={@manual_input.value}
+        step="0.25"
+        min="0"
+        max={@pattern.max_points}
+        inputmode="decimal"
+        phx-keydown="cancel_manual_input"
+        phx-key="Escape"
+        class="w-20 font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-400/60 focus:border-yellow-400"
+      />
+      <span class="text-xs text-stone-500 whitespace-nowrap">
+        / {format_max_points(@pattern.max_points)} P.
+      </span>
+      <button
+        type="submit"
+        class="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-yellow-400 text-white hover:bg-yellow-500 transition-colors duration-100"
+      >
+        OK
+        <kbd class="px-1 py-0.5 rounded font-mono text-[10px] border bg-white/25 border-white/40 text-white">
+          Enter
+        </kbd>
+      </button>
+      <button
+        type="button"
+        phx-click="cancel_manual_input"
+        aria-label="Abbrechen"
+        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-100"
+      >
+        <.icon name="hero-x-mark" class="w-4 h-4" />
+      </button>
+    </form>
+    """
+  end
+
+  defp pattern_manual_input_id(group, key), do: "pattern-manual-points-#{group}-#{key}"
 
   attr :checked, :boolean, required: true
   attr :missing, :boolean, default: false
@@ -516,15 +639,36 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   defp option_verdict_key(v) when v in ["correct", "wrong"], do: v
   defp option_verdict_key(_partial), do: "partial"
 
-  defp option_text_class("correct"), do: "text-emerald-700"
-  defp option_text_class("wrong"), do: "text-red-600"
-  defp option_text_class(_partial), do: "text-amber-600"
+  # Same tints and markers as the corrected exam (✅ / 🟡 / ❌), so a pattern
+  # reads like the sheet the student gets back.
+  # Manual points read like the markers on the sheet: the full share is a ✅,
+  # 0 is a ❌, anything between a 🟡.
+  defp option_marker_verdict(%{verdict: :mixed}), do: :mixed
 
-  defp option_verdict_icon("correct"), do: "hero-check-circle"
-  defp option_verdict_icon("wrong"), do: "hero-x-circle"
-  defp option_verdict_icon(_partial), do: "hero-adjustments-horizontal"
+  defp option_marker_verdict(option),
+    do: Grading.marker_verdict(option.verdict, option.max_points)
 
-  defp option_points_label(%{verdict: :mixed}), do: "uneinheitlich"
+  defp option_row_class("correct"), do: "bg-emerald-50"
+  defp option_row_class("wrong"), do: "bg-red-50"
+  defp option_row_class(_partial), do: "bg-amber-50"
+
+  defp option_marker("correct"), do: "✅"
+  defp option_marker("wrong"), do: "❌"
+  defp option_marker(_partial), do: "🟡"
+
+  defp option_tooltip(option) do
+    [option_deviation_text(option), option_points_label(option), "Klicken zum Umschalten"]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  defp option_deviation_text(%{deviation: :extra}), do: "zu viel angekreuzt"
+  defp option_deviation_text(%{deviation: :missing}), do: "fehlt"
+  defp option_deviation_text(%{expected: nil}), do: nil
+  defp option_deviation_text(_option), do: "wie in der Lösung"
+
+  defp option_points_label(%{verdict: :mixed}),
+    do: "in der Einzelkorrektur uneinheitlich bewertet"
 
   defp option_points_label(%{verdict: v, max_points: max}) when is_number(max),
     do: "#{format_max_points(Grading.awarded_points(v, max))} / #{format_max_points(max)} P."
@@ -867,7 +1011,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:auto_correct, Map.get(part_config, "auto_correct") == true)
          |> assign(:ignore_case, Map.get(part_config, "ignore_case") == true)
          |> assign(:ignore_spelling, Map.get(part_config, "ignore_spelling") == true)
-         |> assign(:ignore_punctuation, Map.get(part_config, "ignore_punctuation") == true)}
+         |> assign(:ignore_punctuation, Map.get(part_config, "ignore_punctuation") == true)
+         |> assign(:checkbox_scoring, Exams.checkbox_scoring(exam, part_id))}
     end
   end
 
@@ -930,6 +1075,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     end
   end
 
+  # Drops every verdict of the pattern, so its checkboxes are scored by the
+  # system's defaults and the question's rule again.
+  def handle_event("reset_pattern_verdicts", %{"group" => group, "pattern" => key}, socket) do
+    case find_pattern(socket, group, key) do
+      nil ->
+        {:noreply, socket}
+
+      pattern ->
+        verdicts = Map.new(pattern.options, &{&1.index, nil})
+        {:noreply, save_pattern_verdicts(socket, pattern, verdicts)}
+    end
+  end
+
   # A click on one checkbox of a pattern flips just that checkbox between
   # counted right and counted wrong, for everyone with this pattern. Landing on
   # the system's default stores no explicit verdict, as with the group cards.
@@ -948,6 +1106,43 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       {:noreply, save_pattern_verdicts(socket, pattern, %{idx => verdict})}
     else
       _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("open_pattern_manual_input", %{"group" => group, "pattern" => key}, socket) do
+    case find_pattern(socket, group, key) do
+      %{max_points: max} = pattern when is_number(max) ->
+        prefill = if pattern.verdict == :manual, do: pattern.points, else: half_of(max)
+
+        {:noreply,
+         socket
+         |> assign(:manual_input, %{pattern_group: group, pattern_key: key, value: prefill})
+         |> push_event("focus-manual-input", %{id: pattern_manual_input_id(group, key)})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  # Manual points for a pattern are spread over its checkboxes (see
+  # `CheckboxPatterns.distribute/2`): verdicts stay per checkbox, and the part
+  # total is what the teacher typed.
+  def handle_event(
+        "set_pattern_manual",
+        %{"group" => group, "pattern" => key, "points" => raw},
+        socket
+      ) do
+    with {points, ""} <- Float.parse(String.trim(raw)),
+         %{max_points: max} = pattern when is_number(max) <- find_pattern(socket, group, key) do
+      verdicts =
+        CheckboxPatterns.distribute(pattern, Grading.normalize_manual_points(points, max))
+
+      {:noreply,
+       socket
+       |> assign(:manual_input, nil)
+       |> save_pattern_verdicts(pattern, verdicts)}
+    else
+      _ -> {:noreply, assign(socket, :manual_input, nil)}
     end
   end
 
@@ -1057,7 +1252,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     socket.assigns.answer_blocks
     # The list id comes back from the client as a string.
     |> Enum.filter(&(&1.type == "taskItem" and to_string(&1.group) == group))
-    |> CheckboxPatterns.build()
+    |> CheckboxPatterns.build(socket.assigns.checkbox_scoring)
     |> Enum.find(&(&1.key == key))
   end
 

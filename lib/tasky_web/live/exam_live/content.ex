@@ -16,10 +16,6 @@ defmodule TaskyWeb.ExamLive.Content do
   alias Tasky.Uploads
   alias TaskyWeb.ExamComponents
 
-  # Keys of the per-part text comparison options in `ai_correction_config`
-  # (see `Tasky.Correction.StringComparator.match_opts/1`).
-  @text_option_keys ~w(ignore_case ignore_spelling ignore_punctuation)
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -248,150 +244,219 @@ defmodule TaskyWeb.ExamLive.Content do
                   <p :if={pv.custom_points} class="text-xs text-stone-500 mt-1.5 leading-relaxed">
                     Summe der Punkte pro Antwortfeld.
                   </p>
-
-                  <label class="flex items-start gap-3 cursor-pointer mt-4">
-                    <input
-                      type="checkbox"
-                      checked={pv.custom_points}
-                      phx-click="toggle_custom_block_points"
-                      phx-value-part-id={pv.id}
-                      class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
-                    />
-                    <span class="min-w-0">
-                      <span class="block text-sm font-medium text-stone-700">
-                        Punkte pro Antwortfeld
-                      </span>
-                      <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
-                        Punkte ungleich auf die Antwortfelder dieser Aufgabe verteilen.
-                      </span>
-                    </span>
-                  </label>
-
-                  <div :if={pv.custom_points} class="mt-3 space-y-2">
-                    <div
-                      :for={block <- pv.blocks}
-                      :if={block.answer_id}
-                      class="rounded-lg border border-stone-200 bg-stone-50/60 px-2.5 py-2"
-                    >
-                      <p class="text-xs text-stone-500 truncate mb-1.5">{block.snippet}</p>
-                      <div class="flex items-center gap-1">
-                        <button
-                          type="button"
-                          phx-click="adjust_block_points"
-                          phx-value-direction="down"
-                          phx-value-part-id={pv.id}
-                          phx-value-answer-id={block.answer_id}
-                          disabled={(block.points || 0) <= 0}
-                          aria-label="−0.25"
-                          class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
-                        >
-                          <.icon name="hero-minus" class="w-3.5 h-3.5" />
-                        </button>
-                        <form
-                          phx-change="set_block_points"
-                          phx-submit="set_block_points"
-                          class="flex-1"
-                        >
-                          <input type="hidden" name="part_id" value={pv.id} />
-                          <input type="hidden" name="answer_id" value={block.answer_id} />
-                          <input
-                            type="number"
-                            name="points"
-                            value={block.points || ""}
-                            step="0.25"
-                            min="0"
-                            inputmode="decimal"
-                            phx-debounce="500"
-                            placeholder="0"
-                            class="w-full font-mono text-sm text-center text-stone-800 bg-white border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
-                          />
-                        </form>
-                        <button
-                          type="button"
-                          phx-click="adjust_block_points"
-                          phx-value-direction="up"
-                          phx-value-part-id={pv.id}
-                          phx-value-answer-id={block.answer_id}
-                          aria-label="+0.25"
-                          class="inline-flex items-center justify-center w-7 h-7 rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition-colors duration-150 shrink-0"
-                        >
-                          <.icon name="hero-plus" class="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
-                <div class="p-5 border-t border-stone-100 space-y-4">
-                  <label class="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={pv.auto_correct}
-                      phx-click="toggle_auto_correct"
-                      phx-value-part-id={pv.id}
-                      class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
-                    />
-                    <span class="min-w-0">
-                      <span class="block text-sm font-medium text-stone-700">Auto-Korrektur</span>
-                      <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
-                        Diese Aufgabe wird beim Start der Auto-Korrektur automatisch bewertet.
-                      </span>
-                    </span>
-                  </label>
+                <div class="p-5 border-t border-stone-100">
+                  <button
+                    type="button"
+                    id={"correction-options-btn-#{pv.id}"}
+                    phx-click="open_correction_options"
+                    phx-value-part-id={pv.id}
+                    class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150 active:scale-[0.98]"
+                  >
+                    <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Korrekturoptionen
+                  </button>
 
-                  <%!-- Text options only make sense where text is compared. A
-                        checkbox is right or wrong by its tick alone, so a part
-                        with nothing but checkboxes gets no text options. --%>
-                  <%= if pv.has_text_answers do %>
-                    <p
-                      :if={pv.has_checkboxes}
-                      id={"text-options-note-#{pv.id}"}
-                      class="text-xs text-stone-500 leading-relaxed"
+                  <ul id={"correction-options-summary-#{pv.id}"} class="mt-4 space-y-1.5">
+                    <li
+                      :for={label <- active_option_labels(pv)}
+                      class="flex items-center gap-2 text-xs text-stone-600"
                     >
-                      Die folgenden Optionen gelten nur für Textantworten, nicht für Checkboxen.
-                    </p>
-                    <label
-                      :for={{key, label, hint} <- text_options()}
-                      class={[
-                        "flex items-start gap-3",
-                        if(pv.auto_correct,
-                          do: "cursor-pointer",
-                          else: "cursor-not-allowed opacity-40"
-                        )
-                      ]}
-                    >
-                      <input
-                        type="checkbox"
-                        id={"#{key}-#{pv.id}"}
-                        checked={Map.fetch!(pv, key)}
-                        disabled={!pv.auto_correct}
-                        phx-click="toggle_text_option"
-                        phx-value-part-id={pv.id}
-                        phx-value-option={key}
-                        class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 transition-colors duration-150 shrink-0 disabled:cursor-not-allowed"
-                      />
-                      <span class="min-w-0">
-                        <span class="block text-sm font-medium text-stone-700">{label}</span>
-                        <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">
-                          {hint}
-                        </span>
-                      </span>
-                    </label>
-                  <% else %>
-                    <p
-                      :if={pv.has_checkboxes}
-                      id={"checkbox-only-note-#{pv.id}"}
-                      class="text-xs text-stone-500 leading-relaxed"
-                    >
-                      Checkboxen werden pro Checkbox korrigiert: Jede richtig angekreuzte oder
-                      richtig leer gelassene Checkbox gibt ihren Anteil der Punkte.
-                    </p>
-                  <% end %>
+                      <.icon name="hero-check-mini" class="w-4 h-4 text-amber-500 shrink-0" />
+                      <span class="min-w-0">{label}</span>
+                    </li>
+                    <li :if={active_option_labels(pv) == []} class="text-xs text-stone-400">
+                      Keine Korrekturoptionen aktiv
+                    </li>
+                  </ul>
                 </div>
               </div>
             </aside>
           </div>
         </div>
+
+        <%!-- Korrekturoptionen: one dialog for whichever question it was opened
+             for. It edits a draft; nothing is saved before "Übernehmen". --%>
+        <%= if @options_draft do %>
+          <dialog
+            id="correction-options-modal"
+            class="modal modal-open"
+            phx-window-keydown="close_correction_options"
+            phx-key="escape"
+          >
+            <div class="modal-backdrop bg-stone-900/50" phx-click="close_correction_options"></div>
+            <div class="modal-box max-w-2xl p-0 bg-white rounded-[16px] shadow-2xl">
+              <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                    <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
+                  </div>
+                  <div class="min-w-0">
+                    <h3 class="text-lg font-semibold text-stone-900">Korrekturoptionen</h3>
+                    <p class="text-xs text-stone-500 truncate">{@options_draft.label}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  phx-click="close_correction_options"
+                  aria-label="Schliessen"
+                  class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-150"
+                >
+                  <.icon name="hero-x-mark" class="w-5 h-5" />
+                </button>
+              </div>
+
+              <.form
+                for={@options_form}
+                id={"correction-options-form-#{@options_draft.part_id}"}
+                phx-change="change_correction_options"
+                phx-submit="apply_correction_options"
+              >
+                <div class="px-6 py-5 space-y-6 max-h-[65vh] overflow-y-auto">
+                  <section class="space-y-3">
+                    <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                      Punkte
+                    </h4>
+                    <div :if={!@options_draft.custom_points} class="max-w-[10rem]">
+                      <.input
+                        field={@options_form[:max_points]}
+                        type="number"
+                        label="Max. Punkte"
+                        step="0.25"
+                        min="0"
+                        inputmode="decimal"
+                      />
+                    </div>
+                    <p :if={@options_draft.custom_points} class="text-sm text-stone-700">
+                      Max. Punkte:
+                      <span class="font-mono font-semibold">
+                        {format_block_points(draft_total(@options_draft))}
+                      </span>
+                      <span class="text-xs text-stone-500">(Summe der Antwortfelder)</span>
+                    </p>
+
+                    <.option_toggle
+                      field={@options_form[:custom_points]}
+                      label="Punkte pro Antwortfeld"
+                      hint="Punkte ungleich auf die Antwortfelder dieser Aufgabe verteilen."
+                    />
+                    <div
+                      :if={@options_draft.custom_points}
+                      class="grid grid-cols-2 gap-3 pl-7"
+                    >
+                      <div :for={block <- @options_draft.blocks} :if={block.answer_id}>
+                        <.input
+                          type="number"
+                          id={"options-block-points-#{block.answer_id}"}
+                          name={"options[block_points][#{block.answer_id}]"}
+                          value={Map.get(@options_draft.block_points, block.answer_id)}
+                          label={block.snippet}
+                          step="0.25"
+                          min="0"
+                          inputmode="decimal"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="space-y-3 pt-5 border-t border-stone-100">
+                    <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                      Auto-Korrektur
+                    </h4>
+                    <.option_toggle
+                      field={@options_form[:auto_correct]}
+                      label="Auto-Korrektur"
+                      hint="Diese Aufgabe wird beim Start der Auto-Korrektur automatisch bewertet."
+                    />
+                    <%= if @options_draft.has_text_answers do %>
+                      <p
+                        :if={@options_draft.has_checkboxes}
+                        id="text-options-note"
+                        class="text-xs text-stone-500 leading-relaxed pl-7"
+                      >
+                        Die folgenden Optionen gelten nur für Textantworten, nicht für Checkboxen.
+                      </p>
+                      <div class="pl-7 space-y-3">
+                        <.option_toggle
+                          :for={{key, label, hint} <- text_options()}
+                          field={@options_form[key]}
+                          label={label}
+                          hint={hint}
+                          disabled={!@options_draft.auto_correct}
+                        />
+                      </div>
+                    <% end %>
+                  </section>
+
+                  <section
+                    :if={@options_draft.has_checkboxes}
+                    id="checkbox-scoring"
+                    class="space-y-3 pt-5 border-t border-stone-100"
+                  >
+                    <div>
+                      <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                        Punkte bei Checkboxen
+                      </h4>
+                      <p class="text-xs text-stone-500 mt-1 leading-relaxed">
+                        Gilt für die Auto-Korrektur und die Korrektur von Hand. Manuelle Punkte
+                        bleiben immer möglich.
+                      </p>
+                    </div>
+                    <.input type="hidden" field={@options_form[:checkbox_rule]} />
+                    <div class="grid grid-cols-3 gap-2" role="radiogroup">
+                      <button
+                        :for={{rule, label, hint} <- checkbox_rule_options()}
+                        type="button"
+                        id={"checkbox-scoring-#{rule}"}
+                        role="radio"
+                        aria-checked={to_string(@options_draft.checkbox_rule == rule)}
+                        phx-click="draft_checkbox_rule"
+                        phx-value-rule={rule}
+                        class={[
+                          "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
+                          if(@options_draft.checkbox_rule == rule,
+                            do: "border-amber-400 bg-amber-50/60",
+                            else: "border-stone-200 bg-white hover:bg-stone-50 hover:border-stone-300"
+                          )
+                        ]}
+                      >
+                        <span class="text-sm font-medium text-stone-700">{label}</span>
+                        <span class="text-xs text-stone-500 leading-relaxed">{hint}</span>
+                      </button>
+                    </div>
+                    <div :if={@options_draft.checkbox_rule == "deduction"} class="max-w-[10rem]">
+                      <.input
+                        field={@options_form[:checkbox_deduction]}
+                        type="number"
+                        label="Abzug pro Fehler"
+                        step="0.25"
+                        min="0.25"
+                        inputmode="decimal"
+                      />
+                    </div>
+                  </section>
+                </div>
+
+                <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    phx-click="close_correction_options"
+                    class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    id="apply-correction-options-btn"
+                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                  >
+                    <.icon name="hero-check" class="w-4 h-4" /> Übernehmen
+                  </button>
+                </div>
+              </.form>
+            </div>
+          </dialog>
+        <% end %>
 
         <%!-- Erklär-Dialog: rendered ONCE outside the part loop, so several
              question cards share one <dialog> instead of duplicating its ID. --%>
@@ -748,6 +813,8 @@ defmodule TaskyWeb.ExamLive.Content do
      # Assigned here rather than in the "musterloesung" branch of
      # handle_params/3 so the flag is defined on every tab.
      |> assign(:show_alternatives_help, false)
+     |> assign(:options_draft, nil)
+     |> assign(:options_form, nil)
      |> assign(:free_document, ExamComponents.free_document?(exam))
      |> allow_upload(:attachment,
        accept: Uploads.attachment_accept_exts(),
@@ -815,8 +882,6 @@ defmodule TaskyWeb.ExamLive.Content do
           sample -> sample.nodes
         end
 
-      custom = Map.get(exam.sample_solution_block_points || %{}, part.id) || %{}
-
       blocks =
         nodes
         |> Tasky.AI.NodePatcher.list_answer_blocks()
@@ -827,29 +892,40 @@ defmodule TaskyWeb.ExamLive.Content do
               s -> s
             end
 
-          %{
-            answer_id: entry.answer_id,
-            type: entry.type,
-            snippet: snippet,
-            points: Map.get(custom, entry.answer_id)
-          }
+          %{answer_id: entry.answer_id, type: entry.type, snippet: snippet, points: nil}
         end)
 
-      %{
-        id: part.id,
-        label: part.label,
-        doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
-        max_points: Map.get(exam.sample_solution_points || %{}, part.id),
-        blocks: blocks,
-        custom_points: map_size(custom) > 0,
-        has_text_answers: Enum.any?(blocks, &(&1.type in ["answerBlock", "lueckentext"])),
-        has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem")),
-        auto_correct: part_config_flag(exam, part.id, "auto_correct"),
-        ignore_case: part_config_flag(exam, part.id, "ignore_case"),
-        ignore_spelling: part_config_flag(exam, part.id, "ignore_spelling"),
-        ignore_punctuation: part_config_flag(exam, part.id, "ignore_punctuation")
-      }
+      Map.merge(
+        %{
+          id: part.id,
+          label: part.label,
+          doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
+          has_text_answers: Enum.any?(blocks, &(&1.type in ["answerBlock", "lueckentext"])),
+          has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem"))
+        },
+        option_fields(exam, part.id, blocks)
+      )
     end)
+  end
+
+  # The part view's points and correction options, as stored on the exam.
+  # Shared by the full build and the refresh after "Übernehmen", which must
+  # not touch `doc_json`.
+  defp option_fields(exam, part_id, blocks) do
+    custom = Map.get(exam.sample_solution_block_points || %{}, part_id) || %{}
+    scoring = Exams.checkbox_scoring(exam, part_id)
+
+    %{
+      max_points: Map.get(exam.sample_solution_points || %{}, part_id),
+      blocks: Enum.map(blocks, &%{&1 | points: Map.get(custom, &1.answer_id)}),
+      custom_points: map_size(custom) > 0,
+      auto_correct: part_config_flag(exam, part_id, "auto_correct"),
+      ignore_case: part_config_flag(exam, part_id, "ignore_case"),
+      ignore_spelling: part_config_flag(exam, part_id, "ignore_spelling"),
+      ignore_punctuation: part_config_flag(exam, part_id, "ignore_punctuation"),
+      checkbox_rule: scoring.rule,
+      checkbox_deduction: scoring.deduction
+    }
   end
 
   @impl true
@@ -869,130 +945,97 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
-  def handle_event("toggle_custom_block_points", %{"part-id" => part_id}, socket) do
+  def handle_event("open_correction_options", %{"part-id" => part_id}, socket) do
     case part_view(socket, part_id) do
       nil ->
         {:noreply, socket}
 
       pv ->
-        result =
-          if pv.custom_points do
-            Exams.clear_custom_block_points(
-              socket.assigns.current_scope,
-              socket.assigns.exam,
-              part_id
-            )
-          else
-            Exams.enable_custom_block_points(
-              socket.assigns.current_scope,
-              socket.assigns.exam,
-              part_id
-            )
-          end
+        draft = %{
+          part_id: pv.id,
+          label: pv.label,
+          blocks: pv.blocks,
+          has_text_answers: pv.has_text_answers,
+          has_checkboxes: pv.has_checkboxes,
+          max_points: pv.max_points,
+          custom_points: pv.custom_points,
+          block_points: Map.new(pv.blocks, &{&1.answer_id, &1.points}),
+          auto_correct: pv.auto_correct,
+          ignore_case: pv.ignore_case,
+          ignore_spelling: pv.ignore_spelling,
+          ignore_punctuation: pv.ignore_punctuation,
+          checkbox_rule: pv.checkbox_rule,
+          checkbox_deduction: pv.checkbox_deduction
+        }
 
-        apply_block_points_result(socket, part_id, result)
+        {:noreply, assign_options_draft(socket, draft)}
     end
   end
 
-  def handle_event("set_block_points", params, socket) do
-    %{"points" => raw, "part_id" => part_id, "answer_id" => answer_id} = params
-    points = parse_points(raw) || 0
-
-    result =
-      Exams.set_sample_solution_block_point(
-        socket.assigns.current_scope,
-        socket.assigns.exam,
-        part_id,
-        answer_id,
-        points
-      )
-
-    apply_block_points_result(socket, part_id, result)
+  def handle_event("close_correction_options", _params, socket) do
+    {:noreply, assign_options_draft(socket, nil)}
   end
 
-  def handle_event("adjust_block_points", params, socket) do
-    %{"direction" => dir, "part-id" => part_id, "answer-id" => answer_id} = params
-
-    case part_view(socket, part_id) do
-      nil ->
-        {:noreply, socket}
-
-      pv ->
-        current =
-          case Enum.find(pv.blocks, &(&1.answer_id == answer_id)) do
-            %{points: p} when is_number(p) -> p
-            _ -> 0
-          end
-
-        delta = if dir == "up", do: 0.25, else: -0.25
-        new_value = max(current + delta, 0)
-
-        result =
-          Exams.set_sample_solution_block_point(
-            socket.assigns.current_scope,
-            socket.assigns.exam,
-            part_id,
-            answer_id,
-            new_value
-          )
-
-        apply_block_points_result(socket, part_id, result)
+  def handle_event("change_correction_options", %{"options" => params}, socket) do
+    case socket.assigns.options_draft do
+      nil -> {:noreply, socket}
+      draft -> {:noreply, assign_options_draft(socket, merge_options_params(draft, params))}
     end
   end
 
-  def handle_event("toggle_auto_correct", %{"part-id" => part_id}, socket) do
-    case part_view(socket, part_id) do
+  def handle_event("draft_checkbox_rule", %{"rule" => rule}, socket) do
+    case socket.assigns.options_draft do
+      %{} = draft when is_binary(rule) ->
+        rule = if rule in Tasky.Grading.checkbox_rules(), do: rule, else: draft.checkbox_rule
+        {:noreply, assign_options_draft(socket, %{draft | checkbox_rule: rule})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("apply_correction_options", %{"options" => params}, socket) do
+    case socket.assigns.options_draft do
       nil ->
         {:noreply, socket}
 
-      pv ->
-        exam = socket.assigns.exam
-        new_val = !pv.auto_correct
-        part_config = Map.get(exam.ai_correction_config || %{}, part_id, %{})
+      draft ->
+        draft = merge_options_params(draft, params)
 
-        updated_part_config =
-          part_config
-          |> Map.put("auto_correct", new_val)
-          |> then(fn cfg ->
-            if new_val,
-              do: cfg,
-              else: Enum.reduce(@text_option_keys, cfg, &Map.put(&2, &1, false))
-          end)
+        opts = %{
+          max_points: draft.max_points,
+          block_points: if(draft.custom_points, do: draft.block_points),
+          config: %{
+            "auto_correct" => draft.auto_correct,
+            "ignore_case" => draft.ignore_case,
+            "ignore_spelling" => draft.ignore_spelling,
+            "ignore_punctuation" => draft.ignore_punctuation,
+            "checkbox_scoring" => draft.checkbox_rule,
+            "checkbox_deduction" => draft.checkbox_deduction
+          }
+        }
 
-        case Exams.update_ai_correction_config(
+        case Exams.apply_part_options(
                socket.assigns.current_scope,
-               exam,
-               part_id,
-               updated_part_config
+               socket.assigns.exam,
+               draft.part_id,
+               opts
              ) do
           {:ok, updated_exam} ->
-            changes =
-              if new_val,
-                do: %{auto_correct: true},
-                else: %{
-                  auto_correct: false,
-                  ignore_case: false,
-                  ignore_spelling: false,
-                  ignore_punctuation: false
-                }
+            pv = part_view(socket, draft.part_id)
 
             {:noreply,
              socket
              |> assign(:exam, updated_exam)
-             |> update_part_view(part_id, changes)}
+             |> update_part_view(draft.part_id, option_fields(updated_exam, pv.id, pv.blocks))
+             |> assign_options_draft(nil)}
 
-          {:error, _changeset} ->
-            {:noreply, put_flash(socket, :error, "Einstellung konnte nicht gespeichert werden.")}
+          {:error, _reason} ->
+            {:noreply,
+             put_flash(socket, :error, "Korrekturoptionen konnten nicht gespeichert werden.")}
         end
     end
   end
-
-  def handle_event("toggle_text_option", %{"part-id" => part_id, "option" => option}, socket)
-      when option in @text_option_keys do
-    toggle_flag_if_auto(socket, part_id, option, String.to_existing_atom(option))
-  end
-
-  def handle_event("toggle_text_option", _params, socket), do: {:noreply, socket}
 
   def handle_event("open_alternatives_help", _params, socket) do
     {:noreply, assign(socket, :show_alternatives_help, true)}
@@ -1144,53 +1187,154 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
-  defp toggle_flag_if_auto(socket, part_id, config_key, view_key) do
-    pv = part_view(socket, part_id)
+  defp checkbox_rule_options do
+    [
+      {"per_checkbox", "Pro Checkbox",
+       "Jede richtig angekreuzte oder richtig leer gelassene Checkbox gibt ihren Anteil der Punkte."},
+      {"all_or_nothing", "Alles oder nichts",
+       "Volle Punkte nur, wenn alle Checkboxen stimmen, sonst 0."},
+      {"deduction", "Abzug pro Fehler",
+       "Volle Punkte minus einen Abzug pro falscher Checkbox, nie unter 0."}
+    ]
+  end
 
-    if pv && pv.auto_correct do
-      exam = socket.assigns.exam
-      new_val = !Map.fetch!(pv, view_key)
-      part_config = Map.get(exam.ai_correction_config || %{}, part_id, %{})
-      updated = Map.put(part_config, config_key, new_val)
+  defp assign_options_draft(socket, nil),
+    do: socket |> assign(:options_draft, nil) |> assign(:options_form, nil)
 
-      case Exams.update_ai_correction_config(socket.assigns.current_scope, exam, part_id, updated) do
-        {:ok, updated_exam} ->
-          {:noreply,
-           socket
-           |> assign(:exam, updated_exam)
-           |> update_part_view(part_id, %{view_key => new_val})}
+  defp assign_options_draft(socket, draft) do
+    params = %{
+      "max_points" => draft.max_points,
+      "custom_points" => draft.custom_points,
+      "auto_correct" => draft.auto_correct,
+      "ignore_case" => draft.ignore_case,
+      "ignore_spelling" => draft.ignore_spelling,
+      "ignore_punctuation" => draft.ignore_punctuation,
+      "checkbox_rule" => draft.checkbox_rule,
+      "checkbox_deduction" => draft.checkbox_deduction
+    }
 
-        {:error, _changeset} ->
-          {:noreply, put_flash(socket, :error, "Einstellung konnte nicht gespeichert werden.")}
+    socket
+    |> assign(:options_draft, draft)
+    |> assign(:options_form, to_form(params, as: :options))
+  end
+
+  # Folds the dialog's form params into the draft. Turning the custom
+  # distribution on starts from the equal split of the current total, turning
+  # it off keeps the sum as the total; text options go with auto-correction.
+  defp merge_options_params(draft, params) do
+    custom? = Map.get(params, "custom_points", to_string(draft.custom_points)) == "true"
+
+    block_points =
+      Enum.reduce(Map.get(params, "block_points", %{}), draft.block_points, fn {id, raw}, acc ->
+        if Map.has_key?(acc, id), do: Map.put(acc, id, parse_points(raw) || 0), else: acc
+      end)
+
+    max_points =
+      case Map.fetch(params, "max_points") do
+        {:ok, raw} -> parse_points(raw)
+        :error -> draft.max_points
       end
-    else
-      {:noreply, socket}
+
+    {block_points, max_points} =
+      cond do
+        custom? and not draft.custom_points ->
+          ids = draft.blocks |> Enum.map(& &1.answer_id) |> Enum.reject(&is_nil/1)
+          {Exams.equal_shares(ids, max_points || 0), max_points}
+
+        draft.custom_points and not custom? ->
+          {block_points, draft_total(%{draft | block_points: block_points})}
+
+        true ->
+          {block_points, max_points}
+      end
+
+    auto? = flag_param(params, "auto_correct", draft.auto_correct)
+
+    deduction =
+      case parse_points(Map.get(params, "checkbox_deduction", "")) do
+        d when is_number(d) and d > 0 -> d
+        _ -> draft.checkbox_deduction
+      end
+
+    %{
+      draft
+      | custom_points: custom?,
+        block_points: block_points,
+        max_points: max_points,
+        auto_correct: auto?,
+        ignore_case: auto? and flag_param(params, "ignore_case", draft.ignore_case),
+        ignore_spelling: auto? and flag_param(params, "ignore_spelling", draft.ignore_spelling),
+        ignore_punctuation:
+          auto? and flag_param(params, "ignore_punctuation", draft.ignore_punctuation),
+        checkbox_rule: Map.get(params, "checkbox_rule", draft.checkbox_rule),
+        checkbox_deduction: deduction
+    }
+  end
+
+  defp flag_param(params, key, default) do
+    case Map.fetch(params, key) do
+      {:ok, value} -> value == "true"
+      :error -> default
     end
   end
 
-  # Refreshes the part view's block points, custom flag and (derived) total
-  # from the freshly updated exam.
-  defp apply_block_points_result(socket, part_id, result) do
-    case result do
-      {:ok, updated_exam} ->
-        custom = Map.get(updated_exam.sample_solution_block_points || %{}, part_id) || %{}
-        pv = part_view(socket, part_id)
+  defp draft_total(draft) do
+    draft.block_points |> Map.values() |> Enum.map(&(&1 || 0)) |> Enum.sum()
+  end
 
-        blocks =
-          Enum.map(pv.blocks, fn b -> %{b | points: Map.get(custom, b.answer_id)} end)
+  # What the sidebar lists under "Korrekturoptionen": the active settings by
+  # name, without their descriptions.
+  defp active_option_labels(pv) do
+    text =
+      if pv.has_text_answers,
+        do: for({key, label, _hint} <- text_options(), Map.fetch!(pv, key), do: label),
+        else: []
 
-        {:noreply,
-         socket
-         |> assign(:exam, updated_exam)
-         |> update_part_view(part_id, %{
-           blocks: blocks,
-           custom_points: map_size(custom) > 0,
-           max_points: Map.get(updated_exam.sample_solution_points || %{}, part_id)
-         })}
+    Enum.reject(
+      [
+        pv.custom_points && "Punkte pro Antwortfeld",
+        pv.auto_correct && "Auto-Korrektur"
+      ],
+      &(&1 in [nil, false])
+    ) ++ text ++ checkbox_rule_summary(pv)
+  end
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Punkte konnten nicht gespeichert werden.")}
-    end
+  defp checkbox_rule_summary(%{has_checkboxes: false}), do: []
+
+  defp checkbox_rule_summary(%{checkbox_rule: "all_or_nothing"}),
+    do: ["Checkboxen: alles oder nichts"]
+
+  defp checkbox_rule_summary(%{checkbox_rule: "deduction", checkbox_deduction: d}),
+    do: ["Checkboxen: −#{format_block_points(d)} P. pro Fehler"]
+
+  defp checkbox_rule_summary(_pv), do: ["Checkboxen: pro Checkbox"]
+
+  attr :field, Phoenix.HTML.FormField, required: true
+  attr :label, :string, required: true
+  attr :hint, :string, required: true
+  attr :disabled, :boolean, default: false
+
+  # A checkbox with its description underneath, for the options dialog.
+  defp option_toggle(assigns) do
+    ~H"""
+    <div class={["flex items-start gap-3", @disabled && "opacity-40"]}>
+      <div class="pt-0.5">
+        <.input
+          field={@field}
+          type="checkbox"
+          disabled={@disabled}
+          class="w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0 disabled:cursor-not-allowed"
+        />
+      </div>
+      <label
+        for={@field.id}
+        class={["min-w-0", if(@disabled, do: "cursor-not-allowed", else: "cursor-pointer")]}
+      >
+        <span class="block text-sm font-medium text-stone-700">{@label}</span>
+        <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">{@hint}</span>
+      </label>
+    </div>
+    """
   end
 
   defp save_max_points(socket, part_id, points) do

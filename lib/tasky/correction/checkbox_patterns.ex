@@ -17,7 +17,7 @@ defmodule Tasky.Correction.CheckboxPatterns do
         students: [%{submission_id, firstname, lastname}, ...],
         options: [%{index, label, state, expected, deviation, verdict, default_verdict, max_points}, ...],
         matches_solution?: true,
-        verdict: "correct" | "wrong" | :partial,
+        verdict: "correct" | "wrong" | :manual | :partial,   # :manual = points typed by hand
         points: 2 | nil,            # nil when a checkbox has no points or mixed verdicts
         max_points: 2 | nil
       }
@@ -35,12 +35,16 @@ defmodule Tasky.Correction.CheckboxPatterns do
   @checked "angekreuzt"
   @unchecked "nicht angekreuzt"
 
-  def build(blocks) when is_list(blocks) do
+  @doc """
+  The patterns of one checkbox list. `scoring` is the question's checkbox rule
+  (`Tasky.Exams.checkbox_scoring/2`); a pattern's points follow it.
+  """
+  def build(blocks, scoring \\ %{rule: "per_checkbox", deduction: nil}) when is_list(blocks) do
     cells = cells_by_submission(blocks)
 
     cells
     |> Enum.group_by(fn {_id, %{by_index: by_index}} -> pattern_key(blocks, by_index) end)
-    |> Enum.map(fn {key, members} -> build_pattern(key, members, blocks) end)
+    |> Enum.map(fn {key, members} -> build_pattern(key, members, blocks, scoring) end)
     |> Enum.sort_by(&{-&1.count, &1.key})
   end
 
@@ -73,7 +77,7 @@ defmodule Tasky.Correction.CheckboxPatterns do
     end)
   end
 
-  defp build_pattern(key, members, blocks) do
+  defp build_pattern(key, members, blocks, scoring) do
     options = Enum.map(blocks, &build_option(&1, members))
 
     %{
@@ -86,7 +90,7 @@ defmodule Tasky.Correction.CheckboxPatterns do
       options: options,
       matches_solution?: Enum.all?(options, &(&1.expected != nil and &1.deviation == nil)),
       verdict: pattern_verdict(options),
-      points: awarded_points(options),
+      points: awarded_points(options, scoring),
       max_points: max_points(options)
     }
   end
@@ -144,17 +148,39 @@ defmodule Tasky.Correction.CheckboxPatterns do
 
   defp pattern_verdict(options) do
     cond do
+      Enum.any?(options, &(is_number(&1.verdict) or &1.verdict == "half")) -> :manual
       Enum.all?(options, &(&1.verdict == "correct")) -> "correct"
       Enum.all?(options, &(&1.verdict == "wrong")) -> "wrong"
       true -> :partial
     end
   end
 
-  defp awarded_points(options) do
+  @doc """
+  Spreads `points` for a whole pattern over its checkboxes as per-checkbox
+  manual verdicts (`%{block_index => points}`). Checkboxes the pattern got
+  right are filled first, each up to its share, so the ✅ markers land on the
+  right ones. Every checkbox gets a number — 0 included — because a manual
+  verdict is what tells the scoring rule to keep the typed total
+  (`Tasky.Grading.checkbox_list_points/3`). Expects a pattern whose
+  checkboxes all carry points.
+  """
+  def distribute(%{options: options}, points) when is_number(points) do
+    {right, others} = Enum.split_with(options, &(&1.default_verdict == "correct"))
+
+    {verdicts, _rest} =
+      Enum.map_reduce(right ++ others, points, fn option, remaining ->
+        share = min(remaining, option.max_points)
+        {{option.index, share}, remaining - share}
+      end)
+
+    Map.new(verdicts)
+  end
+
+  defp awarded_points(options, scoring) do
     if Enum.all?(options, &(is_number(&1.max_points) and &1.verdict != :mixed)) do
       options
-      |> Enum.map(&Grading.awarded_points(&1.verdict, &1.max_points))
-      |> Enum.sum()
+      |> Enum.map(&{&1.verdict, &1.max_points})
+      |> Grading.checkbox_list_points(scoring.rule, scoring.deduction)
       |> Grading.normalize_points()
     end
   end

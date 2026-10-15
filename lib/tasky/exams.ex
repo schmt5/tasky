@@ -1499,9 +1499,11 @@ defmodule Tasky.Exams do
       map_size(custom) > 0 ->
         Map.new(blocks, fn b -> {b.index, block_points_value(Map.get(custom, b.answer_id))} end)
 
+      # On the 0.25 grid, so the shares add up to the part's total: 1 point
+      # over 3 blocks used to be 3 × 0.333…, and two right checkboxes then
+      # summed to 0.67 and were rounded to 0.75.
       is_number(max_points) ->
-        per = max_points / length(blocks)
-        Map.new(blocks, fn b -> {b.index, per} end)
+        blocks |> Enum.map(& &1.index) |> equal_block_shares(max_points)
 
       true ->
         nil
@@ -1558,6 +1560,13 @@ defmodule Tasky.Exams do
       custom_block_points_changes(locked, part_id, part_map)
     end)
   end
+
+  @doc """
+  Splits `max_points` over `keys` (answer ids or block indices) on the 0.25
+  grid, the shares summing to exactly `max_points` — what the equal split and
+  the start of a custom distribution both use.
+  """
+  def equal_shares(keys, max_points) when is_list(keys), do: equal_block_shares(keys, max_points)
 
   # Splits `max_points` over `answer_ids` on the 0.25 grid so the shares sum to
   # *exactly* the part's total. Rounding each share independently would not:
@@ -1869,7 +1878,12 @@ defmodule Tasky.Exams do
     # their points when the teacher only edits a single block.
     effective_indexed = effective_verdicts_for_part(blocks, new_verdicts)
 
-    new_part_points = compute_part_points(effective_indexed, points_by_index)
+    new_part_points =
+      compute_part_points(
+        effective_indexed,
+        points_by_index,
+        checkbox_lists(exam, part_id, blocks)
+      )
 
     new_points_per_part =
       if is_nil(new_part_points) do
@@ -1967,7 +1981,7 @@ defmodule Tasky.Exams do
           new_part_points =
             blocks
             |> effective_verdicts_for_part(merged_verdicts)
-            |> compute_part_points(points_by_index)
+            |> compute_part_points(points_by_index, checkbox_lists(exam, part_id, blocks))
 
           new_points =
             if is_nil(new_part_points) do
@@ -2190,8 +2204,56 @@ defmodule Tasky.Exams do
 
   defp normalize_verdict(v, _block_max), do: v
 
-  defp compute_part_points(indexed, points_by_index),
-    do: Grading.part_points(indexed, points_by_index)
+  defp compute_part_points(indexed, points_by_index, checkbox_lists),
+    do: Grading.part_points(indexed, points_by_index, checkbox_lists)
+
+  @doc """
+  The checkbox lists of a part that are scored by a rule other than per
+  checkbox, as `Tasky.Grading.part_points/3` takes them:
+  `[%{indices: [block_index], rule:, deduction:}]`, one per list.
+
+  The rule is chosen per question in the sample solution
+  (`ai_correction_config[part_id]["checkbox_scoring"]`, with
+  `"checkbox_deduction"` for the deduction rule) and applies to every checkbox
+  list in it. `blocks` are the part's answer blocks
+  (`NodePatcher.list_answer_blocks/1`).
+  """
+  def checkbox_lists(%Exam{} = exam, part_id, blocks) when is_binary(part_id) do
+    %{rule: rule, deduction: deduction} = checkbox_scoring(exam, part_id)
+
+    if rule == "per_checkbox" do
+      []
+    else
+      blocks
+      |> Enum.filter(&(&1.type == "taskItem" and not is_nil(&1[:group])))
+      |> Enum.group_by(& &1.group, & &1.index)
+      |> Enum.map(fn {_group, indices} ->
+        %{indices: indices, rule: rule, deduction: deduction}
+      end)
+    end
+  end
+
+  @doc """
+  A part's checkbox scoring rule and deduction, with their defaults filled in:
+  `%{rule: "per_checkbox" | "all_or_nothing" | "deduction", deduction: number}`.
+  """
+  def checkbox_scoring(%Exam{} = exam, part_id) when is_binary(part_id) do
+    cfg = Map.get(exam.ai_correction_config || %{}, part_id, %{})
+
+    rule =
+      case cfg["checkbox_scoring"] do
+        r when is_binary(r) -> if r in Grading.checkbox_rules(), do: r, else: "per_checkbox"
+        _ -> "per_checkbox"
+      end
+
+    deduction =
+      case cfg["checkbox_deduction"] do
+        d when is_number(d) and d > 0 -> d
+        _ -> Grading.default_checkbox_deduction()
+      end
+
+    %{rule: rule, deduction: deduction}
+  end
 
   # Maps numeric (manual) verdicts to the marker vocabulary understood by
   # NodePatcher.rewrite_markers: full block points → ✅, zero → ❌, else 🟡.
@@ -2348,6 +2410,146 @@ defmodule Tasky.Exams do
         %{ai_correction_config: Map.put(locked.ai_correction_config || %{}, part_id, config)}
       end)
     end
+  end
+
+  @part_option_flags ~w(auto_correct ignore_case ignore_spelling ignore_punctuation)
+
+  @doc """
+  Applies the correction options of one part as the sample solution's options
+  dialog submits them, in one transaction:
+
+    * `:max_points` — the part's total (ignored while `:block_points` is set)
+    * `:block_points` — `%{answer_id => points}` for a custom distribution
+      (the total becomes their sum), or `nil` for the equal split
+    * `:config` — see below
+
+  A key left out keeps what is stored; leaving out both points keys keeps the
+  part's points as they are.
+
+  The config holds the part's flags (`"auto_correct"`, the text options) and
+  its checkbox rule (`"checkbox_scoring"`, `"checkbox_deduction"`); text
+  options are switched off together with auto-correction, as in the form.
+
+  Every submission already graded on the part is rescored afterwards, so the
+  grading table never shows totals of the previous settings.
+  """
+  def apply_part_options(scope, %Exam{} = exam, part_id, opts)
+      when is_binary(part_id) and is_map(opts) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      result =
+        Repo.transaction(fn ->
+          locked = Repo.lock_one!(Exam, exam.id)
+
+          changes =
+            locked
+            |> part_points_changes(part_id, opts)
+            |> Map.put(:ai_correction_config, part_config_changes(locked, part_id, opts))
+
+          updated = locked |> Ecto.Changeset.change(changes) |> Repo.update!()
+          {updated, recompute_part_totals!(updated, part_id)}
+        end)
+
+      with {:ok, {updated, submissions}} <- result do
+        Enum.each(submissions, &broadcast_submission_change/1)
+        {:ok, updated}
+      end
+    end
+  end
+
+  defp part_points_changes(exam, part_id, %{block_points: block_points})
+       when is_map(block_points) and map_size(block_points) > 0 do
+    part_map = Map.new(block_points, fn {id, pts} -> {id, normalize_block_points(pts || 0)} end)
+    custom_block_points_changes(exam, part_id, part_map)
+  end
+
+  defp part_points_changes(_exam, _part_id, opts)
+       when not is_map_key(opts, :max_points) and not is_map_key(opts, :block_points),
+       do: %{}
+
+  defp part_points_changes(exam, part_id, opts) do
+    points =
+      case Map.get(opts, :max_points) do
+        n when is_number(n) -> normalize_block_points(n)
+        _ -> nil
+      end
+
+    %{
+      sample_solution_block_points: Map.delete(exam.sample_solution_block_points || %{}, part_id),
+      sample_solution_points:
+        if(is_nil(points),
+          do: Map.delete(exam.sample_solution_points || %{}, part_id),
+          else: Map.put(exam.sample_solution_points || %{}, part_id, points)
+        )
+    }
+  end
+
+  defp part_config_changes(exam, part_id, opts) do
+    given = Map.get(opts, :config, %{})
+    current = Map.get(exam.ai_correction_config || %{}, part_id, %{})
+    auto? = Map.get(given, "auto_correct", current["auto_correct"]) == true
+
+    flags =
+      Map.new(@part_option_flags, fn key ->
+        value = Map.get(given, key, current[key]) == true
+        {key, if(key == "auto_correct", do: auto?, else: auto? and value)}
+      end)
+
+    rule =
+      case Map.get(given, "checkbox_scoring", current["checkbox_scoring"]) do
+        r when is_binary(r) -> if r in Grading.checkbox_rules(), do: r, else: "per_checkbox"
+        _ -> "per_checkbox"
+      end
+
+    deduction =
+      case Map.get(given, "checkbox_deduction", current["checkbox_deduction"]) do
+        d when is_number(d) and d > 0 -> normalize_block_points(d)
+        _ -> Grading.default_checkbox_deduction()
+      end
+
+    part_cfg =
+      current
+      |> Map.merge(flags)
+      |> Map.merge(%{"checkbox_scoring" => rule, "checkbox_deduction" => deduction})
+
+    Map.put(exam.ai_correction_config || %{}, part_id, part_cfg)
+  end
+
+  # Recomputes `points_per_part[part_id]` from the stored verdicts for every
+  # submission that already has a total for the part. Runs inside the caller's
+  # transaction, with the exam row already locked.
+  defp recompute_part_totals!(exam, part_id) do
+    for submission <-
+          lock_submissions_by_ids!(exam, submission_ids_with_part_total(exam, part_id)),
+        part =
+          submission
+          |> correction_content()
+          |> split_content_into_parts(exam.answer_mode)
+          |> Enum.find(&(&1.id == part_id)),
+        part != nil do
+      blocks = NodePatcher.list_answer_blocks(part.nodes)
+
+      total =
+        blocks
+        |> effective_verdicts_for_part(submission.block_verdicts || %{})
+        |> compute_part_points(
+          resolve_block_points(exam, part_id, blocks),
+          checkbox_lists(exam, part_id, blocks)
+        )
+
+      points =
+        if is_nil(total),
+          do: Map.delete(submission.points_per_part || %{}, part_id),
+          else: Map.put(submission.points_per_part || %{}, part_id, total)
+
+      submission |> Ecto.Changeset.change(points_per_part: points) |> Repo.update!()
+    end
+  end
+
+  defp submission_ids_with_part_total(exam, part_id) do
+    from(s in ExamSubmission, where: s.exam_id == ^exam.id, select: {s.id, s.points_per_part})
+    |> Repo.all()
+    |> Enum.filter(fn {_id, points} -> is_map_key(points || %{}, part_id) end)
+    |> Enum.map(fn {id, _points} -> id end)
   end
 
   @doc """

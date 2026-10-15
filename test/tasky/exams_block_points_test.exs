@@ -86,7 +86,8 @@ defmodule Tasky.ExamsBlockPointsTest do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
       blocks = blocks_of(exam, "q-1")
 
-      assert %{0 => 1.0, 1 => 1.0, 2 => 1.0, 3 => 1.0} =
+      # On the 0.25 grid, so whole shares come back as integers.
+      assert %{0 => 1, 1 => 1, 2 => 1, 3 => 1} ==
                Exams.resolve_block_points(exam, "q-1", blocks)
     end
 

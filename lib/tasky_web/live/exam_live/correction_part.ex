@@ -890,18 +890,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
           end
       end
 
+    # Same formula as the stored part total, checkbox scoring rule included.
     current_total =
-      Enum.reduce(blocks, 0.0, fn b, acc ->
-        bp = b.max_points || 0
-
-        case b.verdict do
-          "correct" -> acc + bp
-          "half" -> acc + bp / 2
-          v when is_number(v) -> acc + v
-          _ -> acc
-        end
-      end)
-      |> normalize_points()
+      Tasky.Grading.part_points(
+        Map.new(blocks, &{&1.index, &1.verdict}),
+        points_by_index || %{},
+        Exams.checkbox_lists(exam, part_id, blocks)
+      )
 
     %{
       blocks: blocks,
@@ -943,7 +938,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   end
 
   defp normalize_points(n) when is_number(n), do: Grading.normalize_points(n)
-  defp normalize_points(n), do: n
 
   @impl true
   def handle_event("set_points_max", _params, socket) do
