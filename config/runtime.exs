@@ -22,23 +22,6 @@ end
 
 config :tasky, TaskyWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
-# Gotenberg PDF rendering service. When unset, the PDF export feature is
-# disabled at runtime. Local dev defaults to the docker-compose service on
-# localhost:3000.
-config :tasky,
-  gotenberg_url:
-    System.get_env("GOTENBERG_URL") ||
-      if(config_env() == :dev, do: "http://localhost:3000", else: nil)
-
-# Base URL Gotenberg uses to fetch print-view pages back from Phoenix.
-# In dev, Gotenberg runs in Docker and reaches the host via host.docker.internal.
-# In prod on Fly.io, set this to the app's `.internal` DNS, e.g.
-#   GOTENBERG_CALLBACK_URL=http://tasky.internal:8080
-config :tasky,
-  gotenberg_callback_url:
-    System.get_env("GOTENBERG_CALLBACK_URL") ||
-      if(config_env() == :dev, do: "http://host.docker.internal:4000", else: nil)
-
 # Directory where uploaded exam images are stored and served from (/uploads).
 # Must NOT live under priv/static — Plug.Static serves that dir and (in dev,
 # with raise_on_missing_only) would raise on files it doesn't whitelist. The

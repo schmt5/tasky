@@ -5,7 +5,6 @@ defmodule TaskyWeb.ExamPaperLiveTest do
   import Tasky.AccountsFixtures
 
   alias Tasky.Exams
-  alias Tasky.Exams.ExamPrintToken
 
   defp content_with_answer do
     %{
@@ -39,11 +38,7 @@ defmodule TaskyWeb.ExamPaperLiveTest do
     %{teacher: teacher, scope: scope, exam: exam}
   end
 
-  defp sign(endpoint, user_id, exam_id) do
-    ExamPrintToken.sign(endpoint, user_id, to_string(exam_id), %{})
-  end
-
-  describe "the teacher's paper view (cookie auth)" do
+  describe "the teacher's paper view" do
     test "renders the sheet with the editable paper island", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam()
 
@@ -57,24 +52,12 @@ defmodule TaskyWeb.ExamPaperLiveTest do
       assert html =~ "paper-field"
     end
 
-    test "does not carry the Gotenberg readiness marker", %{conn: conn} do
-      # There are no read-only viewers on this page to wait for, so the marker
-      # would arm print_ready.js for nothing.
+    test "offers the PDF download and the browser-print fallback", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam()
 
-      {:ok, _view, html} = live(log_in_user(conn, teacher), ~p"/exams/#{exam}/paper")
+      {:ok, view, html} = live(log_in_user(conn, teacher), ~p"/exams/#{exam}/paper")
 
-      refute html =~ "print-ready-signal"
-      refute html =~ ~s(phx-hook="ExamReadOnlyViewer")
-    end
-
-    test "offers the browser-print fallback even without Gotenberg", %{conn: conn} do
-      # :test has no gotenberg_url, so @pdf_enabled is false here.
-      %{teacher: teacher, exam: exam} = create_exam()
-
-      {:ok, _view, html} = live(log_in_user(conn, teacher), ~p"/exams/#{exam}/paper")
-
-      assert html =~ "PDF-Dienst nicht verfügbar"
+      assert has_element?(view, ~s(#paper-pdf-download[href="/exams/#{exam.id}/paper.pdf"]))
       assert html =~ "drucken"
     end
 
@@ -99,86 +82,6 @@ defmodule TaskyWeb.ExamPaperLiveTest do
       %{exam: exam} = create_exam()
 
       assert {:error, {:redirect, _}} = live(conn, ~p"/exams/#{exam}/paper")
-    end
-  end
-
-  describe "the Gotenberg print view (token auth)" do
-    test "a valid token renders the sheet read-only", %{conn: conn} do
-      %{teacher: teacher, exam: exam} = create_exam()
-      token = sign(TaskyWeb.Endpoint, teacher.id, exam.id)
-
-      {:ok, _view, html} = live(conn, ~p"/print/exam-paper/#{exam.id}?token=#{token}")
-
-      assert html =~ "Test Prüfung"
-      assert html =~ ~s(phx-hook="ExamReadOnlyViewer")
-      assert html =~ ~s(id="print-ready-signal")
-      # No editing chrome on the page Gotenberg renders.
-      refute html =~ ~s(phx-hook="ExamPaperEditor")
-      refute html =~ "PDF erstellen"
-    end
-
-    test "no session cookie is needed", %{conn: conn} do
-      %{teacher: teacher, exam: exam} = create_exam()
-      token = sign(TaskyWeb.Endpoint, teacher.id, exam.id)
-
-      assert {:ok, _view, _html} = live(conn, ~p"/print/exam-paper/#{exam.id}?token=#{token}")
-    end
-
-    test "a token for another teacher's exam does not grant access", %{conn: conn} do
-      %{exam: exam} = create_exam()
-      other = user_fixture(%{role: "teacher"})
-      token = sign(TaskyWeb.Endpoint, other.id, exam.id)
-
-      # The scope is rebuilt from the token's user id and the exam is fetched
-      # through the ordinary scoped accessor, so ownership still decides.
-      assert_raise Ecto.NoResultsError, fn ->
-        live(conn, ~p"/print/exam-paper/#{exam.id}?token=#{token}")
-      end
-    end
-
-    test "a token minted for a different exam is rejected", %{conn: conn} do
-      %{teacher: teacher, exam: exam} = create_exam()
-      %{exam: other_exam} = create_exam()
-      token = sign(TaskyWeb.Endpoint, teacher.id, other_exam.id)
-
-      {:ok, _view, html} = live(conn, ~p"/print/exam-paper/#{exam.id}?token=#{token}")
-
-      assert html =~ "Token entspricht nicht der angeforderten Druckansicht."
-    end
-
-    test "a garbage token renders the error page, not a crash", %{conn: conn} do
-      %{exam: exam} = create_exam()
-
-      {:ok, _view, html} = live(conn, ~p"/print/exam-paper/#{exam.id}?token=nonsense")
-
-      assert html =~ "Papierversion nicht verfügbar"
-      assert html =~ "Token ungültig oder abgelaufen"
-    end
-
-    test "a missing token renders the error page", %{conn: conn} do
-      %{exam: exam} = create_exam()
-
-      {:ok, _view, html} = live(conn, ~p"/print/exam-paper/#{exam.id}")
-
-      assert html =~ "Token ungültig oder abgelaufen (missing)"
-    end
-
-    test "a submission print token cannot be replayed here", %{conn: conn} do
-      # The two views use different salts on purpose: one salt, one audience.
-      %{teacher: teacher, exam: exam} = create_exam()
-
-      wrong =
-        Tasky.Exams.PrintToken.sign(
-          TaskyWeb.Endpoint,
-          teacher.id,
-          to_string(exam.id),
-          "1",
-          %{}
-        )
-
-      {:ok, _view, html} = live(conn, ~p"/print/exam-paper/#{exam.id}?token=#{wrong}")
-
-      assert html =~ "Token ungültig oder abgelaufen"
     end
   end
 

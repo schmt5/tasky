@@ -1,6 +1,7 @@
 defmodule TaskyWeb.ExamPaperController do
   @moduledoc """
-  Renders the paper version of an exam to PDF, synchronously.
+  Renders the paper version of an exam to PDF, synchronously
+  (`Tasky.ExamPaperPdf`, Typst in-process).
 
   Not routed through `Tasky.Exams.ExportRunner`: that one requires a non-empty
   submission list, names files after the student and always builds a ZIP. A
@@ -20,37 +21,12 @@ defmodule TaskyWeb.ExamPaperController do
   require Logger
 
   alias Tasky.Exams
-  alias Tasky.Exams.ExamPrintToken
   alias Tasky.Exams.ExportRunner
-  alias Tasky.PDF.Gotenberg
 
   def download(conn, %{"id" => exam_id}) do
-    scope = conn.assigns.current_scope
-    exam = Exams.get_exam!(scope, exam_id)
+    exam = Exams.get_exam!(conn.assigns.current_scope, exam_id)
 
-    cond do
-      not Gotenberg.enabled?() ->
-        unavailable(conn, "PDF-Dienst (Gotenberg) ist nicht konfiguriert.")
-
-      is_nil(ExportRunner.callback_base_url()) ->
-        unavailable(conn, "GOTENBERG_CALLBACK_URL ist nicht gesetzt.")
-
-      true ->
-        render_pdf(conn, scope, exam)
-    end
-  end
-
-  defp render_pdf(conn, scope, exam) do
-    token =
-      ExamPrintToken.sign(conn.private.phoenix_endpoint, scope.user.id, to_string(exam.id), %{})
-
-    url =
-      "#{ExportRunner.callback_base_url()}/print/exam-paper/#{exam.id}?token=#{URI.encode(token)}"
-
-    # max_retries: 0 — Gotenberg's default budget is worth
-    # `max_attempt_time_ms/0` (~190 s), which is fine for a background export
-    # and unacceptable for someone waiting on a click.
-    case Gotenberg.url_to_pdf(url, print_background: true, max_retries: 0) do
+    case Tasky.ExamPaperPdf.render(exam) do
       {:ok, pdf} ->
         filename = "#{ExportRunner.sanitize_filename(exam.name)}-Papierversion.pdf"
 
@@ -60,22 +36,14 @@ defmodule TaskyWeb.ExamPaperController do
         )
 
       {:error, reason} ->
-        Logger.error(
-          "Papierversion-PDF für Prüfung #{exam.id} fehlgeschlagen: #{inspect(reason)}"
-        )
+        Logger.error("Papierversion-PDF für Prüfung #{exam.id} fehlgeschlagen: #{reason}")
 
         conn
-        |> put_status(:bad_gateway)
+        |> put_status(:internal_server_error)
         |> text(
           "Die Papierversion konnte nicht erstellt werden. " <>
             "Bitte im Browser drucken (Cmd/Ctrl+P)."
         )
     end
-  end
-
-  defp unavailable(conn, message) do
-    conn
-    |> put_status(:service_unavailable)
-    |> text(message)
   end
 end

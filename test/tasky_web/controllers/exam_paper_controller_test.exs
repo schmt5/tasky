@@ -19,18 +19,17 @@ defmodule TaskyWeb.ExamPaperControllerTest do
   end
 
   describe "GET /exams/:id/paper.pdf" do
-    test "reports the missing PDF service rather than failing opaquely", %{conn: conn} do
-      # :test configures no gotenberg_url, so this is the unconfigured branch.
-      # Deliberately no test that actually talks to Gotenberg.
+    test "downloads the paper version as a PDF", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam()
 
       conn = get(log_in_user(conn, teacher), ~p"/exams/#{exam}/paper.pdf")
 
-      assert conn.status == 503
-      assert conn.resp_body =~ "Gotenberg"
-      # The message must be readable in the tab the link opened, which is why
-      # this path is a plain navigation and not a push_event download.
-      assert conn.resp_body =~ "nicht konfiguriert"
+      assert conn.status == 200
+      assert get_resp_header(conn, "content-type") == ["application/pdf"]
+
+      assert [disposition] = get_resp_header(conn, "content-disposition")
+      assert disposition =~ "Test-Pruefung-Papierversion.pdf"
+      assert "%PDF" <> _ = conn.resp_body
     end
 
     test "an anonymous visitor is redirected to the log-in", %{conn: conn} do

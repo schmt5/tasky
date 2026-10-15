@@ -79,6 +79,7 @@ defmodule Tasky.MixProject do
       {:bcrypt_elixir, "~> 3.0"},
       {:bandit, "~> 1.5"},
       {:req_s3, "~> 0.2.4"},
+      {:typst, "~> 0.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false},

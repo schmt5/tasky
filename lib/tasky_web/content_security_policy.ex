@@ -7,9 +7,7 @@ defmodule TaskyWeb.ContentSecurityPolicy do
   presigned-URL origin. CSP re-checks the redirect target against the source
   list, so that origin has to be in `img-src` or the browser blocks every
   content image — the request reaches the app and returns a healthy 302, and
-  the image still renders as a broken icon. The same applies to the
-  token-authenticated print views: Gotenberg's Chrome enforces CSP too, so
-  without this the PDF export loses its images as well.
+  the image still renders as a broken icon.
   """
 
   @directives [

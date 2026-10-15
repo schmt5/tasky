@@ -24,11 +24,6 @@
 (function () {
   "use strict";
 
-  // Die Druckansichten rendert Gotenberg mit einem aktuellen Chrome. Der Test
-  // schlüge dort nie an, aber ein Overlay im PDF wäre so teuer, dass sich das
-  // explizite Ausschliessen lohnt.
-  if (document.getElementById("print-ready-signal")) return;
-
   function missingFeatures() {
     var missing = [];
 

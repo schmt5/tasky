@@ -6,7 +6,8 @@ correct, grade, and export the results as PDFs.
 
 Built with Phoenix LiveView and PostgreSQL. The content editors are React/Tiptap
 islands mounted via LiveView hooks; exam documents are stored as Tiptap JSON and
-rendered client-side everywhere, including for PDF export (via Gotenberg).
+rendered client-side in the browser. PDFs are rendered server-side with Typst
+(`priv/typst/`).
 
 ## Getting started
 

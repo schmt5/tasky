@@ -608,8 +608,8 @@
 /* Callout ("Hinweisbox"): the colour token lives in `data-color`, so the
    palette is one rule per token instead of inline styles in the doc JSON.
    The text colour is deliberately left untouched. `print-color-adjust` asks
-   Chromium to keep the tint in the Gotenberg PDF, which doesn't pass
-   printBackground; the border prints either way. */
+   the browser to keep the tint when printing with background graphics off;
+   the border prints either way. */
 .exam-editor__content .ProseMirror .callout {
     border: 1px solid #d6d3d1;
     background: #fafaf9;
@@ -866,8 +866,8 @@
    nie mit `background`. Der Browser-Druck (Cmd/Ctrl+P) läuft standardmässig
    mit ausgeschalteten Hintergrundgrafiken, und genau dieser Fallback ist der
    Grund, warum es die Papierversion gibt — ein Hintergrund-Verlauf wäre dort
-   unsichtbar. Gotenberg bekommt zwar `printBackground: true` (für die
-   Hinweisbox-Tönungen), darauf darf sich aber nichts Tragendes stützen. */
+   unsichtbar. Das PDF (Typst, `priv/typst/tiptap.typ`) zeichnet dieselben
+   Kästen selbst und ist von diesen Regeln unabhängig. */
 
 /* Der Seitengrund muss weiss sein. Das Root-Layout setzt einen Grauton auf
    <html> und `bg-stone-50` auf <body>, und `layout: false` entfernt nur das

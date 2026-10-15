@@ -29,6 +29,26 @@ defmodule Tasky.UploadsTest do
   @png_bytes <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, "fake-image-data">>
   @jpg_bytes <<0xFF, 0xD8, 0xFF, 0xE0, "fake-image-data">>
 
+  describe "read_content_image/1" do
+    test "reads a stored exam image back from its public src" do
+      {:ok, src} = Uploads.save_exam_image("42", upload(@png_bytes, "image/png"))
+
+      assert {:ok, {@png_bytes, ".png"}} = Uploads.read_content_image(src)
+    end
+
+    test "never resolves anything but our own upload paths" do
+      assert {:error, :unsupported_src} =
+               Uploads.read_content_image("https://example.com/image.png")
+
+      assert {:error, :unsupported_src} =
+               Uploads.read_content_image("/uploads/exams/1/attachments/x.png")
+
+      assert {:error, :unsupported_src} = Uploads.read_content_image(nil)
+      assert {:error, _} = Uploads.read_content_image("/uploads/exams/../secret.png")
+      assert {:error, _} = Uploads.read_content_image("/uploads/exams/1/missing.png")
+    end
+  end
+
   describe "save_exam_image/2" do
     test "stores a valid png and returns a fetchable public url" do
       assert {:ok, url} = Uploads.save_exam_image("42", upload(@png_bytes, "image/png"))

@@ -122,17 +122,13 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
     assert html =~ "cursor-not-allowed"
   end
 
-  # The return action must not disturb the export control it sits next to. The
-  # PDF service is absent in test, so the export button renders disabled — which
-  # is exactly the state to assert here.
+  # The return action must not disturb the export control it sits next to.
   test "the export control still renders next to the return button", %{conn: conn} do
     %{teacher: teacher, exam: exam} = graded_exam("assigned")
-    {:ok, _view, html} = open_grading(conn, teacher, exam)
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
 
-    assert html =~ "Exportieren"
-    assert html =~ "Prüfung zurückgeben"
-    refute Tasky.PDF.Gotenberg.enabled?()
-    assert html =~ "PDF-Dienst nicht verfügbar"
+    assert has_element?(view, "#open-export-modal-btn:not([disabled])")
+    assert has_element?(view, "#open-return-modal-btn")
   end
 
   test "the export modal uses the same option list as the return modal", %{conn: conn} do

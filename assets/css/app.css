@@ -416,10 +416,9 @@ body:has(.page-wrapper) {
     transform: scale(0.97);
 }
 
-/* Papierformat für den Browser-Druck (Cmd/Ctrl+P). Gotenberg übergibt die
-   Papiermasse explizit und setzt kein `preferCssPageSize`, ignoriert `@page
-   size` also — diese Regel bedient allein den Fallback-Pfad, und dort sind die
-   einzigen druckbaren Oberflächen die beiden Druckansichten.
+/* Papierformat für den Browser-Druck (Cmd/Ctrl+P) der Papierversion. Das PDF
+   setzt seine Seite selbst (`priv/typst/paper.typ`, gleiche Ränder) — diese
+   Regel bedient allein den Fallback-Pfad.
 
    Der frühere @media-print-Block an dieser Stelle ist entfernt: er stylte
    ausschliesslich Klassen (.toc-sidebar, .page-wrapper, .task-title, .block-*)
@@ -532,13 +531,12 @@ body:has(.page-wrapper) {
 /* This file is for your main application CSS */
 
 /* Fonts are self-hosted, never pulled from fonts.googleapis.com. Three
-   reasons, and the third is the one that actually matters here:
+   reasons, and the second is the one that actually matters here:
 
      1. `style-src 'self'` in TaskyWeb.ContentSecurityPolicy would block the
         remote stylesheet and `font-src 'self' data:` the font files, so the
         remote variant was dead on arrival anyway.
-     2. Gotenberg's Chrome renders the print views under the same CSP.
-     3. Exams run inside Safe Exam Browser, often on a locked-down school
+     2. Exams run inside Safe Exam Browser, often on a locked-down school
         network. A font that needs a third-party origin is a font that is one
         firewall rule away from not rendering during a graded exam.
 

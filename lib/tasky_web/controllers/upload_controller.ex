@@ -1,9 +1,8 @@
 defmodule TaskyWeb.UploadController do
   @moduledoc """
   Serves user-uploaded files (exam images and exam attachments). Public on
-  purpose — filenames are unguessable UUIDs — so that both the browser and
-  Gotenberg's headless Chrome can load `<img>` sources without carrying an
-  auth token. Storage is behind `Tasky.Storage`: local files are sent
+  purpose — filenames are unguessable UUIDs — so that the browser can load
+  `<img>` sources without carrying an auth token. Storage is behind `Tasky.Storage`: local files are sent
   directly, remote objects redirect to a presigned URL.
   """
   use TaskyWeb, :controller

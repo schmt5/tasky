@@ -58,29 +58,15 @@ defmodule TaskyWeb.ExamLive.Grading do
                 <.icon name="hero-cog-6-tooth" class="w-4 h-4" /> Konfigurieren
               </.link>
 
-              <%= if @pdf_enabled do %>
-                <button
-                  type="button"
-                  phx-click="open_export_modal"
-                  disabled={@submissions == []}
-                  class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
-                </button>
-              <% else %>
-                <div
-                  class="tooltip tooltip-bottom tooltip-delayed"
-                  data-tip="PDF-Dienst nicht verfügbar"
-                >
-                  <button
-                    type="button"
-                    disabled
-                    class="inline-flex items-center gap-2 text-sm font-semibold text-stone-400 bg-stone-100 border border-stone-200 px-4 py-2.5 rounded-lg cursor-not-allowed"
-                  >
-                    <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
-                  </button>
-                </div>
-              <% end %>
+              <button
+                type="button"
+                id="open-export-modal-btn"
+                phx-click="open_export_modal"
+                disabled={@submissions == []}
+                class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
+              </button>
 
               <%= if @assigned_mode? and not @returned? do %>
                 <button
@@ -226,6 +212,7 @@ defmodule TaskyWeb.ExamLive.Grading do
               </button>
               <button
                 type="button"
+                id="start-export-btn"
                 phx-click="start_export"
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
@@ -501,7 +488,6 @@ defmodule TaskyWeb.ExamLive.Grading do
     # Sorted here and not only in handle_params/3: should that call not
     # happen, :rows and :sort are set all the same.
     |> apply_sort(params)
-    |> assign(:pdf_enabled, Tasky.PDF.Gotenberg.enabled?())
     |> assign(:show_export_modal, false)
     |> assign(:export_options, %{
       show_points_and_mark: true,
@@ -640,9 +626,10 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   def handle_event("start_export", _params, socket) do
     opts = socket.assigns.export_options
-    user_id = socket.assigns.current_scope.user.id
     endpoint = socket.endpoint
-    exam = socket.assigns.exam
+    # Exam and submissions are reloaded for the PDFs: the assigns can trail a
+    # correction or sample solution saved in another tab.
+    exam = Exams.get_exam!(socket.assigns.current_scope, socket.assigns.exam.id)
 
     print_opts =
       Map.take(opts, [
@@ -652,21 +639,12 @@ defmodule TaskyWeb.ExamLive.Grading do
         :show_points_and_mark
       ])
 
-    # URL building and token signing are web concerns — the runner only gets
+    # Rendering and token signing are web concerns — the runner only gets
     # ready-made functions.
     web = %{
-      print_url: fn submission ->
-        token =
-          Tasky.Exams.PrintToken.sign(
-            endpoint,
-            user_id,
-            to_string(exam.id),
-            to_string(submission.id),
-            print_opts
-          )
-
-        base = Tasky.Exams.ExportRunner.callback_base_url()
-        "#{base}/print/exam-submission/#{exam.id}/#{submission.id}?token=#{URI.encode(token)}"
+      render_pdf: fn submission ->
+        submission = Exams.get_submission!(exam, submission.id)
+        TaskyWeb.ExamSubmissionPdf.render(exam, submission, print_opts)
       end,
       sign_download: fn export_id, filename ->
         Tasky.Exams.ExportDownloadToken.sign(endpoint, export_id, filename)
@@ -684,18 +662,6 @@ defmodule TaskyWeb.ExamLive.Grading do
          socket
          |> assign(:show_export_modal, false)
          |> assign(:export_status, %{done: 0, total: length(socket.assigns.submissions)})}
-
-      {:error, :gotenberg_not_configured} ->
-        {:noreply,
-         socket
-         |> assign(:show_export_modal, false)
-         |> put_flash(:error, "PDF-Dienst (Gotenberg) ist nicht konfiguriert.")}
-
-      {:error, :callback_url_not_configured} ->
-        {:noreply,
-         socket
-         |> assign(:show_export_modal, false)
-         |> put_flash(:error, "GOTENBERG_CALLBACK_URL ist nicht gesetzt.")}
 
       {:error, reason} ->
         {:noreply,

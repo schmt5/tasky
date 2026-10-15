@@ -1,12 +1,12 @@
 defmodule TaskyWeb.ExamSubmissionView do
   @moduledoc """
   Builds the sections of one exam submission for a read-only rendering — the
-  PDF print view (`TaskyWeb.ExamLive.Print`) and the exam handed back to an
+  PDF export (`TaskyWeb.ExamSubmissionPdf`) and the exam handed back to an
   assigned participant (`TaskyWeb.Student.ExamLive`).
 
   Both surfaces must show the same thing for the same options, which is the
   whole reason this lives in one place. The other reason is `normalize_options/1`:
-  `Print` receives its options with **atom** keys (from `Tasky.Exams.PrintToken`),
+  the PDF export receives its options with **atom** keys (the grading export modal),
   while the student view derives them from the exam's `return_show_*` boolean
   columns. Normalizing at the single entry point removes a class of bug that
   type-checks and renders an empty page.
@@ -25,7 +25,7 @@ defmodule TaskyWeb.ExamSubmissionView do
   alias Tasky.Exams.Exam
   alias Tasky.Exams.ExamSubmission
 
-  @type section :: %{key: atom(), heading: String.t() | nil, doc_json: String.t()}
+  @type section :: %{key: atom(), heading: String.t() | nil, doc: map(), doc_json: String.t()}
 
   @option_keys [
     :show_points_and_mark,
@@ -42,7 +42,8 @@ defmodule TaskyWeb.ExamSubmissionView do
   }
 
   @doc """
-  The TipTap docs to render, in order. Each section becomes its own viewer.
+  The TipTap docs to render, in order. Each section becomes its own viewer
+  (`doc_json`) or its own PDF section (`doc`, `TaskyWeb.ExamSubmissionPdf`).
   """
   @spec sections(Exam.t(), ExamSubmission.t(), map()) :: [section()]
   def sections(%Exam{} = exam, %ExamSubmission{} = submission, opts) do
@@ -136,7 +137,7 @@ defmodule TaskyWeb.ExamSubmissionView do
 
   defp build_section(key, heading, nodes) do
     doc = %{"type" => "doc", "content" => nodes}
-    %{key: key, heading: heading, doc_json: Jason.encode!(doc)}
+    %{key: key, heading: heading, doc: doc, doc_json: Jason.encode!(doc)}
   end
 
   defp doc_nodes(doc) when is_map(doc), do: Map.get(doc, "content", [])

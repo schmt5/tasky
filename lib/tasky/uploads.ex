@@ -120,6 +120,45 @@ defmodule Tasky.Uploads do
     end
   end
 
+  @doc """
+  Reads the bytes of a content image from the `src` an editor image node
+  carries (`/uploads/exams/:id/:file` or `/uploads/tasks/:id/:file`), for
+  server-side rendering (`Tasky.PDF`). Returns `{:ok, {bytes, ext}}`.
+
+  Only our own upload paths resolve — never an arbitrary URL, so a document
+  cannot make the server fetch from wherever its `src` points.
+  """
+  def read_content_image("/uploads/" <> rest) do
+    case String.split(rest, "/") do
+      ["exams", id, filename] -> read_image(fetch_exam_image(id, filename), filename)
+      ["tasks", id, filename] -> read_image(fetch_task_image(id, filename), filename)
+      _other -> {:error, :unsupported_src}
+    end
+  end
+
+  def read_content_image(_src), do: {:error, :unsupported_src}
+
+  defp read_image({:ok, {{:file, path}, _content_type}}, filename) do
+    with {:ok, bytes} <- File.read(path), do: {:ok, {bytes, image_ext(filename)}}
+  end
+
+  defp read_image({:ok, {{:redirect, url}, _content_type}}, filename) do
+    case Req.get(url, retry: :transient, max_retries: 2, receive_timeout: 15_000) do
+      {:ok, %Req.Response{status: 200, body: bytes}} when is_binary(bytes) ->
+        {:ok, {bytes, image_ext(filename)}}
+
+      {:ok, %Req.Response{status: status}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp read_image({:error, reason}, _filename), do: {:error, reason}
+
+  defp image_ext(filename), do: filename |> Path.extname() |> String.downcase()
+
   ## File-type registry (attachments + answer uploads)
 
   @doc "Ordered type keys selectable for student answer upload fields."

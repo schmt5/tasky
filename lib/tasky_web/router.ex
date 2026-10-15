@@ -180,7 +180,7 @@ defmodule TaskyWeb.Router do
   end
 
   # Public serving of uploaded exam images (unguessable UUID filenames). Public
-  # so the browser and Gotenberg can load <img> sources without an auth token.
+  # so the browser can load <img> sources without an auth token.
   scope "/uploads", TaskyWeb do
     pipe_through :uploads
 
@@ -211,12 +211,8 @@ defmodule TaskyWeb.Router do
 
     get "/exams/:id/paper.pdf", ExamPaperController, :download
 
-    # Same module as the token-gated /print/exam-paper route below, on two
-    # routes in two live_sessions (a LiveView module is not bound to one).
-    # `layout: false` is a live_session option and the app chrome must not be
-    # on the page a teacher presses Cmd+P on. The param names differ ("id"
-    # here, "exam_id" there) so which credential was meant is decided by the
-    # mount clause that matches, not by a runtime guess.
+    # Its own live_session because `layout: false` is a live_session option,
+    # and the app chrome must not be on the page a teacher presses Cmd+P on.
     live_session :print_authenticated,
       layout: false,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do
@@ -319,16 +315,6 @@ defmodule TaskyWeb.Router do
     live_session :require_authenticated_user,
       on_mount: [{TaskyWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
-    end
-  end
-
-  ## Token-authenticated print views (consumed by Gotenberg's headless Chrome).
-  scope "/print", TaskyWeb do
-    pipe_through [:browser]
-
-    live_session :print, layout: false do
-      live "/exam-submission/:exam_id/:submission_id", ExamLive.Print, :print
-      live "/exam-paper/:exam_id", ExamLive.Paper, :print
     end
   end
 

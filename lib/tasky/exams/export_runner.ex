@@ -2,7 +2,7 @@ defmodule Tasky.Exams.ExportRunner do
   @moduledoc """
   Spawns a supervised Task that:
 
-    1. Asks Gotenberg to render the print-view of each submission to PDF
+    1. Renders each submission to PDF (`web.render_pdf`, Typst in-process)
     2. Packages the PDFs into a ZIP on disk
     3. Notifies the originating LiveView (`owner_pid`) of progress and completion
 
@@ -19,15 +19,12 @@ defmodule Tasky.Exams.ExportRunner do
   survives restarts — no sleeping cleanup tasks.
   """
 
-  alias Tasky.PDF.Gotenberg
-
-  # Gotenberg 8's pinning-proxy (used by --chromium-allow-list) is a single
-  # shared instance per Gotenberg process; concurrent renders race to start it
-  # and wedge it in "already started". Serialize.
-  @max_concurrency 1
-  # Derived from the client's own retry budget so the task can never be killed
-  # mid-retry — see `Tasky.PDF.Gotenberg.max_attempt_time_ms/0`.
-  @gotenberg_timeout Gotenberg.max_attempt_time_ms()
+  # Typst runs on a dirty CPU scheduler and needs some memory per render; two
+  # at a time keeps a small (1 GB, shared-CPU) machine responsive.
+  @max_concurrency 2
+  # One student's PDF is a few hundred milliseconds; a render still running
+  # after this is stuck, and it lands in FEHLER.txt instead of blocking the ZIP.
+  @render_timeout 60_000
 
   @doc "Directory the export ZIPs are written to (scanned by the janitor)."
   def export_dir, do: Path.join(System.tmp_dir!(), "tasky_exports")
@@ -50,29 +47,18 @@ defmodule Tasky.Exams.ExportRunner do
   `web` injects the web-layer concerns (this module stays free of routing
   and token signing):
 
-    * `web.print_url.(submission)` — the token-authenticated print-view URL
-      Gotenberg should render
+    * `web.render_pdf.(submission)` — `{:ok, pdf}` or `{:error, reason}`
     * `web.sign_download.(export_id, filename)` — the signed download token
   """
+  def start(_exam, [], _owner_pid, _web), do: {:error, :no_submissions}
+
   def start(exam, submissions, owner_pid, web) when is_map(web) do
-    cond do
-      not Gotenberg.enabled?() ->
-        {:error, :gotenberg_not_configured}
+    task =
+      Task.Supervisor.async_nolink(Tasky.TaskSupervisor, fn ->
+        run(exam, submissions, owner_pid, web)
+      end)
 
-      is_nil(callback_base_url()) ->
-        {:error, :callback_url_not_configured}
-
-      submissions == [] ->
-        {:error, :no_submissions}
-
-      true ->
-        task =
-          Task.Supervisor.async_nolink(Tasky.TaskSupervisor, fn ->
-            run(exam, submissions, owner_pid, web)
-          end)
-
-        {:ok, task.pid}
-    end
+    {:ok, task.pid}
   end
 
   defp run(exam, submissions, owner_pid, web) do
@@ -84,7 +70,7 @@ defmodule Tasky.Exams.ExportRunner do
       submissions
       |> Task.async_stream(
         fn submission ->
-          result = Gotenberg.url_to_pdf(web.print_url.(submission))
+          result = render(web.render_pdf, submission)
           :counters.add(counter, 1, 1)
 
           notify(
@@ -95,7 +81,7 @@ defmodule Tasky.Exams.ExportRunner do
           {submission, result}
         end,
         max_concurrency: @max_concurrency,
-        timeout: @gotenberg_timeout,
+        timeout: @render_timeout,
         on_timeout: :kill_task
       )
       |> Enum.to_list()
@@ -119,6 +105,15 @@ defmodule Tasky.Exams.ExportRunner do
       {:error, reason} ->
         notify(owner_pid, {:export_failed, reason})
     end
+  end
+
+  # The stream's tasks are linked to this one, so a render that raises (a
+  # submission deleted mid-export, a NIF error) would take the whole export
+  # down with it. Caught here, it is one more line in FEHLER.txt.
+  defp render(render_pdf, submission) do
+    render_pdf.(submission)
+  rescue
+    exception -> {:error, Exception.message(exception)}
   end
 
   # One failed render must not throw away the other N-1 good PDFs: split
@@ -222,7 +217,4 @@ defmodule Tasky.Exams.ExportRunner do
   end
 
   defp sanitize(_), do: "datei"
-
-  @doc "Base URL Gotenberg uses to fetch print pages back from the app."
-  def callback_base_url, do: Application.get_env(:tasky, :gotenberg_callback_url)
 end

@@ -22,8 +22,8 @@ defmodule Tasky.ExamPaper do
     * a `lueckentext` is left alone. On paper it is a fixed-width underline,
       which is purely a CSS concern.
 
-  The transformation is document → document. Rendering stays client-side, so
-  the architecture invariant ("no server-side JSON→HTML") holds.
+  The transformation is document → document. The browser view renders it with
+  the React editor, the PDF with the Typst templates (`Tasky.ExamPaperPdf`).
 
   ## Layout in, layout out
 
@@ -209,11 +209,11 @@ defmodule Tasky.ExamPaper do
   @doc """
   Ruled lines per blank page.
 
-  A4 is 297mm and Gotenberg prints with 0.4in margins top and bottom, leaving
-  ~277mm; the page head and the section's own padding eat ~16mm of that. At
-  9mm per line, 28 lines (252mm) overflowed onto a second sheet — every blank
-  page came out doubled. 24 lines (216mm) leave enough slack that rounding
-  cannot spill.
+  A4 is 297mm; with 12mm page margins top and bottom (`priv/typst/paper.typ`,
+  `@page` for the browser print) ~273mm remain, and the page head eats ~16mm
+  of that. At 9mm per line, 28 lines (252mm) overflowed onto a second sheet —
+  every blank page came out doubled. 24 lines (216mm) leave enough slack that
+  rounding cannot spill.
   """
   def rules_per_page, do: 24
 

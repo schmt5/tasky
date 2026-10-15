@@ -30,14 +30,17 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 | `Tasky.AI.CorrectionOrchestrator` | Subscribes to `"exam_events"` and starts runner jobs — the only link between `Exams` and the runner (no cycle). |
 | `Tasky.Uploads` | Validation + key building for stored files (type whitelists, size caps, magic-byte sniffing for images). Physical IO goes through `Tasky.Storage`. |
 | `Tasky.Storage` (+ `Local`, `R2`) | Storage behaviour (`put/fetch/delete/delete_prefix`). `Local` serves files from `UPLOADS_DIR` (dev/test); `R2` keeps a private bucket and serves via presigned URLs (prod). Selected by `STORAGE_ADAPTER` at boot. |
-| `Tasky.Exams.ExportRunner` / `ExportJanitor` | PDF export via Gotenberg (serialized, retried), ZIP with failure manifest on partial success, id-signed download tokens, janitor-based tmp cleanup. |
-| `Tasky.PDF.Gotenberg` | Thin Req client for the Gotenberg service (transient-error retries). |
+| `Tasky.Exams.ExportRunner` / `ExportJanitor` | Grading export: one PDF per submission (`TaskyWeb.ExamSubmissionPdf`, two at a time), ZIP with failure manifest on partial success, id-signed download tokens, janitor-based tmp cleanup. |
+| `Tasky.PDF` | PDF rendering with Typst (`typst` NIF, in-process, no service). Documents go in as data (`data.json`), the templates in `priv/typst/` render the Tiptap nodes; loads content images, drops non-hex colours, flattens over-deep nesting. Callers: `Tasky.ExamPaperPdf`, `TaskyWeb.ExamSubmissionPdf`. |
 
 ## Document & grading model
 
-The exam document is **Tiptap JSON**, stored as-is and rendered client-side
-everywhere (editors, read-only viewers, the PDF print view) — there is no
-server-side JSON→HTML rendering.
+The exam document is **Tiptap JSON**, stored as-is. In the browser it is
+rendered client-side everywhere (editors, read-only viewers) by the React
+editor — there is no server-side JSON→HTML rendering. The one server-side
+renderer is the PDF: `priv/typst/tiptap.typ` walks the same JSON in Typst.
+**A new editor node or mark needs a branch there too**; until it has one, it
+renders its children (unknown marks: plain text), so a PDF never fails on it.
 
 - **The paper version never touches `content`.** How tall each answer box is
   on paper lives in its own column (`exams.paper_layout`, `%{answer_id =>
@@ -150,7 +153,7 @@ binding:
 - **No raw `Repo` under `lib/tasky_web/`** — a credo `ForbiddenModule` check
   enforces it; contexts expose accessors instead.
 - Pipelines: `:browser` carries a strict CSP (`script-src 'self'`, no inline
-  scripts — even the Gotenberg print-ready signal lives in the bundle);
+  scripts);
   `/uploads` responses are sandboxed (`default-src 'none'`, nosniff, CORP);
   the guest enrollment routes are rate-limited per IP
   (`TaskyWeb.Plugs.RateLimit`; the 128-bit `exam_token` API routes are not).
@@ -219,9 +222,10 @@ the `R2_*` credentials when `STORAGE_ADAPTER=r2`. With the `local` storage
 adapter, `UPLOADS_DIR` must be set explicitly in prod — there is no volume left
 to derive it from.
 
-PDF export needs `GOTENBERG_URL` and `GOTENBERG_CALLBACK_URL` (Gotenberg's
-Chrome fetches token-authenticated `/print` pages back from the app and polls
-`window.printReady`, which the page gates on viewer render + image load).
+PDFs need nothing at runtime: Typst runs in the BEAM as a precompiled NIF
+(`rustler_precompiled` fetches it at compile time), and the fonts ship in
+`priv/typst/fonts` (DM Sans, Instrument Serif; OFL). Iterate on a template
+with the Typst CLI against a dumped `data.json`.
 
 ## Testing & CI
 

@@ -66,9 +66,8 @@ defmodule TaskyWeb.BrowserCompatTest do
     end
 
     test "no stylesheet URL points off-origin" do
-      # `style-src 'self'` would block it, Gotenberg renders the print views
-      # under the same CSP, and an exam room's firewall is the third way it
-      # fails. The previous @import was silently dead for all three reasons.
+      # `style-src 'self'` would block it, and an exam room's firewall is the
+      # second way it fails. The previous @import was silently dead for both.
       #
       # Matches `url(…)` rather than a bare hostname so the prose explaining
       # why we self-host does not trip its own guard.
