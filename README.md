@@ -26,7 +26,7 @@ brew services start postgresql@18
 
 ```sh
 mix setup        # deps, database, assets (incl. npm install)
-mix phx.server   # http://localhost:4000
+mix phx.server   # http://localhost:4001
 ```
 
 For demo data (a teacher, students, an exam with submissions):

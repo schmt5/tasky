@@ -20,7 +20,11 @@ if System.get_env("PHX_SERVER") do
   config :tasky, TaskyWeb.Endpoint, server: true
 end
 
-config :tasky, TaskyWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# Dev defaults to 4001 so it can run next to other Phoenix apps on 4000.
+default_port = if config_env() == :dev, do: "4001", else: "4000"
+
+config :tasky, TaskyWeb.Endpoint,
+  http: [port: String.to_integer(System.get_env("PORT", default_port))]
 
 # Directory where uploaded exam images are stored and served from (/uploads).
 # Must NOT live under priv/static — Plug.Static serves that dir and (in dev,
