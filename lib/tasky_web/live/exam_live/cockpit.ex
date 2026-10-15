@@ -148,7 +148,6 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   <h2 class="text-lg font-semibold text-stone-800">Papierversion</h2>
                   <p class="text-sm text-stone-500 mt-0.5">
                     Absicherung, falls ein Laptop oder der Safe Exam Browser ausfällt.
-                    Am besten zwei Exemplare drucken.
                   </p>
                 </div>
               </div>
