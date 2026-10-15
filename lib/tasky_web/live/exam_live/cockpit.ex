@@ -372,9 +372,8 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                       <button
                         id={"remove-participant-#{submission.id}"}
                         type="button"
-                        phx-click="remove_participant"
+                        phx-click="ask_remove_participant"
                         phx-value-submission_id={submission.id}
-                        data-confirm={remove_confirm(submission)}
                         class="flex items-center gap-2 text-sm text-red-600"
                       >
                         <.icon name="hero-user-minus" class="w-4 h-4 text-red-400" />
@@ -402,6 +401,75 @@ defmodule TaskyWeb.ExamLive.Cockpit do
       </div>
 
       <%!-- Start Exam Confirmation Modal --%>
+      <%= if @removing_submission do %>
+        <dialog
+          id="remove-participant-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_remove"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_remove"></div>
+          <%!-- Pulling focus into the dialog also closes the actions menu,
+               which stays open for as long as it holds focus. --%>
+          <div
+            phx-mounted={JS.focus_first()}
+            class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200"
+          >
+            <div class="p-6 border-b border-stone-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                  <.icon name="hero-user-minus" class="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-stone-800">Aus Prüfung entfernen</h3>
+                  <p class="text-xs text-stone-400 mt-0.5">{full_name(@removing_submission)}</p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <p class="text-sm text-stone-600 leading-relaxed">
+                Möchtest du
+                <span class="font-semibold text-stone-800">{full_name(@removing_submission)}</span>
+                aus der Prüfung entfernen?
+              </p>
+              <div
+                :if={remove_warning(@removing_submission)}
+                id="remove-participant-warning"
+                class="bg-red-50 rounded-lg p-3 mt-4 border border-red-100"
+              >
+                <div class="flex items-start gap-2.5">
+                  <.icon
+                    name="hero-exclamation-triangle"
+                    class="w-4 h-4 text-red-500 shrink-0 mt-0.5"
+                  />
+                  <p class="text-xs text-red-700 leading-relaxed">
+                    {remove_warning(@removing_submission)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6 pt-0 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                phx-click="close_remove"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                id="confirm-remove-participant-btn"
+                phx-click="remove_participant"
+                phx-value-submission_id={@removing_submission.id}
+                class="inline-flex items-center gap-2 bg-red-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(239,68,68,0.25)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
+              >
+                <.icon name="hero-user-minus" class="w-4 h-4" /> Entfernen
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
       <%= if @confirm_action == :start_exam do %>
         <dialog
           id="start-exam-modal"
@@ -835,6 +903,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:status_filter, "all")
      |> assign(:present, presence_state(exam.id))
      |> assign(:confirm_action, nil)
+     |> assign(:removing_submission, nil)
      |> assign(:show_assign?, false)
      |> assign(:class_filter, nil)
      |> assign(:assign_search, "")
@@ -872,19 +941,14 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
   # The removal deletes answers and files for good, so the confirmation says
   # what is at stake for this particular person.
-  defp remove_confirm(%{submitted: true} = submission) do
-    "#{full_name(submission)} hat bereits abgegeben. Aus der Prüfung entfernen und die " <>
-      "Abgabe samt Antworten und Dateien endgültig löschen?"
-  end
+  defp remove_warning(%{submitted: true}),
+    do: "Die Abgabe wird samt Antworten und Dateien endgültig gelöscht."
 
-  defp remove_confirm(%{content: content} = submission)
-       when is_map(content) and map_size(content) > 0 do
-    "#{full_name(submission)} hat bereits Antworten erfasst. Aus der Prüfung entfernen und " <>
-      "die Antworten endgültig löschen? Eine laufende Sitzung wird sofort beendet."
-  end
+  defp remove_warning(%{content: content}) when is_map(content) and map_size(content) > 0,
+    do:
+      "Die bereits erfassten Antworten werden endgültig gelöscht. Eine laufende Sitzung wird sofort beendet."
 
-  defp remove_confirm(submission),
-    do: "#{full_name(submission)} aus der Prüfung entfernen?"
+  defp remove_warning(_submission), do: nil
 
   defp full_name(submission),
     do: String.trim("#{submission.firstname} #{submission.lastname}")
@@ -1115,8 +1179,21 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     end
   end
 
+  def handle_event("ask_remove_participant", %{"submission_id" => raw}, socket) do
+    submission =
+      with id when not is_nil(id) <- Params.int(raw),
+           do: Exams.get_submission(socket.assigns.exam, id)
+
+    {:noreply, assign(socket, :removing_submission, submission)}
+  end
+
+  def handle_event("close_remove", _params, socket) do
+    {:noreply, assign(socket, :removing_submission, nil)}
+  end
+
   def handle_event("remove_participant", %{"submission_id" => raw}, socket) do
     exam = socket.assigns.exam
+    socket = assign(socket, :removing_submission, nil)
 
     with id when not is_nil(id) <- Params.int(raw),
          submission when not is_nil(submission) <- Exams.get_submission(exam, id),

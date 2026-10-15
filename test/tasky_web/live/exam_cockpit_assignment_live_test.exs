@@ -189,9 +189,27 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       {:ok, view, _html} = open_cockpit(conn, teacher, exam)
 
       view |> element("#remove-participant-#{submission.id}") |> render_click()
+      view |> element("#confirm-remove-participant-btn") |> render_click()
 
       assert Exams.list_exam_submissions(exam) == []
+      refute has_element?(view, "#remove-participant-modal")
       assert open_assign_dialog(view) =~ "assign-student-#{student.id}"
+    end
+
+    test "keeps the participant when the removal is cancelled", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned")
+      student = user_fixture(%{role: "student"})
+      {:ok, submission} = Exams.assign_student(scope, exam, student.id)
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+      view |> element("#remove-participant-#{submission.id}") |> render_click()
+      assert has_element?(view, "#remove-participant-modal")
+      refute has_element?(view, "#remove-participant-warning")
+
+      view |> render_keydown("close_remove", %{"key" => "Escape"})
+
+      refute has_element?(view, "#remove-participant-modal")
+      assert length(Exams.list_exam_submissions(exam)) == 1
     end
 
     test "removes a participant who already handed in, after the exam was stopped", %{
@@ -205,12 +223,11 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       {:ok, view, _html} = open_cockpit(conn, teacher, exam)
 
-      assert has_element?(
-               view,
-               ~s{#remove-participant-#{submission.id}[data-confirm*="bereits abgegeben"]}
-             )
-
       view |> element("#remove-participant-#{submission.id}") |> render_click()
+      # A handed-in submission is deleted with it, so the dialog says so.
+      assert has_element?(view, "#remove-participant-warning")
+
+      view |> element("#confirm-remove-participant-btn") |> render_click()
 
       assert Exams.list_exam_submissions(exam) == []
       refute has_element?(view, "#submissions-#{submission.id}")
@@ -222,6 +239,7 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
 
       {:ok, view, _html} = open_cockpit(conn, teacher, exam)
       view |> element("#remove-participant-#{submission.id}") |> render_click()
+      view |> element("#confirm-remove-participant-btn") |> render_click()
 
       assert Exams.list_exam_submissions(exam) == []
     end
