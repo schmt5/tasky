@@ -5,7 +5,8 @@
 //
 //   * Focuses the first visible [data-bulk-power-row] on mount.
 //   * J/L on a focused row → push "set_group_verdict" (full points / zero)
-//     with that card's {block index, group text} payload. K opens the manual
+//     with that card's {block index, group text} payload — or, on a checkbox
+//     pattern card, "set_pattern_verdict" with its {group, pattern}. K opens the manual
 //     points input ("open_manual_input"); the server answers with a
 //     "focus-manual-input" event so the input receives focus. Enter submits
 //     the form natively, Escape cancels via phx-keydown on the input.
@@ -50,6 +51,21 @@ export const BulkPowerKeys = {
       if (!row) return;
 
       const key = e.key.toLowerCase();
+
+      // A checkbox pattern card judges all checkboxes of the pattern at once;
+      // it has no manual-points input, so K does nothing there.
+      if (row.dataset.patternKey) {
+        const verdict = { j: "correct", l: "wrong" }[key];
+        if (!verdict) return;
+        e.preventDefault();
+        this.pushEvent("set_pattern_verdict", {
+          group: row.dataset.patternGroup,
+          pattern: row.dataset.patternKey,
+          verdict,
+        });
+        return;
+      }
+
       const index = row.dataset.blockIndex;
       const text = row.dataset.groupText || "";
 

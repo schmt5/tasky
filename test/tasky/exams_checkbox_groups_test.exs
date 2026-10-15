@@ -158,20 +158,82 @@ defmodule Tasky.ExamsCheckboxGroupsTest do
       assert group =~ "1 von 3 wie in der Musterlösung"
     end
 
-    test "the bulk view groups the checkboxes of one list", %{conn: conn} do
+    test "the bulk view groups the checkboxes of one list by answer pattern", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam()
       submit(exam, "anna", [true, false, false])
+      submit(exam, "ben", [true, false, false])
+      submit(exam, "cara", [false, true, false])
 
-      {:ok, view, _html} =
-        conn
-        |> log_in_user(teacher)
-        |> live(~p"/exams/#{exam}/correction/bulk/q-1")
+      {:ok, view, _html} = open_bulk(conn, teacher, exam)
 
-      group = view |> element("#bulk-checkbox-group-1") |> render()
+      assert has_element?(view, "#bulk-checkbox-solution-1")
+      # Anna and Ben ticked like the solution, Cara swapped Bern for Zürich.
+      assert view |> element("#bulk-pattern-1-100") |> render() =~ "entspricht der Lösung"
+      assert view |> element("#bulk-pattern-1-100") |> render() =~ "2× abgegeben"
 
-      assert group =~ "Checkboxen · 3 Stück"
-      assert group =~ "Bern → angekreuzt"
-      assert group =~ "Zürich → nicht angekreuzt"
+      cara = view |> element("#bulk-pattern-1-010") |> render()
+      assert cara =~ "1× abgegeben"
+      assert cara =~ "fehlt"
+      assert cara =~ "zu viel angekreuzt"
+      assert cara =~ "1 / 3 P."
+      refute cara =~ "entspricht der Lösung"
+    end
+
+    test "a pattern verdict judges every checkbox of the pattern at once", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam()
+      anna = submit(exam, "anna", [true, false, false])
+      cara = submit(exam, "cara", [false, true, false])
+
+      {:ok, view, _html} = open_bulk(conn, teacher, exam)
+
+      view
+      |> element("#bulk-pattern-1-010 button[phx-value-verdict=correct]")
+      |> render_click()
+
+      assert verdicts(exam, cara) == %{"c1" => "correct", "c2" => "correct", "c3" => "correct"}
+      assert verdicts(exam, anna) == %{}
+      assert view |> element("#bulk-pattern-1-010") |> render() =~ "3 / 3 P."
+
+      # Pressing the active verdict again hands the pattern back to the defaults.
+      view
+      |> element("#bulk-pattern-1-010 button[phx-value-verdict=correct]")
+      |> render_click()
+
+      assert verdicts(exam, cara) == %{}
+    end
+
+    test "a click on one checkbox of a pattern flips just that checkbox", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam()
+      anna = submit(exam, "anna", [true, false, false])
+
+      {:ok, view, _html} = open_bulk(conn, teacher, exam)
+
+      view |> element("#bulk-pattern-option-1-100-2") |> render_click()
+      assert verdicts(exam, anna) == %{"c2" => "wrong"}
+      assert has_element?(view, ~s(#bulk-pattern-option-1-100-2[data-verdict="wrong"]))
+
+      # Back on the default, nothing explicit is left behind.
+      view |> element("#bulk-pattern-option-1-100-2") |> render_click()
+      assert verdicts(exam, anna) == %{}
+    end
+
+    test "students of one pattern judged differently show the checkbox as mixed", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam()
+      anna = submit(exam, "anna", [true, false, false])
+      submit(exam, "ben", [true, false, false])
+      {:ok, _} = Exams.set_block_verdict(scope, anna, "q-1", 1, "wrong")
+
+      {:ok, view, _html} = open_bulk(conn, teacher, exam)
+
+      assert has_element?(view, ~s(#bulk-pattern-option-1-100-1[data-verdict="partial"]))
+      assert view |> element("#bulk-pattern-option-1-100-1") |> render() =~ "uneinheitlich"
     end
   end
+
+  defp open_bulk(conn, teacher, exam) do
+    conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/bulk/q-1")
+  end
+
+  defp verdicts(exam, submission),
+    do: Exams.get_submission(exam, submission.id).block_verdicts || %{}
 end

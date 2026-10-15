@@ -1,6 +1,7 @@
 defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   use TaskyWeb, :live_view
 
+  alias Tasky.Correction.CheckboxPatterns
   alias Tasky.Exams
   alias Tasky.Grading
 
@@ -55,21 +56,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
                 <div class="space-y-4">
                   <%= for section <- block_sections(@answer_blocks) do %>
                     <%= if section.kind == :checkboxes do %>
-                      <%!-- The checkboxes of one list are one question. --%>
-                      <div
-                        id={"bulk-checkbox-group-#{section.id}"}
-                        class="rounded-[16px] border border-stone-200 bg-stone-50/60 p-3 space-y-3"
-                      >
-                        <div class="flex items-center gap-2 px-2 pt-1">
-                          <.icon name="hero-check-circle" class="w-4 h-4 text-stone-400" />
-                          <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                            Checkboxen · {length(section.blocks)} Stück
-                          </span>
-                        </div>
-                        <%= for block <- section.blocks do %>
-                          {render_block_section(assigns, block)}
-                        <% end %>
-                      </div>
+                      {render_checkbox_section(assigns, section)}
                     <% else %>
                       {render_block_section(assigns, section.block)}
                     <% end %>
@@ -324,6 +311,226 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     </div>
     """
   end
+
+  # The checkboxes of one list are one question, so they are judged by answer
+  # pattern: one card per combination of ticks, whatever each checkbox's
+  # verdict is stored as underneath (see `Tasky.Correction.CheckboxPatterns`).
+  defp render_checkbox_section(assigns, section) do
+    assigns =
+      assigns
+      |> assign(:section, section)
+      |> assign(:patterns, CheckboxPatterns.build(section.blocks))
+
+    ~H"""
+    <div
+      id={"bulk-checkbox-group-#{@section.id}"}
+      class="rounded-[16px] border border-stone-200 bg-stone-50/60 p-3 space-y-3"
+    >
+      <div class="flex items-center justify-between gap-4 flex-wrap px-2 pt-1">
+        <div class="flex items-center gap-2">
+          <.icon name="hero-check-circle" class="w-4 h-4 text-stone-400" />
+          <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            Checkboxen · {length(@section.blocks)} Optionen · {length(@patterns)} Antwortmuster
+          </span>
+        </div>
+        <div
+          :if={Enum.any?(@section.blocks, &(&1.sample_answers != []))}
+          id={"bulk-checkbox-solution-#{@section.id}"}
+          class="flex items-center gap-3 flex-wrap text-xs text-stone-500"
+        >
+          <span class="font-semibold uppercase tracking-wide">Musterlösung:</span>
+          <span
+            :for={block <- @section.blocks}
+            class="inline-flex items-center gap-1.5 text-stone-700"
+          >
+            <.checkbox_mark checked={block.sample_answers == ["angekreuzt"]} />
+            {checkbox_label(block)}
+          </span>
+        </div>
+      </div>
+
+      <%= for pattern <- @patterns do %>
+        {render_pattern_card(assigns, pattern)}
+      <% end %>
+    </div>
+    """
+  end
+
+  defp render_pattern_card(assigns, pattern) do
+    assigns = assign(assigns, :pattern, pattern)
+
+    ~H"""
+    <div
+      id={"bulk-pattern-#{@section.id}-#{@pattern.key}"}
+      tabindex="0"
+      data-bulk-power-row="true"
+      data-pattern-group={@section.id}
+      data-pattern-key={@pattern.key}
+      class="bg-white rounded-[12px] border border-stone-200 px-5 py-4 flex items-start gap-6 outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
+    >
+      <ul class="flex-1 min-w-0 space-y-1">
+        <li :for={option <- @pattern.options}>
+          <button
+            type="button"
+            tabindex="-1"
+            id={"bulk-pattern-option-#{@section.id}-#{@pattern.key}-#{option.index}"}
+            phx-click="toggle_pattern_option"
+            phx-value-group={@section.id}
+            phx-value-pattern={@pattern.key}
+            phx-value-index={option.index}
+            data-verdict={option_verdict_key(option.verdict)}
+            class={[
+              "group w-full flex items-center gap-3 rounded-md px-2 py-1 -mx-2 text-left transition-colors duration-100 hover:bg-stone-50",
+              option_text_class(option.verdict)
+            ]}
+          >
+            <.checkbox_mark checked={option.state == :checked} missing={option.state == :missing} />
+            <span class="font-serif text-lg leading-snug">{checkbox_label(option)}</span>
+            <span
+              :if={option.deviation == :extra}
+              class="text-[11px] font-semibold uppercase tracking-wide text-red-500"
+            >
+              zu viel angekreuzt
+            </span>
+            <span
+              :if={option.deviation == :missing}
+              class="text-[11px] font-semibold uppercase tracking-wide text-red-500"
+            >
+              fehlt
+            </span>
+            <span class="ml-auto inline-flex items-center gap-1 text-xs font-medium text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+              <.icon name={option_verdict_icon(option.verdict)} class="w-4 h-4" />
+              {option_points_label(option)}
+            </span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="shrink-0 flex flex-col items-end gap-2 max-w-[22rem]">
+        <span
+          :if={@pattern.matches_solution?}
+          class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5"
+        >
+          <.icon name="hero-check" class="w-3.5 h-3.5" /> entspricht der Lösung
+        </span>
+        <div class="text-xs text-stone-500 text-right">
+          {@pattern.count}× abgegeben<span :if={@pattern.points != nil and @pattern.max_points}> · {format_max_points(@pattern.points)} / {format_max_points(@pattern.max_points)} P.</span>
+        </div>
+        <div class="text-xs text-stone-500 text-right">
+          {Enum.map_join(@pattern.students, " · ", &student_name/1)}
+        </div>
+        <div class="inline-flex items-center gap-0 rounded-lg border border-stone-200 bg-white p-0.5">
+          <.pattern_verdict_button
+            group={@section.id}
+            pattern={@pattern.key}
+            verdict="correct"
+            active={@pattern.verdict == "correct"}
+            label={full_points_label(@pattern.max_points)}
+            kbd_label="J"
+            active_class="bg-green-500 text-white shadow-[0_2px_8px_rgba(34,197,94,0.25)]"
+          />
+          <.pattern_verdict_button
+            group={@section.id}
+            pattern={@pattern.key}
+            verdict="wrong"
+            active={@pattern.verdict == "wrong"}
+            label="0 Punkte"
+            kbd_label="L"
+            active_class="bg-red-500 text-white shadow-[0_2px_8px_rgba(239,68,68,0.25)]"
+          />
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :checked, :boolean, required: true
+  attr :missing, :boolean, default: false
+
+  # A drawn checkbox, so a pattern reads like the question on the sheet.
+  defp checkbox_mark(assigns) do
+    ~H"""
+    <span
+      aria-label={
+        cond do
+          @missing -> "keine Antwort"
+          @checked -> "angekreuzt"
+          true -> "nicht angekreuzt"
+        end
+      }
+      class={[
+        "inline-flex items-center justify-center w-[18px] h-[18px] shrink-0 rounded-[4px] border-[1.5px]",
+        cond do
+          @missing -> "border-dashed border-stone-300 bg-white"
+          @checked -> "border-stone-800 bg-stone-800 text-white"
+          true -> "border-stone-400 bg-white"
+        end
+      ]}
+    >
+      <.icon :if={@checked and not @missing} name="hero-check-mini" class="w-3.5 h-3.5" />
+    </span>
+    """
+  end
+
+  attr :group, :string, required: true
+  attr :pattern, :string, required: true
+  attr :verdict, :string, required: true
+  attr :active, :boolean, required: true
+  attr :label, :string, required: true
+  attr :kbd_label, :string, required: true
+  attr :active_class, :string, required: true
+
+  defp pattern_verdict_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      tabindex="-1"
+      phx-click="set_pattern_verdict"
+      phx-value-group={@group}
+      phx-value-pattern={@pattern}
+      phx-value-verdict={@verdict}
+      class={[
+        "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md transition-all duration-100",
+        if(@active, do: @active_class, else: "text-stone-500 hover:bg-stone-50 hover:text-stone-700")
+      ]}
+    >
+      <span>{@label}</span>
+      <kbd class={[
+        "px-1.5 py-0.5 rounded font-mono text-[10px] border",
+        if(@active,
+          do: "bg-white/25 border-white/40 text-white",
+          else: "bg-stone-100 border-stone-200 text-stone-700"
+        )
+      ]}>
+        {@kbd_label}
+      </kbd>
+    </button>
+    """
+  end
+
+  defp checkbox_label(%{label: label, index: index}) when label in [nil, ""],
+    do: "Checkbox #{index + 1}"
+
+  defp checkbox_label(%{label: label}), do: label
+
+  defp option_verdict_key(v) when v in ["correct", "wrong"], do: v
+  defp option_verdict_key(_partial), do: "partial"
+
+  defp option_text_class("correct"), do: "text-emerald-700"
+  defp option_text_class("wrong"), do: "text-red-600"
+  defp option_text_class(_partial), do: "text-amber-600"
+
+  defp option_verdict_icon("correct"), do: "hero-check-circle"
+  defp option_verdict_icon("wrong"), do: "hero-x-circle"
+  defp option_verdict_icon(_partial), do: "hero-adjustments-horizontal"
+
+  defp option_points_label(%{verdict: :mixed}), do: "uneinheitlich"
+
+  defp option_points_label(%{verdict: v, max_points: max}) when is_number(max),
+    do: "#{format_max_points(Grading.awarded_points(v, max))} / #{format_max_points(max)} P."
+
+  defp option_points_label(%{verdict: "correct"}), do: "zählt als richtig"
+  defp option_points_label(_option), do: "zählt als falsch"
 
   # Consecutive checkboxes of the same list become one section; every other
   # block stands alone.
@@ -702,6 +909,48 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     end
   end
 
+  # J / L on a pattern card, or its buttons: every checkbox of the pattern gets
+  # the same verdict; pressing the active one again hands the pattern back to
+  # the system's per-checkbox defaults.
+  def handle_event(
+        "set_pattern_verdict",
+        %{"group" => group, "pattern" => key, "verdict" => verdict},
+        socket
+      )
+      when verdict in ["correct", "wrong"] do
+    case find_pattern(socket, group, key) do
+      nil ->
+        {:noreply, socket}
+
+      pattern ->
+        new_verdict = if pattern.verdict == verdict, do: nil, else: verdict
+        verdicts = Map.new(pattern.options, &{&1.index, new_verdict})
+
+        {:noreply, save_pattern_verdicts(socket, pattern, verdicts)}
+    end
+  end
+
+  # A click on one checkbox of a pattern flips just that checkbox between
+  # counted right and counted wrong, for everyone with this pattern. Landing on
+  # the system's default stores no explicit verdict, as with the group cards.
+  def handle_event(
+        "toggle_pattern_option",
+        %{"group" => group, "pattern" => key, "index" => idx_str},
+        socket
+      ) do
+    idx = TaskyWeb.Params.int(idx_str)
+
+    with %{} = pattern <- find_pattern(socket, group, key),
+         %{} = option <- Enum.find(pattern.options, &(&1.index == idx)) do
+      flipped = if option.verdict == "correct", do: "wrong", else: "correct"
+      verdict = if flipped == option.default_verdict, do: nil, else: flipped
+
+      {:noreply, save_pattern_verdicts(socket, pattern, %{idx => verdict})}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   def handle_event("open_manual_input", %{"index" => idx_str, "text" => text}, socket) do
     idx = TaskyWeb.Params.int(idx_str)
     group_text = if text == "", do: nil, else: text
@@ -803,6 +1052,27 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   def handle_info({:bulk_correction_progress, _}, socket), do: {:noreply, socket}
   def handle_info({:bulk_correction_done, _}, socket), do: {:noreply, refresh_assigns(socket)}
   def handle_info({:bulk_correction_cancelled, _}, socket), do: {:noreply, socket}
+
+  defp find_pattern(socket, group, key) do
+    socket.assigns.answer_blocks
+    # The list id comes back from the client as a string.
+    |> Enum.filter(&(&1.type == "taskItem" and to_string(&1.group) == group))
+    |> CheckboxPatterns.build()
+    |> Enum.find(&(&1.key == key))
+  end
+
+  defp save_pattern_verdicts(socket, pattern, verdicts_by_index) do
+    result =
+      Exams.set_block_verdicts_bulk(
+        socket.assigns.current_scope,
+        socket.assigns.exam,
+        socket.assigns.current_part.id,
+        verdicts_by_index,
+        Enum.map(pattern.students, & &1.submission_id)
+      )
+
+    socket |> flash_bulk_verdict_result(result) |> refresh_assigns()
+  end
 
   # The return value used to be discarded outright, so a failed batch showed the
   # teacher nothing but a flicker back to the previous state.

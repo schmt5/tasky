@@ -2118,6 +2118,17 @@ defmodule Tasky.Exams do
   """
   def set_block_verdict_bulk(scope, %Exam{} = exam, part_id, index, verdict, submission_ids)
       when is_binary(part_id) and is_integer(index) and is_list(submission_ids) do
+    set_block_verdicts_bulk(scope, exam, part_id, %{index => verdict}, submission_ids)
+  end
+
+  @doc """
+  Like `set_block_verdict_bulk/6`, for several blocks of one part at once —
+  `verdicts_by_index` is `%{block_index => verdict}` (`nil` clears the
+  teacher's verdict). The checkbox patterns of the grouped view judge every
+  checkbox of a list together, and this keeps that one write per submission.
+  """
+  def set_block_verdicts_bulk(scope, %Exam{} = exam, part_id, verdicts_by_index, submission_ids)
+      when is_binary(part_id) and is_map(verdicts_by_index) and is_list(submission_ids) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
       result =
         Repo.transaction(fn ->
@@ -2125,7 +2136,7 @@ defmodule Tasky.Exams do
 
           for submission <- lock_submissions_by_ids!(exam, submission_ids),
               {:ok, changes} <-
-                [block_verdict_changes(submission, exam, part_id, index, verdict)] do
+                [part_verdict_changes(submission, exam, part_id, verdicts_by_index)] do
             case submission |> Ecto.Changeset.change(changes) |> Repo.update() do
               {:ok, updated} -> updated
               {:error, changeset} -> Repo.rollback(changeset)
@@ -2450,7 +2461,7 @@ defmodule Tasky.Exams do
       %{
         text: "fliegen" | nil,            # nil = "no answer"
         count: 18,
-        students: [%{submission_id, firstname, lastname}, ...],
+        students: [%{submission_id, firstname, lastname, verdict}, ...],
         default_verdict: "correct" | "wrong",
         current_verdict: "correct" | "half" | "wrong" | number | nil | :mixed,
         diff: [{:eq | :ins | :del, string}, ...],
@@ -2611,9 +2622,12 @@ defmodule Tasky.Exams do
     nearest = nearest_sample(text, sample_answers)
     diff = diff_against(text, nearest)
 
+    # `verdict` is this student's own explicit verdict for the block (nil =
+    # none). The checkbox patterns regroup students across blocks and need it
+    # per person, not just the group's shared value.
     students =
-      Enum.map(subs, fn s ->
-        %{submission_id: s.id, firstname: s.firstname, lastname: s.lastname}
+      Enum.zip_with(subs, verdicts, fn s, verdict ->
+        %{submission_id: s.id, firstname: s.firstname, lastname: s.lastname, verdict: verdict}
       end)
 
     %{
