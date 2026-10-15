@@ -29,16 +29,27 @@ defmodule TaskyWeb.ExamLive.Paper do
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="mb-3">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-              %{label: "Papierversion"}
-            ]} />
+            <.breadcrumbs crumbs={
+              [
+                %{label: "Prüfungen", navigate: ~p"/exams"},
+                %{label: @exam.name, navigate: ~p"/exams/#{@exam}"}
+              ] ++
+                if(@from_cockpit?,
+                  do: [%{label: "Cockpit", navigate: ~p"/exams/#{@exam}/cockpit"}],
+                  else: []
+                ) ++
+                [%{label: "Papierversion"}]
+            } />
           </div>
 
           <div class="flex items-center justify-between gap-4 flex-wrap">
             <div class="flex items-center gap-3">
-              <.back_button navigate={~p"/exams/#{@exam}"} tooltip="Zurück zur Prüfung" />
+              <.back_button
+                navigate={
+                  if(@from_cockpit?, do: ~p"/exams/#{@exam}/cockpit", else: ~p"/exams/#{@exam}")
+                }
+                tooltip={if(@from_cockpit?, do: "Zurück zum Cockpit", else: "Zurück zur Prüfung")}
+              />
               <div>
                 <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
                   Papierversion
@@ -132,10 +143,15 @@ defmodule TaskyWeb.ExamLive.Paper do
   end
 
   @impl true
-  def mount(%{"id" => id}, _session, socket) do
+  def mount(%{"id" => id} = params, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
 
-    {:ok, assign_paper(socket, exam)}
+    # The page is reached from the exam page and from the cockpit; the back
+    # button and breadcrumbs lead to whichever one the teacher came from.
+    {:ok,
+     socket
+     |> assign(:from_cockpit?, params["from"] == "cockpit")
+     |> assign_paper(exam)}
   end
 
   defp assign_paper(socket, exam) do

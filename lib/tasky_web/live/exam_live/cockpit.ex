@@ -155,7 +155,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
               <%!-- Links to the paper view, not straight to the PDF: the
                    teacher sizes the answer boxes there first. --%>
               <.link
-                navigate={~p"/exams/#{@exam}/paper"}
+                navigate={~p"/exams/#{@exam}/paper?from=cockpit"}
                 id="paper-version-link"
                 class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
               >

@@ -62,6 +62,18 @@ defmodule TaskyWeb.ExamPaperLiveTest do
       assert has_element?(view, ~s(nav a[href="/exams/#{exam.id}"]))
     end
 
+    test "leads back to the cockpit when opened from there", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam()
+      conn = log_in_user(conn, teacher)
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}/paper?from=cockpit")
+      assert has_element?(view, ~s(nav a[href="/exams/#{exam.id}/cockpit"]))
+      assert has_element?(view, ~s(.tooltip a[href="/exams/#{exam.id}/cockpit"]))
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}/paper")
+      refute has_element?(view, ~s(a[href="/exams/#{exam.id}/cockpit"]))
+    end
+
     test "another teacher cannot open it", %{conn: conn} do
       %{exam: exam} = create_exam()
       other = user_fixture(%{role: "teacher"})
