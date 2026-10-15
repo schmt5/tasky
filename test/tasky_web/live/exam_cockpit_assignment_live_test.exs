@@ -399,4 +399,22 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
       assert has_element?(view, ~s{#status-filter-all[aria-pressed="true"]})
     end
   end
+
+  describe "paper version card" do
+    test "is shown until the exam starts", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = setup_exam("assigned")
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+      assert has_element?(view, "#paper-version-card #paper-version-link")
+    end
+
+    test "is gone while the exam runs and after it ended", %{conn: conn} do
+      for status <- ["running", "finished"] do
+        %{teacher: teacher, exam: exam} = setup_exam("assigned", status)
+        {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+
+        refute has_element?(view, "#paper-version-card")
+      end
+    end
+  end
 end

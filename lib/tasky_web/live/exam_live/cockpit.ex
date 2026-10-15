@@ -136,8 +136,13 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           </div>
         <% end %>
 
-        <%!-- Paper Version Card --%>
-        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
+        <%!-- Paper Version Card — only before the start: once the exam runs,
+             the copies are either printed or it is too late for them. --%>
+        <div
+          :if={@exam.status not in ["running", "finished"]}
+          id="paper-version-card"
+          class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]"
+        >
           <div class="p-6">
             <div class="flex items-start justify-between gap-4 flex-wrap">
               <div class="flex items-center gap-3">
