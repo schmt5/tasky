@@ -470,7 +470,7 @@ defmodule TaskyWeb.ExamLive.Content do
                     <span>
                       Jede Alternative wird mit denselben Regeln geprüft wie eine einzelne
                       Musterlösung – auch „Gross-/Kleinschreibung ignorieren“,
-                      „Rechtschreibung ignorieren“ und „Satzzeichen ignorieren“.
+                      „Satzzeichen ignorieren“ und „Rechtschreibung ignorieren“.
                     </span>
                   </li>
                   <li class="flex gap-2">
@@ -1261,10 +1261,10 @@ defmodule TaskyWeb.ExamLive.Content do
     [
       {:ignore_case, "Gross-/Kleinschreibung ignorieren",
        "Bei der Auto-Korrektur dieser Aufgabe wird Gross-/Kleinschreibung nicht bewertet."},
-      {:ignore_spelling, "Rechtschreibung ignorieren",
-       "Bei der Auto-Korrektur dieser Aufgabe werden Rechtschreibfehler nicht streng bewertet (Fuzzy-Matching ab Jaro-Ähnlichkeit ≥ 0,85)."},
       {:ignore_punctuation, "Satzzeichen ignorieren",
-       "Punkt, Komma, Ausrufe- und Fragezeichen usw. werden beim Vergleich nicht beachtet."}
+       "Punkt, Komma, Ausrufe- und Fragezeichen usw. werden beim Vergleich nicht beachtet."},
+      {:ignore_spelling, "Rechtschreibung ignorieren",
+       "Bei der Auto-Korrektur dieser Aufgabe werden Rechtschreibfehler nicht streng bewertet (Fuzzy-Matching ab Jaro-Ähnlichkeit ≥ 0,85)."}
     ]
   end
 
