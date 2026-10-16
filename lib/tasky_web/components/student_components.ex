@@ -75,7 +75,7 @@ defmodule TaskyWeb.StudentComponents do
 
         <div class="w-6 h-[1.5px] bg-stone-200 rounded-sm my-5"></div>
 
-        <h3 class="font-serif text-[34px] font-normal text-stone-900 leading-tight mb-2.5 animate-[fadeUp_0.4s_0.15s_ease_both]">
+        <h3 class="text-[34px] font-semibold text-stone-900 leading-tight mb-2.5 animate-[fadeUp_0.4s_0.15s_ease_both]">
           {render_slot(@title)}
         </h3>
 

@@ -433,7 +433,7 @@ defmodule TaskyWeb.ExamLive.Grading do
           <p
             id="grading-stats-average"
             class={[
-              "font-serif text-[52px] leading-none mt-2 tabular-nums",
+              "text-[52px] font-semibold leading-none mt-2 tabular-nums",
               mark_color_class(@stats.average)
             ]}
           >

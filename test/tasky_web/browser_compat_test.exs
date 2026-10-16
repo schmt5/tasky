@@ -47,10 +47,10 @@ defmodule TaskyWeb.BrowserCompatTest do
 
   describe "self-hosted fonts" do
     @faces ~w(
-      dm-sans-latin-wght-normal
-      dm-sans-latin-wght-italic
-      dm-sans-latin-ext-wght-normal
-      dm-sans-latin-ext-wght-italic
+      nunito-latin-wght-normal
+      nunito-latin-wght-italic
+      nunito-latin-ext-wght-normal
+      nunito-latin-ext-wght-italic
       instrument-serif-latin-400-normal
       instrument-serif-latin-400-italic
       instrument-serif-latin-ext-400-normal

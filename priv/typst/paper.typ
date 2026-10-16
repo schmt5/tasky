@@ -18,13 +18,13 @@
 #let render(data) = {
   set document(title: data.exam_name + " – Papierversion")
   set page(paper: "a4", margin: (x: 14mm, y: 12mm))
-  set text(font: "DM Sans", size: 12pt, fill: stone.s900, lang: "de")
+  set text(font: "Nunito", size: 12pt, fill: stone.s900, lang: "de")
   set par(leading: 0.75em, spacing: 0.75em)
 
   block(below: 8mm, {
     text(size: 7.5pt, tracking: 0.14em, fill: stone.s500, upper[Papierversion])
     v(1mm)
-    block(below: 6mm, text(font: "Instrument Serif", size: 26pt, data.exam_name))
+    block(below: 6mm, text(weight: "bold", size: 26pt, data.exam_name))
     grid(columns: (2fr, 1fr, 1fr), column-gutter: 6mm, field[Name], field[Klasse], field[Datum])
     v(4mm)
     grid(

@@ -42,8 +42,8 @@ Defined in `assets/css/app.css` using Tailwind v4's `@theme`:
 ### Typography
 
 **Font Families:**
-- Primary: `DM Sans` (Google Fonts) with system font fallback
-- Serif: `Instrument Serif` (Google Fonts) for headlines
+- Primary: `Nunito` (self-hosted, `priv/static/fonts`) with system font fallback; also the only font in the PDFs
+- Serif: `Instrument Serif` (self-hosted) for the large page titles only (`<h1 class="font-serif">`)
 - Configured in CSS custom properties for easy reference
 
 **Font Sizes:**
@@ -221,7 +221,7 @@ Used in hero sections for status indicators.
 ### Core Files
 
 1. **`assets/css/app.css`**
-   - Added Google Fonts import (DM Sans, Instrument Serif)
+   - Self-hosted `@font-face` rules (Nunito, Instrument Serif)
    - Custom theme tokens via `@theme`
    - No custom CSS classes (pure Tailwind)
 

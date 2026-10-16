@@ -195,7 +195,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       <div class="px-5 py-4 border-b border-stone-100 flex items-center justify-between gap-4">
         <div class="flex items-center gap-2 min-w-0">
           <.icon name="hero-document-text" class="w-4 h-4 text-stone-400 shrink-0" />
-          <h2 class="font-serif text-lg text-stone-800 truncate">Aufgabe</h2>
+          <h2 class="text-lg font-semibold text-stone-800 truncate">Aufgabe</h2>
         </div>
         <div class="flex items-center gap-2 flex-wrap justify-end">
           <span class={[
@@ -218,7 +218,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         </div>
       </div>
       <div class="p-5">
-        <h3 class="font-serif text-xl text-stone-800 leading-snug">
+        <h3 class="text-xl font-semibold text-stone-800 leading-snug">
           {@current_part.label}
         </h3>
       </div>
@@ -263,7 +263,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
           <.icon name="hero-information-circle" class="w-4 h-4 text-stone-400" />
-          <h2 class="font-serif text-lg text-stone-800">Antworten</h2>
+          <h2 class="text-lg font-semibold text-stone-800">Antworten</h2>
         </div>
         <div class="text-xs text-stone-500">
           {length(@answer_blocks)}
@@ -282,17 +282,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       <div class="flex items-center gap-6 mt-3 text-sm">
         <span class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-green-500"></span>
-          <span class="font-serif text-xl text-stone-800 tabular-nums">{@totals.correct}</span>
+          <span class="text-xl font-semibold text-stone-800 tabular-nums">{@totals.correct}</span>
           <span class="text-stone-500">Volle Punkte</span>
         </span>
         <span class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
-          <span class="font-serif text-xl text-stone-800 tabular-nums">{@totals.half}</span>
+          <span class="text-xl font-semibold text-stone-800 tabular-nums">{@totals.half}</span>
           <span class="text-stone-500">Manuell</span>
         </span>
         <span class="inline-flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-red-500"></span>
-          <span class="font-serif text-xl text-stone-800 tabular-nums">{@totals.wrong}</span>
+          <span class="text-xl font-semibold text-stone-800 tabular-nums">{@totals.wrong}</span>
           <span class="text-stone-500">0 Punkte</span>
         </span>
       </div>
@@ -776,7 +776,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       class="bg-white rounded-[12px] border border-stone-200 px-5 py-4 flex items-center gap-4 outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
     >
       <div class="flex-1 min-w-0">
-        <div class="font-serif text-lg text-stone-800">
+        <div class="text-lg text-stone-800">
           <%= if @group.text do %>
             {@group.text}
           <% else %>

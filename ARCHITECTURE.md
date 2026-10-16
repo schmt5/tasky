@@ -224,8 +224,12 @@ to derive it from.
 
 PDFs need nothing at runtime: Typst runs in the BEAM as a precompiled NIF
 (`rustler_precompiled` fetches it at compile time), and the fonts ship in
-`priv/typst/fonts` (DM Sans, Instrument Serif; OFL). Iterate on a template
-with the Typst CLI against a dumped `data.json`.
+`priv/typst/fonts` (Nunito; OFL). Typst needs static cuts, so the TTFs are
+instances of the variable fonts in `googlefonts/nunito`
+(`fonttools varLib.instancer 'Nunito[wght].ttf' wght=600
+--update-name-table`, likewise for the italic file and 400/500/700), with the
+PostScript name set to the file name. Iterate on a template with the Typst CLI
+against a dumped `data.json`.
 
 ## Testing & CI
 

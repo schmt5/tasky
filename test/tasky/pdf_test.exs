@@ -134,6 +134,29 @@ defmodule Tasky.PDFTest do
       assert {:ok, "%PDF" <> _} = PDF.render("submission", data)
     end
 
+    test "sets every text in Nunito, code aside" do
+      # Typst silently falls back to its bundled fonts when a family is
+      # missing from priv/typst/fonts, so a renamed or deleted file would
+      # otherwise only show up as a PDF that looks slightly off.
+      data =
+        submission_data([
+          %{"key" => "sample", "heading" => "Musterlösung", "doc" => kitchen_sink_doc()}
+        ])
+
+      for {template, data} <- [{"submission", data}, {"paper", paper_data(kitchen_sink_doc())}] do
+        {:ok, pdf} = PDF.render(template, data)
+
+        fonts =
+          ~r|/BaseFont\s*/[A-Z]{6}\+([A-Za-z0-9-]+)|
+          |> Regex.scan(pdf, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.reject(&String.starts_with?(&1, "DejaVuSansMono"))
+
+        assert "Nunito-Regular" in fonts
+        assert Enum.all?(fonts, &String.starts_with?(&1, "Nunito-")), inspect(fonts)
+      end
+    end
+
     test "renders an empty submission" do
       assert {:ok, "%PDF" <> _} = PDF.render("submission", submission_data([]))
     end

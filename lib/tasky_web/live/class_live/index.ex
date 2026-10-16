@@ -108,7 +108,7 @@ defmodule TaskyWeb.ClassLive.Index do
           :if={!@has_classes && !@can_create}
           class="flex flex-col items-center text-center px-8 py-16 bg-white"
         >
-          <h2 class="font-serif text-[24px] text-stone-900 leading-[1.2] mb-3 font-normal">
+          <h2 class="text-[24px] font-semibold text-stone-900 leading-[1.2] mb-3">
             Noch keiner Organisation zugewiesen
           </h2>
           <p class="text-[15px] text-stone-500 max-w-[420px] leading-[1.7]">

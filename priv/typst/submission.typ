@@ -28,7 +28,7 @@
       )
     },
   )
-  set text(font: "DM Sans", size: 11pt, fill: stone.s900, lang: "de")
+  set text(font: "Nunito", size: 11pt, fill: stone.s900, lang: "de")
   set par(leading: 0.7em, spacing: 0.75em)
 
   block(
@@ -37,7 +37,7 @@
     inset: (bottom: 6mm),
     stroke: (bottom: 0.75pt + stone.s200),
     {
-      text(font: "Instrument Serif", size: 24pt, data.exam_name)
+      text(weight: "bold", size: 24pt, data.exam_name)
       v(1mm)
       text(size: 10pt, fill: stone.s600, data.student_name)
 
@@ -63,7 +63,7 @@
   for (i, section) in data.sections.enumerate() {
     if i > 0 { pagebreak() }
     if section.heading != none {
-      block(below: 4mm, text(font: "Instrument Serif", size: 19pt, section.heading))
+      block(below: 4mm, text(weight: "bold", size: 19pt, section.heading))
     }
     render-doc(section.doc, mode: "review")
   }
