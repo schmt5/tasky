@@ -190,6 +190,21 @@ defmodule TaskyWeb.ExamContentLiveTest do
       assert Exams.get_exam!(scope, exam.id).ai_correction_config == %{}
     end
 
+    test "the ± buttons step the points in the dialog, plus left", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-1")
+      view |> element("#options_max_points-up") |> render_click()
+      view |> element("#options_max_points-up") |> render_click()
+      view |> element("#options_max_points-down") |> render_click()
+
+      assert has_element?(view, ~s(#options_max_points[value="0.25"]))
+
+      submit_options(view, "q-1", %{})
+      assert Exams.get_exam!(scope, exam.id).sample_solution_points == %{"q-1" => 0.25}
+    end
+
     test "applies points and options of one part and summarizes them", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
@@ -263,19 +278,17 @@ defmodule TaskyWeb.ExamContentLiveTest do
       open_options(view, "q-2")
       assert has_element?(view, ~s(#checkbox-scoring-per_checkbox[aria-checked="true"]))
 
-      view |> element("#checkbox-scoring-deduction") |> render_click()
+      refute has_element?(view, "#checkbox-scoring-deduction")
+      view |> element("#checkbox-scoring-all_or_nothing") |> render_click()
 
-      submit_options(view, "q-2", %{
-        "checkbox_rule" => "deduction",
-        "checkbox_deduction" => "0.25"
-      })
+      submit_options(view, "q-2", %{"checkbox_rule" => "all_or_nothing"})
 
       exam = Exams.get_exam!(scope, exam.id)
-      assert Exams.checkbox_scoring(exam, "q-2") == %{rule: "deduction", deduction: 0.25}
+      assert Exams.checkbox_scoring(exam, "q-2") == %{rule: "all_or_nothing"}
       assert Exams.checkbox_scoring(exam, "q-3").rule == "per_checkbox"
 
       assert view |> element("#correction-options-summary-q-2") |> render() =~
-               "Checkboxen: −0.25 P. pro Fehler"
+               "Checkboxen: alles oder nichts"
     end
 
     test "a custom distribution starts from the equal split and sets the total", %{conn: conn} do

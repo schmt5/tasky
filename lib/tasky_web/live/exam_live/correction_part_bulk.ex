@@ -244,9 +244,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
   defp checkbox_rule_label(%{rule: "all_or_nothing"}), do: "Checkboxen: alles oder nichts"
 
-  defp checkbox_rule_label(%{rule: "deduction", deduction: d}),
-    do: "Checkboxen: −#{format_max_points(d)} P. pro Fehler"
-
   defp checkbox_rule_label(_scoring), do: "Checkboxen: pro Checkbox"
 
   defp config_chip_classes(true),

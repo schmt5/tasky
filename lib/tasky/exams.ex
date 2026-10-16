@@ -2233,16 +2233,15 @@ defmodule Tasky.Exams do
   @doc """
   The checkbox lists of a part that are scored by a rule other than per
   checkbox, as `Tasky.Grading.part_points/3` takes them:
-  `[%{indices: [block_index], rule:, deduction:}]`, one per list.
+  `[%{indices: [block_index], rule:}]`, one per list.
 
   The rule is chosen per question in the sample solution
-  (`ai_correction_config[part_id]["checkbox_scoring"]`, with
-  `"checkbox_deduction"` for the deduction rule) and applies to every checkbox
-  list in it. `blocks` are the part's answer blocks
+  (`ai_correction_config[part_id]["checkbox_scoring"]`) and applies to every
+  checkbox list in it. `blocks` are the part's answer blocks
   (`NodePatcher.list_answer_blocks/1`).
   """
   def checkbox_lists(%Exam{} = exam, part_id, blocks) when is_binary(part_id) do
-    %{rule: rule, deduction: deduction} = checkbox_scoring(exam, part_id)
+    %{rule: rule} = checkbox_scoring(exam, part_id)
 
     if rule == "per_checkbox" do
       []
@@ -2251,14 +2250,15 @@ defmodule Tasky.Exams do
       |> Enum.filter(&(&1.type == "taskItem" and not is_nil(&1[:group])))
       |> Enum.group_by(& &1.group, & &1.index)
       |> Enum.map(fn {_group, indices} ->
-        %{indices: indices, rule: rule, deduction: deduction}
+        %{indices: indices, rule: rule}
       end)
     end
   end
 
   @doc """
-  A part's checkbox scoring rule and deduction, with their defaults filled in:
-  `%{rule: "per_checkbox" | "all_or_nothing" | "deduction", deduction: number}`.
+  A part's checkbox scoring rule, `"per_checkbox"` unless set:
+  `%{rule: "per_checkbox" | "all_or_nothing"}`. A rule that no longer exists
+  reads as `"per_checkbox"`.
   """
   def checkbox_scoring(%Exam{} = exam, part_id) when is_binary(part_id) do
     cfg = Map.get(exam.ai_correction_config || %{}, part_id, %{})
@@ -2269,13 +2269,7 @@ defmodule Tasky.Exams do
         _ -> "per_checkbox"
       end
 
-    deduction =
-      case cfg["checkbox_deduction"] do
-        d when is_number(d) and d > 0 -> d
-        _ -> Grading.default_checkbox_deduction()
-      end
-
-    %{rule: rule, deduction: deduction}
+    %{rule: rule}
   end
 
   # Maps numeric (manual) verdicts to the marker vocabulary understood by
@@ -2450,7 +2444,7 @@ defmodule Tasky.Exams do
   part's points as they are.
 
   The config holds the part's flags (`"auto_correct"`, the text options) and
-  its checkbox rule (`"checkbox_scoring"`, `"checkbox_deduction"`); text
+  its checkbox rule (`"checkbox_scoring"`); text
   options are switched off together with auto-correction, as in the form.
 
   Every submission already graded on the part is rescored afterwards, so the
@@ -2523,16 +2517,10 @@ defmodule Tasky.Exams do
         _ -> "per_checkbox"
       end
 
-    deduction =
-      case Map.get(given, "checkbox_deduction", current["checkbox_deduction"]) do
-        d when is_number(d) and d > 0 -> normalize_block_points(d)
-        _ -> Grading.default_checkbox_deduction()
-      end
-
     part_cfg =
       current
       |> Map.merge(flags)
-      |> Map.merge(%{"checkbox_scoring" => rule, "checkbox_deduction" => deduction})
+      |> Map.put("checkbox_scoring", rule)
 
     Map.put(exam.ai_correction_config || %{}, part_id, part_cfg)
   end

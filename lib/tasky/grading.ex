@@ -101,10 +101,10 @@ defmodule Tasky.Grading do
   points configured (`points_by_index` is nil); whole numbers come back as
   integers.
 
-  `checkbox_lists` (`[%{indices, rule, deduction}]`, see
+  `checkbox_lists` (`[%{indices, rule}]`, see
   `Tasky.Exams.checkbox_lists/3`) names the checkbox lists scored by a rule
   other than per checkbox; their blocks are scored together by
-  `checkbox_list_points/3`, every other block by its own verdict.
+  `checkbox_list_points/2`, every other block by its own verdict.
   """
   def part_points(verdicts_by_index, points_by_index, checkbox_lists \\ [])
 
@@ -124,7 +124,7 @@ defmodule Tasky.Grading do
     listed =
       Enum.reduce(checkbox_lists, 0.0, fn list, acc ->
         entries = Enum.map(list.indices, &{Map.get(verdicts_by_index, &1), points_by_index[&1]})
-        acc + checkbox_list_points(entries, list.rule, list.deduction)
+        acc + checkbox_list_points(entries, list.rule)
       end)
 
     (loose + listed)
@@ -134,20 +134,15 @@ defmodule Tasky.Grading do
 
   ## Checkbox lists
 
-  @checkbox_rules ~w(per_checkbox all_or_nothing deduction)
+  @checkbox_rules ~w(per_checkbox all_or_nothing)
 
   @doc """
   How the checkboxes of one list are scored, chosen per question:
 
     * `"per_checkbox"` — every checkbox earns its share (the default)
     * `"all_or_nothing"` — the list's points only when every checkbox is right
-    * `"deduction"` — the list's points minus a fixed amount per wrong
-      checkbox, never below 0
   """
   def checkbox_rules, do: @checkbox_rules
-
-  @doc "The deduction per wrong checkbox when none is configured."
-  def default_checkbox_deduction, do: 0.5
 
   @doc """
   Points of one checkbox list from its `[{verdict, block_max}]` entries under
@@ -155,20 +150,20 @@ defmodule Tasky.Grading do
   the teacher set the points by hand, so the list then simply sums its
   checkboxes — no rule overrides what was typed.
   """
-  def checkbox_list_points(entries, rule, deduction \\ nil) do
+  def checkbox_list_points(entries, rule) do
     total = entries |> Enum.map(fn {_v, max} -> points_value(max) end) |> Enum.sum()
     manual? = Enum.any?(entries, fn {v, _max} -> is_number(v) or v == "half" end)
     errors = Enum.count(entries, fn {v, _max} -> v != "correct" end)
 
     cond do
-      manual? or rule not in ["all_or_nothing", "deduction"] ->
+      manual? or rule != "all_or_nothing" ->
         entries |> Enum.map(fn {v, max} -> awarded_points(v, max) end) |> Enum.sum()
 
-      rule == "all_or_nothing" ->
-        if errors == 0, do: total, else: 0
+      errors == 0 ->
+        total
 
-      rule == "deduction" ->
-        max(total - errors * (deduction || default_checkbox_deduction()), 0)
+      true ->
+        0
     end
   end
 

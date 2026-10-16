@@ -107,17 +107,11 @@ defmodule TaskyWeb.ExamLive.Content do
                   Max. Punkte
                 </label>
                 <div class="flex items-center gap-1.5">
-                  <button
-                    type="button"
+                  <.step_button
+                    direction="up"
                     phx-click="adjust_max_points"
-                    phx-value-direction="down"
                     phx-value-part-id={pv.id}
-                    disabled={is_nil(pv.max_points) or pv.max_points <= 0}
-                    aria-label="−0.25"
-                    class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
-                  >
-                    <.icon name="hero-minus" class="w-4 h-4" />
-                  </button>
+                  />
                   <form phx-change="set_max_points" phx-submit="set_max_points" class="flex-1">
                     <input type="hidden" name="part_id" value={pv.id} />
                     <input
@@ -132,16 +126,12 @@ defmodule TaskyWeb.ExamLive.Content do
                       class="w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
                     />
                   </form>
-                  <button
-                    type="button"
+                  <.step_button
+                    direction="down"
                     phx-click="adjust_max_points"
-                    phx-value-direction="up"
                     phx-value-part-id={pv.id}
-                    aria-label="+0.25"
-                    class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 shrink-0"
-                  >
-                    <.icon name="hero-plus" class="w-4 h-4" />
-                  </button>
+                    disabled={is_nil(pv.max_points) or pv.max_points <= 0}
+                  />
                 </div>
               </div>
             </div>
@@ -199,17 +189,11 @@ defmodule TaskyWeb.ExamLive.Content do
                     Max. Punkte
                   </label>
                   <div :if={!pv.custom_points} class="flex items-center gap-1.5">
-                    <button
-                      type="button"
+                    <.step_button
+                      direction="up"
                       phx-click="adjust_max_points"
-                      phx-value-direction="down"
                       phx-value-part-id={pv.id}
-                      disabled={is_nil(pv.max_points) or pv.max_points <= 0}
-                      aria-label="−0.25"
-                      class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
-                    >
-                      <.icon name="hero-minus" class="w-4 h-4" />
-                    </button>
+                    />
                     <form phx-change="set_max_points" phx-submit="set_max_points" class="flex-1">
                       <input type="hidden" name="part_id" value={pv.id} />
                       <input
@@ -224,16 +208,12 @@ defmodule TaskyWeb.ExamLive.Content do
                         class="w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
                       />
                     </form>
-                    <button
-                      type="button"
+                    <.step_button
+                      direction="down"
                       phx-click="adjust_max_points"
-                      phx-value-direction="up"
                       phx-value-part-id={pv.id}
-                      aria-label="+0.25"
-                      class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 shrink-0"
-                    >
-                      <.icon name="hero-plus" class="w-4 h-4" />
-                    </button>
+                      disabled={is_nil(pv.max_points) or pv.max_points <= 0}
+                    />
                   </div>
                   <div
                     :if={pv.custom_points}
@@ -262,7 +242,7 @@ defmodule TaskyWeb.ExamLive.Content do
                       :for={label <- active_option_labels(pv)}
                       class="flex items-center gap-2 text-xs text-stone-600"
                     >
-                      <.icon name="hero-check-mini" class="w-4 h-4 text-amber-500 shrink-0" />
+                      <.icon name="hero-check-circle" class="w-4 h-4 text-stone-400 shrink-0" />
                       <span class="min-w-0">{label}</span>
                     </li>
                     <li :if={active_option_labels(pv) == []} class="text-xs text-stone-400">
@@ -317,16 +297,15 @@ defmodule TaskyWeb.ExamLive.Content do
                     <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
                       Punkte
                     </h4>
-                    <div :if={!@options_draft.custom_points} class="max-w-[10rem]">
-                      <.input
-                        field={@options_form[:max_points]}
-                        type="number"
-                        label="Max. Punkte"
-                        step="0.25"
-                        min="0"
-                        inputmode="decimal"
-                      />
-                    </div>
+                    <.points_field
+                      :if={!@options_draft.custom_points}
+                      id={@options_form[:max_points].id}
+                      name={@options_form[:max_points].name}
+                      value={@options_draft.max_points}
+                      label="Max. Punkte"
+                      key="max_points"
+                      class="max-w-[14rem]"
+                    />
                     <p :if={@options_draft.custom_points} class="text-sm text-stone-700">
                       Max. Punkte:
                       <span class="font-mono font-semibold">
@@ -344,18 +323,15 @@ defmodule TaskyWeb.ExamLive.Content do
                       :if={@options_draft.custom_points}
                       class="grid grid-cols-2 gap-3 pl-7"
                     >
-                      <div :for={block <- @options_draft.blocks} :if={block.answer_id}>
-                        <.input
-                          type="number"
-                          id={"options-block-points-#{block.answer_id}"}
-                          name={"options[block_points][#{block.answer_id}]"}
-                          value={Map.get(@options_draft.block_points, block.answer_id)}
-                          label={block.snippet}
-                          step="0.25"
-                          min="0"
-                          inputmode="decimal"
-                        />
-                      </div>
+                      <.points_field
+                        :for={block <- @options_draft.blocks}
+                        :if={block.answer_id}
+                        id={"options-block-points-#{block.answer_id}"}
+                        name={"options[block_points][#{block.answer_id}]"}
+                        value={Map.get(@options_draft.block_points, block.answer_id)}
+                        label={block.snippet}
+                        key={block.answer_id}
+                      />
                     </div>
                   </section>
 
@@ -403,7 +379,7 @@ defmodule TaskyWeb.ExamLive.Content do
                       </p>
                     </div>
                     <.input type="hidden" field={@options_form[:checkbox_rule]} />
-                    <div class="grid grid-cols-3 gap-2" role="radiogroup">
+                    <div class="grid grid-cols-2 gap-2" role="radiogroup">
                       <button
                         :for={{rule, label, hint} <- checkbox_rule_options()}
                         type="button"
@@ -423,16 +399,6 @@ defmodule TaskyWeb.ExamLive.Content do
                         <span class="text-sm font-medium text-stone-700">{label}</span>
                         <span class="text-xs text-stone-500 leading-relaxed">{hint}</span>
                       </button>
-                    </div>
-                    <div :if={@options_draft.checkbox_rule == "deduction"} class="max-w-[10rem]">
-                      <.input
-                        field={@options_form[:checkbox_deduction]}
-                        type="number"
-                        label="Abzug pro Fehler"
-                        step="0.25"
-                        min="0.25"
-                        inputmode="decimal"
-                      />
                     </div>
                   </section>
                 </div>
@@ -923,8 +889,7 @@ defmodule TaskyWeb.ExamLive.Content do
       ignore_case: part_config_flag(exam, part_id, "ignore_case"),
       ignore_spelling: part_config_flag(exam, part_id, "ignore_spelling"),
       ignore_punctuation: part_config_flag(exam, part_id, "ignore_punctuation"),
-      checkbox_rule: scoring.rule,
-      checkbox_deduction: scoring.deduction
+      checkbox_rule: scoring.rule
     }
   end
 
@@ -964,8 +929,7 @@ defmodule TaskyWeb.ExamLive.Content do
           ignore_case: pv.ignore_case,
           ignore_spelling: pv.ignore_spelling,
           ignore_punctuation: pv.ignore_punctuation,
-          checkbox_rule: pv.checkbox_rule,
-          checkbox_deduction: pv.checkbox_deduction
+          checkbox_rule: pv.checkbox_rule
         }
 
         {:noreply, assign_options_draft(socket, draft)}
@@ -980,6 +944,27 @@ defmodule TaskyWeb.ExamLive.Content do
     case socket.assigns.options_draft do
       nil -> {:noreply, socket}
       draft -> {:noreply, assign_options_draft(socket, merge_options_params(draft, params))}
+    end
+  end
+
+  # The ± buttons next to a points field in the dialog: `key` is
+  # "max_points" or a block's answer id.
+  def handle_event("step_draft_points", %{"key" => key, "direction" => dir}, socket) do
+    case socket.assigns.options_draft do
+      nil ->
+        {:noreply, socket}
+
+      draft ->
+        step = &step_points(&1, dir)
+
+        draft =
+          cond do
+            key == "max_points" -> %{draft | max_points: step.(draft.max_points)}
+            Map.has_key?(draft.block_points, key) -> update_in(draft.block_points[key], step)
+            true -> draft
+          end
+
+        {:noreply, assign_options_draft(socket, draft)}
     end
   end
 
@@ -1010,8 +995,7 @@ defmodule TaskyWeb.ExamLive.Content do
             "ignore_case" => draft.ignore_case,
             "ignore_spelling" => draft.ignore_spelling,
             "ignore_punctuation" => draft.ignore_punctuation,
-            "checkbox_scoring" => draft.checkbox_rule,
-            "checkbox_deduction" => draft.checkbox_deduction
+            "checkbox_scoring" => draft.checkbox_rule
           }
         }
 
@@ -1192,9 +1176,7 @@ defmodule TaskyWeb.ExamLive.Content do
       {"per_checkbox", "Pro Checkbox",
        "Jede richtig angekreuzte oder richtig leer gelassene Checkbox gibt ihren Anteil der Punkte."},
       {"all_or_nothing", "Alles oder nichts",
-       "Volle Punkte nur, wenn alle Checkboxen stimmen, sonst 0."},
-      {"deduction", "Abzug pro Fehler",
-       "Volle Punkte minus einen Abzug pro falscher Checkbox, nie unter 0."}
+       "Volle Punkte nur, wenn alle Checkboxen stimmen, sonst 0."}
     ]
   end
 
@@ -1209,8 +1191,7 @@ defmodule TaskyWeb.ExamLive.Content do
       "ignore_case" => draft.ignore_case,
       "ignore_spelling" => draft.ignore_spelling,
       "ignore_punctuation" => draft.ignore_punctuation,
-      "checkbox_rule" => draft.checkbox_rule,
-      "checkbox_deduction" => draft.checkbox_deduction
+      "checkbox_rule" => draft.checkbox_rule
     }
 
     socket
@@ -1250,12 +1231,6 @@ defmodule TaskyWeb.ExamLive.Content do
 
     auto? = flag_param(params, "auto_correct", draft.auto_correct)
 
-    deduction =
-      case parse_points(Map.get(params, "checkbox_deduction", "")) do
-        d when is_number(d) and d > 0 -> d
-        _ -> draft.checkbox_deduction
-      end
-
     %{
       draft
       | custom_points: custom?,
@@ -1266,8 +1241,7 @@ defmodule TaskyWeb.ExamLive.Content do
         ignore_spelling: auto? and flag_param(params, "ignore_spelling", draft.ignore_spelling),
         ignore_punctuation:
           auto? and flag_param(params, "ignore_punctuation", draft.ignore_punctuation),
-        checkbox_rule: Map.get(params, "checkbox_rule", draft.checkbox_rule),
-        checkbox_deduction: deduction
+        checkbox_rule: Map.get(params, "checkbox_rule", draft.checkbox_rule)
     }
   end
 
@@ -1304,10 +1278,77 @@ defmodule TaskyWeb.ExamLive.Content do
   defp checkbox_rule_summary(%{checkbox_rule: "all_or_nothing"}),
     do: ["Checkboxen: alles oder nichts"]
 
-  defp checkbox_rule_summary(%{checkbox_rule: "deduction", checkbox_deduction: d}),
-    do: ["Checkboxen: −#{format_block_points(d)} P. pro Fehler"]
-
   defp checkbox_rule_summary(_pv), do: ["Checkboxen: pro Checkbox"]
+
+  # One 0.25 step up or down, never below 0; whole numbers stay integers.
+  defp step_points(value, dir) do
+    stepped = max((value || 0) + if(dir == "up", do: 0.25, else: -0.25), 0)
+    if stepped == trunc(stepped), do: trunc(stepped), else: stepped
+  end
+
+  attr :direction, :string, values: ~w(up down), required: true
+  attr :disabled, :boolean, default: false
+  attr :rest, :global
+
+  # The ± button of a points field. Plus sits left, minus right — the same
+  # order in the sidebar and in the options dialog.
+  defp step_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      phx-value-direction={@direction}
+      disabled={@disabled}
+      aria-label={if @direction == "up", do: "+0.25", else: "−0.25"}
+      class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent shrink-0"
+      {@rest}
+    >
+      <.icon name={if @direction == "up", do: "hero-plus", else: "hero-minus"} class="w-4 h-4" />
+    </button>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :name, :string, required: true
+  attr :value, :any, default: nil
+  attr :label, :string, required: true
+  attr :key, :string, required: true
+  attr :class, :string, default: nil
+
+  # A points input of the options dialog, between its + and − buttons.
+  defp points_field(assigns) do
+    ~H"""
+    <div class={@class}>
+      <label for={@id} class="block text-sm text-stone-700 mb-1 truncate">{@label}</label>
+      <div class="flex items-center gap-1.5 [&_.fieldset]:mb-0">
+        <.step_button
+          id={"#{@id}-up"}
+          direction="up"
+          phx-click="step_draft_points"
+          phx-value-key={@key}
+        />
+        <div class="flex-1 min-w-0">
+          <.input
+            type="number"
+            id={@id}
+            name={@name}
+            value={@value}
+            step="0.25"
+            min="0"
+            inputmode="decimal"
+            class="w-full input text-center font-mono"
+          />
+        </div>
+        <.step_button
+          id={"#{@id}-down"}
+          direction="down"
+          phx-click="step_draft_points"
+          phx-value-key={@key}
+          disabled={is_nil(@value) or @value <= 0}
+        />
+      </div>
+    </div>
+    """
+  end
 
   attr :field, Phoenix.HTML.FormField, required: true
   attr :label, :string, required: true
