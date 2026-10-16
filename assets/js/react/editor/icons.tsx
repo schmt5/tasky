@@ -122,10 +122,10 @@ export function MultipleChoiceIcon({ className }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <circle cx="6" cy="7" r="2.2" />
-      <circle cx="6" cy="17" r="2.2" />
-      <circle cx="6" cy="17" r="0.8" fill="currentColor" stroke="none" />
-      <path d="M11 7h9M11 17h9" />
+      {/* Same footprint as SingleChoiceIcon: a ticked box next to a filled
+          radio, so the two answer types read as siblings. */}
+      <rect x="4.5" y="4.5" width="15" height="15" rx="2.5" />
+      <path d="M8.25 12.25l2.5 2.5 5-5.5" strokeWidth="1.75" />
     </svg>
   );
 }

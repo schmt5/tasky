@@ -390,16 +390,16 @@ export function Toolbar({
                   active.answerBlock,
                 ),
                 btn(
-                  "Aufgabenliste",
-                  <MultipleChoiceIcon className={iconCls} />,
-                  () => editor.chain().focus().toggleTaskList().run(),
-                  active.taskList,
-                ),
-                btn(
                   "Lückentextfeld",
                   <LueckentextIcon className={iconCls} />,
                   () => editor.chain().focus().setLueckentext().run(),
                   active.lueckentext,
+                ),
+                btn(
+                  "Aufgabenliste",
+                  <MultipleChoiceIcon className={iconCls} />,
+                  () => editor.chain().focus().toggleTaskList().run(),
+                  active.taskList,
                 ),
                 btn(
                   "Auswahl (Single Choice)",
