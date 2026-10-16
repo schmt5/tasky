@@ -60,6 +60,17 @@ defmodule TaskyWeb.ExamGradingSortLiveTest do
     assert lastnames(html) == ["Zimmermann", "Ammann", "Meier"]
   end
 
+  test "every column shows both sort arrows without a hover", %{conn: conn} do
+    %{teacher: teacher, exam: exam} = graded_exam()
+
+    {:ok, view, _html} = open(conn, teacher, ~p"/exams/#{exam}/correction/grading")
+
+    for field <- ~w(firstname lastname points calculated_mark mark) do
+      assert has_element?(view, "#sort-#{field} .hero-chevron-up-mini")
+      assert has_element?(view, "#sort-#{field} .hero-chevron-down-mini")
+    end
+  end
+
   test "without params the table is sorted by first name ascending", %{conn: conn} do
     %{teacher: teacher, exam: exam} = graded_exam()
 

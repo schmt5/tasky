@@ -376,16 +376,18 @@ defmodule TaskyWeb.ExamLive.Grading do
         ]}
       >
         {@label}
-        <.icon
-          name={if @active?, do: sort_icon(@dir), else: "hero-chevron-up-down"}
-          class={[
-            "w-3.5 h-3.5 shrink-0",
-            if(@active?,
-              do: "text-stone-500",
-              else: "text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-            )
-          ]}
-        />
+        <%!-- Both arrows always show, so every column reads as sortable
+             without a hover; the active direction is the blue one. --%>
+        <span class="inline-flex flex-col shrink-0 leading-none" aria-hidden="true">
+          <.icon
+            name="hero-chevron-up-mini"
+            class={["w-4 h-4 -mb-1.5", sort_arrow_class(@active? and @dir == :asc)]}
+          />
+          <.icon
+            name="hero-chevron-down-mini"
+            class={["w-4 h-4", sort_arrow_class(@active? and @dir == :desc)]}
+          />
+        </span>
       </.link>
     </th>
     """
@@ -395,8 +397,10 @@ defmodule TaskyWeb.ExamLive.Grading do
   defp aria_sort(true, _asc), do: "ascending"
   defp aria_sort(_inactive, _dir), do: "none"
 
-  defp sort_icon(:desc), do: "hero-chevron-down"
-  defp sort_icon(_asc), do: "hero-chevron-up"
+  defp sort_arrow_class(true), do: "text-sky-600"
+
+  defp sort_arrow_class(false),
+    do: "text-stone-400 group-hover:text-stone-600 transition-colors duration-150"
 
   attr :row, :map, required: true
   attr :step, :string, required: true
