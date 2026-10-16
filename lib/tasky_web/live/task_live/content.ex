@@ -556,6 +556,7 @@ defmodule TaskyWeb.TaskLive.Content do
   defp block_type_label("answerBlock"), do: "Antwortfeld"
   defp block_type_label("lueckentext"), do: "Lücke"
   defp block_type_label("taskItem"), do: "Checkbox"
+  defp block_type_label("choice"), do: "Auswahl"
   defp block_type_label(_type), do: "Antwortfeld"
 
   ## Dateien tab: Lösungsdateien

@@ -13,3 +13,8 @@ export function generateAnswerId(): string {
 export function generatePartId(): string {
   return "q-" + generateAnswerId().replace(/-/g, "").slice(0, 8);
 }
+
+// Option ids of a radio group (`choice`): unique within the group only.
+export function generateOptionId(): string {
+  return "o_" + generateAnswerId().replace(/-/g, "").slice(0, 8);
+}

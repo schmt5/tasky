@@ -82,6 +82,30 @@ defmodule Tasky.TiptapFixtures do
             }
           ]
         },
+        # Single choice: the chosen radio was wrong, the right one is marked.
+        paragraph([
+          %{
+            "type" => "choice",
+            "attrs" => %{
+              "groupId" => "c1",
+              "optionId" => "o1",
+              "checked" => true,
+              "verdict" => "wrong"
+            }
+          },
+          text(" analog "),
+          %{
+            "type" => "choice",
+            "attrs" => %{
+              "groupId" => "c1",
+              "optionId" => "o2",
+              "checked" => false,
+              "verdict" => "wrong",
+              "correct" => true
+            }
+          },
+          text(" digital")
+        ]),
         %{
           "type" => "bulletList",
           "content" => [

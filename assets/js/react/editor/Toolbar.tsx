@@ -29,6 +29,8 @@ import {
   PaintBrushIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
+  ScissorsIcon,
+  LinkIcon,
 } from "@heroicons/react/24/outline";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -46,6 +48,7 @@ import {
   FreitextAbcIcon,
   LueckentextIcon,
   MultipleChoiceIcon,
+  SingleChoiceIcon,
   AddRowAboveIcon,
   AddRowBelowIcon,
   RemoveRowIcon,
@@ -55,6 +58,7 @@ import {
   HeaderRowIcon,
   RemoveTableIcon,
 } from "./icons";
+import { isSingleChoiceActive } from "./extensions";
 
 export interface ToolbarProps {
   editor: Editor;
@@ -99,6 +103,9 @@ export function Toolbar({
       taskList: editor.isActive("taskList"),
       lueckentext: editor.isActive("lueckentext"),
       answerBlock: editor.isActive("answerBlock"),
+      choice: editor.isActive("choice"),
+      singleChoice: isSingleChoiceActive(editor.state),
+      canJoinChoice: editor.can().choiceJoinPrevious(),
       table: editor.isActive("table"),
       teacherComment: editor.isActive("teacherComment"),
       highlightColor: HIGHLIGHT_COLORS.find((c) =>
@@ -393,6 +400,28 @@ export function Toolbar({
                   <LueckentextIcon className={iconCls} />,
                   () => editor.chain().focus().setLueckentext().run(),
                   active.lueckentext,
+                ),
+                btn(
+                  "Auswahl (Single Choice)",
+                  <SingleChoiceIcon className={iconCls} />,
+                  () => editor.chain().focus().toggleSingleChoice().run(),
+                  active.singleChoice,
+                ),
+              ])}
+            {!hideAnswers &&
+              active.choice &&
+              group("Auswahlgruppe", [
+                btn(
+                  "Eigene Gruppe für dieses Feld",
+                  <ScissorsIcon className={iconCls} />,
+                  () => editor.chain().focus().choiceNewGroup().run(),
+                ),
+                btn(
+                  "Zur vorherigen Gruppe",
+                  <LinkIcon className={iconCls} />,
+                  () => editor.chain().focus().choiceJoinPrevious().run(),
+                  false,
+                  !active.canJoinChoice,
                 ),
               ])}
             {uploadImage &&

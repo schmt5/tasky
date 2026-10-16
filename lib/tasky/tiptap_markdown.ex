@@ -228,6 +228,10 @@ defmodule Tasky.TiptapMarkdown do
     end
   end
 
+  defp inline(%{"type" => "choice"} = node, _ctx) do
+    if node |> attrs() |> Map.get("checked") == true, do: "(x) ", else: "( ) "
+  end
+
   defp inline(%{"content" => content}, ctx) when is_list(content), do: inlines(content, ctx)
 
   defp inline(_node, _ctx), do: ""

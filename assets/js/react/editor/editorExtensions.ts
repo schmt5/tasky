@@ -18,6 +18,8 @@ import {
   SolutionHint,
   Callout,
   TaskItemWithId,
+  Choice,
+  ChoiceIdStamper,
   TeacherComment,
   PreventNodeDeletion,
   LockExamContent,
@@ -25,6 +27,8 @@ import {
 } from "./extensions";
 
 export interface EditorExtensionFlags {
+  editable?: boolean;
+  correctionMode?: boolean;
   lockContent?: boolean;
   protectAnswers?: boolean;
   paperMode?: boolean;
@@ -33,6 +37,8 @@ export interface EditorExtensionFlags {
 }
 
 export function buildEditorExtensions({
+  editable = true,
+  correctionMode = false,
   lockContent = false,
   protectAnswers = false,
   paperMode = false,
@@ -57,6 +63,14 @@ export function buildEditorExtensions({
     Callout,
     TaskList,
     TaskItemWithId.configure({ nested: true }),
+    // Choosing a radio is answering: only where answers are given (learner,
+    // sample solution), never while authoring or correcting. Authoring
+    // gets the group aids instead.
+    Choice.configure({
+      interactive: editable && lockContent && !paperMode,
+      authoring: editable && !lockContent && !correctionMode,
+    }),
+    ...(lockContent ? [] : [ChoiceIdStamper]),
     TableKit.configure({ table: { resizable: true } }),
     Highlight.configure({ multicolor: true }),
     TextStyle,

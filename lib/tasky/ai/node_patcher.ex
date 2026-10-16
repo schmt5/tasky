@@ -18,7 +18,9 @@ defmodule Tasky.AI.NodePatcher do
   awarded, never for re-emitting the document structure.
   """
 
-  @answer_types ["answerBlock", "lueckentext", "taskItem"]
+  alias Tasky.Correction.Choice
+
+  @answer_types Tasky.Correction.AnswerKey.answer_types()
   @trailing_marker_regex ~r/\s*[✅❌🟡]\s*$/u
 
   @doc """
@@ -40,21 +42,51 @@ defmodule Tasky.AI.NodePatcher do
   are shown as one question. Other node types carry `checked: nil, group: nil`.
   """
   def list_answer_blocks(nodes) when is_list(nodes) do
-    {entries, _} = collect_blocks(nodes, [], 0, nil)
+    {entries, _} = collect_blocks(nodes, [], 0, nil, Choice.groups(nodes))
     Enum.reverse(entries)
   end
 
-  defp collect_blocks(nodes, acc, counter, group)
+  defp collect_blocks(nodes, acc, counter, group, choices)
 
-  defp collect_blocks([], acc, counter, _group), do: {acc, counter}
+  defp collect_blocks([], acc, counter, _group, _choices), do: {acc, counter}
 
-  defp collect_blocks([%{"type" => "taskList", "content" => content} | rest], acc, counter, group)
+  defp collect_blocks(
+         [%{"type" => "taskList", "content" => content} | rest],
+         acc,
+         counter,
+         group,
+         choices
+       )
        when is_list(content) do
-    {acc, next} = collect_blocks(content, acc, counter, counter)
-    collect_blocks(rest, acc, next, group)
+    {acc, next} = collect_blocks(content, acc, counter, counter, choices)
+    collect_blocks(rest, acc, next, group, choices)
   end
 
-  defp collect_blocks([%{"type" => type} = node | rest], acc, counter, group)
+  # A radio group is one block, at the position of its first radio; the
+  # group's later radios add nothing. `text` is the chosen option's label.
+  defp collect_blocks([%{"type" => "choice"} = node | rest], acc, counter, group, choices) do
+    gid = Choice.group_id(node)
+
+    if is_nil(gid) or Enum.any?(acc, &(&1.type == "choice" and &1.answer_id == gid)) do
+      collect_blocks(rest, acc, counter, group, choices)
+    else
+      choice_group = Map.get(choices, gid)
+
+      entry = %{
+        index: counter,
+        answer_id: gid,
+        type: "choice",
+        text: Choice.selected_label(choice_group),
+        inferred_verdict: Choice.verdict(choice_group),
+        checked: nil,
+        group: nil
+      }
+
+      collect_blocks(rest, [entry | acc], counter + 1, group, choices)
+    end
+  end
+
+  defp collect_blocks([%{"type" => type} = node | rest], acc, counter, group, choices)
        when type in @answer_types do
     raw_text = node |> Map.get("content", []) |> extract_plain_text()
     text = raw_text |> strip_marker_text()
@@ -81,17 +113,17 @@ defmodule Tasky.AI.NodePatcher do
       group: group
     }
 
-    collect_blocks(rest, [entry | acc], counter + 1, group)
+    collect_blocks(rest, [entry | acc], counter + 1, group, choices)
   end
 
-  defp collect_blocks([%{"content" => content} | rest], acc, counter, group)
+  defp collect_blocks([%{"content" => content} | rest], acc, counter, group, choices)
        when is_list(content) do
-    {acc, counter} = collect_blocks(content, acc, counter, group)
-    collect_blocks(rest, acc, counter, group)
+    {acc, counter} = collect_blocks(content, acc, counter, group, choices)
+    collect_blocks(rest, acc, counter, group, choices)
   end
 
-  defp collect_blocks([_ | rest], acc, counter, group),
-    do: collect_blocks(rest, acc, counter, group)
+  defp collect_blocks([_ | rest], acc, counter, group, choices),
+    do: collect_blocks(rest, acc, counter, group, choices)
 
   defp extract_plain_text(content) when is_list(content) do
     Enum.map_join(content, "", fn
@@ -134,15 +166,31 @@ defmodule Tasky.AI.NodePatcher do
         {to_string(k), v}
       end)
 
-    {new_nodes, _} = rewrite_walk(nodes, normalized, 0)
+    {new_nodes, _} = rewrite_walk(nodes, normalized, {0, %{}})
     new_nodes
   end
 
-  defp rewrite_walk(nodes, verdicts, counter) when is_list(nodes) do
-    Enum.map_reduce(nodes, counter, fn node, c -> rewrite_node(node, verdicts, c) end)
+  # `state` is `{counter, %{group_id => index}}`: every radio of a group
+  # shares the index its first radio took.
+  defp rewrite_walk(nodes, verdicts, state) when is_list(nodes) do
+    Enum.map_reduce(nodes, state, fn node, st -> rewrite_node(node, verdicts, st) end)
   end
 
-  defp rewrite_node(%{"type" => type} = node, verdicts, counter) when type in @answer_types do
+  # Radios have no text to carry a marker, so the verdict goes on the radio's
+  # own `verdict` attribute — on every radio of the group.
+  defp rewrite_node(%{"type" => "choice"} = node, verdicts, state) do
+    case choice_index(node, state) do
+      {nil, state} ->
+        {node, state}
+
+      {index, state} ->
+        verdict = verdicts |> Map.get(Integer.to_string(index)) |> marker_verdict()
+        {Choice.put_attr(node, "verdict", verdict), state}
+    end
+  end
+
+  defp rewrite_node(%{"type" => type} = node, verdicts, {counter, groups})
+       when type in @answer_types do
     verdict = Map.get(verdicts, Integer.to_string(counter))
     marker = power_marker(verdict)
 
@@ -160,15 +208,32 @@ defmodule Tasky.AI.NodePatcher do
           content
       end
 
-    {put_content(node, new_content), counter + 1}
+    {put_content(node, new_content), {counter + 1, groups}}
   end
 
-  defp rewrite_node(%{"content" => content} = node, verdicts, counter) when is_list(content) do
-    {new_content, new_counter} = rewrite_walk(content, verdicts, counter)
-    {Map.put(node, "content", new_content), new_counter}
+  defp rewrite_node(%{"content" => content} = node, verdicts, state) when is_list(content) do
+    {new_content, state} = rewrite_walk(content, verdicts, state)
+    {Map.put(node, "content", new_content), state}
   end
 
-  defp rewrite_node(node, _verdicts, counter), do: {node, counter}
+  defp rewrite_node(node, _verdicts, state), do: {node, state}
+
+  # The positional index of a radio's group: assigned at its first radio.
+  defp choice_index(node, {counter, groups} = state) do
+    case Choice.group_id(node) do
+      nil ->
+        {nil, state}
+
+      gid ->
+        case Map.fetch(groups, gid) do
+          {:ok, index} -> {index, state}
+          :error -> {counter, {counter + 1, Map.put(groups, gid, counter)}}
+        end
+    end
+  end
+
+  defp marker_verdict(v) when v in ["correct", "half", "wrong"], do: v
+  defp marker_verdict(_v), do: nil
 
   defp power_marker("correct"), do: "✅"
   defp power_marker("half"), do: "🟡"
@@ -181,7 +246,8 @@ defmodule Tasky.AI.NodePatcher do
   answer nodes Claude is expected to return verdicts for).
   """
   def annotate(nodes) when is_list(nodes) do
-    walk_annotate(nodes, 0)
+    {annotated, {count, _groups}} = walk_annotate(nodes, {0, %{}})
+    {annotated, count}
   end
 
   @doc """
@@ -195,11 +261,28 @@ defmodule Tasky.AI.NodePatcher do
     Enum.map(nodes, &apply_to_node(&1, verdicts))
   end
 
-  defp walk_annotate(nodes, counter) when is_list(nodes) do
-    Enum.map_reduce(nodes, counter, &annotate_node/2)
+  defp walk_annotate(nodes, state) when is_list(nodes) do
+    Enum.map_reduce(nodes, state, &annotate_node/2)
   end
 
-  defp annotate_node(%{"type" => type} = node, counter) when type in @answer_types do
+  # Every radio of a group carries the group's one `__ai_id`; a stale
+  # verdict from an earlier run is dropped, like a text marker.
+  defp annotate_node(%{"type" => "choice"} = node, state) do
+    case choice_index(node, state) do
+      {nil, state} ->
+        {node, state}
+
+      {index, state} ->
+        annotated =
+          node
+          |> Choice.put_attr("verdict", nil)
+          |> Choice.put_attr("__ai_id", Integer.to_string(index + 1))
+
+        {annotated, state}
+    end
+  end
+
+  defp annotate_node(%{"type" => type} = node, {counter, groups}) when type in @answer_types do
     id = Integer.to_string(counter + 1)
     attrs = node |> Map.get("attrs", %{}) |> Map.put("__ai_id", id)
 
@@ -214,15 +297,15 @@ defmodule Tasky.AI.NodePatcher do
       |> Map.put("attrs", attrs)
       |> put_content(cleaned_content)
 
-    {annotated, counter + 1}
+    {annotated, {counter + 1, groups}}
   end
 
-  defp annotate_node(%{"content" => content} = node, counter) when is_list(content) do
-    {new_content, new_counter} = walk_annotate(content, counter)
-    {Map.put(node, "content", new_content), new_counter}
+  defp annotate_node(%{"content" => content} = node, state) when is_list(content) do
+    {new_content, state} = walk_annotate(content, state)
+    {Map.put(node, "content", new_content), state}
   end
 
-  defp annotate_node(node, counter), do: {node, counter}
+  defp annotate_node(node, state), do: {node, state}
 
   # A marker after formatted text (e.g. a highlighted answer) sits in its own
   # text leaf. Stripping it must drop the leaf: ProseMirror rejects empty text
@@ -241,6 +324,12 @@ defmodule Tasky.AI.NodePatcher do
       other ->
         [other]
     end)
+  end
+
+  defp apply_to_node(%{"type" => "choice", "attrs" => %{"__ai_id" => id}} = node, verdicts) do
+    node
+    |> Choice.put_attr("__ai_id", nil)
+    |> Choice.put_attr("verdict", verdicts |> Map.get(id) |> marker_verdict())
   end
 
   defp apply_to_node(%{"type" => type, "attrs" => %{"__ai_id" => id} = attrs} = node, verdicts)

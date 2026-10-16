@@ -130,6 +130,24 @@ export function MultipleChoiceIcon({ className }: IconProps) {
   );
 }
 
+export function SingleChoiceIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="7.5" />
+      <circle cx="12" cy="12" r="3.25" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function AddRowAboveIcon({ className }: IconProps) {
   return (
     <svg

@@ -19,6 +19,7 @@ defmodule Tasky.ExamPaper do
       no new attribute, no `::after` rule, and typographically exactly how a
       paper exam reads.
     * a `taskItem` is unchecked, so it prints as an empty box to tick.
+    * a `choice` radio is unchosen, so it prints as an empty circle.
     * a `lueckentext` is left alone. On paper it is a fixed-width underline,
       which is purely a CSS concern.
 
@@ -287,6 +288,10 @@ defmodule Tasky.ExamPaper do
         [node]
     end
   end
+
+  # A radio is an atom: the choice is the answer and gets cleared.
+  defp resize_node(%{"type" => "choice"} = node, _layout, _defaults),
+    do: [Tasky.Correction.Choice.put_attr(node, "checked", false)]
 
   # Fixed-width underline on paper — nothing to do to the document.
   defp resize_node(%{"type" => "lueckentext"} = node, _layout, _defaults), do: [node]

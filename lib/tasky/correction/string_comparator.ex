@@ -9,6 +9,9 @@ defmodule Tasky.Correction.StringComparator do
   Comparison rules per answer node:
 
   * `taskItem`     — `attrs["checked"]` boolean equality (ignores text options).
+  * `choice`       — one verdict per radio group: right when exactly the
+                     sample's radio is chosen. A group whose sample chooses
+                     none gets no verdict at all (nothing to compare against).
   * `answerBlock`  — text comparison; sample text may list alternative
                      accepted answers separated by `;`. Trimmed.
   * `lueckentext`  — same as `answerBlock`.
@@ -32,8 +35,9 @@ defmodule Tasky.Correction.StringComparator do
   """
 
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.Choice
 
-  @answer_types ["answerBlock", "lueckentext", "taskItem"]
+  @answer_types Tasky.Correction.AnswerKey.answer_types()
   @fuzzy_threshold 0.85
   @fuzzy_min_length 4
 
@@ -56,9 +60,10 @@ defmodule Tasky.Correction.StringComparator do
         sample = Enum.at(sample_answers, idx)
         verdict = verdict_for(sub, sample, opts)
 
-        case sub.id do
-          nil -> acc
-          id -> Map.put(acc, id, verdict)
+        case {sub.id, verdict} do
+          {nil, _} -> acc
+          {_, nil} -> acc
+          {id, verdict} -> Map.put(acc, id, verdict)
         end
       end)
 
@@ -68,6 +73,12 @@ defmodule Tasky.Correction.StringComparator do
   end
 
   defp verdict_for(_sub, nil, _opts), do: "wrong"
+
+  defp verdict_for(%{type: "choice"}, %{type: "choice", checked: []}, _opts), do: nil
+
+  defp verdict_for(%{type: "choice", checked: s}, %{type: "choice", checked: [_] = t}, _opts) do
+    if s == t, do: "correct", else: "wrong"
+  end
 
   defp verdict_for(%{type: "taskItem", checked: s}, %{type: "taskItem", checked: t}, _opts) do
     if s == t, do: "correct", else: "wrong"
@@ -179,22 +190,40 @@ defmodule Tasky.Correction.StringComparator do
   # --- Tree walking ---------------------------------------------------------
 
   defp collect_answers(nodes) when is_list(nodes) do
-    nodes |> walk([]) |> Enum.reverse()
+    nodes |> walk([], Choice.groups(nodes)) |> Enum.reverse()
   end
 
-  defp walk(nodes, acc) when is_list(nodes) do
-    Enum.reduce(nodes, acc, &visit/2)
+  defp walk(nodes, acc, choices) when is_list(nodes) do
+    Enum.reduce(nodes, acc, &visit(&1, &2, choices))
   end
 
-  defp visit(%{"type" => type} = node, acc) when type in @answer_types do
+  # One entry per radio group, at its first radio (`Tasky.Correction.Choice`).
+  defp visit(%{"type" => "choice"} = node, acc, choices) do
+    gid = Choice.group_id(node)
+
+    if is_nil(gid) or Enum.any?(acc, &(&1.type == "choice" and &1.group_id == gid)) do
+      acc
+    else
+      entry = %{
+        type: "choice",
+        id: get_in(node, ["attrs", "__ai_id"]),
+        group_id: gid,
+        checked: choices |> Map.get(gid) |> Choice.checked_options()
+      }
+
+      [entry | acc]
+    end
+  end
+
+  defp visit(%{"type" => type} = node, acc, _choices) when type in @answer_types do
     [build_entry(node) | acc]
   end
 
-  defp visit(%{"content" => content}, acc) when is_list(content) do
-    walk(content, acc)
+  defp visit(%{"content" => content}, acc, choices) when is_list(content) do
+    walk(content, acc, choices)
   end
 
-  defp visit(_, acc), do: acc
+  defp visit(_, acc, _choices), do: acc
 
   defp build_entry(%{"type" => "taskItem"} = node) do
     %{

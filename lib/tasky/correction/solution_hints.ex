@@ -28,16 +28,20 @@ defmodule Tasky.Correction.SolutionHints do
   Zwei bewusste Grenzen:
 
     * **Checkboxen bekommen keinen Hinweis.** Bei einem `taskItem` sagt das
-      Verdikt bereits, wie es richtig gewesen wäre.
+      Verdikt bereits, wie es richtig gewesen wäre. Bei einer Auswahlgruppe
+      (`choice`) trägt jedes Radio das Verdikt der Gruppe, und das richtige
+      Radio `attrs["correct"] = true` — so zeigt der Viewer, welches es
+      gewesen wäre.
     * **Eine leere Musterlösung ist keine Vorgabe.** Ein leeres Feld unter der
       Antwort wäre nur Lärm.
   """
 
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.Choice
 
-  # Dieselben drei Knotentypen wie in `Tasky.Correction.AnswerKey`, und wie
-  # dort als Blätter behandelt: in ihre Kinder wird nicht abgestiegen.
-  @answer_types ["answerBlock", "lueckentext", "taskItem"]
+  # Dieselben Knotentypen wie in `Tasky.Correction.AnswerKey`, und wie dort
+  # als Blätter behandelt: in ihre Kinder wird nicht abgestiegen.
+  @answer_types Tasky.Correction.AnswerKey.answer_types()
 
   @doc """
   Das Dokument für die Vergleichsansicht.
@@ -84,6 +88,8 @@ defmodule Tasky.Correction.SolutionHints do
     [put_verdict(node, ctx) | hint_for_answer_block(node, ctx)]
   end
 
+  defp expand_node(%{"type" => "choice"} = node, ctx), do: [annotate_choice(node, ctx)]
+
   defp expand_node(%{"type" => type} = node, ctx) when type in @answer_types do
     [put_verdict(node, ctx)]
   end
@@ -110,6 +116,7 @@ defmodule Tasky.Correction.SolutionHints do
   defp filled?(_payload), do: false
 
   defp annotate_inline(%{"type" => "lueckentext"} = node, ctx), do: put_verdict(node, ctx)
+  defp annotate_inline(%{"type" => "choice"} = node, ctx), do: annotate_choice(node, ctx)
   defp annotate_inline(node, _ctx), do: node
 
   defp hint_for_answer_block(node, ctx) do
@@ -161,6 +168,18 @@ defmodule Tasky.Correction.SolutionHints do
   defp clean_attrs(node), do: node
 
   defp hint(nodes), do: %{"type" => "solutionHint", "content" => nodes}
+
+  # Gepaart über die `groupId`: Verdikt der Gruppe an jedes Radio, und das
+  # richtige Radio markiert.
+  defp annotate_choice(node, ctx) do
+    gid = Choice.group_id(node)
+    sample = Map.get(ctx.sample, gid)
+    correct? = is_binary(sample) and sample == Choice.option_id(node)
+
+    node
+    |> Choice.put_attr("verdict", Map.get(ctx.verdicts, gid))
+    |> Choice.put_attr("correct", if(correct?, do: true))
+  end
 
   defp put_verdict(node, ctx) do
     id = answer_id(node)

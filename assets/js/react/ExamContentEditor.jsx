@@ -93,6 +93,8 @@ export default function ExamContentEditor({
   // Built once, like useEditor itself: the flags and showLockHint are stable.
   const [extensions] = useState(() =>
     buildEditorExtensions({
+      editable,
+      correctionMode,
       lockContent,
       protectAnswers,
       paperMode,

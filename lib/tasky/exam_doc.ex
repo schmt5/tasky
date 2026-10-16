@@ -15,7 +15,7 @@ defmodule Tasky.ExamDoc do
   ids until they are re-saved (beta rule: no migration).
   """
 
-  @answer_node_types ["answerBlock", "lueckentext", "taskItem"]
+  @answer_node_types Tasky.Correction.AnswerKey.answer_types()
 
   @free_document_part_id "document"
 
@@ -191,30 +191,41 @@ defmodule Tasky.ExamDoc do
   cell for the "Begriff | [Antwort]" layout).
   """
   def answer_block_labels(nodes) when is_list(nodes) do
-    {labels, _, _} = walk_labels(nodes, %{}, "", 0)
+    {labels, _, _, _} = walk_labels(nodes, %{}, "", 0, MapSet.new())
     labels
   end
 
-  defp walk_labels(nodes, labels, buffer, counter) when is_list(nodes) do
-    Enum.reduce(nodes, {labels, buffer, counter}, fn node, {l, b, c} ->
-      visit_label(node, l, b, c)
+  # `seen` holds the radio groups already labelled: a group is one answer, at
+  # its first radio (see `Tasky.Correction.Choice`), so its later radios
+  # neither take an index nor reset the label buffer.
+  defp walk_labels(nodes, labels, buffer, counter, seen) when is_list(nodes) do
+    Enum.reduce(nodes, {labels, buffer, counter, seen}, fn node, {l, b, c, s} ->
+      visit_label(node, l, b, c, s)
     end)
   end
 
-  defp visit_label(%{"type" => type}, labels, buffer, counter)
+  defp visit_label(%{"type" => type} = node, labels, buffer, counter, seen)
        when type in @answer_node_types do
-    label =
-      case String.trim(buffer || "") do
-        "" -> nil
-        t -> t
-      end
+    case new_answer(node, seen) do
+      # The text between a group's radios is its option labels, not the
+      # label of whatever answer follows.
+      {false, seen} ->
+        {labels, "", counter, seen}
 
-    {Map.put(labels, counter, label), "", counter + 1}
+      {true, seen} ->
+        label =
+          case String.trim(buffer || "") do
+            "" -> nil
+            t -> t
+          end
+
+        {Map.put(labels, counter, label), "", counter + 1, seen}
+    end
   end
 
-  defp visit_label(%{"type" => "text", "text" => t}, labels, buffer, counter)
+  defp visit_label(%{"type" => "text", "text" => t}, labels, buffer, counter, seen)
        when is_binary(t) do
-    {labels, (buffer || "") <> t, counter}
+    {labels, (buffer || "") <> t, counter, seen}
   end
 
   # The leading h3 of a part is the question heading; its inline text is the
@@ -224,54 +235,74 @@ defmodule Tasky.ExamDoc do
          %{"type" => "heading", "attrs" => %{"level" => 3}},
          labels,
          _buffer,
-         counter
+         counter,
+         seen
        ),
-       do: {labels, "", counter}
+       do: {labels, "", counter, seen}
 
   # Tables: an answer cell is labelled by the preceding cell in the same row
   # (the common "Begriff | [Antwort]" layout, often repeated across the row).
   # We handle the row explicitly because the linear text buffer has no notion
   # of cell boundaries — without this, the header row and other cells leak
   # into the first answer's label.
-  defp visit_label(%{"type" => "tableRow", "content" => cells}, labels, _buffer, counter)
+  defp visit_label(%{"type" => "tableRow", "content" => cells}, labels, _buffer, counter, seen)
        when is_list(cells) do
-    {labels, _prev, counter} =
-      Enum.reduce(cells, {labels, nil, counter}, fn cell, {l, prev, c} ->
+    {labels, _prev, counter, seen} =
+      Enum.reduce(cells, {labels, nil, counter, seen}, fn cell, {l, prev, c, s} ->
         if cell_contains_answer?(cell) do
-          {l2, c2} = label_answers(cell, l, prev, c)
-          {l2, nil, c2}
+          {l2, c2, s2} = label_answers(cell, l, prev, c, s)
+          {l2, nil, c2, s2}
         else
-          {l, cell_text(cell), c}
+          {l, cell_text(cell), c, s}
         end
       end)
 
-    {labels, "", counter}
+    {labels, "", counter, seen}
   end
 
-  defp visit_label(%{"content" => content}, labels, buffer, counter) when is_list(content) do
-    walk_labels(content, labels, buffer, counter)
+  defp visit_label(%{"content" => content}, labels, buffer, counter, seen)
+       when is_list(content) do
+    walk_labels(content, labels, buffer, counter, seen)
   end
 
-  defp visit_label(_, labels, buffer, counter), do: {labels, buffer, counter}
+  defp visit_label(_, labels, buffer, counter, seen), do: {labels, buffer, counter, seen}
 
-  defp label_answers(%{"type" => type}, labels, label, counter)
+  defp label_answers(%{"type" => type} = node, labels, label, counter, seen)
        when type in @answer_node_types do
-    normalized =
-      case String.trim(label || "") do
-        "" -> nil
-        t -> t
-      end
+    case new_answer(node, seen) do
+      {false, seen} ->
+        {labels, counter, seen}
 
-    {Map.put(labels, counter, normalized), counter + 1}
+      {true, seen} ->
+        normalized =
+          case String.trim(label || "") do
+            "" -> nil
+            t -> t
+          end
+
+        {Map.put(labels, counter, normalized), counter + 1, seen}
+    end
   end
 
-  defp label_answers(%{"content" => content}, labels, label, counter) when is_list(content) do
-    Enum.reduce(content, {labels, counter}, fn node, {l, c} ->
-      label_answers(node, l, label, c)
+  defp label_answers(%{"content" => content}, labels, label, counter, seen)
+       when is_list(content) do
+    Enum.reduce(content, {labels, counter, seen}, fn node, {l, c, s} ->
+      label_answers(node, l, label, c, s)
     end)
   end
 
-  defp label_answers(_, labels, _label, counter), do: {labels, counter}
+  defp label_answers(_, labels, _label, counter, seen), do: {labels, counter, seen}
+
+  # Whether an answer node opens a new answer: every node does, except a
+  # radio whose group was already counted.
+  defp new_answer(%{"type" => "choice"} = node, seen) do
+    case Tasky.Correction.Choice.group_id(node) do
+      nil -> {false, seen}
+      gid -> {not MapSet.member?(seen, gid), MapSet.put(seen, gid)}
+    end
+  end
+
+  defp new_answer(_node, seen), do: {true, seen}
 
   defp cell_contains_answer?(%{"type" => type}) when type in @answer_node_types, do: true
 

@@ -568,6 +568,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         <%= cond do %>
           <% @block.type == "taskItem" -> %>
             <.checkbox_answer block={@block} />
+          <% @block.type == "choice" -> %>
+            <.choice_answer block={@block} />
           <% @block.text == "" -> %>
             <span class="text-sm italic text-stone-400">— leer —</span>
           <% true -> %>
@@ -690,6 +692,45 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
           )
         ]}>
           Lösung: {if @block.expected_checked, do: "ankreuzen", else: "leer lassen"}
+        </span>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr :block, :map, required: true
+
+  # A radio group in the power view: the option the participant chose (or
+  # that they chose none) and the one the sample solution chooses.
+  defp choice_answer(assigns) do
+    ~H"""
+    <div class="flex items-center gap-3 min-w-0">
+      <span
+        class={[
+          "inline-flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0",
+          if(@block.text != "",
+            do: "border-sky-500",
+            else: "bg-white border-stone-300"
+          )
+        ]}
+        aria-hidden="true"
+      >
+        <span :if={@block.text != ""} class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+      </span>
+      <%= if @block.text == "" do %>
+        <span class="text-sm italic text-stone-400">— keine Auswahl —</span>
+      <% else %>
+        <span class="text-base text-stone-800 break-words min-w-0">{@block.text}</span>
+      <% end %>
+      <%= if @block.expected_option do %>
+        <span class={[
+          "ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0",
+          if(@block.text == @block.expected_option,
+            do: "bg-green-50 text-green-700",
+            else: "bg-red-50 text-red-700"
+          )
+        ]}>
+          Lösung: {@block.expected_option}
         </span>
       <% end %>
     </div>

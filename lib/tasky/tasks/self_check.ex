@@ -31,14 +31,15 @@ defmodule Tasky.Tasks.SelfCheck do
   """
 
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.Choice
   alias Tasky.Correction.SolutionHints
   alias Tasky.Correction.StringComparator
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskSubmission
 
-  # Dieselben drei Knotentypen wie in `Tasky.Correction.AnswerKey`, und wie
-  # dort als Blätter behandelt: in ihre Kinder wird nicht abgestiegen.
-  @answer_types ["answerBlock", "lueckentext", "taskItem"]
+  # Dieselben Knotentypen wie in `Tasky.Correction.AnswerKey`, und wie dort
+  # als Blätter behandelt: in ihre Kinder wird nicht abgestiegen.
+  @answer_types Tasky.Correction.AnswerKey.answer_types()
   @text_types ["answerBlock", "lueckentext"]
 
   # Gross-/Kleinschreibung ignorieren, aber kein Fuzzy-Matching: "bern" gilt,
@@ -65,9 +66,11 @@ defmodule Tasky.Tasks.SelfCheck do
     sample = task.sample_solution || %{}
     off = MapSet.new(task.self_check_off || [])
 
+    choices = Choice.groups(nodes)
+
     verdicts =
       nodes
-      |> collect_answers()
+      |> collect_answers(choices)
       |> Enum.reduce(%{}, fn {id, node}, acc ->
         case verdict_for(node, Map.get(sample, id), MapSet.member?(off, id)) do
           nil -> acc
@@ -103,6 +106,11 @@ defmodule Tasky.Tasks.SelfCheck do
 
   defp verdict_for(_node, nil, _off?), do: nil
   defp verdict_for(_node, _payload, true), do: nil
+
+  # A radio group: right when exactly the sample's radio is chosen.
+  defp verdict_for({:choice, group}, payload, _off?) when is_binary(payload) do
+    if Choice.checked_options(group) == [payload], do: "correct", else: "wrong"
+  end
 
   defp verdict_for(%{"type" => "taskItem"} = node, payload, _off?) when is_boolean(payload) do
     if checked?(node) == payload, do: "correct", else: "wrong"
@@ -141,8 +149,16 @@ defmodule Tasky.Tasks.SelfCheck do
 
   ## Gemeinsame Helfer
 
-  defp collect_answers(nodes) when is_list(nodes) do
+  # A radio group is keyed by its `groupId` and stands for all its radios;
+  # every radio yields the same pair, and `Enum.reduce` into a map keeps one.
+  defp collect_answers(nodes, choices) when is_list(nodes) do
     Enum.flat_map(nodes, fn
+      %{"type" => "choice"} = node ->
+        case Choice.group_id(node) do
+          nil -> []
+          gid -> [{gid, {:choice, Map.get(choices, gid)}}]
+        end
+
       %{"type" => type} = node when type in @answer_types ->
         case answer_id(node) do
           nil -> []
@@ -150,7 +166,7 @@ defmodule Tasky.Tasks.SelfCheck do
         end
 
       %{"content" => content} when is_list(content) ->
-        collect_answers(content)
+        collect_answers(content, choices)
 
       _ ->
         []

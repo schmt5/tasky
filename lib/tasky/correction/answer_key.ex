@@ -9,17 +9,28 @@ defmodule Tasky.Correction.AnswerKey do
   block's `answerId`. To reconstruct the answer-filled document (for the
   editor or for correction) we `merge/2` the two back together.
 
-  Answer-bearing nodes are the same three `@answer_types` the correction
-  pipeline recognises (`answerBlock`, `lueckentext`, `taskItem`). Mirroring
-  `Tasky.AI.NodePatcher`, these nodes are treated as leaves — their children
-  are never descended into.
+  Answer-bearing nodes are the `answer_types/0` the whole correction pipeline
+  recognises. Mirroring `Tasky.AI.NodePatcher`, these nodes are treated as
+  leaves — their children are never descended into.
 
   Answer payloads are type-specific:
     * `answerBlock` / `lueckentext` — the inner content nodes (a list).
     * `taskItem` — the `checked` boolean (the label text stays in `content`).
+    * `choice` — keyed by the radio's `groupId`, not an `answerId`: the
+      `optionId` of the checked radio of the group, or `nil` when none is
+      (see `Tasky.Correction.Choice`).
   """
 
-  @answer_types ["answerBlock", "lueckentext", "taskItem"]
+  alias Tasky.Correction.Choice
+
+  @answer_types ["answerBlock", "lueckentext", "taskItem", "choice"]
+
+  @doc """
+  The answer-bearing node types. The single list every module that walks
+  answers takes its own `@answer_types` from — it sits in guards there, so it
+  is read at compile time.
+  """
+  def answer_types, do: @answer_types
 
   @doc """
   Assigns a unique `attrs.answerId` to every answer-bearing node that lacks
@@ -72,7 +83,7 @@ defmodule Tasky.Correction.AnswerKey do
   defp collect_ids(nodes, seen) when is_list(nodes) do
     Enum.reduce(nodes, seen, fn
       %{"type" => type} = node, acc when type in @answer_types ->
-        case answer_id(node) do
+        case key(node) do
           nil -> acc
           id -> MapSet.put(acc, to_string(id))
         end
@@ -87,6 +98,24 @@ defmodule Tasky.Correction.AnswerKey do
 
   defp assign_walk(nodes, seen) when is_list(nodes) do
     Enum.map_reduce(nodes, seen, &assign_node/2)
+  end
+
+  # A radio without a group (none exist — the editor stamps them) becomes a
+  # group of its own; one without an option id gets one.
+  defp assign_node(%{"type" => "choice"} = node, seen) do
+    node =
+      if Choice.option_id(node),
+        do: node,
+        else: Choice.put_attr(node, "optionId", gen_option_id())
+
+    case Choice.group_id(node) do
+      nil ->
+        id = gen_id(seen)
+        {Choice.put_attr(node, "groupId", id), MapSet.put(seen, to_string(id))}
+
+      gid ->
+        {node, MapSet.put(seen, gid)}
+    end
   end
 
   defp assign_node(%{"type" => type} = node, seen) when type in @answer_types do
@@ -113,10 +142,30 @@ defmodule Tasky.Correction.AnswerKey do
     if MapSet.member?(seen, to_string(id)), do: gen_id(seen), else: id
   end
 
+  defp gen_option_id,
+    do: "o_" <> (:crypto.strong_rand_bytes(4) |> Base.encode32(case: :lower, padding: false))
+
   # --- split helpers ---
 
   defp split_walk(nodes, answers) when is_list(nodes) do
     Enum.map_reduce(nodes, answers, &split_node/2)
+  end
+
+  # The group's payload is whichever radio is checked; an unchecked radio only
+  # makes sure the group has an entry, so a later one never erases an earlier.
+  defp split_node(%{"type" => "choice"} = node, answers) do
+    answers =
+      case Choice.group_id(node) do
+        nil ->
+          answers
+
+        gid ->
+          if Choice.checked?(node),
+            do: Map.put(answers, gid, Choice.option_id(node)),
+            else: Map.put_new(answers, gid, nil)
+      end
+
+    {Choice.put_attr(node, "checked", false), answers}
   end
 
   defp split_node(%{"type" => type} = node, answers) when type in @answer_types do
@@ -151,6 +200,17 @@ defmodule Tasky.Correction.AnswerKey do
     Enum.map(nodes, &merge_node(&1, answers))
   end
 
+  defp merge_node(%{"type" => "choice"} = node, answers) do
+    case Map.fetch(answers, Choice.group_id(node) || "") do
+      {:ok, selected} ->
+        checked = is_binary(selected) and selected == Choice.option_id(node)
+        Choice.put_attr(node, "checked", checked)
+
+      :error ->
+        node
+    end
+  end
+
   defp merge_node(%{"type" => type} = node, answers) when type in @answer_types do
     case Map.fetch(answers, to_string(answer_id(node))) do
       {:ok, payload} -> apply_answer(type, node, payload)
@@ -178,4 +238,8 @@ defmodule Tasky.Correction.AnswerKey do
   defp answer_id(node) do
     node |> Map.get("attrs", %{}) |> Map.get("answerId")
   end
+
+  # The key an answer node is stored under: a radio's group, else its own id.
+  defp key(%{"type" => "choice"} = node), do: Choice.group_id(node)
+  defp key(node), do: answer_id(node)
 end

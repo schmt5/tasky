@@ -701,6 +701,16 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     end
   end
 
+  # For a radio group: "Sanduhr → analog", the option the solution chooses.
+  defp block_heading(%{type: "choice"} = block) do
+    label = if block.label in [nil, ""], do: "Auswahl #{block.index + 1}", else: block.label
+
+    case block.sample_answers do
+      [] -> label
+      [expected | _] -> label <> " → " <> expected
+    end
+  end
+
   defp block_heading(block) do
     label = block.label || "Antwort #{block.index + 1}"
 

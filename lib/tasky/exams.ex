@@ -1296,7 +1296,11 @@ defmodule Tasky.Exams do
   """
   def save_exam_structure(scope, %Exam{} = exam, doc) when is_map(doc) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      new_content = doc |> AnswerKey.ensure_ids() |> Tasky.ExamDoc.ensure_part_ids()
+      new_content =
+        doc
+        |> AnswerKey.ensure_ids()
+        |> Tasky.ExamDoc.ensure_part_ids()
+        |> keep_choice_groups_in_parts(exam.answer_mode)
 
       # The sample-solution columns must be read from the *locked* row. Reading
       # them off the caller's struct (loaded in the controller, outside any
@@ -1406,6 +1410,18 @@ defmodule Tasky.Exams do
       broadcast_exam_event({:exam_answers_changed, updated})
       {:ok, updated}
     end
+  end
+
+  # A radio group must not span two questions (see `Choice.separate_by_part/3`).
+  # A free document is a single part, so nothing can span anything there.
+  defp keep_choice_groups_in_parts(content, "free_document"), do: content
+
+  defp keep_choice_groups_in_parts(content, _answer_mode) do
+    Tasky.Correction.Choice.separate_by_part(
+      content,
+      &Tasky.ExamDoc.question_heading?/1,
+      AnswerKey.block_ids(content)
+    )
   end
 
   defp prune_orphan_answers(content, answers) do
@@ -1687,13 +1703,15 @@ defmodule Tasky.Exams do
 
   Each entry is a `Tasky.AI.NodePatcher.list_answer_blocks/1` entry plus
   `verdict` — `"correct"`, `"half"` (legacy), `"wrong"`, a number (manual
-  points) or `nil` — and `expected_checked`, whether the sample solution ticks
-  that checkbox (`nil` for anything but a `taskItem`). Verdicts are keyed by
+  points) or `nil` — `expected_checked`, whether the sample solution ticks
+  that checkbox (`nil` for anything but a `taskItem`), and `expected_option`,
+  the label of the radio the sample solution chooses (`nil` for anything but
+  a `choice` group, or when the sample chooses none). Verdicts are keyed by
   the block's stable `answerId` in `submission.block_verdicts`.
   """
   def list_part_answer_blocks(%Exam{} = exam, %ExamSubmission{} = submission, part_id)
       when is_binary(part_id) do
-    expected_checked = sample_checked_by_index(exam, part_id)
+    sample_blocks = sample_blocks_by_index(exam, part_id)
 
     parts =
       submission
@@ -1713,30 +1731,35 @@ defmodule Tasky.Exams do
           verdict =
             (entry.answer_id && Map.get(explicit, entry.answer_id)) || entry.inferred_verdict
 
+          sample = Map.get(sample_blocks, entry.index)
+
           entry
           |> Map.put(:verdict, verdict)
-          |> Map.put(:expected_checked, Map.get(expected_checked, entry.index))
+          |> Map.put(:expected_checked, expected_checked(sample))
+          |> Map.put(:expected_option, expected_option(sample))
         end)
     end
   end
 
-  # Whether the sample solution ticks each checkbox of the part, by block
-  # index — the same positional index the submission's blocks carry.
-  defp sample_checked_by_index(exam, part_id) do
+  # The sample solution's blocks of the part, by block index — the same
+  # positional index the submission's blocks carry.
+  defp sample_blocks_by_index(exam, part_id) do
     exam
     |> sample_solution_doc()
     |> split_content_into_parts(exam.answer_mode)
     |> Enum.find(&(&1.id == part_id))
     |> case do
-      nil ->
-        %{}
-
-      part ->
-        for %{type: "taskItem"} = b <- NodePatcher.list_answer_blocks(part.nodes),
-            into: %{},
-            do: {b.index, b.checked}
+      nil -> %{}
+      part -> part.nodes |> NodePatcher.list_answer_blocks() |> Map.new(&{&1.index, &1})
     end
   end
+
+  defp expected_checked(%{type: "taskItem", checked: checked}), do: checked
+  defp expected_checked(_sample), do: nil
+
+  # A sample block's `text` is the label of the radio it chooses.
+  defp expected_option(%{type: "choice", text: label}) when label != "", do: label
+  defp expected_option(_sample), do: nil
 
   @doc """
   Sets (or clears, when `verdict` is `nil`) the teacher's verdict for a
@@ -2740,45 +2763,70 @@ defmodule Tasky.Exams do
         max_points: points_by_index && Map.get(points_by_index, index)
       }
 
-      if exam_block.type == "taskItem" do
-        # A checkbox's label is the same for everyone; what differs is the
-        # tick. Grouping by the label put the whole class in one "correct"
-        # group, ticked or not.
-        expected =
-          case Map.get(sample_block_by_index, index) do
-            %{checked: checked} -> checkbox_state_text(checked)
-            nil -> nil
-          end
+      cond do
+        exam_block.type == "choice" ->
+          # A radio group is grouped by the chosen option's label, compared
+          # exactly: an option is picked, not typed, so no text options and
+          # no `;` alternatives (a `;` in a label must not split it).
+          sample_answers =
+            case Map.get(sample_block_by_index, index) do
+              %{text: label} when label != "" -> [label]
+              _ -> []
+            end
 
-        sample_answers = if expected, do: [expected], else: []
+          Map.merge(base, %{
+            label: Map.get(labels_by_index, index),
+            sample_answers: sample_answers,
+            groups:
+              build_answer_groups(
+                per_submission_blocks,
+                index,
+                &normalize_group_text(&1.text),
+                sample_answers,
+                %{}
+              )
+          })
 
-        Map.merge(base, %{
-          label: exam_block.text,
-          sample_answers: sample_answers,
-          groups:
-            build_answer_groups(
-              per_submission_blocks,
-              index,
-              &checkbox_state_text(&1.checked),
-              sample_answers,
-              %{}
-            )
-        })
-      else
-        sample_answers = AnswerVariants.split(Map.get(sample_text_by_index, index))
+        exam_block.type == "taskItem" ->
+          # A checkbox's label is the same for everyone; what differs is the
+          # tick. Grouping by the label put the whole class in one "correct"
+          # group, ticked or not.
+          expected =
+            case Map.get(sample_block_by_index, index) do
+              %{checked: checked} -> checkbox_state_text(checked)
+              nil -> nil
+            end
 
-        Map.merge(base, %{
-          label: Map.get(labels_by_index, index),
-          sample_answers: sample_answers,
-          groups:
-            build_answer_groups(
-              per_submission_blocks,
-              index,
-              &normalize_group_text(&1.text),
-              sample_answers,
-              opts
-            )
-        })
+          sample_answers = if expected, do: [expected], else: []
+
+          Map.merge(base, %{
+            label: exam_block.text,
+            sample_answers: sample_answers,
+            groups:
+              build_answer_groups(
+                per_submission_blocks,
+                index,
+                &checkbox_state_text(&1.checked),
+                sample_answers,
+                %{}
+              )
+          })
+
+        true ->
+          sample_answers = AnswerVariants.split(Map.get(sample_text_by_index, index))
+
+          Map.merge(base, %{
+            label: Map.get(labels_by_index, index),
+            sample_answers: sample_answers,
+            groups:
+              build_answer_groups(
+                per_submission_blocks,
+                index,
+                &normalize_group_text(&1.text),
+                sample_answers,
+                opts
+              )
+          })
       end
     end)
   end

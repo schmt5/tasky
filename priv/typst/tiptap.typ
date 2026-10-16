@@ -289,6 +289,31 @@
   if checked { align(center + horizon, text(font: "DejaVu Sans Mono", size: 8pt, weight: "bold", "✓")) },
 )
 
+// A single-choice radio (`choice`, inline): a circle, filled when chosen. The
+// chosen radio takes its group's verdict colour; the right one gets a green
+// ring when the group was not answered right, so the sheet shows the answer.
+// Paper prints every radio empty.
+#let radio-box(node, ctx) = {
+  let a = attrs-of(node)
+  let paper = ctx.mode == "paper"
+  let checked = not paper and a.at("checked", default: false) == true
+  let verdict = if paper { none } else { verdict-of(node) }
+  let show-correct = (
+    not paper and a.at("correct", default: none) == true and verdict != none and verdict != verdicts.correct
+  )
+  let ink = if checked and verdict != none { verdict.ink } else { stone.s700 }
+
+  box(
+    width: 3.5mm,
+    height: 3.5mm,
+    baseline: 0.5mm,
+    outset: if show-correct { 1pt } else { 0pt },
+    radius: 50%,
+    stroke: if show-correct { 1.5pt + verdicts.correct.stroke } else { 0.75pt + ink },
+    if checked { align(center + horizon, circle(radius: 0.9mm, fill: ink, stroke: none)) },
+  )
+}
+
 #let task-item(node, ctx, render-node, graded-list) = {
   let checked = ctx.mode != "paper" and attrs-of(node).at("checked", default: false) == true
   let verdict = verdict-of(node)
@@ -374,6 +399,8 @@
     linebreak()
   } else if kind == "lueckentext" {
     lueckentext(node, ctx, self)
+  } else if kind == "choice" {
+    radio-box(node, ctx)
   } else if kind == "image" {
     render-image(node, inline: inline)
   } else if kind == "paragraph" {
