@@ -255,6 +255,73 @@ defmodule Tasky.Grading do
   defp clamp_mark(n) when n > @mark_max, do: @mark_max
   defp clamp_mark(n), do: n
 
+  ## Class statistics
+
+  # Ten classes of half a mark: 1–1.4, 1.5–1.9, …, 5–5.4, and 5.5–6 last,
+  # which takes the 6.0 as well.
+  @bucket_count 10
+
+  @doc """
+  Summary of a class's marks for the grading overview: average, median, how
+  many passed (≥ 4) and the distribution over half-mark classes.
+
+  `nil` entries are participants without a mark; they count as `:ungraded`
+  and stay out of every figure. The average and median are rounded to two
+  decimals, not onto the mark grid — they describe the class, they are not a
+  mark anyone gets.
+
+  The classes are half-open, so a 4.0 lands in «4–4.4» only and never also
+  in «3.5–3.9». A class's `:to` is its highest mark on the exam's grid
+  (3.9 on 0.1, 3.75 on 0.25); the last class closes at 6.0. The class is
+  picked in integer hundredths, so float drift such as 3.9999999 cannot tip
+  a mark into the neighbouring class.
+  """
+  def mark_stats(marks, step) when is_list(marks) do
+    graded = Enum.filter(marks, &is_number/1)
+    count = length(graded)
+    size = mark_step_size(step)
+    counts = Enum.frequencies_by(graded, &bucket_index/1)
+
+    buckets =
+      for idx <- 0..(@bucket_count - 1) do
+        from = @mark_min + idx * 0.5
+        last? = idx == @bucket_count - 1
+        to = if last?, do: @mark_max, else: round_mark(from + 0.5 - size, step)
+        %{from: from, to: to, count: Map.get(counts, idx, 0)}
+      end
+
+    %{
+      graded: count,
+      ungraded: length(marks) - count,
+      average: if(count > 0, do: Float.round(Enum.sum(graded) / count, 2)),
+      median: median(graded),
+      passed: Enum.count(graded, &(hundredths(&1) >= 400)),
+      min: Enum.min(graded, fn -> nil end),
+      max: Enum.max(graded, fn -> nil end),
+      buckets: buckets
+    }
+  end
+
+  defp bucket_index(mark) do
+    (hundredths(mark) - 100) |> div(50) |> max(0) |> min(@bucket_count - 1)
+  end
+
+  defp hundredths(mark), do: round(mark * 100)
+
+  defp median([]), do: nil
+
+  defp median(marks) do
+    sorted = Enum.sort(marks)
+    count = length(sorted)
+    mid = div(count, 2)
+
+    if rem(count, 2) == 1 do
+      Enum.at(sorted, mid) * 1.0
+    else
+      Float.round((Enum.at(sorted, mid - 1) + Enum.at(sorted, mid)) / 2, 2)
+    end
+  end
+
   ## Formatting / parsing (shared by screen and PDF)
 
   @doc ~S"""

@@ -85,6 +85,8 @@ defmodule TaskyWeb.ExamLive.Grading do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-4">
+        <.stats_card :if={@submissions != []} stats={@stats} />
+
         <%!-- Table --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @submissions == [] do %>
@@ -401,6 +403,161 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   defp sort_arrow_class(false),
     do: "text-stone-400 group-hover:text-stone-600 transition-colors duration-150"
+
+  attr :stats, :map, required: true, doc: "the result of Grading.mark_stats/2"
+
+  # Key figures and the mark distribution of the class. Pure HEEx: ten bars
+  # need no chart library, and the card re-renders with every changed mark.
+  defp stats_card(assigns) do
+    top = assigns.stats.buckets |> Enum.map(& &1.count) |> Enum.max()
+
+    assigns =
+      assigns
+      |> assign(:top, top)
+      |> assign(:histogram_label, histogram_label(assigns.stats.buckets))
+
+    ~H"""
+    <section
+      id="grading-stats"
+      aria-labelledby="grading-stats-title"
+      class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-6"
+    >
+      <div class="flex flex-col md:flex-row gap-8">
+        <div class="md:w-60 shrink-0">
+          <h2
+            id="grading-stats-title"
+            class="text-xs font-semibold text-stone-500 uppercase tracking-wide"
+          >
+            Durchschnitt
+          </h2>
+          <p
+            id="grading-stats-average"
+            class={[
+              "font-serif text-[52px] leading-none mt-2 tabular-nums",
+              mark_color_class(@stats.average)
+            ]}
+          >
+            {Grading.format_mark(@stats.average)}
+          </p>
+          <p class="text-xs text-stone-400 mt-1.5">
+            aus {@stats.graded} {if @stats.graded == 1, do: "Note", else: "Noten"}
+          </p>
+
+          <dl class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
+            <div>
+              <dt class="text-xs text-stone-500">Median</dt>
+              <dd class="font-mono text-sm font-semibold text-stone-800 tabular-nums">
+                {Grading.format_mark(@stats.median)}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-stone-500">Genügend (≥ 4)</dt>
+              <dd
+                id="grading-stats-passed"
+                class="font-mono text-sm font-semibold text-stone-800 tabular-nums"
+              >
+                {@stats.passed}/{@stats.graded}
+                <span class="font-sans text-xs text-stone-400 font-normal ml-0.5">
+                  {passed_percent(@stats)}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-stone-500">Tiefste</dt>
+              <dd class="font-mono text-sm font-semibold text-stone-800 tabular-nums">
+                {Grading.format_mark(@stats.min)}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-stone-500">Höchste</dt>
+              <dd class="font-mono text-sm font-semibold text-stone-800 tabular-nums">
+                {Grading.format_mark(@stats.max)}
+              </dd>
+            </div>
+          </dl>
+
+          <p :if={@stats.ungraded > 0} class="mt-4 text-xs text-stone-400">
+            {@stats.ungraded} ohne Note — nicht mitgezählt.
+          </p>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-4">
+            <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+              Notenverteilung
+            </h3>
+            <div class="flex items-center gap-4 text-xs text-stone-500" aria-hidden="true">
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-[3px] bg-red-400"></span> unter 4
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-[3px] bg-sky-500"></span> ab 4
+              </span>
+            </div>
+          </div>
+
+          <div id="mark-histogram" role="img" aria-label={@histogram_label} class="mt-4">
+            <div class="flex items-end gap-0.5 h-44 border-b border-stone-200">
+              <div
+                :for={{bucket, idx} <- Enum.with_index(@stats.buckets)}
+                id={"mark-bucket-#{idx}"}
+                data-count={bucket.count}
+                class="tooltip tooltip-top group flex-1 h-full pt-6 flex items-end justify-center"
+                data-tip={"#{bucket_label(bucket)}: #{bucket.count} #{learner_word(bucket.count)}"}
+              >
+                <div
+                  class={[
+                    "relative w-full max-w-12 rounded-t-[4px] transition-[height,background-color] duration-300 ease-out",
+                    if(bucket.from < 4.0,
+                      do: "bg-red-400 group-hover:bg-red-500",
+                      else: "bg-sky-500 group-hover:bg-sky-600"
+                    )
+                  ]}
+                  style={"height: #{bar_percent(bucket.count, @top)}%"}
+                >
+                  <span
+                    :if={bucket.count > 0}
+                    class="absolute -top-5 inset-x-0 text-center text-xs font-semibold text-stone-600 tabular-nums"
+                  >
+                    {bucket.count}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="flex gap-0.5 mt-2" aria-hidden="true">
+              <span
+                :for={bucket <- @stats.buckets}
+                class="flex-1 text-center text-[11px] text-stone-500 tabular-nums whitespace-nowrap"
+              >
+                {Grading.format_mark(bucket.from)}<span class="hidden lg:inline">–{Grading.format_mark(bucket.to)}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    """
+  end
+
+  defp bar_percent(_count, 0), do: 0
+  defp bar_percent(count, top), do: Float.round(count * 100 / top, 1)
+
+  defp passed_percent(%{graded: 0}), do: ""
+
+  defp passed_percent(%{passed: passed, graded: graded}),
+    do: "#{round(passed * 100 / graded)} %"
+
+  defp bucket_label(bucket),
+    do: "#{Grading.format_mark(bucket.from)}–#{Grading.format_mark(bucket.to)}"
+
+  defp learner_word(1), do: "Lernende:r"
+  defp learner_word(_), do: "Lernende"
+
+  # The bars are an image to a screen reader, so the label carries the data.
+  defp histogram_label(buckets) do
+    "Notenverteilung: " <>
+      Enum.map_join(buckets, ", ", &"#{bucket_label(&1)}: #{&1.count}")
+  end
 
   attr :row, :map, required: true
   attr :step, :string, required: true
@@ -735,7 +892,7 @@ defmodule TaskyWeb.ExamLive.Grading do
           {:noreply,
            socket
            |> assign(:submissions, submissions)
-           |> assign(:rows, build_rows(socket.assigns.exam, submissions))}
+           |> assign_rows(build_rows(socket.assigns.exam, submissions))}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Note konnte nicht gespeichert werden.")}
@@ -821,8 +978,18 @@ defmodule TaskyWeb.ExamLive.Grading do
 
     socket
     |> assign(:sort, sort)
-    |> assign(:rows, rows)
+    |> assign_rows(rows)
     |> assign(:submissions, Enum.map(rows, & &1.submission))
+  end
+
+  # The one way :rows is written, so the statistics above the table can
+  # never trail a mark that was just changed.
+  defp assign_rows(socket, rows) do
+    marks = Enum.map(rows, & &1.effective_mark)
+
+    socket
+    |> assign(:rows, rows)
+    |> assign(:stats, Grading.mark_stats(marks, socket.assigns.mark_step))
   end
 
   defp sort_rows(rows, {field, dir}) do

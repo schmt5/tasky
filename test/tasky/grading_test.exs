@@ -250,6 +250,72 @@ defmodule Tasky.GradingTest do
     end
   end
 
+  describe "mark_stats/2" do
+    defp counts_by_class(stats),
+      do: Map.new(stats.buckets, &{{&1.from, &1.to}, &1.count})
+
+    test "a mark on a class boundary counts in exactly one class" do
+      stats = Grading.mark_stats([3.9, 4.0, 4.4, 4.5], "0.1")
+      counts = counts_by_class(stats)
+
+      assert counts[{3.5, 3.9}] == 1
+      assert counts[{4.0, 4.4}] == 2
+      assert counts[{4.5, 4.9}] == 1
+      assert Enum.sum(Enum.map(stats.buckets, & &1.count)) == 4
+    end
+
+    test "the first class starts at 1, the last one closes at 6" do
+      stats = Grading.mark_stats([1.0, 5.5, 6.0], "0.1")
+
+      assert [%{from: 1.0, to: 1.4, count: 1} | _] = stats.buckets
+      assert %{from: 5.5, to: 6.0, count: 2} = List.last(stats.buckets)
+      assert length(stats.buckets) == 10
+    end
+
+    test "class labels follow the exam's grid" do
+      tenths = Grading.mark_stats([], "0.1")
+      quarters = Grading.mark_stats([], "0.25")
+
+      assert Enum.map(tenths.buckets, & &1.to) |> Enum.take(3) == [1.4, 1.9, 2.4]
+      assert Enum.map(quarters.buckets, & &1.to) |> Enum.take(3) == [1.25, 1.75, 2.25]
+      assert counts_by_class(Grading.mark_stats([3.75], "0.25"))[{3.5, 3.75}] == 1
+    end
+
+    test "float drift does not tip a mark into the next class" do
+      # A hair below 4 — what a ± chain of float steps can leave behind.
+      counts = counts_by_class(Grading.mark_stats([3.9999999999999996], "0.1"))
+
+      assert counts[{4.0, 4.4}] == 1
+    end
+
+    test "average, median, pass count and range skip the participants without a mark" do
+      stats = Grading.mark_stats([4.0, 5.0, nil, 3.5, 6.0], "0.25")
+
+      assert stats.graded == 4
+      assert stats.ungraded == 1
+      assert stats.average == 4.63
+      assert stats.median == 4.5
+      assert stats.passed == 3
+      assert stats.min == 3.5
+      assert stats.max == 6.0
+    end
+
+    test "an odd count takes the middle mark as median" do
+      assert Grading.mark_stats([5.0, 3.0, 4.0], "0.1").median == 4.0
+    end
+
+    test "no marks at all give no figures and empty classes" do
+      stats = Grading.mark_stats([nil, nil], "0.1")
+
+      assert stats.graded == 0
+      assert stats.ungraded == 2
+      assert stats.average == nil
+      assert stats.median == nil
+      assert stats.min == nil
+      assert Enum.all?(stats.buckets, &(&1.count == 0))
+    end
+  end
+
   describe "the points grid is untouched by the mark step" do
     test "points rounding takes no step and stays on 0.25" do
       assert Grading.normalize_points(4.3) == 4.25
