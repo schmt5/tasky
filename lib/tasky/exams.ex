@@ -2343,6 +2343,32 @@ defmodule Tasky.Exams do
     end
   end
 
+  @doc """
+  Saves the whole grading configuration — mark step and max-points override
+  — in one transaction, so the configuration page has one «Speichern» and
+  never a half-written state.
+
+  `:max_points` follows `update_grading_max_points/3` (`nil` clears the
+  override); `:mark_step` follows `set_mark_step/3`, including the
+  re-rounding of every stored manual mark. Both are validated before
+  anything is written. Returns `{:ok, exam, rounded_count}`.
+  """
+  def update_grading_config(scope, %Exam{} = exam, %{mark_step: step, max_points: max_points}) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_mark_step(step),
+         {:ok, normalized} <- normalize_grading_max_points(max_points) do
+      case do_set_mark_step(exam, step, %{grading_max_points: normalized}) do
+        {:ok, {updated, changed}} ->
+          Enum.each(changed, &broadcast_submission_change/1)
+          broadcast_exam_update(updated)
+          {:ok, updated, length(changed)}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   defp validate_mark_step(step) do
     if Grading.mark_step?(step), do: :ok, else: {:error, :invalid_mark_step}
   end
@@ -2352,7 +2378,10 @@ defmodule Tasky.Exams do
   # in ARCHITECTURE.md. Taking FOR UPDATE rather than FOR SHARE on the exam
   # is deliberate: this transaction writes the exam row *and* must exclude a
   # concurrent set_submission_mark/3, which reads the step under FOR SHARE.
-  defp do_set_mark_step(%Exam{} = exam, step) do
+  #
+  # `exam_changes` rides along on the same exam write, for
+  # update_grading_config/3.
+  defp do_set_mark_step(%Exam{} = exam, step, exam_changes \\ %{}) do
     Repo.transaction(fn ->
       locked = Repo.lock_one!(Exam, exam.id, :update)
 
@@ -2373,6 +2402,7 @@ defmodule Tasky.Exams do
       updated =
         locked
         |> Exam.mark_step_changeset(%{mark_step: step})
+        |> Ecto.Changeset.change(exam_changes)
         |> Repo.update!()
 
       {updated, changed}

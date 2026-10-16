@@ -435,14 +435,15 @@ defmodule TaskyWeb.ExamComponents do
   end
 
   @doc """
-  Die Karte „Maximalpunkte für Benotung“ — auf der Benotungskonfiguration und
-  über der Benotungstabelle.
+  Die Karte „Maximalpunkte für Benotung“ auf der Benotungskonfiguration.
 
-  Sie erscheint an zwei Stellen, weil die Lehrperson den Wert beim Einrichten
-  der Benotung setzt und ihn danach beim Blick auf die Tabelle nachjustiert
-  (nudgen und zusehen, wie sich die Noten verschieben). Beide Seiten
-  schreiben über `Exams.update_grading_max_points/3` und implementieren die
-  zwei Events `set_max_points` und `adjust_max_points`.
+  Die Karte zeigt nur einen Entwurf: Die Seite implementiert die Events
+  `set_max_points`, `adjust_max_points` und `reset_max_points` und schreibt
+  den Wert erst beim Speichern.
+
+  Der Zurücksetzen-Button erscheint nur, wenn der Wert die Musterlösung
+  überschreibt und die Musterlösung überhaupt Punkte hat — ein Zurücksetzen
+  auf 0 hiesse «keine Note für niemanden».
 
   Die Schritte hier sind bewusst 0.25 und folgen *nicht* dem Notenraster der
   Prüfung: Punkte liegen immer auf dem 0.25er-Gitter.
@@ -450,6 +451,8 @@ defmodule TaskyWeb.ExamComponents do
   attr :value, :any, required: true, doc: "die effektiven Maximalpunkte"
   attr :sample_solution_total, :any, required: true
   attr :free_document, :boolean, required: true
+  attr :overridden, :boolean, default: false, doc: "der Wert überschreibt die Musterlösung"
+  attr :error, :string, default: nil
 
   def max_points_card(assigns) do
     ~H"""
@@ -465,8 +468,33 @@ defmodule TaskyWeb.ExamComponents do
         <p class="text-xs text-stone-500 mt-0.5">
           Mit dieser Formel wird die Note berechnet. Du kannst jede Note danach selber anpassen.
         </p>
+        <p :if={@error} id="grading-max-points-error" class="text-xs font-medium text-red-600 mt-1.5">
+          {@error}
+        </p>
+        <p
+          :if={is_nil(@error) and not @overridden}
+          id="grading-max-points-source"
+          class="text-xs text-stone-400 mt-1.5"
+        >
+          Entspricht der Summe der Musterlösung.
+        </p>
       </div>
       <div class="shrink-0 inline-flex items-center gap-2">
+        <div
+          :if={@overridden and is_number(@sample_solution_total) and @sample_solution_total > 0}
+          class="tooltip tooltip-top tooltip-delayed"
+          data-tip={"Auf Musterlösung zurücksetzen (#{Tasky.Grading.format_points(@sample_solution_total)} Punkte)"}
+        >
+          <button
+            type="button"
+            id="reset-max-points-btn"
+            phx-click="reset_max_points"
+            aria-label="Auf Musterlösung zurücksetzen"
+            class="inline-flex items-center justify-center w-8 h-8 mr-1 rounded-full text-stone-400 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"
+          >
+            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
+          </button>
+        </div>
         <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte weniger">
           <button
             type="button"
@@ -488,7 +516,7 @@ defmodule TaskyWeb.ExamComponents do
             step="0.25"
             min="0"
             inputmode="decimal"
-            phx-debounce="500"
+            phx-debounce="200"
             class="w-24 font-mono text-base text-right text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
           />
         </form>

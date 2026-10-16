@@ -114,6 +114,114 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
     end
   end
 
+  describe "saving the configuration" do
+    defp configured_exam(sample_points) do
+      %{scope: scope, exam: exam} = ctx = finished_exam()
+      {:ok, exam, 0} = Exams.set_mark_step(scope, exam, "0.25")
+
+      exam =
+        exam
+        |> Ecto.Changeset.change(sample_solution_points: %{"p1" => sample_points})
+        |> Tasky.Repo.update!()
+
+      %{ctx | exam: exam}
+    end
+
+    defp open_config(conn, teacher, exam) do
+      conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/grading/config")
+    end
+
+    test "max points are a draft until Speichern", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      assert has_element?(view, "#save-grading-config-btn[disabled]")
+
+      render_change(view, "set_max_points", %{"max_points" => "12"})
+
+      assert Tasky.Repo.reload!(exam).grading_max_points == nil
+      refute has_element?(view, "#save-grading-config-btn[disabled]")
+      assert has_element?(view, "#grading-config-unsaved")
+
+      view |> element("#save-grading-config-btn") |> render_click()
+
+      assert Tasky.Repo.reload!(exam).grading_max_points == 12.0
+      assert has_element?(view, "#save-grading-config-btn[disabled]")
+      refute has_element?(view, "#grading-config-unsaved")
+    end
+
+    test "the plus button only changes the draft", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      render_click(view, "adjust_max_points", %{"direction" => "up"})
+
+      assert Tasky.Repo.reload!(exam).grading_max_points == nil
+      assert has_element?(view, ~s|#grading-max-points-input[value="10.25"]|)
+    end
+
+    test "reset goes back to the sample solution and saves as no override", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = configured_exam(10)
+      {:ok, exam} = Exams.update_grading_max_points(scope, exam, 8)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      view |> element("#reset-max-points-btn") |> render_click()
+
+      assert has_element?(view, ~s|#grading-max-points-input[value="10"]|)
+      refute has_element?(view, "#reset-max-points-btn")
+
+      view |> element("#save-grading-config-btn") |> render_click()
+
+      assert Tasky.Repo.reload!(exam).grading_max_points == nil
+    end
+
+    test "no reset when the value already follows the sample solution", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      refute has_element?(view, "#reset-max-points-btn")
+      assert has_element?(view, "#grading-max-points-source")
+    end
+
+    test "an invalid value blocks saving", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      render_change(view, "set_max_points", %{"max_points" => "0"})
+
+      assert has_element?(view, "#grading-max-points-error")
+      assert has_element?(view, "#save-grading-config-btn[disabled]")
+    end
+
+    test "step and max points are saved together", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      view |> element(~s|input[name="mark_step"][value="0.1"]|) |> render_click()
+      render_change(view, "set_max_points", %{"max_points" => "9.5"})
+      view |> element("#save-grading-config-btn") |> render_click()
+
+      exam = Tasky.Repo.reload!(exam)
+      assert exam.mark_step == "0.1"
+      assert exam.grading_max_points == 9.5
+    end
+
+    test "Benotung starten writes the max points as well", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = finished_exam()
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      render_change(view, "set_max_points", %{"max_points" => "20"})
+      assert Tasky.Repo.reload!(exam).grading_max_points == nil
+
+      assert {:error, {:live_redirect, _}} =
+               view |> element("#start-grading-btn") |> render_click()
+
+      exam = Tasky.Repo.reload!(exam)
+      assert exam.mark_step == "0.25"
+      assert exam.grading_max_points == 20.0
+    end
+  end
+
   describe "the grading table follows the exam's step" do
     test "the stepper, its copy and the input are on the 0.1 grid", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = finished_exam()

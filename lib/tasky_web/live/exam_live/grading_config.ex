@@ -8,10 +8,12 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
   statt die 0.25er-Schritte als Gegebenheit vorzufinden. Danach ist dieselbe
   Seite die Konfiguration, erreichbar über den Kopf der Benotungstabelle.
 
-  Das Raster wird erst auf Klick auf den Button geschrieben, nicht schon beim
-  Anwählen des Radios: `Exams.set_mark_step/3` rundet bestehende manuelle
-  Noten mit, und das soll an einem Speichern hängen und nicht am Durchklicken
-  der Optionen.
+  Die ganze Seite schreibt erst auf Klick auf den Button — Raster und
+  Maximalpunkte zusammen über `Exams.update_grading_config/3`. Bis dahin sind
+  beide ein Entwurf in den Assigns. Beim Raster ist das zwingend: es rundet
+  bestehende manuelle Noten mit, und das soll an einem Speichern hängen und
+  nicht am Durchklicken der Optionen. Die Maximalpunkte folgen derselben
+  Regel, damit es auf der Seite nur eine Art zu speichern gibt.
   """
   use TaskyWeb, :live_view
 
@@ -41,9 +43,11 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
         <div class="max-w-3xl">
           <ExamComponents.max_points_card
-            value={@effective_max_points}
+            value={effective_max_points(@draft_max_points, @sample_solution_total)}
             sample_solution_total={@sample_solution_total}
             free_document={@free_document}
+            overridden={not is_nil(@draft_max_points)}
+            error={@max_points_error}
           />
         </div>
 
@@ -89,7 +93,12 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
 
         <div class="max-w-3xl flex items-center justify-between">
           <.link
+            id="grading-config-back-link"
             navigate={@back_to}
+            data-confirm={
+              (not @pending? and @dirty?) &&
+                "Deine Änderungen sind noch nicht gespeichert. Trotzdem verlassen?"
+            }
             class="text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
           >
             ← {@back_tooltip}
@@ -99,20 +108,30 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
               type="button"
               id="start-grading-btn"
               phx-click="save"
-              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+              disabled={not is_nil(@max_points_error)}
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
             >
               <.icon name="hero-academic-cap" class="w-4 h-4" /> Benotung starten
             </button>
           <% else %>
-            <button
-              type="button"
-              id="save-grading-config-btn"
-              phx-click="save"
-              disabled={@selected_step == @exam.mark_step}
-              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
-            >
-              <.icon name="hero-check" class="w-4 h-4" /> Speichern
-            </button>
+            <div class="flex items-center gap-4">
+              <span
+                :if={@dirty?}
+                id="grading-config-unsaved"
+                class="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Ungespeicherte Änderungen
+              </span>
+              <button
+                type="button"
+                id="save-grading-config-btn"
+                phx-click="save"
+                disabled={not @dirty? or not is_nil(@max_points_error)}
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
+              >
+                <.icon name="hero-check" class="w-4 h-4" /> Speichern
+              </button>
+            </div>
           <% end %>
         </div>
       </div>
@@ -150,7 +169,9 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
      |> assign(:selected_step, Exams.mark_step(exam))
      |> assign(:free_document, Exams.free_document?(exam))
      |> assign(:sample_solution_total, sample_solution_total)
-     |> assign(:effective_max_points, exam.grading_max_points || sample_solution_total)
+     |> assign(:draft_max_points, exam.grading_max_points)
+     |> assign(:max_points_error, nil)
+     |> assign_dirty()
      |> assign_chrome()}
   end
 
@@ -191,38 +212,85 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
     # Whitelist gegen Grading.mark_steps/0: Client-Params dürfen nie
     # ungeprüft in einen Assign wandern, aus dem sie gespeichert werden.
     if Grading.mark_step?(step) do
-      {:noreply, assign(socket, :selected_step, step)}
+      {:noreply, socket |> assign(:selected_step, step) |> assign_dirty()}
     else
       {:noreply, socket}
     end
   end
 
   def handle_event("save", _params, socket) do
-    %{current_scope: scope, exam: exam, selected_step: step} = socket.assigns
+    %{current_scope: scope, exam: exam, selected_step: step, draft_max_points: max_points} =
+      socket.assigns
 
-    case Exams.set_mark_step(scope, exam, step) do
+    case Exams.update_grading_config(scope, exam, %{mark_step: step, max_points: max_points}) do
       {:ok, updated, rounded} ->
         {:noreply, after_save(socket, updated, rounded)}
 
       {:error, :invalid_mark_step} ->
         {:noreply, put_flash(socket, :error, "Unbekannte Notenschritte.")}
 
+      {:error, :invalid_max_points} ->
+        {:noreply, put_flash(socket, :error, "Maximalpunkte müssen grösser als 0 sein.")}
+
       {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Notenschritte konnten nicht gespeichert werden.")}
+        {:noreply, put_flash(socket, :error, "Konfiguration konnte nicht gespeichert werden.")}
     end
   end
 
+  # Die Maximalpunkte-Events ändern nur den Entwurf; geschrieben wird erst
+  # in "save".
   def handle_event("set_max_points", %{"max_points" => raw}, socket) do
-    save_max_points(socket, Grading.parse_points(raw))
+    case Grading.parse_points(raw) do
+      n when is_number(n) and n > 0 ->
+        {:noreply, put_draft_max_points(socket, Grading.normalize_points(n))}
+
+      _ ->
+        {:noreply,
+         socket
+         |> assign(:max_points_error, "Maximalpunkte müssen grösser als 0 sein.")
+         |> assign_dirty()}
+    end
   end
 
   def handle_event("adjust_max_points", %{"direction" => dir}, socket) do
+    %{draft_max_points: draft, sample_solution_total: total} = socket.assigns
     delta = if dir == "up", do: 0.25, else: -0.25
     # Gleicher Boden wie in der Benotungstabelle: 0 Maximalpunkte hiesse
     # «keine Note für niemanden».
-    new_value = max((socket.assigns.effective_max_points || 0) + delta, 0.25)
-    save_max_points(socket, new_value)
+    new_value = max((effective_max_points(draft, total) || 0) + delta, 0.25)
+    {:noreply, put_draft_max_points(socket, Grading.normalize_points(new_value))}
   end
+
+  # Zurück auf «folgt der Musterlösung»: nil, nicht die aktuelle Summe —
+  # sonst folgte der Wert einer später geänderten Musterlösung nicht mehr.
+  def handle_event("reset_max_points", _params, socket) do
+    {:noreply, put_draft_max_points(socket, nil)}
+  end
+
+  defp put_draft_max_points(socket, value) do
+    socket
+    |> assign(:draft_max_points, value)
+    |> assign(:max_points_error, nil)
+    |> assign_dirty()
+  end
+
+  # Verglichen werden die effektiven Werte: ein Entwurf, der genau die Summe
+  # der Musterlösung trifft, ist gegenüber «keine Überschreibung» keine
+  # Änderung.
+  defp assign_dirty(socket) do
+    %{exam: exam, selected_step: step, draft_max_points: draft, sample_solution_total: total} =
+      socket.assigns
+
+    dirty? =
+      step != exam.mark_step or
+        not is_nil(socket.assigns.max_points_error) or
+        effective_max_points(draft, total) != effective_max_points(exam.grading_max_points, total)
+
+    assign(socket, :dirty?, dirty?)
+  end
+
+  defp effective_max_points(nil, sample_solution_total), do: sample_solution_total
+  defp effective_max_points(value, _sample_solution_total), do: value
 
   defp after_save(socket, updated, rounded) do
     if socket.assigns.pending? do
@@ -233,15 +301,18 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
       socket
       |> assign(:exam, updated)
       |> assign(:selected_step, updated.mark_step)
-      |> put_flash(:info, saved_message(updated, rounded))
+      |> assign(:draft_max_points, updated.grading_max_points)
+      |> assign(:max_points_error, nil)
+      |> assign_dirty()
+      |> put_flash(:info, saved_message(rounded))
     end
   end
 
-  defp saved_message(exam, 0), do: "Notenschritte auf #{exam.mark_step} gesetzt."
+  defp saved_message(0), do: "Konfiguration gespeichert."
 
-  defp saved_message(exam, rounded),
+  defp saved_message(rounded),
     do:
-      "Notenschritte auf #{exam.mark_step} gesetzt. " <>
+      "Konfiguration gespeichert. " <>
         "#{rounded} #{note_word(rounded)} wurde#{plural_n(rounded)} auf das neue Raster gerundet."
 
   defp note_word(1), do: "Note"
@@ -249,25 +320,4 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
 
   defp plural_n(1), do: ""
   defp plural_n(_), do: "n"
-
-  defp save_max_points(socket, value) do
-    case Exams.update_grading_max_points(socket.assigns.current_scope, socket.assigns.exam, value) do
-      {:ok, updated_exam} ->
-        # Den effektiven Wert aus der Prüfung zurücklesen, nicht aus dem Feld:
-        # der Kontext rundet, was er speichert.
-        {:noreply,
-         socket
-         |> assign(:exam, updated_exam)
-         |> assign(
-           :effective_max_points,
-           updated_exam.grading_max_points || socket.assigns.sample_solution_total
-         )}
-
-      {:error, :invalid_max_points} ->
-        {:noreply, put_flash(socket, :error, "Maximalpunkte müssen grösser als 0 sein.")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Maximalpunkte konnten nicht gespeichert werden.")}
-    end
-  end
 end
