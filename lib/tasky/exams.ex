@@ -2614,15 +2614,58 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  Counts how many parts of the exam are enabled for automatic AI correction.
+  Counts how many parts of the exam are auto-corrected (see `auto_correct_part_ids/1`).
   """
-  def count_auto_correct_parts(%Exam{} = exam) do
-    config = exam.ai_correction_config || %{}
+  def count_auto_correct_parts(%Exam{} = exam),
+    do: exam |> auto_correct_part_ids() |> MapSet.size()
 
-    Enum.count(config, fn {_part_id, part_config} ->
-      is_map(part_config) and Map.get(part_config, "auto_correct") == true
-    end)
+  @doc """
+  Whether the part `part_id` is auto-corrected: the teacher switched it on, or
+  the part only asks for ticks (`choice_only_blocks?/1`).
+  """
+  def auto_correct_part?(%Exam{} = exam, part_id) when is_binary(part_id),
+    do: MapSet.member?(auto_correct_part_ids(exam), part_id)
+
+  @doc """
+  The ids of the parts the auto-correction grades: those whose config has
+  `"auto_correct" => true`, plus every part made only of checkboxes and radios.
+
+  A tick compares exactly against the sample solution, so there is nothing to
+  switch off there — such a part is always auto-corrected, whatever its stored
+  flag says. The flag stays untouched, so a part that later gains a text field
+  falls back to it.
+  """
+  def auto_correct_part_ids(%Exam{} = exam) do
+    flagged =
+      for {part_id, part_config} <- exam.ai_correction_config || %{},
+          is_map(part_config),
+          Map.get(part_config, "auto_correct") == true,
+          into: MapSet.new(),
+          do: part_id
+
+    MapSet.union(flagged, choice_only_part_ids(exam))
   end
+
+  @doc """
+  The ids of the parts whose answer fields are all checkboxes (`taskItem`) or
+  radios (`choice`) — at least one, and no text field.
+  """
+  def choice_only_part_ids(%Exam{} = exam) do
+    for part <-
+          exam |> sample_solution_doc() |> split_content_into_parts(exam.answer_mode),
+        choice_only_blocks?(NodePatcher.list_answer_blocks(part.nodes)),
+        into: MapSet.new(),
+        do: part.id
+  end
+
+  @doc """
+  Whether `blocks` (from `Tasky.AI.NodePatcher.list_answer_blocks/1`) are all
+  checkboxes or radios, and there is at least one.
+  """
+  def choice_only_blocks?([_ | _] = blocks),
+    do: Enum.all?(blocks, &(&1.type in ["taskItem", "choice"]))
+
+  def choice_only_blocks?(_blocks), do: false
 
   @doc """
   Enumerates correction job descriptors eligible for bulk AI correction across
@@ -2648,12 +2691,9 @@ defmodule Tasky.Exams do
     submission_filter = Keyword.get(opts, :submission_id)
 
     auto_correct_part_ids =
-      for {part_id, part_config} <- config,
-          is_map(part_config),
-          Map.get(part_config, "auto_correct") == true,
-          Map.get(max_points_map, part_id) not in [nil, 0],
-          into: MapSet.new(),
-          do: part_id
+      exam
+      |> auto_correct_part_ids()
+      |> MapSet.reject(&(Map.get(max_points_map, &1) in [nil, 0]))
 
     if MapSet.size(auto_correct_part_ids) == 0 do
       []

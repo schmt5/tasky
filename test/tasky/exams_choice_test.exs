@@ -80,6 +80,10 @@ defmodule Tasky.ExamsChoiceTest do
         sample_solution_points: %{"q-1" => 3}
       })
 
+    # A part of only radios is always auto-corrected, so saving the solution
+    # starts a run — let it finish before the test's sandbox goes away.
+    Exams.subscribe_correction(exam.id)
+
     {:ok, exam} =
       Exams.save_sample_solution_part(
         scope,
@@ -87,6 +91,8 @@ defmodule Tasky.ExamsChoiceTest do
         "q-1",
         part_nodes(doc({:digital, :analog, :bern}))
       )
+
+    assert_receive {:bulk_correction_done, _}, 2_000
 
     {:ok, exam} = Exams.open_exam_session(:system, exam, "anonymous")
     {:ok, exam} = Exams.update_exam_status(:system, exam, "running")
@@ -207,6 +213,7 @@ defmodule Tasky.ExamsChoiceTest do
     }
 
     {:ok, saved} = Exams.save_exam_structure(scope, exam, content)
+    assert_receive {:bulk_correction_done, _}, 2_000
 
     [q1, q2] = Exams.split_content_into_parts(saved.content, "answer_fields")
     [g1, g2, g3] = q1.nodes |> NodePatcher.list_answer_blocks() |> Enum.map(& &1.answer_id)

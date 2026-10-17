@@ -234,4 +234,108 @@ defmodule Tasky.ExamsAutoCorrectionTest do
                Exams.apply_auto_correction(:system, submission, "q-99", [], verdicts: %{})
     end
   end
+
+  describe "parts of only ticks" do
+    defp heading(part_id) do
+      %{
+        "type" => "heading",
+        "attrs" => %{"level" => 3, "partId" => part_id},
+        "content" => [%{"type" => "text", "text" => part_id}]
+      }
+    end
+
+    defp task_list(ids) do
+      %{
+        "type" => "taskList",
+        "content" =>
+          Enum.map(ids, fn id ->
+            %{
+              "type" => "taskItem",
+              "attrs" => %{"checked" => false, "answerId" => id},
+              "content" => [
+                %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => id}]}
+              ]
+            }
+          end)
+      }
+    end
+
+    defp radios(group_id, option_ids) do
+      %{
+        "type" => "paragraph",
+        "content" =>
+          Enum.flat_map(option_ids, fn id ->
+            [
+              %{
+                "type" => "choice",
+                "attrs" => %{"groupId" => group_id, "optionId" => id, "checked" => false}
+              },
+              %{"type" => "text", "text" => " #{id} "}
+            ]
+          end)
+      }
+    end
+
+    # q-text: text only, q-boxes: checkboxes only, q-radios: radios only,
+    # q-mixed: a text field and a checkbox.
+    defp tick_doc do
+      %{
+        "type" => "doc",
+        "content" => [
+          heading("q-text"),
+          answer_block("t1", ""),
+          heading("q-boxes"),
+          task_list(["c1", "c2"]),
+          heading("q-radios"),
+          radios(482_913, ["o1", "o2"]),
+          heading("q-mixed"),
+          answer_block("t2", ""),
+          task_list(["c3"])
+        ]
+      }
+    end
+
+    defp tick_exam(config \\ %{}) do
+      exam_fixture(%{
+        content: tick_doc(),
+        sample_solution_points: Map.new(~w(q-text q-boxes q-radios q-mixed), &{&1, 2}),
+        ai_correction_config: config
+      })
+    end
+
+    test "are auto-corrected without the flag" do
+      exam = tick_exam()
+
+      assert Exams.choice_only_part_ids(exam) == MapSet.new(["q-boxes", "q-radios"])
+      assert Exams.auto_correct_part?(exam, "q-boxes")
+      assert Exams.auto_correct_part?(exam, "q-radios")
+      refute Exams.auto_correct_part?(exam, "q-text")
+      refute Exams.auto_correct_part?(exam, "q-mixed")
+      assert Exams.count_auto_correct_parts(exam) == 2
+    end
+
+    test "stay auto-corrected when the flag is off, while other parts follow it" do
+      exam =
+        tick_exam(%{
+          "q-boxes" => %{"auto_correct" => false},
+          "q-mixed" => %{"auto_correct" => true}
+        })
+
+      assert Exams.auto_correct_part_ids(exam) == MapSet.new(["q-boxes", "q-radios", "q-mixed"])
+    end
+
+    test "get correction jobs, mixed parts only with the flag" do
+      exam = tick_exam()
+
+      {:ok, submission} =
+        exam
+        |> submission_fixture()
+        |> Exams.update_exam_submission_content(tick_doc())
+
+      submission |> Ecto.Changeset.change(submitted: true) |> Repo.update!()
+
+      part_ids = exam |> Exams.list_bulk_correction_jobs() |> Enum.map(& &1.part_id)
+      assert part_ids == ["q-boxes", "q-radios"]
+    end
+  end
 end

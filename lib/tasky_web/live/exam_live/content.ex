@@ -339,7 +339,22 @@ defmodule TaskyWeb.ExamLive.Content do
                     <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
                       Auto-Korrektur
                     </h4>
+                    <p
+                      :if={@options_draft.choice_only}
+                      id="auto-correct-always-note"
+                      class="flex items-start gap-2 text-sm text-stone-600 leading-relaxed"
+                    >
+                      <.icon
+                        name="hero-check-circle"
+                        class="w-[18px] h-[18px] text-amber-500 shrink-0 mt-0.5"
+                      />
+                      <span>
+                        Ankreuzaufgaben werden immer automatisch korrigiert. Du kannst jede
+                        Bewertung weiterhin von Hand ändern.
+                      </span>
+                    </p>
                     <.option_toggle
+                      :if={!@options_draft.choice_only}
                       field={@options_form[:auto_correct]}
                       label="Auto-Korrektur"
                       hint="Diese Aufgabe wird beim Start der Auto-Korrektur automatisch bewertet."
@@ -880,12 +895,15 @@ defmodule TaskyWeb.ExamLive.Content do
   defp option_fields(exam, part_id, blocks) do
     custom = Map.get(exam.sample_solution_block_points || %{}, part_id) || %{}
     scoring = Exams.checkbox_scoring(exam, part_id)
+    choice_only? = Exams.choice_only_blocks?(blocks)
 
     %{
       max_points: Map.get(exam.sample_solution_points || %{}, part_id),
       blocks: Enum.map(blocks, &%{&1 | points: Map.get(custom, &1.answer_id)}),
       custom_points: map_size(custom) > 0,
-      auto_correct: part_config_flag(exam, part_id, "auto_correct"),
+      # A part of only ticks is always auto-corrected (`Exams.auto_correct_part_ids/1`).
+      choice_only: choice_only?,
+      auto_correct: choice_only? or part_config_flag(exam, part_id, "auto_correct"),
       ignore_case: part_config_flag(exam, part_id, "ignore_case"),
       ignore_spelling: part_config_flag(exam, part_id, "ignore_spelling"),
       ignore_punctuation: part_config_flag(exam, part_id, "ignore_punctuation"),
@@ -922,6 +940,7 @@ defmodule TaskyWeb.ExamLive.Content do
           blocks: pv.blocks,
           has_text_answers: pv.has_text_answers,
           has_checkboxes: pv.has_checkboxes,
+          choice_only: pv.choice_only,
           max_points: pv.max_points,
           custom_points: pv.custom_points,
           block_points: Map.new(pv.blocks, &{&1.answer_id, &1.points}),
@@ -990,13 +1009,7 @@ defmodule TaskyWeb.ExamLive.Content do
         opts = %{
           max_points: draft.max_points,
           block_points: if(draft.custom_points, do: draft.block_points),
-          config: %{
-            "auto_correct" => draft.auto_correct,
-            "ignore_case" => draft.ignore_case,
-            "ignore_spelling" => draft.ignore_spelling,
-            "ignore_punctuation" => draft.ignore_punctuation,
-            "checkbox_scoring" => draft.checkbox_rule
-          }
+          config: options_config(draft)
         }
 
         case Exams.apply_part_options(
@@ -1243,6 +1256,20 @@ defmodule TaskyWeb.ExamLive.Content do
           auto? and flag_param(params, "ignore_punctuation", draft.ignore_punctuation),
         checkbox_rule: Map.get(params, "checkbox_rule", draft.checkbox_rule)
     }
+  end
+
+  # A part of only ticks shows no auto-correction switch, so its stored flag
+  # stays as it is — a text field added later falls back to it.
+  defp options_config(draft) do
+    config = %{
+      "auto_correct" => draft.auto_correct,
+      "ignore_case" => draft.ignore_case,
+      "ignore_spelling" => draft.ignore_spelling,
+      "ignore_punctuation" => draft.ignore_punctuation,
+      "checkbox_scoring" => draft.checkbox_rule
+    }
+
+    if draft.choice_only, do: Map.delete(config, "auto_correct"), else: config
   end
 
   defp flag_param(params, key, default) do

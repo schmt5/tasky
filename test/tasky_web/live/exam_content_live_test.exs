@@ -271,6 +271,29 @@ defmodule TaskyWeb.ExamContentLiveTest do
       assert has_element?(view, "#text-options-note")
     end
 
+    test "a part of only checkboxes has no auto-correction switch", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-2")
+      assert has_element?(view, "#auto-correct-always-note")
+      refute has_element?(view, "#options_auto_correct")
+
+      submit_options(view, "q-2", %{"max_points" => "2"})
+
+      exam = Exams.get_exam!(scope, exam.id)
+      assert Exams.auto_correct_part?(exam, "q-2")
+
+      assert view |> element("#correction-options-summary-q-2") |> render() =~
+               "Auto-Korrektur"
+
+      # Mixed: the switch stays, and it is off by default.
+      open_options(view, "q-3")
+      refute has_element?(view, "#auto-correct-always-note")
+      assert has_element?(view, "#options_auto_correct")
+      refute Exams.auto_correct_part?(exam, "q-3")
+    end
+
     test "the checkbox scoring rule is stored per part", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)

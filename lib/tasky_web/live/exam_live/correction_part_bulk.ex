@@ -1078,7 +1078,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:part_already_done, count_part_done(submissions, part_id))
          |> assign(:totals, compute_totals(answer_blocks))
          |> assign(:max_points, max_points)
-         |> assign(:auto_correct, Map.get(part_config, "auto_correct") == true)
+         |> assign(:auto_correct, Exams.auto_correct_part?(exam, part_id))
          |> assign(:ignore_case, Map.get(part_config, "ignore_case") == true)
          |> assign(:ignore_spelling, Map.get(part_config, "ignore_spelling") == true)
          |> assign(:ignore_punctuation, Map.get(part_config, "ignore_punctuation") == true)
