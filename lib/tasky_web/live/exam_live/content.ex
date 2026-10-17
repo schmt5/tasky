@@ -123,7 +123,7 @@ defmodule TaskyWeb.ExamLive.Content do
                       inputmode="decimal"
                       phx-debounce="500"
                       placeholder="—"
-                      class="w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                      class={points_input_class()}
                     />
                   </form>
                   <.step_button
@@ -205,7 +205,7 @@ defmodule TaskyWeb.ExamLive.Content do
                         inputmode="decimal"
                         phx-debounce="500"
                         placeholder="—"
-                        class="w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+                        class={points_input_class()}
                       />
                     </form>
                     <.step_button
@@ -1422,6 +1422,11 @@ defmodule TaskyWeb.ExamLive.Content do
     """
   end
 
+  # One look for every points input, in the sidebar and in the options dialog.
+  defp points_input_class,
+    do:
+      "w-full font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400"
+
   attr :id, :string, required: true
   attr :name, :string, required: true
   attr :value, :any, default: nil
@@ -1450,7 +1455,7 @@ defmodule TaskyWeb.ExamLive.Content do
             step="0.25"
             min="0"
             inputmode="decimal"
-            class="w-full input text-center font-mono"
+            class={points_input_class()}
           />
         </div>
         <.step_button
