@@ -69,8 +69,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         </div>
 
         <div class="max-w-7xl mx-auto px-8 py-6">
-          <div class="grid grid-cols-4 gap-6 items-start">
-            <%!-- Editor (3/4) --%>
+          <div class="grid grid-cols-5 gap-6 items-start">
+            <%!-- Editor (3/5) --%>
             <div class="col-span-3 min-w-0">
               <div
                 id={"correction-part-editor-#{@submission.id}-#{@current_part.id}"}
@@ -84,10 +84,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
               </div>
             </div>
 
-            <%!-- Sidebar (1/4, sticky) --%>
-            <aside class="col-span-1 sticky top-[72px]">
-              <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-                <div class="p-5 border-b border-stone-100">
+            <%!-- Power panel (2/5, sticky): the answer fields are judged right
+                 here, next to the text, instead of in a dialog on top of it. --%>
+            <aside class="col-span-2 sticky top-[72px]">
+              <div
+                id="power-panel"
+                phx-hook="PowerView"
+                class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] flex flex-col max-h-[calc(100vh-96px)]"
+              >
+                <div class="px-5 pt-5 pb-4 border-b border-stone-100">
                   <h2 class="text-base font-semibold text-stone-800 truncate">
                     {@current_part.label}
                   </h2>
@@ -102,36 +107,151 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                       <span class="text-xs font-medium text-purple-600">Automatisch korrigiert</span>
                     </div>
                   <% end %>
+                  <div
+                    :if={@power_blocks_count > 0}
+                    id="power-keys-legend"
+                    class="mt-3 flex items-center gap-3 flex-wrap text-xs text-stone-500"
+                  >
+                    <span :for={{key, label} <- power_keys()} class="inline-flex items-center gap-1">
+                      <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
+                        {key}
+                      </kbd>
+                      {label}
+                    </span>
+                  </div>
                 </div>
 
-                <div class="p-5 border-b border-stone-100">
-                  <form phx-change="set_points" phx-submit="set_points">
-                    <div class="flex items-center justify-between mb-2">
-                      <label
-                        for="part-points-input"
-                        class="block text-xs font-semibold text-stone-500 uppercase tracking-wide"
-                      >
-                        Punkte
-                      </label>
-                      <%= if @max_points do %>
-                        <span class="text-xs text-stone-400">
-                          max {format_points(@max_points)}
-                        </span>
+                <div class="flex-1 min-h-0 overflow-y-auto">
+                  <div :if={@power_blocks_count > 0} id="power-rows" class="p-4 space-y-2">
+                    <%= for section <- @power_sections do %>
+                      <%= if section.kind == :checkboxes do %>
+                        <%!-- Checkboxes of one list are one question: shown
+                            together, each with what was ticked and what the
+                            sample solution ticks. --%>
+                        <div
+                          id={"power-checkbox-group-#{section.id}"}
+                          class="rounded-xl border border-stone-200 bg-stone-50/60 p-2 space-y-2"
+                        >
+                          <div class="flex items-center justify-between gap-3 px-2 pt-1">
+                            <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                              Multiple-Choice
+                            </span>
+                            <span class="text-xs text-stone-500">
+                              {checkbox_matches(section.blocks)} von {length(section.blocks)} wie in der Musterlösung
+                            </span>
+                          </div>
+                          <.power_row
+                            :for={block <- section.blocks}
+                            block={block}
+                            manual_index={@power_manual_index}
+                            manual_value={@power_manual_value}
+                          />
+                        </div>
+                      <% else %>
+                        <.power_row
+                          block={section.block}
+                          manual_index={@power_manual_index}
+                          manual_value={@power_manual_value}
+                        />
+                      <% end %>
+                    <% end %>
+                  </div>
+
+                  <div :if={@upload_fields != []} class="p-5 border-b border-stone-100">
+                    <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">
+                      Datei-Abgaben
+                    </h3>
+                    <div class="space-y-2">
+                      <%= for field <- @upload_fields do %>
+                        <%= case @submission_files[field.id] do %>
+                          <% nil -> %>
+                            <div class="flex items-center gap-2.5 rounded-lg border border-dashed border-stone-200 px-3 py-2.5">
+                              <.icon name="hero-document" class="w-4 h-4 text-stone-300 shrink-0" />
+                              <div class="flex-1 min-w-0">
+                                <p class="text-xs font-semibold text-stone-500 truncate">
+                                  {field.label}
+                                </p>
+                                <p class="text-xs text-stone-400">
+                                  Keine Datei
+                                  <span :if={field.required} class="text-amber-600 font-semibold">
+                                    · Pflicht
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                          <% file -> %>
+                            <a
+                              href={
+                                ~p"/exams/#{@exam.id}/submissions/#{@submission.id}/files/#{file.id}"
+                              }
+                              target="_blank"
+                              rel="noopener"
+                              class="flex items-center gap-2.5 rounded-lg border border-stone-200 px-3 py-2.5 hover:bg-stone-50 hover:border-stone-300 transition-all duration-150 group"
+                            >
+                              <.file_badge filename={file.stored_filename} />
+                              <div class="flex-1 min-w-0">
+                                <p class="text-xs font-semibold text-stone-700 truncate">
+                                  {field.label}
+                                </p>
+                                <p class="text-xs text-stone-400 truncate">
+                                  {file.original_name} · {Uploads.format_size(file.size)}
+                                </p>
+                              </div>
+                              <.icon
+                                name="hero-arrow-down-tray"
+                                class="w-4 h-4 text-stone-300 group-hover:text-stone-500 shrink-0 transition-colors duration-150"
+                              />
+                            </a>
+                        <% end %>
                       <% end %>
                     </div>
-                    <input
-                      id="part-points-input"
-                      type="number"
-                      name="points"
-                      value={@points || ""}
-                      step="0.25"
-                      inputmode="decimal"
-                      phx-debounce="500"
-                      placeholder="—"
-                      class="w-full font-mono text-base text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
-                    />
+                  </div>
+                </div>
+
+                <div class="p-5 border-t border-stone-100 space-y-3">
+                  <form
+                    id="part-points-form"
+                    phx-change="set_points"
+                    phx-submit="set_points"
+                    class="flex items-center gap-3 flex-wrap"
+                  >
+                    <label
+                      for="part-points-input"
+                      class="text-xs font-semibold text-stone-500 uppercase tracking-wide"
+                    >
+                      Punkte
+                    </label>
+                    <div class="flex items-center gap-2">
+                      <input
+                        id="part-points-input"
+                        type="number"
+                        name="points"
+                        value={@points || ""}
+                        step="0.25"
+                        min="0"
+                        max={@max_points}
+                        inputmode="decimal"
+                        phx-debounce="500"
+                        placeholder="—"
+                        class="w-20 font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
+                      />
+                      <span :if={@max_points} class="text-sm text-stone-500">
+                        / {format_points(@max_points)}
+                      </span>
+                    </div>
+                    <%= if @power_blocks_count > 0 and format_points(@power_current_total) != format_points(@points) do %>
+                      <span
+                        class="tooltip tooltip-delayed tooltip-top text-xs text-stone-400"
+                        data-tip="Summe aus den Blockbewertungen. Wird übernommen, sobald du eine Bewertung änderst."
+                      >
+                        berechnet: {format_points(@power_current_total)}
+                      </span>
+                    <% end %>
                   </form>
-                  <div class="flex items-center gap-2 mt-3">
+
+                  <%!-- Without answer fields (free document, file upload only)
+                       there is nothing to judge per row: points go in by hand. --%>
+                  <div :if={@power_blocks_count == 0} class="flex items-center gap-2">
                     <div
                       class="flex-1 tooltip tooltip-delayed"
                       data-tip={
@@ -142,6 +262,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     >
                       <button
                         type="button"
+                        id="points-max"
                         phx-click="set_points_max"
                         disabled={is_nil(@max_points)}
                         class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-stone-200"
@@ -151,297 +272,52 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     </div>
                     <button
                       type="button"
+                      id="points-zero"
                       phx-click="set_points_zero"
                       class="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
                     >
                       <.icon name="hero-x-mark" class="w-3.5 h-3.5" /> 0
                     </button>
                   </div>
-                </div>
 
-                <div :if={@upload_fields != []} class="p-5 border-b border-stone-100">
-                  <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">
-                    Datei-Abgaben
-                  </h3>
-                  <div class="space-y-2">
-                    <%= for field <- @upload_fields do %>
-                      <%= case @submission_files[field.id] do %>
-                        <% nil -> %>
-                          <div class="flex items-center gap-2.5 rounded-lg border border-dashed border-stone-200 px-3 py-2.5">
-                            <.icon name="hero-document" class="w-4 h-4 text-stone-300 shrink-0" />
-                            <div class="flex-1 min-w-0">
-                              <p class="text-xs font-semibold text-stone-500 truncate">
-                                {field.label}
-                              </p>
-                              <p class="text-xs text-stone-400">
-                                Keine Datei
-                                <span :if={field.required} class="text-amber-600 font-semibold">
-                                  · Pflicht
-                                </span>
-                              </p>
-                            </div>
-                          </div>
-                        <% file -> %>
-                          <a
-                            href={
-                              ~p"/exams/#{@exam.id}/submissions/#{@submission.id}/files/#{file.id}"
-                            }
-                            target="_blank"
-                            rel="noopener"
-                            class="flex items-center gap-2.5 rounded-lg border border-stone-200 px-3 py-2.5 hover:bg-stone-50 hover:border-stone-300 transition-all duration-150 group"
-                          >
-                            <.file_badge filename={file.stored_filename} />
-                            <div class="flex-1 min-w-0">
-                              <p class="text-xs font-semibold text-stone-700 truncate">
-                                {field.label}
-                              </p>
-                              <p class="text-xs text-stone-400 truncate">
-                                {file.original_name} · {Uploads.format_size(file.size)}
-                              </p>
-                            </div>
-                            <.icon
-                              name="hero-arrow-down-tray"
-                              class="w-4 h-4 text-stone-300 group-hover:text-stone-500 shrink-0 transition-colors duration-150"
-                            />
-                          </a>
-                      <% end %>
-                    <% end %>
-                  </div>
-                </div>
-
-                <div class="p-5 space-y-3">
                   <%!-- Die Musterlösung ist antwortfeldbasiert; im freien Modus
                        gibt es keine, der Dialog wäre immer leer. --%>
                   <button
                     :if={not @free_document}
                     type="button"
+                    id="show-sample-solution"
                     phx-click="show_sample_solution_modal"
                     class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
                   >
                     <.icon name="hero-light-bulb" class="w-4 h-4" /> Musterlösung anzeigen
                   </button>
 
-                  <%= if @power_blocks_count > 0 do %>
-                    <button
-                      type="button"
-                      phx-click="open_power_view"
-                      class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all duration-150 active:scale-[0.98] bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 hover:border-sky-300"
-                    >
-                      <.icon name="hero-bolt" class="w-4 h-4" /> Power-Ansicht
-                    </button>
-                  <% end %>
-
-                  <%!-- Stacked: the sidebar is too narrow for badge and button side by side. --%>
-                  <div class="w-full flex flex-col gap-2">
-                    <.corrected_badge
-                      :if={@is_corrected}
-                      id="sidebar-corrected-badge"
-                      class="self-start"
-                    />
+                  <div class="flex items-center gap-2.5">
+                    <.corrected_badge :if={@is_corrected} id="power-corrected-badge" />
                     <.corrected_toggle
-                      id="sidebar-toggle-corrected"
+                      id="power-toggle-corrected"
                       corrected={@is_corrected}
-                      class="w-full"
+                      class="flex-1"
+                      data-power-toggle-corrected
                       phx-click="toggle_corrected"
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    id="power-next-submission"
+                    data-power-next-submission
+                    phx-click="goto_next_submission_power"
+                    disabled={is_nil(@next_submission_path)}
+                    class="w-full inline-flex items-center justify-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                  >
+                    Zum nächsten Teilnehmenden <.icon name="hero-arrow-right" class="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </aside>
           </div>
         </div>
-
-        <%= if @show_power_view do %>
-          <dialog
-            id="power-view-modal"
-            class="modal modal-open"
-            phx-window-keydown="close_power_view"
-            phx-key="escape"
-          >
-            <div class="modal-backdrop bg-stone-900/50" phx-click="close_power_view"></div>
-            <div
-              id="power-view-container"
-              phx-hook="PowerView"
-              class="modal-box max-w-3xl w-[min(720px,92vw)] p-0 bg-white rounded-[16px] shadow-2xl flex flex-col max-h-[92vh] h-[92vh]"
-            >
-              <div class="px-6 pt-5 pb-4 border-b border-stone-100 flex items-start gap-4">
-                <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
-                  <.icon name="hero-bolt" class="w-5 h-5 text-sky-500" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h3 class="text-lg font-semibold text-stone-900 truncate">
-                    Power-Ansicht – {@current_part.label}
-                  </h3>
-                  <p class="text-sm text-stone-500 mt-1">
-                    {@submission.firstname} {@submission.lastname}
-                    <%= if @max_points do %>
-                      · Max. Punkte:
-                      <span class="font-semibold text-stone-700">{format_points(@max_points)}</span>
-                      <%= if @power_per_block do %>
-                        · {format_points(@power_per_block)} pro Block
-                      <% else %>
-                        · Punkte pro Antwortfeld
-                      <% end %>
-                    <% end %>
-                  </p>
-                </div>
-                <div class="tooltip tooltip-left tooltip-delayed" data-tip="Schliessen (Esc)">
-                  <button
-                    type="button"
-                    phx-click="close_power_view"
-                    class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
-                  >
-                    <.icon name="hero-x-mark" class="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div class="px-6 py-4 border-b border-stone-100 flex items-center gap-4 text-xs text-stone-500">
-                <span class="font-semibold uppercase tracking-wide">Tastatur</span>
-                <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                    J
-                  </kbd>
-                  Volle Punkte
-                </span>
-                <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                    K
-                  </kbd>
-                  Manuell
-                </span>
-                <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                    L
-                  </kbd>
-                  0 Punkte
-                </span>
-                <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                    Tab
-                  </kbd>
-                  Nächster Block
-                </span>
-                <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                    Enter
-                  </kbd>
-                  Erledigt / Weiter
-                </span>
-              </div>
-
-              <div class="px-6 py-5 overflow-y-auto flex-1 space-y-2">
-                <%= for section <- @power_sections do %>
-                  <%= if section.kind == :checkboxes do %>
-                    <%!-- Checkboxes of one list are one question: shown
-                          together, each with what was ticked and what the
-                          sample solution ticks. --%>
-                    <div
-                      id={"power-checkbox-group-#{section.id}"}
-                      class="rounded-xl border border-stone-200 bg-stone-50/60 p-2 space-y-2"
-                    >
-                      <div class="flex items-center justify-between gap-3 px-2 pt-1">
-                        <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                          Multiple-Choice
-                        </span>
-                        <span class="text-xs text-stone-500">
-                          {checkbox_matches(section.blocks)} von {length(section.blocks)} wie in der Musterlösung
-                        </span>
-                      </div>
-                      <.power_row
-                        :for={block <- section.blocks}
-                        block={block}
-                        manual_index={@power_manual_index}
-                        manual_value={@power_manual_value}
-                      />
-                    </div>
-                  <% else %>
-                    <.power_row
-                      block={section.block}
-                      manual_index={@power_manual_index}
-                      manual_value={@power_manual_value}
-                    />
-                  <% end %>
-                <% end %>
-
-                <div class="w-full flex items-center gap-2.5">
-                  <.corrected_badge :if={@is_corrected} id="power-corrected-badge" />
-                  <%!-- Enter really is "Erledigt / Weiter" here, so the kbd stays. --%>
-                  <.corrected_toggle
-                    id="power-toggle-corrected"
-                    corrected={@is_corrected}
-                    class="flex-1"
-                    data-power-toggle-corrected
-                    phx-click="toggle_corrected"
-                  >
-                    <kbd class="px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
-                      Enter
-                    </kbd>
-                  </.corrected_toggle>
-                </div>
-              </div>
-
-              <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                  <form
-                    phx-change="set_points"
-                    phx-submit="set_points"
-                    class="flex items-center gap-2"
-                  >
-                    <span class="text-sm text-stone-500">Punkte</span>
-                    <input
-                      id="power-points-input"
-                      type="number"
-                      name="points"
-                      value={@points || ""}
-                      step="0.25"
-                      min="0"
-                      max={@max_points}
-                      inputmode="decimal"
-                      phx-debounce="400"
-                      placeholder="—"
-                      class="w-20 font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:border-sky-400"
-                    />
-                    <%= if @max_points do %>
-                      <span class="text-sm text-stone-500">/ {format_points(@max_points)}</span>
-                    <% end %>
-                  </form>
-                  <%= if format_points(@power_current_total) != format_points(@points) do %>
-                    <span
-                      class="tooltip tooltip-delayed tooltip-top text-xs text-stone-400"
-                      data-tip="Summe aus den Blockbewertungen. Wird übernommen, sobald du eine Bewertung änderst."
-                    >
-                      berechnet: {format_points(@power_current_total)}
-                    </span>
-                  <% end %>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    data-power-next-submission
-                    phx-click="goto_next_submission_power"
-                    disabled={is_nil(@next_submission_path)}
-                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
-                  >
-                    Zum nächsten Teilnehmenden
-                    <kbd class="ml-1 px-1.5 py-0.5 bg-white/20 border border-white/30 rounded text-white/80 font-mono text-[10px]">
-                      Enter
-                    </kbd>
-                    <.icon name="hero-arrow-right" class="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    phx-click="close_power_view"
-                    class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-lg border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
-                  >
-                    Schliessen
-                  </button>
-                </div>
-              </div>
-            </div>
-          </dialog>
-        <% end %>
 
         <%= if @show_sample_solution_modal do %>
           <dialog
@@ -513,16 +389,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   attr :manual_index, :integer, default: nil
   attr :manual_value, :any, default: 0
 
-  # One correctable answer block of the power view: points, the answer, and
-  # the verdict buttons (or the manual points form while it is open).
+  # One correctable answer block of the power panel: the points on the left,
+  # the answer with the verdict buttons (or the manual points form while it is
+  # open) below it on the right — the panel is too narrow for one line.
   defp power_row(assigns) do
     ~H"""
     <div
       tabindex="0"
       data-power-row={@block.index}
-      class="grid grid-cols-[64px_1fr_auto] items-center gap-4 px-4 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
+      class="grid grid-cols-[56px_1fr] items-center gap-x-3 gap-y-2.5 px-4 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2 focus:bg-sky-50/30 transition-all duration-100"
     >
-      <div class="text-center">
+      <div class="row-span-2 self-start text-center">
         <span class={[
           "inline-flex items-center justify-center min-w-[36px] h-8 px-2 rounded-lg font-mono text-base font-semibold",
           power_points_class(@block.verdict)
@@ -551,7 +428,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         <form
           phx-submit="set_block_verdict_manual"
           data-power-manual-form
-          class="flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
+          class="col-start-2 justify-self-start flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
         >
           <input type="hidden" name="index" value={@block.index} />
           <input
@@ -581,7 +458,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
           </button>
         </form>
       <% else %>
-        <div class="flex items-center gap-1.5">
+        <div class="col-start-2 flex items-center gap-1.5">
           <.power_verdict_button
             verdict="correct"
             active={@block.verdict == "correct"}
@@ -795,13 +672,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
      |> assign(:submissions, submissions)
      |> assign(:upload_fields, Exams.list_upload_fields(exam))
      |> assign(:show_sample_solution_modal, false)
-     |> assign(:sample_solution_json, nil)
-     |> assign(:show_power_view, false)}
+     |> assign(:sample_solution_json, nil)}
   end
 
   @impl true
   def handle_params(
-        %{"submission_id" => submission_id, "part_id" => part_id} = params,
+        %{"submission_id" => submission_id, "part_id" => part_id},
         _uri,
         socket
       ) do
@@ -830,8 +706,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       part_index = Enum.find_index(parts, &(&1.id == current_part.id))
       submission_index = Enum.find_index(submissions, &(&1.id == submission.id))
       max_points = Map.get(exam.sample_solution_points || %{}, current_part.id)
-      open_power = Map.get(params, "power") == "1"
-
       power_data = build_power_view(exam, submission, current_part.id)
 
       submission_files =
@@ -873,7 +747,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        |> assign(:power_current_total, power_data.current_total)
        |> assign(:power_manual_index, nil)
        |> assign(:power_manual_value, 0)
-       |> assign(:show_power_view, open_power and power_data.count > 0)}
+       # A new participant or question: start again on its first answer row.
+       |> push_event("power-view-refocus", %{})}
     end
   end
 
@@ -931,6 +806,10 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         %{kind: :single, block: block}
     end)
   end
+
+  # The keyboard legend above the answer rows.
+  defp power_keys,
+    do: [{"J", "Volle Punkte"}, {"K", "Manuell"}, {"L", "0 Punkte"}, {"Tab", "Nächste Zeile"}]
 
   defp checkbox_matches(blocks),
     do: Enum.count(blocks, &(&1.checked == &1.expected_checked))
@@ -990,14 +869,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
   def handle_event("set_points", %{"points" => raw}, socket) do
     save_points(socket, parse_points(raw))
-  end
-
-  def handle_event("open_power_view", _params, socket) do
-    {:noreply, assign(socket, :show_power_view, true)}
-  end
-
-  def handle_event("close_power_view", _params, socket) do
-    {:noreply, assign(socket, :show_power_view, false)}
   end
 
   def handle_event("set_block_verdict", %{"index" => index, "verdict" => verdict}, socket) do
@@ -1060,10 +931,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         {:noreply, socket}
 
       path ->
-        {:noreply,
-         socket
-         |> push_patch(to: "#{path}?power=1")
-         |> push_event("power-view-refocus", %{})}
+        {:noreply, push_patch(socket, to: path)}
     end
   end
 

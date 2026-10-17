@@ -25,6 +25,12 @@ export interface EditorModePreset {
   hideToolbar?: boolean;
   /** Load PaperAnswerLines: Enter/Backspace size an answer box. */
   paperMode?: boolean;
+  /**
+   * One plain toolbar row without tabs and without the grey bar: the start
+   * tools plus the teacher comment. For the exam correction, where verdicts
+   * are given in the power panel beside the editor, not in the text.
+   */
+  compactToolbar?: boolean;
 }
 
 export const EDITOR_MODES: Record<string, EditorModePreset> = {
@@ -94,6 +100,9 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
     hideCallout: true,
     correctionMode: true,
     notFullWidth: true,
+    // A question heading typed into a submission would re-split its parts.
+    hideQuestion: true,
+    compactToolbar: true,
   },
 
   /**

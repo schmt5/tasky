@@ -1,23 +1,22 @@
-// PowerView keyboard hook for the exam-correction power-view modal.
+// PowerView keyboard hook for the power panel of the exam correction, which
+// sits beside the editor on the single correction page.
 //
-// Attached to the modal element. Manages:
-//   * Initial focus on the first row
+// Attached to the panel element. Manages:
+//   * Focus on the first row on mount and whenever the server pushes
+//     "power-view-refocus" (next participant or question)
 //   * J/L shortcuts → push "set_block_verdict" (full points / zero) for the
 //     focused row (focus stays put; the teacher advances manually with Tab)
 //   * K → opens the manual points input ("open_block_manual_input"); the
 //     server answers with "focus-manual-input" so the input receives focus.
-//     Enter submits the form natively; Escape inside the form cancels it
-//     (stopPropagation keeps the modal's window-level Escape from closing).
-//   * Tab focus trap inside the modal
-//   * Escape closes the modal (delegated to the existing close handler)
+//     Enter submits the form natively; Escape inside the form cancels it.
 //
-// The action buttons ("Erledigen" / "Zum nächsten Teilnehmenden") are activated
-// natively via Enter — no JS handling needed.
+// No focus trap: the panel is part of the page, and Tab may leave it for the
+// editor. The action buttons are activated natively via Enter.
 export const PowerView = {
   mounted() {
     this.rows = () => Array.from(this.el.querySelectorAll("[data-power-row]"));
 
-    // Defer focus until after LiveView's morphdom settles and the dialog is
+    // Defer focus until after LiveView's morphdom settles and the panel is
     // actually painted. A single rAF isn't always enough on first mount.
     const focusFirstRow = () => {
       const rows = this.rows();
@@ -29,24 +28,17 @@ export const PowerView = {
 
     setTimeout(focusFirstRow, 0);
     // Retry once more after layout to defeat any focus stealers (e.g. the
-    // dialog element or a sibling button auto-focusing).
+    // editor or a sibling button auto-focusing).
     setTimeout(focusFirstRow, 80);
 
-    // When navigating to the next submission via push_patch, the modal
-    // container keeps its DOM id so `mounted()` does NOT re-run. The server
-    // pushes "power-view-refocus" after the patch so we can re-focus the
-    // first row of the (now different) submission.
+    // Navigating to another participant or question is a push_patch: the
+    // panel keeps its DOM id so `mounted()` does NOT re-run. The server pushes
+    // "power-view-refocus" from handle_params so the first row of the new
+    // answer gets the focus.
     this.handleEvent("power-view-refocus", () => {
       setTimeout(focusFirstRow, 0);
       setTimeout(focusFirstRow, 80);
     });
-
-    this.focusables = () =>
-      Array.from(
-        this.el.querySelectorAll(
-          '[data-power-row], input:not([tabindex="-1"]):not([type="hidden"]), button:not([tabindex="-1"]):not([disabled]), [href]:not([tabindex="-1"])',
-        ),
-      ).filter((el) => !el.disabled);
 
     // Server-pushed after open_block_manual_input: focus + select the points
     // input once the patched DOM is in place.
@@ -65,43 +57,14 @@ export const PowerView = {
     this.keyHandler = (e) => {
       if (e.defaultPrevented) return;
 
-      // Escape inside the manual points form cancels just the form — keep it
-      // from bubbling to the window-level handler that closes the modal.
+      // Escape inside the manual points form cancels just the form.
       if (e.key === "Escape") {
         const form =
           document.activeElement &&
           document.activeElement.closest("[data-power-manual-form]");
         if (form) {
           e.preventDefault();
-          e.stopPropagation();
           this.pushEvent("cancel_block_manual_input", {});
-        }
-        return;
-      }
-
-      // Focus trap: keep Tab navigation inside the modal.
-      if (e.key === "Tab") {
-        const items = this.focusables();
-        if (items.length === 0) return;
-        const first = items[0];
-        const last = items[items.length - 1];
-        const active = document.activeElement;
-
-        if (e.shiftKey && active === first) {
-          e.preventDefault();
-          last.focus();
-          return;
-        }
-        if (!e.shiftKey && active === last) {
-          e.preventDefault();
-          first.focus();
-          return;
-        }
-        // If focus has somehow escaped the modal entirely, pull it back.
-        if (!this.el.contains(active)) {
-          e.preventDefault();
-          first.focus();
-          return;
         }
         return;
       }

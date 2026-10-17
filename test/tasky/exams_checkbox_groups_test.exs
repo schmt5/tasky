@@ -137,14 +137,14 @@ defmodule Tasky.ExamsCheckboxGroupsTest do
   end
 
   describe "correction views" do
-    test "the power view shows the checkboxes as one group with both ticks", %{conn: conn} do
+    test "the power panel shows the checkboxes as one group with both ticks", %{conn: conn} do
       %{teacher: teacher, exam: exam} = setup_exam()
       submission = submit(exam, "anna", [false, true, false])
 
       {:ok, view, _html} =
         conn
         |> log_in_user(teacher)
-        |> live(~p"/exams/#{exam}/correction/#{submission}/parts/q-1?power=1")
+        |> live(~p"/exams/#{exam}/correction/#{submission}/parts/q-1")
 
       group = view |> element("#power-checkbox-group-1") |> render()
 

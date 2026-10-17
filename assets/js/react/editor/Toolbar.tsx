@@ -68,6 +68,7 @@ export interface ToolbarProps {
   hideCallout?: boolean;
   correctionMode?: boolean;
   hideQuestion?: boolean;
+  compactToolbar?: boolean;
   uploadImage?: ((file: File) => Promise<{ url: string }>) | null;
   lockHintVisible?: boolean;
   lockHintEnabled?: boolean;
@@ -82,6 +83,7 @@ export function Toolbar({
   hideCallout = false,
   correctionMode = false,
   hideQuestion = false,
+  compactToolbar = false,
   uploadImage = null,
   lockHintVisible = false,
   lockHintEnabled = false,
@@ -281,6 +283,164 @@ export function Toolbar({
 
   const [tab, setTab] = useState("start");
 
+  const startGroups = (
+    <>
+      {group("Aktionen", [
+        btn(
+          "Rückgängig",
+          <ArrowUturnLeftIcon className={iconCls} />,
+          () => editor.chain().focus().undo().run(),
+          false,
+          !active.canUndo,
+        ),
+        btn(
+          "Wiederholen",
+          <ArrowUturnRightIcon className={iconCls} />,
+          () => editor.chain().focus().redo().run(),
+          false,
+          !active.canRedo,
+        ),
+      ])}
+      {group("Schriftart", [
+        btn(
+          "Überschrift 1",
+          <H1Icon className={iconCls} />,
+          () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+          active.h1,
+        ),
+        btn(
+          "Überschrift 2",
+          <H2Icon className={iconCls} />,
+          () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+          active.h2,
+        ),
+        btn(
+          "Fett",
+          <BoldIcon className={iconCls} />,
+          () => editor.chain().focus().toggleBold().run(),
+          active.bold,
+        ),
+        btn(
+          "Unterstrichen",
+          <UnderlineIcon className={iconCls} />,
+          () => editor.chain().focus().toggleUnderline().run(),
+          active.underline,
+        ),
+        btn(
+          "Kursiv",
+          <ItalicIcon className={iconCls} />,
+          () => editor.chain().focus().toggleItalic().run(),
+          active.italic,
+        ),
+        textColorMenu,
+        highlightMenu,
+      ])}
+      {group("Listen", [
+        btn(
+          "Aufzählung",
+          <ListBulletIcon className={iconCls} />,
+          () => editor.chain().focus().toggleBulletList().run(),
+          active.bulletList,
+        ),
+        btn(
+          "Nummerierte Liste",
+          <NumberedListIcon className={iconCls} />,
+          () => editor.chain().focus().toggleOrderedList().run(),
+          active.orderedList,
+        ),
+      ])}
+      {!hideCallout && group("Hinweisbox", [calloutMenu])}
+      {!hideQuestion &&
+        group("Frage", [
+          btn(
+            "Frage",
+            <QuestionMarkCircleIcon className={iconCls} />,
+            () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+            active.h3,
+          ),
+        ])}
+      {!hideAnswers &&
+        group("Antworten", [
+          btn(
+            "Antwortfeld",
+            <FreitextAbcIcon className={iconCls} />,
+            () => editor.chain().focus().setAnswerBlock().run(),
+            active.answerBlock,
+          ),
+          btn(
+            "Lückentextfeld",
+            <LueckentextIcon className={iconCls} />,
+            () => editor.chain().focus().setLueckentext().run(),
+            active.lueckentext,
+          ),
+          btn(
+            "Multiple-Choice",
+            <MultipleChoiceIcon className={iconCls} />,
+            () => editor.chain().focus().toggleTaskList().run(),
+            active.taskList,
+          ),
+          btn(
+            "Single-Choice",
+            <SingleChoiceIcon className={iconCls} />,
+            () => editor.chain().focus().toggleSingleChoice().run(),
+            active.singleChoice,
+          ),
+        ])}
+      {!hideAnswers &&
+        active.choice &&
+        group("Single-Choice-Gruppe", [
+          btn(
+            "Eigene Gruppe für dieses Feld",
+            <ScissorsIcon className={iconCls} />,
+            () => editor.chain().focus().choiceNewGroup().run(),
+          ),
+          btn(
+            "Zur vorherigen Gruppe",
+            <LinkIcon className={iconCls} />,
+            () => editor.chain().focus().choiceJoinPrevious().run(),
+            false,
+            !active.canJoinChoice,
+          ),
+        ])}
+      {uploadImage &&
+        group("Einfügen", [
+          <ImageButton
+            key="image"
+            editor={editor}
+            uploadImage={uploadImage}
+          />,
+        ])}
+    </>
+  );
+
+  const commentGroup = group("Anmerkungen", [
+    btn(
+      "Lehrpersonkommentar",
+      <ChatBubbleLeftEllipsisIcon className={iconCls} />,
+      () => editor.chain().focus().toggleTeacherComment().run(),
+      active.teacherComment,
+    ),
+  ]);
+
+  // Exam correction: one row, no tabs. Verdicts are given in the power panel
+  // beside the editor, so the "Bewertung" emoji buttons and the table tools
+  // have no place here; the comment goes last.
+  if (compactToolbar) {
+    return (
+      <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
+        <div className="exam-editor__toolbar">
+          <div className="exam-editor__compact-bar">
+            <div className="exam-editor__toolbar-inner">
+              {startGroups}
+              {correctionMode && commentGroup}
+            </div>
+            <StatusIndicator status={status} errorMsg={errorMsg} />
+          </div>
+        </div>
+      </Tooltip.Provider>
+    );
+  }
+
   return (
     <Tooltip.Provider delayDuration={400} skipDelayDuration={300}>
       <div className="exam-editor__toolbar">
@@ -307,131 +467,7 @@ export function Toolbar({
         </div>
         <Tabs.Content value="start" className="exam-editor__tab-content">
           <div className="exam-editor__toolbar-inner">
-            {group("Aktionen", [
-              btn(
-                "Rückgängig",
-                <ArrowUturnLeftIcon className={iconCls} />,
-                () => editor.chain().focus().undo().run(),
-                false,
-                !active.canUndo,
-              ),
-              btn(
-                "Wiederholen",
-                <ArrowUturnRightIcon className={iconCls} />,
-                () => editor.chain().focus().redo().run(),
-                false,
-                !active.canRedo,
-              ),
-            ])}
-            {group("Schriftart", [
-              btn(
-                "Überschrift 1",
-                <H1Icon className={iconCls} />,
-                () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
-                active.h1,
-              ),
-              btn(
-                "Überschrift 2",
-                <H2Icon className={iconCls} />,
-                () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
-                active.h2,
-              ),
-              btn(
-                "Fett",
-                <BoldIcon className={iconCls} />,
-                () => editor.chain().focus().toggleBold().run(),
-                active.bold,
-              ),
-              btn(
-                "Unterstrichen",
-                <UnderlineIcon className={iconCls} />,
-                () => editor.chain().focus().toggleUnderline().run(),
-                active.underline,
-              ),
-              btn(
-                "Kursiv",
-                <ItalicIcon className={iconCls} />,
-                () => editor.chain().focus().toggleItalic().run(),
-                active.italic,
-              ),
-              textColorMenu,
-              highlightMenu,
-            ])}
-            {group("Listen", [
-              btn(
-                "Aufzählung",
-                <ListBulletIcon className={iconCls} />,
-                () => editor.chain().focus().toggleBulletList().run(),
-                active.bulletList,
-              ),
-              btn(
-                "Nummerierte Liste",
-                <NumberedListIcon className={iconCls} />,
-                () => editor.chain().focus().toggleOrderedList().run(),
-                active.orderedList,
-              ),
-            ])}
-            {!hideCallout && group("Hinweisbox", [calloutMenu])}
-            {!hideQuestion &&
-              group("Frage", [
-                btn(
-                  "Frage",
-                  <QuestionMarkCircleIcon className={iconCls} />,
-                  () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
-                  active.h3,
-                ),
-              ])}
-            {!hideAnswers &&
-              group("Antworten", [
-                btn(
-                  "Antwortfeld",
-                  <FreitextAbcIcon className={iconCls} />,
-                  () => editor.chain().focus().setAnswerBlock().run(),
-                  active.answerBlock,
-                ),
-                btn(
-                  "Lückentextfeld",
-                  <LueckentextIcon className={iconCls} />,
-                  () => editor.chain().focus().setLueckentext().run(),
-                  active.lueckentext,
-                ),
-                btn(
-                  "Multiple-Choice",
-                  <MultipleChoiceIcon className={iconCls} />,
-                  () => editor.chain().focus().toggleTaskList().run(),
-                  active.taskList,
-                ),
-                btn(
-                  "Single-Choice",
-                  <SingleChoiceIcon className={iconCls} />,
-                  () => editor.chain().focus().toggleSingleChoice().run(),
-                  active.singleChoice,
-                ),
-              ])}
-            {!hideAnswers &&
-              active.choice &&
-              group("Single-Choice-Gruppe", [
-                btn(
-                  "Eigene Gruppe für dieses Feld",
-                  <ScissorsIcon className={iconCls} />,
-                  () => editor.chain().focus().choiceNewGroup().run(),
-                ),
-                btn(
-                  "Zur vorherigen Gruppe",
-                  <LinkIcon className={iconCls} />,
-                  () => editor.chain().focus().choiceJoinPrevious().run(),
-                  false,
-                  !active.canJoinChoice,
-                ),
-              ])}
-            {uploadImage &&
-              group("Einfügen", [
-                <ImageButton
-                  key="image"
-                  editor={editor}
-                  uploadImage={uploadImage}
-                />,
-              ])}
+            {startGroups}
           </div>
         </Tabs.Content>
         <Tabs.Content value="tabellen" className="exam-editor__tab-content">
@@ -513,14 +549,7 @@ export function Toolbar({
         {correctionMode && (
           <Tabs.Content value="korrektur" className="exam-editor__tab-content">
             <div className="exam-editor__toolbar-inner">
-              {group("Anmerkungen", [
-                btn(
-                  "Lehrerkommentar",
-                  <ChatBubbleLeftEllipsisIcon className={iconCls} />,
-                  () => editor.chain().focus().toggleTeacherComment().run(),
-                  active.teacherComment,
-                ),
-              ])}
+              {commentGroup}
               {group("Bewertung", [
                 btn(
                   "Falsch",

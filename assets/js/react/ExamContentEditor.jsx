@@ -41,6 +41,7 @@ export default function ExamContentEditor({
   partId = null,
   apiRef = null,
   lockHintText = null,
+  compactToolbar = false,
 }) {
   // Mode presets bundle the prop matrix. NOTE: the preset WINS over an
   // explicit prop — `preset.x ?? x` only falls back to the prop when the
@@ -59,6 +60,7 @@ export default function ExamContentEditor({
   externalToolbar = preset.externalToolbar ?? externalToolbar;
   hideToolbar = preset.hideToolbar ?? hideToolbar;
   paperMode = preset.paperMode ?? paperMode;
+  compactToolbar = preset.compactToolbar ?? compactToolbar;
 
   // Blocked-edit hint (lockContent mode): briefly explains why typing into
   // the exam text has no effect, and pulses the answer fields.
@@ -218,6 +220,7 @@ export default function ExamContentEditor({
         "exam-editor" +
         (notFullWidth ? " exam-editor--not-full-width" : "") +
         (solutionMode ? " exam-editor--solution-mode" : "") +
+        (compactToolbar ? " exam-editor--compact-toolbar" : "") +
         (lockHintVisible ? " exam-editor--lock-flash" : "")
       }
     >
@@ -230,6 +233,7 @@ export default function ExamContentEditor({
           hideCallout={hideCallout}
           correctionMode={correctionMode}
           hideQuestion={hideQuestion}
+          compactToolbar={compactToolbar}
           uploadImage={uploadImage}
           lockHintVisible={lockContent && lockHintVisible}
           lockHintEnabled={lockContent}
