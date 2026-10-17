@@ -367,7 +367,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           max. {format_max_points(@block.max_points)} P.
         </div>
       </div>
-      <%= for group <- @block.groups do %>
+      <%= for group <- ordered_groups(@block, @answer_order) do %>
         {render_group_card(assigns, @block, group)}
       <% end %>
     </div>
@@ -381,7 +381,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     assigns =
       assigns
       |> assign(:section, section)
-      |> assign(:patterns, CheckboxPatterns.build(section.blocks, assigns.checkbox_scoring))
+      |> assign(
+        :patterns,
+        section.blocks
+        |> CheckboxPatterns.build(assigns.checkbox_scoring)
+        |> in_answer_order(assigns.answer_order, {:checkboxes, section.id}, & &1.key)
+      )
 
     ~H"""
     <div
@@ -797,7 +802,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           <% end %>
         </div>
       <% end %>
-      <%= for group <- @block.groups do %>
+      <%= for group <- ordered_groups(@block, @answer_order) do %>
         {render_group_card(assigns, @block, group)}
       <% end %>
     </div>
@@ -1050,6 +1055,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         submissions = Exams.list_exam_submissions(exam)
         answer_blocks = Exams.list_part_answer_groups(exam, part_id)
 
+        checkbox_scoring = Exams.checkbox_scoring(exam, part_id)
         part_config = Map.get(exam.ai_correction_config || %{}, part_id, %{})
         max_points = Map.get(exam.sample_solution_points || %{}, part_id)
 
@@ -1065,6 +1071,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:prev_part_id, prev_part_id)
          |> assign(:next_part_id, next_part_id)
          |> assign(:answer_blocks, answer_blocks)
+         |> assign(:answer_order, answer_order(answer_blocks, checkbox_scoring))
          |> assign(:manual_input, nil)
          |> assign(:is_multi_input, length(answer_blocks) > 1)
          |> assign(:total_submissions, length(submissions))
@@ -1075,7 +1082,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:ignore_case, Map.get(part_config, "ignore_case") == true)
          |> assign(:ignore_spelling, Map.get(part_config, "ignore_spelling") == true)
          |> assign(:ignore_punctuation, Map.get(part_config, "ignore_punctuation") == true)
-         |> assign(:checkbox_scoring, Exams.checkbox_scoring(exam, part_id))}
+         |> assign(:checkbox_scoring, checkbox_scoring)}
     end
   end
 
@@ -1367,6 +1374,71 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
 
   defp part_corrected?(submissions, part_id) do
     Enum.all?(submissions, fn s -> part_id in (s.corrected_parts || []) end)
+  end
+
+  # ----------------------------------------------------------------- order
+
+  # Answers read best-first: full points, partial points, zero, and "keine
+  # Antwort" last. The order is taken once when the question opens and then
+  # held (`refresh_assigns/1` leaves it alone), so a card the teacher just
+  # judged stays put instead of jumping into its new bucket; opening the
+  # question again sorts afresh.
+  defp answer_order(blocks, scoring) do
+    groups =
+      for block <- blocks, into: %{} do
+        texts =
+          block.groups
+          |> Enum.sort_by(&{group_rank(&1, block), -&1.count, &1.text || ""})
+          |> Enum.map(& &1.text)
+
+        {{:block, block.index}, texts}
+      end
+
+    patterns =
+      for %{kind: :checkboxes} = section <- block_sections(blocks), into: %{} do
+        keys =
+          section.blocks
+          |> CheckboxPatterns.build(scoring)
+          |> Enum.sort_by(&{pattern_rank(&1), -&1.count, &1.key})
+          |> Enum.map(& &1.key)
+
+        {{:checkboxes, section.id}, keys}
+      end
+
+    Map.merge(groups, patterns)
+  end
+
+  defp group_rank(%{text: nil}, _block), do: 3
+
+  defp group_rank(group, block),
+    do: group |> effective_verdict() |> Grading.marker_verdict(block.max_points) |> rank()
+
+  # A pattern of nothing but empty checkboxes is the checkbox "keine Antwort".
+  defp pattern_rank(pattern) do
+    cond do
+      String.match?(pattern.key, ~r/\A-+\z/) ->
+        3
+
+      is_number(pattern.points) ->
+        pattern.points |> Grading.marker_verdict(pattern.max_points) |> rank()
+
+      true ->
+        rank(pattern.verdict)
+    end
+  end
+
+  defp rank("correct"), do: 0
+  defp rank("wrong"), do: 2
+  defp rank(_partial), do: 1
+
+  defp ordered_groups(block, order),
+    do: in_answer_order(block.groups, order, {:block, block.index}, & &1.text)
+
+  # Items the held order does not know yet (a submission that arrived while
+  # the question was open) go to the end, in their incoming order.
+  defp in_answer_order(items, order, ref, id_fun) do
+    positions = order |> Map.get(ref, []) |> Enum.with_index() |> Map.new()
+    Enum.sort_by(items, &Map.get(positions, id_fun.(&1), map_size(positions)))
   end
 
   # ----------------------------------------------------------------- helpers
