@@ -403,4 +403,45 @@ defmodule Tasky.ExamsBlockPointsTest do
       refute Map.has_key?(updated.points_per_part, "q-1")
     end
   end
+
+  describe "apply_part_options/4" do
+    setup do
+      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
+      %{exam: exam, submission: submission_fixture(exam)}
+    end
+
+    defp points_of(submission) do
+      Tasky.Repo.get!(Tasky.Exams.ExamSubmission, submission.id).points_per_part["q-1"]
+    end
+
+    test "rescores a total that came from the verdicts", %{exam: exam, submission: submission} do
+      {:ok, _} = Exams.set_block_verdict(:system, submission, "q-1", 0, "correct")
+      assert points_of(submission) == 1
+
+      {:ok, _} = Exams.apply_part_options(:system, exam, "q-1", %{max_points: 8})
+
+      assert points_of(submission) == 2
+    end
+
+    test "keeps a total typed by hand", %{exam: exam, submission: submission} do
+      # No verdicts behind it: re-summing them would turn the 3 into 0.
+      {:ok, _} = Exams.set_part_points(:system, submission, "q-1", 3)
+
+      {:ok, _} = Exams.apply_part_options(:system, exam, "q-1", %{max_points: 8})
+
+      assert points_of(submission) == 3
+    end
+
+    test "re-runs the auto-correction when a text option changes", %{exam: exam} do
+      Phoenix.PubSub.subscribe(Tasky.PubSub, Tasky.AI.CorrectionOrchestrator.topic())
+      opts = %{config: %{"auto_correct" => true, "ignore_case" => true}}
+
+      {:ok, _} = Exams.apply_part_options(:system, exam, "q-1", opts)
+      assert_receive {:exam_answers_changed, _exam}
+
+      # Applying the same options again changes nothing.
+      {:ok, _} = Exams.apply_part_options(:system, exam, "q-1", opts)
+      refute_receive {:exam_answers_changed, _exam}
+    end
+  end
 end

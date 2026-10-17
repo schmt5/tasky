@@ -2477,8 +2477,11 @@ defmodule Tasky.Exams do
   its checkbox rule (`"checkbox_scoring"`); text
   options are switched off together with auto-correction, as in the form.
 
-  Every submission already graded on the part is rescored afterwards, so the
-  grading table never shows totals of the previous settings.
+  When the part's settings changed, every submission whose total on the part
+  is still the sum of its verdicts is rescored, so the grading table never
+  shows totals of the previous settings; a total the teacher typed by hand
+  (`set_part_points/4`) stays. The auto-correction then compares again, since
+  the text options change what counts as a match.
   """
   def apply_part_options(scope, %Exam{} = exam, part_id, opts)
       when is_binary(part_id) and is_map(opts) do
@@ -2493,14 +2496,27 @@ defmodule Tasky.Exams do
             |> Map.put(:ai_correction_config, part_config_changes(locked, part_id, opts))
 
           updated = locked |> Ecto.Changeset.change(changes) |> Repo.update!()
-          {updated, recompute_part_totals!(updated, part_id)}
+          changed? = part_settings(locked, part_id) != part_settings(updated, part_id)
+
+          submissions =
+            if changed?, do: recompute_part_totals!(locked, updated, part_id), else: []
+
+          {updated, changed?, submissions}
         end)
 
-      with {:ok, {updated, submissions}} <- result do
+      with {:ok, {updated, changed?, submissions}} <- result do
         Enum.each(submissions, &broadcast_submission_change/1)
+        if changed?, do: broadcast_exam_event({:exam_answers_changed, updated})
         {:ok, updated}
       end
     end
+  end
+
+  # Everything `apply_part_options/4` can change about one part.
+  defp part_settings(exam, part_id) do
+    {Map.get(exam.ai_correction_config || %{}, part_id),
+     Map.get(exam.sample_solution_points || %{}, part_id),
+     Map.get(exam.sample_solution_block_points || %{}, part_id)}
   end
 
   defp part_points_changes(exam, part_id, %{block_points: block_points})
@@ -2555,10 +2571,13 @@ defmodule Tasky.Exams do
     Map.put(exam.ai_correction_config || %{}, part_id, part_cfg)
   end
 
-  # Recomputes `points_per_part[part_id]` from the stored verdicts for every
-  # submission that already has a total for the part. Runs inside the caller's
-  # transaction, with the exam row already locked.
-  defp recompute_part_totals!(exam, part_id) do
+  # Recomputes `points_per_part[part_id]` from the stored verdicts under
+  # `exam`'s settings, for every submission whose total is still what its
+  # verdicts gave under `old_exam`'s. A total that differs was typed by hand
+  # (`set_part_points/4`): the verdicts don't explain it, so they must not
+  # replace it — without verdicts they would sum to 0. Runs inside the
+  # caller's transaction, with the exam row already locked.
+  defp recompute_part_totals!(old_exam, exam, part_id) do
     for submission <-
           lock_submissions_by_ids!(exam, submission_ids_with_part_total(exam, part_id)),
         part =
@@ -2566,16 +2585,11 @@ defmodule Tasky.Exams do
           |> correction_content()
           |> split_content_into_parts(exam.answer_mode)
           |> Enum.find(&(&1.id == part_id)),
-        part != nil do
-      blocks = NodePatcher.list_answer_blocks(part.nodes)
-
-      total =
-        blocks
-        |> effective_verdicts_for_part(submission.block_verdicts || %{})
-        |> compute_part_points(
-          resolve_block_points(exam, part_id, blocks),
-          checkbox_lists(exam, part_id, blocks)
-        )
+        part != nil,
+        blocks = NodePatcher.list_answer_blocks(part.nodes),
+        verdicts = effective_verdicts_for_part(blocks, submission.block_verdicts || %{}),
+        submission.points_per_part[part_id] == verdict_total(old_exam, part_id, blocks, verdicts) do
+      total = verdict_total(exam, part_id, blocks, verdicts)
 
       points =
         if is_nil(total),
@@ -2584,6 +2598,14 @@ defmodule Tasky.Exams do
 
       submission |> Ecto.Changeset.change(points_per_part: points) |> Repo.update!()
     end
+  end
+
+  defp verdict_total(exam, part_id, blocks, verdicts) do
+    compute_part_points(
+      verdicts,
+      resolve_block_points(exam, part_id, blocks),
+      checkbox_lists(exam, part_id, blocks)
+    )
   end
 
   defp submission_ids_with_part_total(exam, part_id) do
