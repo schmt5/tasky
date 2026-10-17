@@ -268,7 +268,7 @@ defmodule TaskyWeb.ExamLive.Content do
             <div class="modal-box max-w-2xl p-0 bg-white rounded-[16px] shadow-2xl">
               <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                  <div class="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
                     <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
                   </div>
                   <div class="min-w-0">
@@ -351,7 +351,7 @@ defmodule TaskyWeb.ExamLive.Content do
                     >
                       <.icon
                         name="hero-check-circle"
-                        class="w-[18px] h-[18px] text-amber-500 shrink-0 mt-0.5"
+                        class="w-[18px] h-[18px] text-violet-500 shrink-0 mt-0.5"
                       />
                       <span>
                         {choice_kinds(@options_draft)} werden immer automatisch korrigiert.
@@ -411,7 +411,7 @@ defmodule TaskyWeb.ExamLive.Content do
                         class={[
                           "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
                           if(@options_draft.checkbox_rule == rule,
-                            do: "border-amber-400 bg-amber-50/60",
+                            do: "border-violet-400 bg-violet-50/60",
                             else: "border-stone-200 bg-white hover:bg-stone-50 hover:border-stone-300"
                           )
                         ]}
@@ -434,7 +434,7 @@ defmodule TaskyWeb.ExamLive.Content do
                   <button
                     type="submit"
                     id="apply-correction-options-btn"
-                    class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+                    class="inline-flex items-center gap-2 bg-violet-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(124,58,237,0.25)] transition-all duration-150 hover:bg-violet-700 active:scale-[0.98]"
                   >
                     <.icon name="hero-check" class="w-4 h-4" /> Übernehmen
                   </button>
