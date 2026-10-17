@@ -85,4 +85,20 @@ defmodule TaskyWeb.ExamCorrectionBulkNavLiveTest do
 
     assert has_element?(view, ~s|#bulk-part-nav-q-2 a[data-done="true"]|)
   end
+
+  test "the done badge in the header follows the toggle", %{conn: conn} = ctx do
+    {:ok, view, _html} = open(conn, ctx.teacher, ctx.exam, "q-2")
+
+    refute has_element?(view, "#bulk-corrected-badge")
+    assert has_element?(view, ~s|#bulk-toggle-corrected[aria-pressed="false"]|)
+
+    view |> element("#bulk-toggle-corrected") |> render_click()
+
+    assert has_element?(view, "#bulk-corrected-badge")
+    assert has_element?(view, ~s|#bulk-toggle-corrected[aria-pressed="true"]|)
+
+    view |> element("#bulk-toggle-corrected") |> render_click()
+
+    refute has_element?(view, "#bulk-corrected-badge")
+  end
 end

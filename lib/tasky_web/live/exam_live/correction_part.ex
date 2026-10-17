@@ -1,6 +1,7 @@
 defmodule TaskyWeb.ExamLive.CorrectionPart do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.ExamComponents, only: [corrected_badge: 1, corrected_toggle: 1]
   import TaskyWeb.FileComponents
 
   alias Tasky.Exams
@@ -230,33 +231,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     </button>
                   <% end %>
 
-                  <div class="w-full flex items-center gap-2.5">
-                    <.icon
-                      name="hero-check-badge"
-                      class={[
-                        "w-6 h-6 shrink-0 transition-all duration-300 ease-out",
-                        if(@is_corrected,
-                          do: "text-green-600 scale-110",
-                          else: "text-stone-300"
-                        )
-                      ]}
+                  <%!-- Stacked: the sidebar is too narrow for badge and button side by side. --%>
+                  <div class="w-full flex flex-col gap-2">
+                    <.corrected_badge
+                      :if={@is_corrected}
+                      id="sidebar-corrected-badge"
+                      class="self-start"
                     />
-                    <button
-                      type="button"
+                    <.corrected_toggle
+                      id="sidebar-toggle-corrected"
+                      corrected={@is_corrected}
+                      class="w-full"
                       phx-click="toggle_corrected"
-                      aria-pressed={@is_corrected}
-                      class={[
-                        "flex-1 inline-flex items-center justify-center text-sm font-semibold px-4 py-2.5 rounded-lg border transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2",
-                        if(@is_corrected,
-                          do:
-                            "bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200 hover:border-stone-400",
-                          else:
-                            "bg-green-50 border-green-500 text-green-700 hover:bg-green-100 hover:border-green-600"
-                        )
-                      ]}
-                    >
-                      {if @is_corrected, do: "Erledigt zurücknehmen", else: "Als erledigt markieren"}
-                    </button>
+                    />
                   </div>
                 </div>
               </div>
@@ -378,36 +365,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 <% end %>
 
                 <div class="w-full flex items-center gap-2.5">
-                  <.icon
-                    name="hero-check-badge"
-                    class={[
-                      "w-6 h-6 shrink-0 transition-all duration-300 ease-out",
-                      if(@is_corrected,
-                        do: "text-green-600 scale-110",
-                        else: "text-stone-300"
-                      )
-                    ]}
-                  />
-                  <button
-                    type="button"
+                  <.corrected_badge :if={@is_corrected} id="power-corrected-badge" />
+                  <%!-- Enter really is "Erledigt / Weiter" here, so the kbd stays. --%>
+                  <.corrected_toggle
+                    id="power-toggle-corrected"
+                    corrected={@is_corrected}
+                    class="flex-1"
                     data-power-toggle-corrected
                     phx-click="toggle_corrected"
-                    aria-pressed={@is_corrected}
-                    class={[
-                      "flex-1 inline-flex items-center justify-center gap-3 text-sm font-semibold px-4 py-2.5 rounded-lg border transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2",
-                      if(@is_corrected,
-                        do:
-                          "bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200 hover:border-stone-400",
-                        else:
-                          "bg-green-50 border-green-500 text-green-700 hover:bg-green-100 hover:border-green-600"
-                      )
-                    ]}
                   >
-                    {if @is_corrected, do: "Erledigt zurücknehmen", else: "Als erledigt markieren"}
                     <kbd class="px-1.5 py-0.5 bg-white/60 border border-stone-200 rounded text-stone-500 font-mono text-[10px]">
                       Enter
                     </kbd>
-                  </button>
+                  </.corrected_toggle>
                 </div>
               </div>
 

@@ -1,7 +1,8 @@
 // BulkPowerKeys — inline keyboard navigation for the bulk-correction view.
 //
-// Attached to the content wrapper that contains both the answer-group cards
-// and the "Als erledigt markieren" / "Erledigt zurücknehmen" action button.
+// Attached to the content wrapper around the answer-group cards. The
+// "Als erledigt markieren" / "Erledigt zurücknehmen" toggle sits in the sticky
+// header, outside this wrapper.
 //
 //   * Focuses the first visible [data-bulk-power-row] on mount.
 //   * J/L on a focused row → push "set_group_verdict" (full points / zero)
@@ -23,7 +24,7 @@ export const BulkPowerKeys = {
         (el) => el.offsetParent !== null,
       );
 
-    this.toggleBtn = () => this.el.querySelector("[data-bulk-power-toggle]");
+    this.toggleBtn = () => document.querySelector("[data-bulk-power-toggle]");
 
     const focusFirst = () => {
       const rows = this.visibleRows();

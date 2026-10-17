@@ -1,6 +1,8 @@
 defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.ExamComponents, only: [corrected_badge: 1, corrected_toggle: 1]
+
   alias Tasky.Correction.CheckboxPatterns
   alias Tasky.Exams
   alias Tasky.Grading
@@ -33,9 +35,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
             </div>
 
             <div class="flex items-center gap-3 shrink-0">
-              <span id="bulk-parts-done" class="text-xs font-medium text-stone-500 tabular-nums">
-                {MapSet.size(@parts_done)}/{length(@parts)} erledigt
-              </span>
+              <%!-- Mark done, then move on with › — read left to right. --%>
+              <.corrected_badge :if={@is_corrected} id="bulk-corrected-badge" />
+              <.corrected_toggle
+                id="bulk-toggle-corrected"
+                corrected={@is_corrected}
+                size="sm"
+                data-bulk-power-toggle
+                phx-click="toggle_part_corrected"
+              />
               <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
                 <.icon name="hero-document-text" class="w-4 h-4 text-sky-700" />
                 <span class="text-xs font-semibold text-sky-700 uppercase tracking-wide">
@@ -103,59 +111,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
                   <% end %>
                 </div>
               <% end %>
-            </div>
-
-            <div class="mt-6">
-              <div class="bg-white border border-stone-200 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] px-5 py-3 flex items-center justify-end gap-3">
-                <.icon
-                  name="hero-check-badge"
-                  class={[
-                    "w-6 h-6 shrink-0 transition-all duration-300 ease-out",
-                    if(@is_corrected, do: "text-green-600 scale-110", else: "text-stone-300")
-                  ]}
-                />
-                <button
-                  type="button"
-                  data-bulk-power-toggle
-                  phx-click="toggle_part_corrected"
-                  aria-pressed={@is_corrected}
-                  class={[
-                    "inline-flex items-center justify-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg border transition-all duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2",
-                    if(@is_corrected,
-                      do:
-                        "bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200 hover:border-stone-400",
-                      else:
-                        "bg-green-50 border-green-500 text-green-700 hover:bg-green-100 hover:border-green-600"
-                    )
-                  ]}
-                >
-                  {if @is_corrected,
-                    do: "Erledigt zurücknehmen",
-                    else: "Als erledigt markieren"}
-                  <kbd class="px-1.5 py-0.5 rounded font-mono text-[10px] border bg-white/60 border-stone-200 text-stone-500">
-                    Enter
-                  </kbd>
-                </button>
-                <.link
-                  navigate={
-                    case @next_part_id do
-                      nil -> ~p"/exams/#{@exam}/correction"
-                      next -> ~p"/exams/#{@exam}/correction/bulk/#{next}"
-                    end
-                  }
-                  class="inline-flex items-center justify-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg border border-sky-600 bg-white text-sky-700 transition-all duration-200 active:scale-[0.98] hover:bg-sky-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2"
-                >
-                  {if @next_part_id, do: "Nächste Frage", else: "Zur Übersicht"}
-                  <%!-- Enter belongs to the toggle; → is the global shortcut. --%>
-                  <kbd
-                    :if={@next_part_id}
-                    class="px-1.5 py-0.5 rounded font-mono text-[10px] border bg-sky-50 border-sky-200 text-sky-600"
-                  >
-                    →
-                  </kbd>
-                  <.icon :if={is_nil(@next_part_id)} name="hero-arrow-right" class="w-4 h-4" />
-                </.link>
-              </div>
             </div>
           </div>
         <% end %>
