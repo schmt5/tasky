@@ -32,6 +32,22 @@ defmodule TaskyWeb.ExamCorrectionPartLiveTest do
     %{teacher: teacher, scope: user_scope_fixture(teacher)}
   end
 
+  # The rows come from the submitted document.
+  defp submitted(exam) do
+    {:ok, submission} =
+      exam |> exam_submission_fixture() |> Exams.update_exam_submission_content(@content)
+
+    submission
+  end
+
+  defp exam_with_max(scope) do
+    exam_fixture(
+      scope: scope,
+      status: "running",
+      attrs: %{content: @content, sample_solution_points: %{"q-1" => 2}}
+    )
+  end
+
   defp open(conn, teacher, exam, submission, part_id) do
     conn
     |> log_in_user(teacher)
@@ -77,5 +93,43 @@ defmodule TaskyWeb.ExamCorrectionPartLiveTest do
 
     assert has_element?(view, "#power-corrected-badge")
     assert has_element?(view, ~s|#power-toggle-corrected[aria-pressed="true"]|)
+  end
+
+  describe "the points under the rows" do
+    test "are the read-only sum of the rows", %{conn: conn} = ctx do
+      exam = exam_with_max(ctx.scope)
+      submission = submitted(exam)
+
+      {:ok, view, _html} = open(conn, ctx.teacher, exam, submission, "q-1")
+
+      assert has_element?(view, "#part-points-sum")
+      refute has_element?(view, "#part-points-input")
+      refute has_element?(view, "#part-points-no-max")
+
+      # A stale page or a crafted push cannot type the total by hand.
+      render_hook(view, "set_points", %{"points" => "1.5"})
+
+      assert Exams.get_submission!(exam, submission.id).points_per_part["q-1"] == nil
+    end
+
+    test "say so when the question has no max points", %{conn: conn} = ctx do
+      exam = exam_fixture(scope: ctx.scope, status: "running", attrs: %{content: @content})
+      submission = submitted(exam)
+
+      {:ok, view, _html} = open(conn, ctx.teacher, exam, submission, "q-1")
+
+      assert has_element?(view, "#part-points-no-max")
+      refute has_element?(view, "#part-points-input")
+    end
+
+    test "keep a total typed by hand and flag it", %{conn: conn} = ctx do
+      exam = exam_with_max(ctx.scope)
+      {:ok, submission} = Exams.set_part_points(ctx.scope, submitted(exam), "q-1", 1.5)
+
+      {:ok, view, _html} = open(conn, ctx.teacher, exam, submission, "q-1")
+
+      assert view |> element("#part-points-value") |> render() =~ "1.5"
+      assert has_element?(view, "#part-points-hand-set")
+    end
   end
 end

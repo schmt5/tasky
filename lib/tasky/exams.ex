@@ -1130,6 +1130,39 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Like `mark_part_corrected/3`, first persisting `defaults`
+  (`%{block_index => verdict}`) for the part's blocks the teacher left
+  untouched — the single-submission twin of `mark_part_corrected_bulk/4`. With
+  a read-only total, a part accepted as pre-judged would otherwise be marked
+  done without any points.
+
+  The defaults are only applied while the part has no stored total yet: a
+  total typed by hand before stays as it is.
+  """
+  def mark_part_corrected(scope, %ExamSubmission{} = submission, part_id, defaults)
+      when is_binary(part_id) and is_map(defaults) do
+    with :ok <- authorize_submission(scope, submission) do
+      result =
+        Repo.transaction(fn ->
+          # Exam first (FOR SHARE), then the submission — the lock order of
+          # every other grading write.
+          exam = Repo.lock_one!(Exam, submission.exam_id, :share)
+          locked = Repo.lock_one!(ExamSubmission, submission.id)
+
+          defaults =
+            if Map.has_key?(locked.points_per_part || %{}, part_id), do: %{}, else: defaults
+
+          mark_one_corrected!(locked, exam, part_id, defaults)
+        end)
+
+      with {:ok, updated} <- result do
+        broadcast_submission_change(updated)
+        {:ok, updated}
+      end
+    end
+  end
+
+  @doc """
   Removes a part from the submission's corrected list.
   """
   def unmark_part_corrected(scope, %ExamSubmission{} = submission, part_id)

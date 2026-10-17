@@ -211,76 +211,104 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 </div>
 
                 <div class="p-5 border-t border-stone-100 space-y-3">
-                  <form
-                    id="part-points-form"
-                    phx-change="set_points"
-                    phx-submit="set_points"
-                    class="flex items-center gap-3 flex-wrap"
-                  >
-                    <label
-                      for="part-points-input"
-                      class="text-xs font-semibold text-stone-500 uppercase tracking-wide"
+                  <%= if @power_blocks_count == 0 do %>
+                    <%!-- Without answer fields (free document, file upload only)
+                         there is nothing to sum up: points go in by hand. --%>
+                    <form
+                      id="part-points-form"
+                      phx-change="set_points"
+                      phx-submit="set_points"
+                      class="flex items-center gap-3 flex-wrap"
                     >
-                      Punkte
-                    </label>
-                    <div class="flex items-center gap-2">
-                      <input
-                        id="part-points-input"
-                        type="number"
-                        name="points"
-                        value={@points || ""}
-                        step="0.25"
-                        min="0"
-                        max={@max_points}
-                        inputmode="decimal"
-                        phx-debounce="500"
-                        placeholder="—"
-                        class="w-20 font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
-                      />
-                      <span :if={@max_points} class="text-sm text-stone-500">
-                        / {format_points(@max_points)}
-                      </span>
-                    </div>
-                    <%= if @power_blocks_count > 0 and format_points(@power_current_total) != format_points(@points) do %>
-                      <span
-                        class="tooltip tooltip-delayed tooltip-top text-xs text-stone-400"
-                        data-tip="Summe aus den Blockbewertungen. Wird übernommen, sobald du eine Bewertung änderst."
+                      <label
+                        for="part-points-input"
+                        class="text-xs font-semibold text-stone-500 uppercase tracking-wide"
                       >
-                        berechnet: {format_points(@power_current_total)}
-                      </span>
-                    <% end %>
-                  </form>
-
-                  <%!-- Without answer fields (free document, file upload only)
-                       there is nothing to judge per row: points go in by hand. --%>
-                  <div :if={@power_blocks_count == 0} class="flex items-center gap-2">
-                    <div
-                      class="flex-1 tooltip tooltip-delayed"
-                      data-tip={
-                        if is_nil(@max_points),
-                          do: "Keine Maximalpunkte in der Musterlösung gesetzt",
-                          else: "Maximale Punkte vergeben"
-                      }
-                    >
+                        Punkte
+                      </label>
+                      <div class="flex items-center gap-2">
+                        <input
+                          id="part-points-input"
+                          type="number"
+                          name="points"
+                          value={@points || ""}
+                          step="0.25"
+                          min="0"
+                          max={@max_points}
+                          inputmode="decimal"
+                          phx-debounce="500"
+                          placeholder="—"
+                          class="w-20 font-mono text-base text-center text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-4 focus:ring-sky-600 focus:ring-offset-2"
+                        />
+                        <span :if={@max_points} class="text-sm text-stone-500">
+                          / {format_points(@max_points)}
+                        </span>
+                      </div>
+                    </form>
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="flex-1 tooltip tooltip-delayed"
+                        data-tip={
+                          if is_nil(@max_points),
+                            do: "Keine Maximalpunkte in der Musterlösung gesetzt",
+                            else: "Maximale Punkte vergeben"
+                        }
+                      >
+                        <button
+                          type="button"
+                          id="points-max"
+                          phx-click="set_points_max"
+                          disabled={is_nil(@max_points)}
+                          class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-stone-200"
+                        >
+                          <.icon name="hero-check" class="w-3.5 h-3.5" /> Max
+                        </button>
+                      </div>
                       <button
                         type="button"
-                        id="points-max"
-                        phx-click="set_points_max"
-                        disabled={is_nil(@max_points)}
-                        class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-stone-200"
+                        id="points-zero"
+                        phx-click="set_points_zero"
+                        class="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
                       >
-                        <.icon name="hero-check" class="w-3.5 h-3.5" /> Max
+                        <.icon name="hero-x-mark" class="w-3.5 h-3.5" /> 0
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      id="points-zero"
-                      phx-click="set_points_zero"
-                      class="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300"
+                  <% else %>
+                    <%!-- With answer fields the points are the sum of the rows
+                         above, read-only: a different share goes in as manual
+                         points on a row (K), so total and rows always agree. --%>
+                    <div id="part-points-sum" class="flex items-center gap-3 flex-wrap">
+                      <span class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                        Punkte
+                      </span>
+                      <span class="inline-flex items-baseline gap-2">
+                        <span
+                          id="part-points-value"
+                          class="font-mono text-base font-semibold text-stone-800 tabular-nums"
+                        >
+                          {shown_part_points(@points, @power_current_total)}
+                        </span>
+                        <span :if={@max_points} class="text-sm text-stone-500">
+                          / {format_points(@max_points)}
+                        </span>
+                      </span>
+                    </div>
+                    <p
+                      :if={hand_set_points?(@points, @power_current_total)}
+                      id="part-points-hand-set"
+                      class="text-xs text-amber-700"
                     >
-                      <.icon name="hero-x-mark" class="w-3.5 h-3.5" /> 0
-                    </button>
-                  </div>
+                      Von Hand gesetzt · Summe der Felder: {format_points(@power_current_total)}.
+                      Wird übernommen, sobald du ein Feld bewertest.
+                    </p>
+                    <p
+                      :if={is_nil(@power_current_total)}
+                      id="part-points-no-max"
+                      class="text-xs text-stone-500"
+                    >
+                      Für diese Frage sind keine Maximalpunkte festgelegt.
+                    </p>
+                  <% end %>
 
                   <%!-- Die Musterlösung ist antwortfeldbasiert; im freien Modus
                        gibt es keine, der Dialog wäre immer leer. --%>
@@ -779,10 +807,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       end
 
     # Same formula as the stored part total, checkbox scoring rule included.
+    # nil without max points: there is no sum then, not a sum of 0.
     current_total =
       Tasky.Grading.part_points(
         Map.new(blocks, &{&1.index, &1.verdict}),
-        points_by_index || %{},
+        points_by_index,
         Exams.checkbox_lists(exam, part_id, blocks)
       )
 
@@ -808,6 +837,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         %{kind: :single, block: block}
     end)
   end
+
+  # The read-only total under the answer rows: the stored one, since it is
+  # what counts; before anything is stored, the sum the rows give.
+  defp shown_part_points(points, _sum) when is_number(points), do: format_points(points)
+  defp shown_part_points(_points, sum) when is_number(sum), do: format_points(sum)
+  defp shown_part_points(_points, _sum), do: "—"
+
+  # A total typed by hand before the field became read-only, which the rows
+  # don't explain. It stays until a row is judged (see `refresh_power_view/1`).
+  defp hand_set_points?(points, sum) when is_number(points) and is_number(sum),
+    do: format_points(points) != format_points(sum)
+
+  defp hand_set_points?(_points, _sum), do: false
 
   # The keyboard legend above the answer rows.
   defp power_keys,
@@ -942,27 +984,38 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
     scope = socket.assigns.current_scope
 
-    result =
-      if part.id in (submission.corrected_parts || []) do
-        Exams.unmark_part_corrected(scope, submission, part.id)
-      else
-        Exams.mark_part_corrected(scope, submission, part.id)
+    if part.id in (submission.corrected_parts || []) do
+      case Exams.unmark_part_corrected(scope, submission, part.id) do
+        {:ok, updated} ->
+          {:noreply,
+           socket
+           |> assign(:submission, updated)
+           |> assign(:is_corrected, false)}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Status konnte nicht aktualisiert werden.")}
       end
+    else
+      # The rows' pre-judgements (e.g. from the auto-correction) count as
+      # accepted, so the read-only total gets stored with the flag.
+      defaults =
+        for %{verdict: v, index: i} <- socket.assigns.power_blocks,
+            not is_nil(v),
+            into: %{},
+            do: {i, v}
 
-    case result do
-      {:ok, updated} ->
-        {:noreply,
-         socket
-         |> assign(:submission, updated)
-         |> assign(:is_corrected, part.id in (updated.corrected_parts || []))}
+      case Exams.mark_part_corrected(scope, submission, part.id, defaults) do
+        {:ok, updated} ->
+          {:noreply, apply_graded_submission(socket, updated)}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Status konnte nicht aktualisiert werden.")}
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, "Status konnte nicht aktualisiert werden.")}
+      end
     end
   end
 
   defp apply_block_verdict(socket, index_int, new_verdict) do
-    %{exam: exam, submission: submission, current_part: part} = socket.assigns
+    %{submission: submission, current_part: part} = socket.assigns
 
     case Exams.set_block_verdict(
            socket.assigns.current_scope,
@@ -972,32 +1025,41 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
            new_verdict
          ) do
       {:ok, updated} ->
-        updated_part =
-          updated
-          |> Exams.correction_content()
-          |> Exams.split_content_into_parts(exam.answer_mode)
-          |> Enum.find(&(&1.id == part.id))
-
-        part_doc_json =
-          case updated_part do
-            nil -> nil
-            p -> Jason.encode!(%{"type" => "doc", "content" => p.nodes})
-          end
-
-        socket =
-          socket
-          |> assign(:submission, updated)
-          |> refresh_power_view()
-
-        socket =
-          if part_doc_json,
-            do: push_event(socket, "reload-content", %{content: part_doc_json}),
-            else: socket
-
-        {:noreply, socket}
+        {:noreply, apply_graded_submission(socket, updated)}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Bewertung konnte nicht gespeichert werden.")}
+    end
+  end
+
+  # After a grading write: the panel shows the new verdicts and total, and when
+  # the part's markers were rewritten the editor reloads the document, so its
+  # autosave cannot put the old markers back. An unchanged document is not
+  # reloaded, which would drop what the teacher is still typing.
+  defp apply_graded_submission(socket, updated) do
+    %{exam: exam, current_part: part, submission: before} = socket.assigns
+    content_changed? = Exams.correction_content(updated) != Exams.correction_content(before)
+
+    updated_part =
+      updated
+      |> Exams.correction_content()
+      |> Exams.split_content_into_parts(exam.answer_mode)
+      |> Enum.find(&(&1.id == part.id))
+
+    socket =
+      socket
+      |> assign(:submission, updated)
+      |> assign(:is_corrected, part.id in (updated.corrected_parts || []))
+      |> refresh_power_view()
+
+    case updated_part do
+      p when is_nil(p) or not content_changed? ->
+        socket
+
+      p ->
+        push_event(socket, "reload-content", %{
+          content: Jason.encode!(%{"type" => "doc", "content" => p.nodes})
+        })
     end
   end
 
@@ -1011,6 +1073,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       _ -> 0
     end
   end
+
+  # With answer fields the total is the read-only sum of the rows; an event
+  # that would type it by hand (a stale page, a crafted push) is ignored.
+  defp save_points(%{assigns: %{power_blocks_count: n}} = socket, _points) when n > 0,
+    do: {:noreply, socket}
 
   defp save_points(socket, points) do
     %{submission: submission, current_part: part} = socket.assigns
