@@ -84,13 +84,15 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
               </div>
             </div>
 
-            <%!-- Power panel (2/5, sticky): the answer fields are judged right
-                 here, next to the text, instead of in a dialog on top of it. --%>
-            <aside class="col-span-2 sticky top-[72px]">
+            <%!-- Power panel (2/5): the answer fields are judged right here,
+                 next to the text, instead of in a dialog on top of it. It
+                 scrolls with the page, without an inner scroll area, so every
+                 row and the actions below them stay in reach. --%>
+            <aside class="col-span-2">
               <div
                 id="power-panel"
                 phx-hook="PowerView"
-                class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] flex flex-col max-h-[calc(100vh-96px)]"
+                class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]"
               >
                 <div class="px-5 pt-5 pb-4 border-b border-stone-100">
                   <h2 class="text-base font-semibold text-stone-800 truncate">
@@ -121,7 +123,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                   </div>
                 </div>
 
-                <div class="flex-1 min-h-0 overflow-y-auto">
+                <div>
                   <div :if={@power_blocks_count > 0} id="power-rows" class="p-4 space-y-2">
                     <%= for section <- @power_sections do %>
                       <%= if section.kind == :checkboxes do %>
@@ -428,7 +430,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
         <form
           phx-submit="set_block_verdict_manual"
           data-power-manual-form
-          class="col-start-2 justify-self-start flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
+          class="col-start-2 justify-self-end flex items-center gap-1.5 rounded-lg border border-yellow-400 bg-yellow-50/60 p-1"
         >
           <input type="hidden" name="index" value={@block.index} />
           <input
@@ -458,7 +460,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
           </button>
         </form>
       <% else %>
-        <div class="col-start-2 flex items-center gap-1.5">
+        <div class="col-start-2 flex items-center justify-end gap-1.5">
           <.power_verdict_button
             verdict="correct"
             active={@block.verdict == "correct"}
