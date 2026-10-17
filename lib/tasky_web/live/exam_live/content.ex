@@ -1035,12 +1035,23 @@ defmodule TaskyWeb.ExamLive.Content do
                opts
              ) do
           {:ok, updated_exam} ->
-            pv = part_view(socket, draft.part_id)
+            # The question may have been removed while the dialog was open.
+            socket =
+              case part_view(socket, draft.part_id) do
+                nil ->
+                  socket
+
+                pv ->
+                  update_part_view(
+                    socket,
+                    draft.part_id,
+                    option_fields(updated_exam, pv.id, pv.blocks)
+                  )
+              end
 
             {:noreply,
              socket
              |> assign(:exam, updated_exam)
-             |> update_part_view(draft.part_id, option_fields(updated_exam, pv.id, pv.blocks))
              |> assign_options_draft(nil)}
 
           {:error, _reason} ->
