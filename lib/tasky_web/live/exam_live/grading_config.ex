@@ -222,7 +222,14 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
     %{current_scope: scope, exam: exam, selected_step: step, draft_max_points: max_points} =
       socket.assigns
 
-    case Exams.update_grading_config(scope, exam, %{mark_step: step, max_points: max_points}) do
+    # Untouched max points stay out of the write, so saving the mark step
+    # never reverts a change made to them in another tab since mount.
+    attrs =
+      if max_points == exam.grading_max_points,
+        do: %{mark_step: step},
+        else: %{mark_step: step, max_points: max_points}
+
+    case Exams.update_grading_config(scope, exam, attrs) do
       {:ok, updated, rounded} ->
         {:noreply, after_save(socket, updated, rounded)}
 

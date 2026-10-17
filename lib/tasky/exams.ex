@@ -2349,15 +2349,16 @@ defmodule Tasky.Exams do
   never a half-written state.
 
   `:max_points` follows `update_grading_max_points/3` (`nil` clears the
-  override); `:mark_step` follows `set_mark_step/3`, including the
-  re-rounding of every stored manual mark. Both are validated before
-  anything is written. Returns `{:ok, exam, rounded_count}`.
+  override) and may be left out to keep what is stored; `:mark_step` follows
+  `set_mark_step/3`, including the re-rounding of every stored manual mark.
+  Both are validated before anything is written. Returns
+  `{:ok, exam, rounded_count}`.
   """
-  def update_grading_config(scope, %Exam{} = exam, %{mark_step: step, max_points: max_points}) do
+  def update_grading_config(scope, %Exam{} = exam, %{mark_step: step} = attrs) do
     with :ok <- Policy.authorize(scope, exam.teacher_id),
          :ok <- validate_mark_step(step),
-         {:ok, normalized} <- normalize_grading_max_points(max_points) do
-      case do_set_mark_step(exam, step, %{grading_max_points: normalized}) do
+         {:ok, exam_changes} <- grading_max_points_changes(attrs) do
+      case do_set_mark_step(exam, step, exam_changes) do
         {:ok, {updated, changed}} ->
           Enum.each(changed, &broadcast_submission_change/1)
           broadcast_exam_update(updated)
@@ -2368,6 +2369,13 @@ defmodule Tasky.Exams do
       end
     end
   end
+
+  defp grading_max_points_changes(%{max_points: max_points}) do
+    with {:ok, normalized} <- normalize_grading_max_points(max_points),
+         do: {:ok, %{grading_max_points: normalized}}
+  end
+
+  defp grading_max_points_changes(_attrs), do: {:ok, %{}}
 
   defp validate_mark_step(step) do
     if Grading.mark_step?(step), do: :ok, else: {:error, :invalid_mark_step}

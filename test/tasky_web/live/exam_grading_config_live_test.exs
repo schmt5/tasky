@@ -206,6 +206,21 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       assert exam.grading_max_points == 9.5
     end
 
+    test "saving the step keeps max points changed elsewhere since mount", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      # Another tab sets the max points after this page loaded.
+      {:ok, _exam} = Exams.update_grading_max_points(scope, exam, 8)
+
+      view |> element(~s|input[name="mark_step"][value="0.1"]|) |> render_click()
+      view |> element("#save-grading-config-btn") |> render_click()
+
+      exam = Tasky.Repo.reload!(exam)
+      assert exam.mark_step == "0.1"
+      assert exam.grading_max_points == 8.0
+    end
+
     test "Benotung starten writes the max points as well", %{conn: conn} do
       %{teacher: teacher, exam: exam} = finished_exam()
       {:ok, view, _html} = open_config(conn, teacher, exam)
