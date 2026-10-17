@@ -13,44 +13,78 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       current_scope={@current_scope}
       current_path={~p"/exams/#{@exam}/correction"}
     >
-      <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
-        <div class="max-w-7xl mx-auto">
-          <div class="flex items-center justify-between mb-3">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
-              %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
-              %{label: @current_part.label}
-            ]} />
+      <%!-- Compact sticky header: the question navigation stays in reach while
+           the teacher works down a long list of answer groups. --%>
+      <div class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-stone-100 px-8 py-3 mb-6">
+        <div class="max-w-7xl mx-auto space-y-3">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-2 min-w-0">
+              <.back_button
+                navigate={~p"/exams/#{@exam}/correction"}
+                tooltip="Zurück zur Übersicht"
+                size="sm"
+              />
+              <.breadcrumbs crumbs={[
+                %{label: "Prüfungen", navigate: ~p"/exams"},
+                %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
+                %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
+                %{label: @current_part.label}
+              ]} />
+            </div>
+
+            <div class="flex items-center gap-3 shrink-0">
+              <span id="bulk-parts-done" class="text-xs font-medium text-stone-500 tabular-nums">
+                {MapSet.size(@parts_done)}/{length(@parts)} erledigt
+              </span>
+              <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
+                <.icon name="hero-document-text" class="w-4 h-4 text-sky-700" />
+                <span class="text-xs font-semibold text-sky-700 uppercase tracking-wide">
+                  Frage
+                </span>
+                <span class="text-xs font-mono font-semibold text-sky-700">
+                  {@current_part_index + 1}/{length(@parts)}
+                </span>
+                <div class="flex items-center gap-1 ml-1">
+                  <.nav_chevron
+                    id="bulk-prev-part"
+                    direction="left"
+                    target={part_path(@exam, @prev_part_id)}
+                    tooltip="Vorherige Frage (←)"
+                  />
+                  <.nav_chevron
+                    id="bulk-next-part"
+                    direction="right"
+                    target={part_path(@exam, @next_part_id)}
+                    tooltip="Nächste Frage (→)"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="flex items-center gap-3 mb-3">
-            <.back_button
-              navigate={~p"/exams/#{@exam}/correction"}
-              tooltip="Zurück zur Übersicht"
-            />
-            <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
-              Korrektur – {@current_part.label}
-            </h1>
-          </div>
+          {render_part_nav(assigns)}
         </div>
       </div>
 
       <div class="max-w-7xl mx-auto px-8 pb-12">
+        {render_part_heading(assigns)}
+
         <%= if @answer_blocks == [] do %>
           <div class="bg-white rounded-[14px] border border-stone-100 p-12 text-center text-stone-400 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
             <.icon name="hero-document" class="w-10 h-10 mx-auto mb-3 text-stone-300" />
             <p class="text-sm font-medium">Keine Antwortfelder in diesem Teil.</p>
           </div>
         <% else %>
-          {render_part_nav(assigns)}
-          {render_question_card(assigns)}
-
-          <div class="mt-4">
+          <div>
             {render_summary(assigns)}
           </div>
 
-          <div id="bulk-power-keys" phx-hook="BulkPowerKeys">
+          <div
+            id="bulk-power-keys"
+            phx-hook="BulkPowerKeys"
+            data-prev-url={part_path(@exam, @prev_part_id)}
+            data-next-url={part_path(@exam, @next_part_id)}
+          >
             <div class="mt-4">
               <%= if @is_multi_input do %>
                 <div class="space-y-4">
@@ -112,10 +146,14 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
                   class="inline-flex items-center justify-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-lg border border-sky-600 bg-white text-sky-700 transition-all duration-200 active:scale-[0.98] hover:bg-sky-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2"
                 >
                   {if @next_part_id, do: "Nächste Frage", else: "Zur Übersicht"}
-                  <kbd class="px-1.5 py-0.5 rounded font-mono text-[10px] border bg-sky-50 border-sky-200 text-sky-600">
-                    Enter
+                  <%!-- Enter belongs to the toggle; → is the global shortcut. --%>
+                  <kbd
+                    :if={@next_part_id}
+                    class="px-1.5 py-0.5 rounded font-mono text-[10px] border bg-sky-50 border-sky-200 text-sky-600"
+                  >
+                    →
                   </kbd>
-                  <.icon name="hero-arrow-right" class="w-4 h-4" />
+                  <.icon :if={is_nil(@next_part_id)} name="hero-arrow-right" class="w-4 h-4" />
                 </.link>
               </div>
             </div>
@@ -126,101 +164,117 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     """
   end
 
+  # One numbered box per question; the full label lives in the tooltip, so a
+  # long exam wraps onto a second row instead of scrolling sideways.
   defp render_part_nav(assigns) do
     ~H"""
-    <div class="overflow-x-auto -mx-1 px-1 mb-4">
-      <ol class="flex items-stretch gap-2 whitespace-nowrap">
-        <li
-          :for={{part, idx} <- Enum.with_index(@parts)}
-          class="tooltip tooltip-bottom tooltip-delayed"
-          data-tip={part.label}
+    <ol id="bulk-part-nav" class="flex flex-wrap items-center gap-2">
+      <li
+        :for={{part, idx} <- Enum.with_index(@parts)}
+        id={"bulk-part-nav-#{part.id}"}
+        class="tooltip tooltip-bottom tooltip-delayed"
+        data-tip={part.label}
+      >
+        <.link
+          navigate={~p"/exams/#{@exam}/correction/bulk/#{part.id}"}
+          aria-current={if idx == @current_part_index, do: "page"}
+          aria-label={part_nav_label(idx, part, MapSet.member?(@parts_done, part.id))}
+          data-done={to_string(MapSet.member?(@parts_done, part.id))}
+          class={[
+            "relative inline-flex items-center justify-center min-w-8 h-8 px-2 rounded-lg border font-mono text-xs font-semibold tabular-nums transition-all duration-150 active:scale-95 focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2",
+            part_chip_classes(
+              idx == @current_part_index,
+              MapSet.member?(@parts_done, part.id)
+            )
+          ]}
         >
-          <.link
-            navigate={~p"/exams/#{@exam}/correction/bulk/#{part.id}"}
-            class={[
-              "inline-flex items-center gap-3 px-3 py-2 rounded-[10px] border-2 transition-all duration-150 max-w-[14rem]",
-              part_chip_classes(
-                idx == @current_part_index,
-                MapSet.member?(@parts_done, part.id)
-              )
-            ]}
+          {idx + 1}
+          <span
+            :if={MapSet.member?(@parts_done, part.id)}
+            class="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white ring-2 ring-white"
           >
-            <span class="font-mono text-xs tabular-nums opacity-60 shrink-0">
-              {String.pad_leading(Integer.to_string(idx + 1), 2, "0")}
-            </span>
-            <span class="flex flex-col min-w-0">
-              <span class="text-sm font-semibold truncate">{part.label}</span>
-              <span class={[
-                "text-xs inline-flex items-center gap-1 mt-0.5",
-                part_chip_status_classes(
-                  idx == @current_part_index,
-                  MapSet.member?(@parts_done, part.id)
-                )
-              ]}>
-                <%= if MapSet.member?(@parts_done, part.id) do %>
-                  <.icon name="hero-check-badge" class="w-4 h-4" /> Erledigt
-                <% else %>
-                  <span class="w-2 h-2 rounded-full border border-current"></span> Offen
-                <% end %>
-              </span>
-            </span>
-          </.link>
-        </li>
-      </ol>
+            <.icon name="hero-check-mini" class="w-3 h-3" />
+          </span>
+        </.link>
+      </li>
+    </ol>
+    """
+  end
+
+  defp part_nav_label(idx, part, done?) do
+    "Frage #{idx + 1}: #{part.label} – #{if done?, do: "erledigt", else: "offen"}"
+  end
+
+  # (active?, done?) — the green corner badge marks "done" in every state.
+  defp part_chip_classes(true, _done),
+    do: "bg-stone-900 border-stone-900 text-white shadow-sm"
+
+  defp part_chip_classes(false, true),
+    do: "bg-green-50 border-green-300 text-green-800 hover:bg-green-100 hover:border-green-400"
+
+  defp part_chip_classes(false, false),
+    do:
+      "bg-white border-stone-200 text-stone-600 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-900"
+
+  defp part_path(_exam, nil), do: nil
+  defp part_path(exam, part_id), do: ~p"/exams/#{exam}/correction/bulk/#{part_id}"
+
+  attr :id, :string, required: true
+  attr :direction, :string, required: true, values: ~w(left right)
+  attr :target, :string, default: nil
+  attr :tooltip, :string, required: true
+
+  # Same look as the chevrons of the single correction view; navigate instead
+  # of patch, since every question here is its own mount.
+  defp nav_chevron(assigns) do
+    ~H"""
+    <div class="tooltip tooltip-bottom tooltip-delayed" data-tip={@tooltip}>
+      <%= if @target do %>
+        <.link
+          id={@id}
+          navigate={@target}
+          aria-label={@tooltip}
+          class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-700 bg-white border border-sky-300 transition-all duration-150 hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800 active:scale-95"
+        >
+          <.icon name={"hero-chevron-#{@direction}"} class="w-4 h-4" />
+        </.link>
+      <% else %>
+        <span
+          id={@id}
+          aria-disabled="true"
+          class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-300 bg-white/60 border border-sky-100 cursor-not-allowed"
+        >
+          <.icon name={"hero-chevron-#{@direction}"} class="w-4 h-4" />
+        </span>
+      <% end %>
     </div>
     """
   end
 
-  # (active?, done?)
-  defp part_chip_classes(true, true),
-    do: "bg-stone-900 border-green-500 text-white"
-
-  defp part_chip_classes(true, false),
-    do: "bg-stone-900 border-stone-900 text-white"
-
-  defp part_chip_classes(false, true),
-    do: "bg-white border-green-500 text-stone-700 hover:bg-green-50/40"
-
-  defp part_chip_classes(false, false),
-    do: "bg-white border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300"
-
-  defp part_chip_status_classes(true, true), do: "text-green-300"
-  defp part_chip_status_classes(true, false), do: "text-stone-400"
-  defp part_chip_status_classes(false, true), do: "text-green-600"
-  defp part_chip_status_classes(false, false), do: "text-stone-400"
-
-  defp render_question_card(assigns) do
+  defp render_part_heading(assigns) do
     ~H"""
-    <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] mb-4">
-      <div class="px-5 py-4 border-b border-stone-100 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-2 min-w-0">
-          <.icon name="hero-document-text" class="w-4 h-4 text-stone-400 shrink-0" />
-          <h2 class="text-lg font-semibold text-stone-800 truncate">Aufgabe</h2>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap justify-end">
-          <span class={[
-            "inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1",
-            config_chip_classes(not is_nil(@max_points))
-          ]}>
-            Max. Punkte:
-            <span class="font-mono tabular-nums">
-              {if @max_points, do: format_max_points(@max_points), else: "—"}
-            </span>
+    <div id="bulk-part-heading" class="flex items-start justify-between gap-4 flex-wrap mb-4">
+      <h1 class="text-xl font-semibold text-stone-800 leading-snug min-w-0">
+        {@current_part.label}
+      </h1>
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <span class={[
+          "inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1",
+          config_chip_classes(not is_nil(@max_points))
+        ]}>
+          Max. Punkte:
+          <span class="font-mono tabular-nums">
+            {if @max_points, do: format_max_points(@max_points), else: "—"}
           </span>
-          <.config_chip active={@auto_correct} label="Auto-Korrektur" />
-          <.config_chip active={@ignore_case} label="Gross/Klein ignorieren" />
-          <.config_chip active={@ignore_spelling} label="Fuzzy-Matching" />
-          <.config_chip active={@ignore_punctuation} label="Satzzeichen ignorieren" />
-          <.config_chip
-            active={@checkbox_scoring.rule != "per_checkbox"}
-            label={checkbox_rule_label(@checkbox_scoring)}
-          />
-        </div>
-      </div>
-      <div class="p-5">
-        <h3 class="text-xl font-semibold text-stone-800 leading-snug">
-          {@current_part.label}
-        </h3>
+        </span>
+        <.config_chip active={@auto_correct} label="Auto-Korrektur" />
+        <.config_chip active={@ignore_case} label="Gross/Klein ignorieren" />
+        <.config_chip active={@ignore_spelling} label="Fuzzy-Matching" />
+        <.config_chip active={@ignore_punctuation} label="Satzzeichen ignorieren" />
+        <.config_chip
+          active={@checkbox_scoring.rule != "per_checkbox"}
+          label={checkbox_rule_label(@checkbox_scoring)}
+        />
       </div>
     </div>
     """
@@ -991,6 +1045,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       idx ->
         current_part = Enum.at(parts, idx)
         next_part_id = if idx + 1 < length(parts), do: Enum.at(parts, idx + 1).id, else: nil
+        prev_part_id = if idx > 0, do: Enum.at(parts, idx - 1).id, else: nil
 
         submissions = Exams.list_exam_submissions(exam)
         answer_blocks = Exams.list_part_answer_groups(exam, part_id)
@@ -1007,6 +1062,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:current_part_index, idx)
          |> assign(:parts_done, compute_parts_done(submissions, parts))
          |> assign(:is_corrected, part_corrected?(submissions, part_id))
+         |> assign(:prev_part_id, prev_part_id)
          |> assign(:next_part_id, next_part_id)
          |> assign(:answer_blocks, answer_blocks)
          |> assign(:manual_input, nil)

@@ -10,6 +10,8 @@
 //     points input ("open_manual_input"); the server answers with a
 //     "focus-manual-input" event so the input receives focus. Enter submits
 //     the form natively, Escape cancels via phx-keydown on the input.
+//   * ← / → anywhere on the page (outside form fields) → previous / next
+//     question, read from data-prev-url / data-next-url on the hook element.
 //
 // Sibling to PowerView (assets/js/hooks/power_view_hook.js), but trimmed:
 // no focus trap (this is a full page, not a modal) and no refocus event
@@ -89,6 +91,23 @@ export const BulkPowerKeys = {
 
     this.el.addEventListener("keydown", this.keyHandler);
 
+    // Question switching listens on window: the teacher may have clicked
+    // outside the cards, and focus then sits on <body>, not inside this.el.
+    this.navHandler = (e) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const active = document.activeElement;
+      if (active && active.matches("input, textarea, select, [contenteditable]")) return;
+
+      const url = { ArrowLeft: this.el.dataset.prevUrl, ArrowRight: this.el.dataset.nextUrl }[
+        e.key
+      ];
+      if (!url) return;
+      e.preventDefault();
+      this.js().navigate(url);
+    };
+
+    window.addEventListener("keydown", this.navHandler);
+
     // Server-pushed after open_manual_input: focus + select the points input
     // once the patched DOM is in place (same double-timeout pattern as above).
     this.handleEvent("focus-manual-input", ({ id }) => {
@@ -107,6 +126,9 @@ export const BulkPowerKeys = {
   destroyed() {
     if (this.keyHandler) {
       this.el.removeEventListener("keydown", this.keyHandler);
+    }
+    if (this.navHandler) {
+      window.removeEventListener("keydown", this.navHandler);
     }
   },
 };
