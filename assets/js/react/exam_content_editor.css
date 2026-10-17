@@ -680,8 +680,9 @@
     box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18);
 }
 
-/* Vergleichsansicht: das gewählte Radio trägt die Farbe des Verdikts, und
-   war die Gruppe nicht richtig, ist das richtige Radio grün umrandet. */
+/* Vergleichsansicht: das gewählte Radio trägt die Farbe des Verdikts (grün,
+   gelb für Teilpunkte, rot), und war die Gruppe nicht richtig, ist das
+   richtige Radio grün umrandet. */
 .exam-editor__content .ProseMirror .choice-radio[data-checked="true"][data-choice-verdict="correct"] {
     border-color: #059669;
     box-shadow: 0 0 0 3px #d1fae5;
@@ -691,13 +692,24 @@
     background: #059669;
 }
 
-.exam-editor__content .ProseMirror .choice-radio[data-checked="true"]:is([data-choice-verdict="wrong"], [data-choice-verdict="half"]) {
+.exam-editor__content .ProseMirror .choice-radio[data-checked="true"][data-choice-verdict="wrong"] {
     border-color: #dc2626;
     box-shadow: 0 0 0 3px #fee2e2;
 }
 
-.exam-editor__content .ProseMirror .choice-radio[data-checked="true"]:is([data-choice-verdict="wrong"], [data-choice-verdict="half"])::before {
+.exam-editor__content .ProseMirror .choice-radio[data-checked="true"][data-choice-verdict="wrong"]::before {
     background: #dc2626;
+}
+
+/* Manuelle Teilpunkte (`half`, siehe `Tasky.Grading.marker_verdict/2`) sind
+   gelb, wie der 🟡-Marker und der „Manuell“-Button der Power-Korrektur. */
+.exam-editor__content .ProseMirror .choice-radio[data-checked="true"][data-choice-verdict="half"] {
+    border-color: #eab308;
+    box-shadow: 0 0 0 3px #fef9c3;
+}
+
+.exam-editor__content .ProseMirror .choice-radio[data-checked="true"][data-choice-verdict="half"]::before {
+    background: #eab308;
 }
 
 .exam-editor__content .ProseMirror .choice-radio[data-correct="true"]:is([data-choice-verdict="wrong"], [data-choice-verdict="half"]) {
