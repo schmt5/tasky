@@ -185,16 +185,18 @@ defmodule TaskyWeb.ExamLive.Correction do
                   })}
                 </div>
                 <div class="w-36">
+                  <%!-- Secondary on every row: "Korrektur fortsetzen" above is
+                       the one primary action of the page. --%>
                   <.link
                     id={"correction-action-#{part.id}"}
                     navigate={~p"/exams/#{@exam}/correction/bulk/#{part.id}"}
                     class={[
-                      "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
+                      "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
                       if(part_status(@done_counts, part, @submissions) == :done,
                         do:
-                          "text-stone-600 border border-stone-200 bg-white hover:bg-stone-100 hover:border-stone-300 hover:text-stone-700 focus-visible:ring-stone-400",
+                          "text-stone-600 border-stone-200 bg-white hover:bg-stone-100 hover:border-stone-300 hover:text-stone-700 focus-visible:ring-stone-400",
                         else:
-                          "bg-emerald-500 text-white shadow-[0_2px_8px_rgba(16,185,129,0.25)] hover:bg-emerald-600 focus-visible:ring-emerald-600"
+                          "text-green-700 border-green-500 bg-transparent hover:bg-green-50 hover:border-green-600 focus-visible:ring-green-600"
                       )
                     ]}
                   >
