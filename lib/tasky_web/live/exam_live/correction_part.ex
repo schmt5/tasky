@@ -545,9 +545,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   defp checkbox_answer(assigns) do
     ~H"""
     <div class="flex items-center gap-3 min-w-0">
+      <%!-- A fixed radius: the theme's --radius-md (10px) turns a 20px box
+           into a circle, which reads as a single-choice radio. --%>
       <span
         class={[
-          "inline-flex items-center justify-center w-5 h-5 rounded-md border-2 shrink-0",
+          "inline-flex items-center justify-center w-5 h-5 rounded-[4px] border-2 shrink-0",
           if(@block.checked,
             do: "bg-sky-500 border-sky-500 text-white",
             else: "bg-white border-stone-300"
