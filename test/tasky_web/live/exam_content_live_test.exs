@@ -314,6 +314,17 @@ defmodule TaskyWeb.ExamContentLiveTest do
                "Multiple-Choice: alles oder nichts"
     end
 
+    test "points per answer field are offered only with several fields", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-1")
+      refute has_element?(view, "#options_custom_points")
+
+      open_options(view, "q-2")
+      assert has_element?(view, "#options_custom_points")
+    end
+
     test "a custom distribution starts from the equal split and sets the total", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)

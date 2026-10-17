@@ -314,7 +314,10 @@ defmodule TaskyWeb.ExamLive.Content do
                       <span class="text-xs text-stone-500">(Summe der Antwortfelder)</span>
                     </p>
 
+                    <%!-- One field takes all points anyway. A distribution
+                         already set stays switchable, so it can be turned off. --%>
                     <.option_toggle
+                      :if={@options_draft.custom_points or answer_field_count(@options_draft) > 1}
                       field={@options_form[:custom_points]}
                       label="Punkte pro Antwortfeld"
                       hint="Punkte ungleich auf die Antwortfelder dieser Aufgabe verteilen."
@@ -1290,6 +1293,8 @@ defmodule TaskyWeb.ExamLive.Content do
       :error -> default
     end
   end
+
+  defp answer_field_count(draft), do: Enum.count(draft.blocks, & &1.answer_id)
 
   defp draft_total(draft) do
     draft.block_points |> Map.values() |> Enum.map(&(&1 || 0)) |> Enum.sum()
