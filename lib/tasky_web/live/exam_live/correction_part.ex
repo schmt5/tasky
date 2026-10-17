@@ -355,7 +355,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                     >
                       <div class="flex items-center justify-between gap-3 px-2 pt-1">
                         <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                          Checkboxen
+                          Multiple-Choice
                         </span>
                         <span class="text-xs text-stone-500">
                           {checkbox_matches(section.blocks)} von {length(section.blocks)} wie in der Musterlösung

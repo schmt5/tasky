@@ -149,7 +149,7 @@ defmodule TaskyWeb.ExamContentLiveTest do
                "Keine Korrekturoptionen aktiv"
 
       assert view |> element("#correction-options-summary-q-2") |> render() =~
-               "Checkboxen: pro Checkbox"
+               "Multiple-Choice: pro Checkbox"
 
       refute has_element?(view, "#correction-options-modal")
     end
@@ -311,7 +311,7 @@ defmodule TaskyWeb.ExamContentLiveTest do
       assert Exams.checkbox_scoring(exam, "q-3").rule == "per_checkbox"
 
       assert view |> element("#correction-options-summary-q-2") |> render() =~
-               "Checkboxen: alles oder nichts"
+               "Multiple-Choice: alles oder nichts"
     end
 
     test "a custom distribution starts from the equal split and sets the total", %{conn: conn} do

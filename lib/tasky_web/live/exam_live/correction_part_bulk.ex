@@ -296,9 +296,9 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     """
   end
 
-  defp checkbox_rule_label(%{rule: "all_or_nothing"}), do: "Checkboxen: alles oder nichts"
+  defp checkbox_rule_label(%{rule: "all_or_nothing"}), do: "Multiple-Choice: alles oder nichts"
 
-  defp checkbox_rule_label(_scoring), do: "Checkboxen: pro Checkbox"
+  defp checkbox_rule_label(_scoring), do: "Multiple-Choice: pro Checkbox"
 
   defp config_chip_classes(true),
     do: "text-stone-600 bg-stone-100 border border-stone-200"
@@ -397,7 +397,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         <div class="flex items-center gap-2">
           <.icon name="hero-check-circle" class="w-4 h-4 text-stone-400" />
           <span class="text-xs font-semibold uppercase tracking-wide text-stone-500">
-            Checkboxen · {length(@section.blocks)} Optionen · {length(@patterns)} Antwortmuster
+            Multiple-Choice · {length(@section.blocks)} Optionen · {length(@patterns)} Antwortmuster
           </span>
         </div>
         <div

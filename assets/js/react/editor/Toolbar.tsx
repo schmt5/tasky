@@ -396,13 +396,13 @@ export function Toolbar({
                   active.lueckentext,
                 ),
                 btn(
-                  "Aufgabenliste",
+                  "Multiple-Choice",
                   <MultipleChoiceIcon className={iconCls} />,
                   () => editor.chain().focus().toggleTaskList().run(),
                   active.taskList,
                 ),
                 btn(
-                  "Auswahl (Single Choice)",
+                  "Single-Choice",
                   <SingleChoiceIcon className={iconCls} />,
                   () => editor.chain().focus().toggleSingleChoice().run(),
                   active.singleChoice,
@@ -410,7 +410,7 @@ export function Toolbar({
               ])}
             {!hideAnswers &&
               active.choice &&
-              group("Auswahlgruppe", [
+              group("Single-Choice-Gruppe", [
                 btn(
                   "Eigene Gruppe für dieses Feld",
                   <ScissorsIcon className={iconCls} />,
@@ -574,7 +574,7 @@ const SHORTCUTS = {
   Aufzählung: "Mod-Shift-8",
   "Nummerierte Liste": "Mod-Shift-7",
   Frage: "Mod-Alt-3",
-  Aufgabenliste: "Mod-Shift-9",
+  "Multiple-Choice": "Mod-Shift-9",
 };
 
 function formatShortcut(combo: string | undefined) {

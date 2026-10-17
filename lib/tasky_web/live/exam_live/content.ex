@@ -349,8 +349,8 @@ defmodule TaskyWeb.ExamLive.Content do
                         class="w-[18px] h-[18px] text-amber-500 shrink-0 mt-0.5"
                       />
                       <span>
-                        Ankreuzaufgaben werden immer automatisch korrigiert. Du kannst jede
-                        Bewertung weiterhin von Hand ändern.
+                        {choice_kinds(@options_draft)} werden immer automatisch korrigiert.
+                        Du kannst jede Bewertung weiterhin von Hand ändern.
                       </span>
                     </p>
                     <.option_toggle
@@ -365,7 +365,7 @@ defmodule TaskyWeb.ExamLive.Content do
                         id="text-options-note"
                         class="text-xs text-stone-500 leading-relaxed pl-7"
                       >
-                        Die folgenden Optionen gelten nur für Textantworten, nicht für Checkboxen.
+                        Die folgenden Optionen gelten nur für Textantworten, nicht für Multiple-Choice.
                       </p>
                       <div class="pl-7 space-y-3">
                         <.option_toggle
@@ -386,7 +386,7 @@ defmodule TaskyWeb.ExamLive.Content do
                   >
                     <div>
                       <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                        Punkte bei Checkboxen
+                        Punkte bei Multiple-Choice
                       </h4>
                       <p class="text-xs text-stone-500 mt-1 leading-relaxed">
                         Gilt für die Auto-Korrektur und die Korrektur von Hand. Manuelle Punkte
@@ -501,7 +501,7 @@ defmodule TaskyWeb.ExamLive.Content do
                     <span>
                       Gilt für <span class="font-medium text-stone-700">Antwortfelder</span>
                       und <span class="font-medium text-stone-700">Lückentextfelder</span>
-                      – nicht für Ankreuzaufgaben.
+                      – nicht für Multiple-Choice und Single-Choice.
                     </span>
                   </li>
                   <li class="flex gap-2">
@@ -1258,6 +1258,18 @@ defmodule TaskyWeb.ExamLive.Content do
     }
   end
 
+  # The kinds of tick questions in a part of only ticks, as the note names them.
+  defp choice_kinds(draft) do
+    types = MapSet.new(draft.blocks, & &1.type)
+
+    case {"taskItem" in types, "choice" in types} do
+      {true, true} -> "Multiple-Choice- und Single-Choice-Aufgaben"
+      {true, false} -> "Multiple-Choice-Aufgaben"
+      {false, true} -> "Single-Choice-Aufgaben"
+      _ -> "Ankreuzaufgaben"
+    end
+  end
+
   # A part of only ticks shows no auto-correction switch, so its stored flag
   # stays as it is — a text field added later falls back to it.
   defp options_config(draft) do
@@ -1303,9 +1315,9 @@ defmodule TaskyWeb.ExamLive.Content do
   defp checkbox_rule_summary(%{has_checkboxes: false}), do: []
 
   defp checkbox_rule_summary(%{checkbox_rule: "all_or_nothing"}),
-    do: ["Checkboxen: alles oder nichts"]
+    do: ["Multiple-Choice: alles oder nichts"]
 
-  defp checkbox_rule_summary(_pv), do: ["Checkboxen: pro Checkbox"]
+  defp checkbox_rule_summary(_pv), do: ["Multiple-Choice: pro Checkbox"]
 
   # One 0.25 step up or down, never below 0; whole numbers stay integers.
   defp step_points(value, dir) do
