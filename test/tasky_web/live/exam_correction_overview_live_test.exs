@@ -87,4 +87,16 @@ defmodule TaskyWeb.ExamCorrectionOverviewLiveTest do
     assert has_element?(view, first_q2 <> ~s|[data-corrected="true"]|)
     assert has_element?(view, second_q2 <> ~s|[data-corrected="false"]|)
   end
+
+  # Building the "Korrektur fortsetzen" link used to crash on the nil part id.
+  test "an exam without questions shows its empty state", %{conn: conn} = ctx do
+    scope = user_scope_fixture(ctx.teacher)
+    content = %{"type" => "doc", "content" => [%{"type" => "paragraph"}]}
+    exam = exam_fixture(scope: scope, status: "running", attrs: %{content: content})
+    exam_submission_fixture(exam)
+
+    {:ok, view, _html} = open(conn, ctx.teacher, exam)
+
+    assert has_element?(view, "#correction-no-parts")
+  end
 end

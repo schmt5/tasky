@@ -94,7 +94,7 @@ defmodule TaskyWeb.ExamLive.Correction do
 
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <%= if @parts == [] do %>
-            <div class="p-12 text-center text-stone-400">
+            <div id="correction-no-parts" class="p-12 text-center text-stone-400">
               <.icon name="hero-document" class="w-10 h-10 mx-auto mb-3 text-stone-300" />
               <p class="text-sm font-medium">
                 Noch keine Fragen erstellt. Füge im Editor eine Frage hinzu.
@@ -606,6 +606,11 @@ defmodule TaskyWeb.ExamLive.Correction do
   # view ("Korrektur nach Frage") has nothing to group and would only show
   # "Keine Antwortfelder in diesem Teil." There the resume link goes straight to
   # the submission the teacher still has to read.
+  #
+  # An exam without questions has nothing to resume; the template hides the
+  # link then, so no path is built (it used to crash on a nil part id).
+  defp resume_path(_exam, [], _submissions, _summary), do: nil
+
   defp resume_path(exam, parts, submissions, summary) do
     if Exams.free_document?(exam) do
       case {summary.first_uncorrected, submissions} do
@@ -617,8 +622,6 @@ defmodule TaskyWeb.ExamLive.Correction do
       ~p"/exams/#{exam}/correction/bulk/#{resume_part_id(parts, summary)}"
     end
   end
-
-  defp resume_part_id([], _summary), do: nil
 
   defp resume_part_id(_parts, %{first_uncorrected: {_submission, part}}), do: part.id
   defp resume_part_id(parts, _summary), do: hd(parts).id
