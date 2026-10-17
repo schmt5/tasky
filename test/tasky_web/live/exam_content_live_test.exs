@@ -325,6 +325,41 @@ defmodule TaskyWeb.ExamContentLiveTest do
       assert has_element?(view, "#options_custom_points")
     end
 
+    test "warns when the points do not split evenly and offers fixes", %{conn: conn} do
+      content = %{
+        "type" => "doc",
+        "content" => [heading("Farben"), task_list(["c1", "c2", "c3"])]
+      }
+
+      %{teacher: teacher, exam: exam} = create_exam(content)
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      open_options(view, "q-1")
+      refute has_element?(view, "#points-split-hint")
+
+      view
+      |> form("#correction-options-form-q-1", %{"options" => %{"max_points" => "1"}})
+      |> render_change()
+
+      assert has_element?(view, "#points-split-hint", "1 Punkt auf 3 Optionen")
+      assert has_element?(view, "#split-hint-lower", "0.75")
+      assert has_element?(view, "#split-hint-add-fields", "1 Option")
+      assert has_element?(view, "#split-hint-all-or-nothing")
+
+      view |> element("#split-hint-higher") |> render_click()
+      assert has_element?(view, ~s(#options_max_points[value="1.5"]))
+      refute has_element?(view, "#points-split-hint")
+
+      # Scored all or nothing, only the sum counts.
+      view
+      |> form("#correction-options-form-q-1", %{"options" => %{"max_points" => "1"}})
+      |> render_change()
+
+      view |> element("#split-hint-all-or-nothing") |> render_click()
+      assert has_element?(view, ~s(#checkbox-scoring-all_or_nothing[aria-checked="true"]))
+      refute has_element?(view, "#points-split-hint")
+    end
+
     test "a custom distribution starts from the equal split and sets the total", %{conn: conn} do
       %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
       {:ok, view, _html} = open_musterloesung(conn, teacher, exam)

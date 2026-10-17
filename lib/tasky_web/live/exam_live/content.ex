@@ -336,6 +336,8 @@ defmodule TaskyWeb.ExamLive.Content do
                         key={block.answer_id}
                       />
                     </div>
+
+                    <.split_hint hint={uneven_split_hint(@options_draft)} />
                   </section>
 
                   <section class="space-y-3 pt-5 border-t border-stone-100">
@@ -990,6 +992,17 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
+  # A suggestion of the uneven-split hint: the max points that split evenly.
+  def handle_event("draft_max_points", %{"points" => raw}, socket) do
+    case {socket.assigns.options_draft, parse_points(raw)} do
+      {%{} = draft, points} when is_number(points) ->
+        {:noreply, assign_options_draft(socket, %{draft | max_points: points})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("draft_checkbox_rule", %{"rule" => rule}, socket) do
     case socket.assigns.options_draft do
       %{} = draft when is_binary(rule) ->
@@ -1296,6 +1309,64 @@ defmodule TaskyWeb.ExamLive.Content do
 
   defp answer_field_count(draft), do: Enum.count(draft.blocks, & &1.answer_id)
 
+  # Whether the dialog warns that the max points do not split evenly over the
+  # answer fields (`Tasky.Grading.uneven_split/2`), and what it suggests. Not
+  # with a custom distribution — the teacher chose the shares — and not for
+  # a Multiple-Choice question scored all or nothing, where only the sum counts.
+  defp uneven_split_hint(draft) do
+    fields = Enum.filter(draft.blocks, & &1.answer_id)
+    multiple_choice? = fields != [] and Enum.all?(fields, &(&1.type == "taskItem"))
+    all_or_nothing? = draft.checkbox_rule == "all_or_nothing"
+
+    split =
+      if draft.custom_points or (multiple_choice? and all_or_nothing?),
+        do: nil,
+        else: Tasky.Grading.uneven_split(draft.max_points, length(fields))
+
+    if split do
+      {one, many} =
+        if multiple_choice?, do: {"Option", "Optionen"}, else: {"Antwortfeld", "Antwortfelder"}
+
+      count = length(fields)
+
+      %{
+        split: split,
+        summary:
+          "#{points_label(draft.max_points)} auf #{count} #{many} ergibt je " <>
+            "#{approx_points(split.exact)} Punkte. LearningLine rechnet in Viertelpunkten, " <>
+            "darum zählt #{count_label(split.high_count, one, many)} " <>
+            "#{points_label(split.high)} und #{count_label(split.low_count, one, many)} " <>
+            "#{points_label(split.low)}.",
+        add_fields:
+          split.fields &&
+            "Lass die Punkte bei #{points_label(draft.max_points)}, doch füge " <>
+              "#{count_label(split.fields - count, one, many)} hinzu: Bei #{split.fields} " <>
+              "#{many} zählt jede#{if multiple_choice?, do: "", else: "s"} " <>
+              "#{points_label(draft.max_points / split.fields)}.",
+        all_or_nothing: multiple_choice? and not all_or_nothing?
+      }
+    end
+  end
+
+  defp count_label(1, one, _many), do: "1 #{one}"
+  defp count_label(n, _one, many), do: "#{n} #{many}"
+
+  defp points_label(n) when n in [1, 1.0], do: "1 Punkt"
+  defp points_label(n), do: "#{format_block_points(Tasky.Grading.normalize_points(n))} Punkte"
+
+  # 1/3 → "rund 0.33", 0.2 → "0.2".
+  defp approx_points(n) do
+    rounded = Float.round(n * 1.0, 2)
+
+    text =
+      rounded
+      |> :erlang.float_to_binary(decimals: 2)
+      |> String.trim_trailing("0")
+      |> String.trim_trailing(".")
+
+    if rounded == n * 1.0, do: text, else: "rund #{text}"
+  end
+
   defp draft_total(draft) do
     draft.block_points |> Map.values() |> Enum.map(&(&1 || 0)) |> Enum.sum()
   end
@@ -1391,6 +1462,88 @@ defmodule TaskyWeb.ExamLive.Content do
         />
       </div>
     </div>
+    """
+  end
+
+  attr :hint, :map, default: nil
+
+  # The warning under the points when they do not split evenly, with its
+  # suggestions as one-click fixes for the draft.
+  defp split_hint(%{hint: nil} = assigns), do: ~H""
+
+  defp split_hint(assigns) do
+    ~H"""
+    <div
+      id="points-split-hint"
+      role="status"
+      class="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3.5 space-y-3"
+    >
+      <div class="flex items-start gap-2.5">
+        <.icon
+          name="hero-exclamation-triangle"
+          class="w-[18px] h-[18px] text-amber-500 shrink-0 mt-0.5"
+        />
+        <div class="space-y-1 min-w-0">
+          <p class="text-sm font-semibold text-stone-800">
+            Die Punkte lassen sich nicht gleichmässig verteilen
+          </p>
+          <p class="text-xs text-stone-600 leading-relaxed">{@hint.summary}</p>
+        </div>
+      </div>
+
+      <div class="pl-7 space-y-2">
+        <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Empfehlung</p>
+        <ul class="space-y-2 text-xs text-stone-600 leading-relaxed">
+          <li class="flex flex-wrap items-center gap-1.5">
+            <span>Ändere die max. Punktzahl auf</span>
+            <.hint_button
+              :if={@hint.split.lower}
+              id="split-hint-lower"
+              phx-click="draft_max_points"
+              phx-value-points={@hint.split.lower}
+            >
+              {format_block_points(@hint.split.lower)} Punkte
+            </.hint_button>
+            <span :if={@hint.split.lower}>oder</span>
+            <.hint_button
+              id="split-hint-higher"
+              phx-click="draft_max_points"
+              phx-value-points={@hint.split.higher}
+            >
+              {format_block_points(@hint.split.higher)} Punkte
+            </.hint_button>
+          </li>
+          <li :if={@hint.add_fields} id="split-hint-add-fields">{@hint.add_fields}</li>
+          <li :if={@hint.all_or_nothing} class="flex flex-wrap items-center gap-1.5">
+            <span>Ändere die Korrektur-Option auf</span>
+            <.hint_button
+              id="split-hint-all-or-nothing"
+              phx-click="draft_checkbox_rule"
+              phx-value-rule="all_or_nothing"
+            >
+              Alles oder nichts
+            </.hint_button>
+          </li>
+        </ul>
+      </div>
+    </div>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :rest, :global
+  slot :inner_block, required: true
+
+  defp hint_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id={@id}
+      class="inline-flex items-center rounded-md border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-700 transition-colors duration-150 hover:bg-amber-100 hover:border-amber-400 active:scale-[0.98] cursor-pointer"
+      {@rest}
+    >
+      {render_slot(@inner_block)}
+    </button>
     """
   end
 

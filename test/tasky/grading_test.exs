@@ -370,4 +370,43 @@ defmodule Tasky.GradingTest do
       assert Grading.parse_points(1.25) == 1.25
     end
   end
+
+  describe "uneven_split/2" do
+    test "1 point over 3 fields: one field takes the left-over quarter" do
+      assert Grading.uneven_split(1, 3) == %{
+               exact: 1 / 3,
+               high: 0.5,
+               high_count: 1,
+               low: 0.25,
+               low_count: 2,
+               lower: 0.75,
+               higher: 1.5,
+               fields: 4
+             }
+    end
+
+    test "is nil when every field gets the same share" do
+      assert Grading.uneven_split(1.5, 3) == nil
+      assert Grading.uneven_split(2, 4) == nil
+      assert Grading.uneven_split(0, 3) == nil
+      assert Grading.uneven_split(nil, 3) == nil
+      assert Grading.uneven_split(1, 1) == nil
+    end
+
+    test "fewer quarters than fields leave a field at 0 and nothing lower" do
+      assert %{low: 0, low_count: 1, high: 0.25, high_count: 4, lower: nil, higher: 1.25} =
+               Grading.uneven_split(1, 5)
+
+      # No field count up to 3 more splits 4 quarters evenly.
+      assert Grading.uneven_split(1, 5).fields == nil
+    end
+
+    test "matches the shares the equal split hands out" do
+      shares = Tasky.Exams.equal_shares(~w(a b c), 2) |> Map.values() |> Enum.frequencies()
+      split = Grading.uneven_split(2, 3)
+
+      assert shares == %{split.high => split.high_count, split.low => split.low_count}
+      assert split.fields == 4
+    end
+  end
 end

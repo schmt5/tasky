@@ -167,6 +167,48 @@ defmodule Tasky.Grading do
     end
   end
 
+  @doc """
+  How `max_points` splits over `count` answer fields on the points grid, when
+  the fields do **not** all get the same share — `nil` when they do.
+
+  The equal split (`Tasky.Exams.equal_shares/2`) hands out whole quarters, the
+  quarters left over going to the first fields: 1 point over 3 checkboxes is
+  0.5 + 0.25 + 0.25, not 3 × 0.33. The result says so and what would even it
+  out:
+
+      %{
+        exact: 0.333…,         # what each field would get without the grid
+        high: 0.5, high_count: 1,
+        low: 0.25, low_count: 2,
+        lower: 0.75 | nil,      # the closest even max points below, if > 0
+        higher: 1.5,            # … and above
+        fields: 4 | nil         # the closest larger field count that splits
+      }                          # `max_points` evenly (at most 3 more)
+  """
+  def uneven_split(max_points, count)
+      when is_number(max_points) and is_integer(count) and count > 1 do
+    quarters = round(max(max_points, 0) * 4)
+    base = div(quarters, count)
+    remainder = rem(quarters, count)
+
+    if quarters == 0 or remainder == 0 do
+      nil
+    else
+      %{
+        exact: max_points / count,
+        high: integerize((base + 1) / 4),
+        high_count: remainder,
+        low: integerize(base / 4),
+        low_count: count - remainder,
+        lower: if(base > 0, do: integerize(base * count / 4)),
+        higher: integerize((base + 1) * count / 4),
+        fields: Enum.find((count + 1)..(count + 3), &(rem(quarters, &1) == 0))
+      }
+    end
+  end
+
+  def uneven_split(_max_points, _count), do: nil
+
   @doc "Sums the numeric values of a points map (nil-safe); non-numbers count 0."
   def sum_points(nil), do: 0
 
