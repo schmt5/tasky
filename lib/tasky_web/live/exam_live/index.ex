@@ -24,22 +24,66 @@ defmodule TaskyWeb.ExamLive.Index do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-        <div class="flex items-center justify-between p-6 border-b border-stone-100">
+        <div class="flex items-center justify-between gap-4 flex-wrap p-6 border-b border-stone-100">
           <div>
             <h2 class="text-lg font-semibold text-stone-800">Alle Prüfungen</h2>
 
             <p class="text-sm text-stone-500 mt-1">{@exam_count} Prüfungen insgesamt</p>
           </div>
 
-          <.link
-            navigate={~p"/exams/new"}
-            class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+          <div class="flex items-center gap-2">
+            <.link
+              navigate={~p"/exams/new"}
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+            >
+              <.icon name="hero-plus" class="w-4 h-4" /> Neue Prüfung
+            </.link>
+          </div>
+        </div>
+
+        <div :if={@has_exams} class="px-6 pt-5 pb-1">
+          <div
+            id="status-filter"
+            role="group"
+            aria-label="Nach Status filtern"
+            class="inline-flex items-center flex-wrap gap-1 p-1 bg-stone-100 rounded-lg"
           >
-            <.icon name="hero-plus" class="w-4 h-4" /> Neue Prüfung
-          </.link>
+            <.link
+              :for={{value, label} <- @status_filter_options}
+              id={"status-filter-#{value}"}
+              patch={status_path(value)}
+              replace
+              aria-pressed={to_string(@status_filter == value)}
+              class={[
+                "inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
+                if(@status_filter == value,
+                  do: "bg-white text-stone-800 shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+                  else: "text-stone-500 hover:text-stone-700"
+                )
+              ]}
+            >
+              {label}
+              <span class={[
+                "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-full",
+                if(@status_filter == value,
+                  do: "bg-stone-100 text-stone-600",
+                  else: "bg-stone-200/70 text-stone-500"
+                )
+              ]}>
+                {Map.get(@status_counts, value, 0)}
+              </span>
+            </.link>
+          </div>
         </div>
 
         <ul :if={@has_exams} id="exams" phx-update="stream" class="list-none p-0 m-0">
+          <li
+            id="exams-empty"
+            class="hidden only:flex flex-col items-center text-center px-8 py-14"
+          >
+            <.icon name="hero-funnel" class="w-8 h-8 mb-3 text-stone-300" />
+            <p class="text-sm font-medium text-stone-500">Keine Prüfungen mit diesem Status.</p>
+          </li>
           <li
             :for={{id, exam} <- @streams.exams}
             id={id}
@@ -107,15 +151,55 @@ defmodule TaskyWeb.ExamLive.Index do
     """
   end
 
+  @status_filter_options [
+    {"all", "Alle"},
+    {"draft", "Entwurf"},
+    {"open", "Offen"},
+    {"running", "Laufend"},
+    {"finished", "Beendet"}
+  ]
+
+  @status_filters Enum.map(@status_filter_options, &elem(&1, 0))
+
   @impl true
   def mount(_params, _session, socket) do
-    exams = Exams.list_exams(socket.assigns.current_scope)
-
     {:ok,
      socket
      |> assign(:page_title, "Prüfungen")
-     |> assign(:exam_count, length(exams))
-     |> assign(:has_exams, exams != [])
-     |> stream(:exams, exams)}
+     |> assign(:status_filter_options, @status_filter_options)}
   end
+
+  # The filter lives in the URL, so it survives a reload and the way back from
+  # an exam page. Anything not on the list falls back to "all".
+  @impl true
+  def handle_params(params, _uri, socket) do
+    status = if params["status"] in @status_filters, do: params["status"], else: "all"
+
+    {:noreply,
+     socket
+     |> assign(:status_filter, status)
+     |> assign_exams()}
+  end
+
+  defp assign_exams(socket) do
+    scope = socket.assigns.current_scope
+    exams = Exams.list_exams(scope)
+    status = socket.assigns.status_filter
+
+    counts =
+      exams
+      |> Enum.frequencies_by(& &1.status)
+      |> Map.put("all", length(exams))
+
+    visible = if status == "all", do: exams, else: Enum.filter(exams, &(&1.status == status))
+
+    socket
+    |> assign(:exam_count, length(exams))
+    |> assign(:has_exams, exams != [])
+    |> assign(:status_counts, counts)
+    |> stream(:exams, visible, reset: true)
+  end
+
+  defp status_path("all"), do: ~p"/exams"
+  defp status_path(status), do: ~p"/exams?#{[status: status]}"
 end
