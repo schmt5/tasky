@@ -1050,10 +1050,6 @@ defmodule TaskyWeb.CoreComponents do
         <span class="inline-flex items-center gap-1.5 bg-stone-100 text-stone-500 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-stone-200">
           <span class="w-1.5 h-1.5 rounded-full bg-stone-400"></span> Beendet
         </span>
-      <% @status == "archived" -> %>
-        <span class="inline-flex items-center gap-1.5 bg-stone-100 text-stone-400 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-stone-200">
-          <span class="w-1.5 h-1.5 rounded-full bg-stone-300"></span> Archiviert
-        </span>
       <% true -> %>
         <span class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-amber-200">
           <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Entwurf

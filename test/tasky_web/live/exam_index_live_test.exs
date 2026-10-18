@@ -52,4 +52,37 @@ defmodule TaskyWeb.ExamIndexLiveTest do
       assert has_element?(view, "#exams-empty")
     end
   end
+
+  describe "archiving" do
+    test "only finished exams offer the archive button", %{conn: conn, scope: scope} do
+      draft = exam_fixture(scope: scope)
+      finished = exam_fixture(scope: scope, status: "finished")
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+
+      assert has_element?(view, "#archive-#{finished.id}")
+      refute has_element?(view, "#archive-#{draft.id}")
+    end
+
+    test "moves a finished exam from the list to the archive", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, status: "finished")
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+      view |> element("#archive-#{exam.id}") |> render_click()
+
+      refute has_element?(view, "#exams-#{exam.id}")
+
+      {:ok, archive, _html} = live(conn, ~p"/exams/archive")
+      assert has_element?(archive, "#archived-exams #exams-#{exam.id}")
+    end
+
+    test "leaves archived exams out of the list", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, status: "finished", archived: true)
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+
+      refute has_element?(view, "#exams-#{exam.id}")
+      assert has_element?(view, "#archive-link")
+    end
+  end
 end

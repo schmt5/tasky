@@ -29,4 +29,42 @@ defmodule TaskyWeb.ExamShowLiveTest do
       refute html =~ "auf ihrem Dashboard"
     end
   end
+
+  describe "archiving" do
+    setup %{conn: conn} do
+      teacher = user_fixture(%{role: "teacher"})
+      %{conn: log_in_user(conn, teacher), scope: user_scope_fixture(teacher)}
+    end
+
+    test "archives a draft and restores it", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope)
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+      refute has_element?(view, "#archived-notice")
+
+      view |> element("#archive-exam") |> render_click()
+      assert has_element?(view, "#archived-notice")
+      assert Tasky.Exams.archived?(Tasky.Exams.get_exam!(scope, exam.id))
+
+      view |> element("#archived-notice-unarchive") |> render_click()
+      refute has_element?(view, "#archived-notice")
+      refute Tasky.Exams.archived?(Tasky.Exams.get_exam!(scope, exam.id))
+    end
+
+    test "asks before archiving a running session", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, status: "running")
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+
+      assert has_element?(view, "#archive-exam[data-confirm]")
+    end
+
+    test "archives a finished exam without asking", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, status: "finished")
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+
+      refute has_element?(view, "#archive-exam[data-confirm]")
+    end
+  end
 end

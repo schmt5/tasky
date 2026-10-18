@@ -516,7 +516,7 @@ defmodule TaskyWeb.Guest.ExamLive do
                 </dialog>
               <% end %>
             </div>
-          <% @exam.status in ["finished", "archived"] -> %>
+          <% @exam.status == "finished" -> %>
             <%!-- Finished. Not necessarily a success for this participant — they
                   may never have submitted — so the flag, not a celebration. --%>
             <div class="min-h-[80vh] flex items-center justify-center px-4 py-12">

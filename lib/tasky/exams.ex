@@ -25,22 +25,45 @@ defmodule Tasky.Exams do
   @doc """
   Returns the list of exams for a given scope.
   Teachers see only their own exams, admins see all exams.
+
+  Archived exams are left out unless `archived: true` is given, in which case
+  only archived exams are returned, most recently archived first.
   """
-  def list_exams(%Scope{user: user}) do
+  def list_exams(%Scope{user: user}, opts \\ []) do
+    archived? = Keyword.get(opts, :archived, false)
+
     case user.role do
-      "admin" ->
-        Repo.all(from e in Exam, order_by: [desc: e.inserted_at], preload: [:teacher])
+      "admin" -> Repo.all(exams_query(archived?))
+      "teacher" -> Repo.all(from e in exams_query(archived?), where: e.teacher_id == ^user.id)
+      _ -> []
+    end
+  end
 
-      "teacher" ->
-        Repo.all(
-          from e in Exam,
-            where: e.teacher_id == ^user.id,
-            order_by: [desc: e.inserted_at],
-            preload: [:teacher]
-        )
+  defp exams_query(false) do
+    from e in Exam,
+      where: is_nil(e.archived_at),
+      order_by: [desc: e.inserted_at],
+      preload: [:teacher]
+  end
 
-      _ ->
-        []
+  defp exams_query(true) do
+    from e in Exam,
+      where: not is_nil(e.archived_at),
+      order_by: [desc: e.archived_at, desc: e.inserted_at],
+      preload: [:teacher]
+  end
+
+  @doc """
+  Returns how many archived exams the scope can see — the count on the list's
+  link to the archive.
+  """
+  def count_archived_exams(%Scope{user: user}) do
+    base = from e in Exam, where: not is_nil(e.archived_at)
+
+    case user.role do
+      "admin" -> Repo.aggregate(base, :count)
+      "teacher" -> Repo.aggregate(from(e in base, where: e.teacher_id == ^user.id), :count)
+      _ -> 0
     end
   end
 
@@ -252,13 +275,14 @@ defmodule Tasky.Exams do
     # beenden": the click is otherwise terminal, and after it nobody can save
     # or hand in any more. Reopening broadcasts the status change like any
     # other transition, so the participants' views follow on their own.
-    "finished" => ~w(archived running),
-    "archived" => ~w()
+    #
+    # Archiving is not a status: see `archive_exam/2`.
+    "finished" => ~w(running)
   }
 
   @doc """
   Advances the status of an exam along the allowed lifecycle
-  (draft → open → running → finished → archived). Returns
+  (draft → open → running → finished). Returns
   `{:error, :invalid_transition}` for anything else.
   """
   def update_exam_status(scope, %Exam{} = exam, status) do
@@ -269,6 +293,35 @@ defmodule Tasky.Exams do
       |> update_and_broadcast(&broadcast_exam_update/1)
     end
   end
+
+  @doc """
+  Archives an exam: it leaves the teacher's exam list for the archive.
+
+  Works in every status and leaves the status alone, so `unarchive_exam/2`
+  puts the exam back exactly where it was. Archiving is the teacher's
+  bookkeeping only — an open or running session goes on, and participants
+  keep seeing their exam.
+  """
+  def archive_exam(scope, %Exam{} = exam) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      exam
+      |> Ecto.Changeset.change(archived_at: DateTime.utc_now(:second))
+      |> Repo.update()
+    end
+  end
+
+  @doc "Brings an archived exam back into the teacher's exam list."
+  def unarchive_exam(scope, %Exam{} = exam) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      exam
+      |> Ecto.Changeset.change(archived_at: nil)
+      |> Repo.update()
+    end
+  end
+
+  @doc "True when the teacher has archived the exam."
+  def archived?(%Exam{archived_at: nil}), do: false
+  def archived?(%Exam{}), do: true
 
   defp validate_status_transition(from, to) do
     if to in Map.get(@status_transitions, from, []) do
@@ -864,7 +917,7 @@ defmodule Tasky.Exams do
   defp validate_returnable(%Exam{} = exam) do
     cond do
       not assigned_mode?(exam) -> {:error, :not_assigned_mode}
-      exam.status not in ["finished", "archived"] -> {:error, :exam_not_finished}
+      exam.status != "finished" -> {:error, :exam_not_finished}
       true -> :ok
     end
   end

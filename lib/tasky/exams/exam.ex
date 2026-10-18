@@ -44,6 +44,11 @@ defmodule Tasky.Exams.Exam do
     # Written only by Exams.update_paper_layout/3 and the duplication path
     # (see the migration).
     field :paper_layout, :map
+    # When the teacher archived the exam, nil while it is not. Orthogonal to
+    # :status on purpose — any exam can be archived and restored, and the
+    # status it comes back with is the one it left with. Written only by
+    # Exams.archive_exam/2 and unarchive_exam/2.
+    field :archived_at, :utc_datetime
 
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :exam_submissions, Tasky.Exams.ExamSubmission
@@ -84,7 +89,8 @@ defmodule Tasky.Exams.Exam do
   # :mark_step is like :paper_layout: only Exams.set_mark_step/3 writes it,
   # because that write also re-rounds every stored manual mark of the exam
   # onto the new grid — a plain cast would move the grid and leave the marks
-  # behind.
+  # behind. :archived_at is only written by Exams.archive_exam/2 and
+  # unarchive_exam/2.
   def changeset(exam, attrs) do
     exam
     |> cast(attrs, [

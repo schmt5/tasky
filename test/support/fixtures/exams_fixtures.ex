@@ -33,6 +33,7 @@ defmodule Tasky.ExamsFixtures do
       exercising the self-enrolment path) or `"assigned"`
     * `:answer_mode` - `"answer_fields"` (default) or `"free_document"`. Goes
       through `attrs` because it is castable on create only.
+    * `:archived` - `true` archives the exam after the status steps
     * `:attrs` - attributes passed to `Exams.create_exam/2`
   """
   def exam_fixture(opts \\ []) do
@@ -53,25 +54,32 @@ defmodule Tasky.ExamsFixtures do
     {:ok, exam} = Exams.create_exam(scope, attrs)
     participation_mode = Keyword.get(opts, :participation_mode, "anonymous")
 
-    case Keyword.get(opts, :status, "draft") do
-      "draft" ->
-        exam
+    exam =
+      case Keyword.get(opts, :status, "draft") do
+        "draft" ->
+          exam
 
-      status ->
-        {:ok, exam} = Exams.open_exam_session(scope, exam, participation_mode)
+        status ->
+          {:ok, exam} = Exams.open_exam_session(scope, exam, participation_mode)
 
-        steps =
-          case status do
-            "open" -> []
-            "running" -> ~w(running)
-            "finished" -> ~w(running finished)
-            "archived" -> ~w(running finished archived)
-          end
+          steps =
+            case status do
+              "open" -> []
+              "running" -> ~w(running)
+              "finished" -> ~w(running finished)
+            end
 
-        Enum.reduce(steps, exam, fn s, e ->
-          {:ok, e} = Exams.update_exam_status(scope, e, s)
-          e
-        end)
+          Enum.reduce(steps, exam, fn s, e ->
+            {:ok, e} = Exams.update_exam_status(scope, e, s)
+            e
+          end)
+      end
+
+    if Keyword.get(opts, :archived, false) do
+      {:ok, exam} = Exams.archive_exam(scope, exam)
+      exam
+    else
+      exam
     end
   end
 

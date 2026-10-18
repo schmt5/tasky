@@ -12,10 +12,16 @@ defmodule TaskyWeb.ExamLive.Show do
       <div class="sticky top-0 z-10 bg-white border-b border-stone-100 px-8 py-6 mb-8">
         <div class="max-w-6xl mx-auto">
           <div class="flex items-center justify-between mb-3">
-            <.breadcrumbs crumbs={[
-              %{label: "Prüfungen", navigate: ~p"/exams"},
-              %{label: @exam.name}
-            ]} />
+            <.breadcrumbs crumbs={
+              if(@archived?,
+                do: [
+                  %{label: "Prüfungen", navigate: ~p"/exams"},
+                  %{label: "Archiv", navigate: ~p"/exams/archive"},
+                  %{label: @exam.name}
+                ],
+                else: [%{label: "Prüfungen", navigate: ~p"/exams"}, %{label: @exam.name}]
+              )
+            } />
 
             <div class="flex items-center gap-2">
               <button
@@ -64,6 +70,39 @@ defmodule TaskyWeb.ExamLive.Show do
                   </button>
                 </li>
                 <li>
+                  <%!-- Any status: archiving only takes the exam off the
+                       list, so even a running session may go — the confirm
+                       says that it keeps running. --%>
+                  <%= if @archived? do %>
+                    <button
+                      id="unarchive-exam"
+                      type="button"
+                      phx-click="unarchive"
+                      popovertarget="exam-actions-menu"
+                      popovertargetaction="hide"
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <.icon name="hero-arrow-uturn-left" class="w-4 h-4 text-stone-400" />
+                      Wiederherstellen
+                    </button>
+                  <% else %>
+                    <button
+                      id="archive-exam"
+                      type="button"
+                      phx-click="archive"
+                      popovertarget="exam-actions-menu"
+                      popovertargetaction="hide"
+                      data-confirm={
+                        @exam.status in ["open", "running"] &&
+                          "Die Durchführung läuft weiter, die Prüfung verschwindet nur aus deiner Liste. Trotzdem archivieren?"
+                      }
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <.icon name="hero-archive-box" class="w-4 h-4 text-stone-400" /> Archivieren
+                    </button>
+                  <% end %>
+                </li>
+                <li>
                   <button
                     type="button"
                     phx-click="delete"
@@ -86,7 +125,11 @@ defmodule TaskyWeb.ExamLive.Show do
           </div>
 
           <div class="flex items-center gap-3 mb-3">
-            <.back_button navigate={~p"/exams"} tooltip="Zurück zu Prüfungen" />
+            <%= if @archived? do %>
+              <.back_button navigate={~p"/exams/archive"} tooltip="Zurück zum Archiv" />
+            <% else %>
+              <.back_button navigate={~p"/exams"} tooltip="Zurück zu Prüfungen" />
+            <% end %>
             <h1 class="font-serif text-[42px] text-stone-900 leading-[1.1] font-normal">
               {@exam.name}
             </h1>
@@ -111,6 +154,27 @@ defmodule TaskyWeb.ExamLive.Show do
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
+        <div
+          :if={@archived?}
+          id="archived-notice"
+          class="flex items-center gap-4 flex-wrap bg-stone-50 border border-stone-200 rounded-[14px] px-6 py-4"
+        >
+          <div class="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 bg-white text-stone-400 ring-1 ring-stone-200">
+            <.icon name="hero-archive-box" class="w-5 h-5" />
+          </div>
+          <p class="flex-1 min-w-0 text-sm text-stone-600">
+            Archiviert am {Calendar.strftime(@exam.archived_at, "%d.%m.%Y")}. Die Prüfung erscheint nicht mehr in deiner Prüfungsliste.
+          </p>
+          <button
+            id="archived-notice-unarchive"
+            type="button"
+            phx-click="unarchive"
+            class="inline-flex items-center gap-2 bg-white text-stone-700 text-sm font-semibold px-4 py-2 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 active:scale-[0.98]"
+          >
+            <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Wiederherstellen
+          </button>
+        </div>
+
         <%!-- Status Card --%>
         <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
           <div class="p-6">
@@ -120,8 +184,7 @@ defmodule TaskyWeb.ExamLive.Show do
                 @exam.status == "draft" && "bg-amber-50 text-amber-500",
                 @exam.status == "open" && "bg-blue-50 text-blue-600",
                 @exam.status == "running" && "bg-emerald-50 text-emerald-500",
-                @exam.status == "finished" && "bg-stone-100 text-stone-500",
-                @exam.status == "archived" && "bg-stone-50 text-stone-400"
+                @exam.status == "finished" && "bg-stone-100 text-stone-500"
               ]}>
                 <.icon name="hero-signal" class="w-6 h-6" />
               </div>
@@ -141,8 +204,6 @@ defmodule TaskyWeb.ExamLive.Show do
                       Die Prüfung läuft. Lernende bearbeiten gerade die Prüfung.
                     <% @exam.status == "finished" -> %>
                       Die Prüfung ist beendet. Keine weiteren Abgaben möglich.
-                    <% @exam.status == "archived" -> %>
-                      Die Prüfung ist archiviert und nicht mehr aktiv.
                   <% end %>
                 </p>
                 <%= if @exam.status == "draft" do %>
@@ -277,7 +338,7 @@ defmodule TaskyWeb.ExamLive.Show do
     {:ok,
      socket
      |> assign(:page_title, exam.name)
-     |> assign(:exam, exam)
+     |> assign_exam(exam)
      |> assign(:answer_mode_option, ExamComponents.answer_mode_option(exam.answer_mode))
      |> assign(:grading_available, grading_available?(exam))}
   end
@@ -293,7 +354,40 @@ defmodule TaskyWeb.ExamLive.Show do
       end)
   end
 
+  defp assign_exam(socket, exam) do
+    socket
+    |> assign(:exam, exam)
+    |> assign(:archived?, Exams.archived?(exam))
+  end
+
   @impl true
+  def handle_event("archive", _params, socket) do
+    case Exams.archive_exam(socket.assigns.current_scope, socket.assigns.exam) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> assign_exam(exam)
+         |> put_flash(:info, "Prüfung archiviert")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Die Prüfung konnte nicht archiviert werden.")}
+    end
+  end
+
+  def handle_event("unarchive", _params, socket) do
+    case Exams.unarchive_exam(socket.assigns.current_scope, socket.assigns.exam) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> assign_exam(exam)
+         |> put_flash(:info, "Prüfung wiederhergestellt")}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Die Prüfung konnte nicht wiederhergestellt werden.")}
+    end
+  end
+
   def handle_event("delete", _params, socket) do
     {:ok, _} = Exams.delete_exam(socket.assigns.current_scope, socket.assigns.exam)
 

@@ -240,6 +240,8 @@ defmodule TaskyWeb.Router do
 
       live "/exams", ExamLive.Index, :index
       live "/exams/new", ExamLive.Form, :new
+      # Before "/exams/:id", which would otherwise take "archive" as an id.
+      live "/exams/archive", ExamLive.Archive, :archive
       live "/exams/:id", ExamLive.Show, :show
       live "/exams/:id/edit", ExamLive.Form, :edit
       live "/exams/:id/paper", ExamLive.Paper, :paper

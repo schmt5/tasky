@@ -33,6 +33,17 @@ defmodule TaskyWeb.ExamLive.Index do
 
           <div class="flex items-center gap-2">
             <.link
+              id="archive-link"
+              navigate={~p"/exams/archive"}
+              class="inline-flex items-center gap-2 text-stone-600 text-sm font-semibold px-4 py-2.5 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
+            >
+              <.icon name="hero-archive-box" class="w-4 h-4" /> Archiv
+              <span class="text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500">
+                {@archived_count}
+              </span>
+            </.link>
+
+            <.link
               navigate={~p"/exams/new"}
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-[10px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
             >
@@ -118,6 +129,18 @@ defmodule TaskyWeb.ExamLive.Index do
               </div>
             </.link>
             <div class="flex items-center gap-2 shrink-0 pt-0.5">
+              <%!-- Only finished exams offer it here: archiving is the step
+                    after an exam is done. The exam page archives any status. --%>
+              <button
+                :if={exam.status == "finished"}
+                id={"archive-#{exam.id}"}
+                type="button"
+                phx-click="archive"
+                phx-value-id={exam.id}
+                class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-700"
+              >
+                <.icon name="hero-archive-box" class="w-4 h-4" /> Archivieren
+              </button>
               <.link
                 navigate={~p"/exams/#{exam}/edit"}
                 class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-700"
@@ -181,6 +204,23 @@ defmodule TaskyWeb.ExamLive.Index do
      |> assign_exams()}
   end
 
+  @impl true
+  def handle_event("archive", %{"id" => id}, socket) do
+    scope = socket.assigns.current_scope
+    exam = Exams.get_exam!(scope, id)
+
+    case Exams.archive_exam(scope, exam) do
+      {:ok, _exam} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "„#{exam.name}“ wurde archiviert.")
+         |> assign_exams()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Die Prüfung konnte nicht archiviert werden.")}
+    end
+  end
+
   defp assign_exams(socket) do
     scope = socket.assigns.current_scope
     exams = Exams.list_exams(scope)
@@ -197,6 +237,7 @@ defmodule TaskyWeb.ExamLive.Index do
     |> assign(:exam_count, length(exams))
     |> assign(:has_exams, exams != [])
     |> assign(:status_counts, counts)
+    |> assign(:archived_count, Exams.count_archived_exams(scope))
     |> stream(:exams, visible, reset: true)
   end
 
