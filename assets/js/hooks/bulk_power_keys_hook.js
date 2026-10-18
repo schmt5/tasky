@@ -4,7 +4,8 @@
 // "Als erledigt markieren" / "Erledigt zurücknehmen" toggle sits in the sticky
 // header, outside this wrapper.
 //
-//   * Focuses the first visible [data-bulk-power-row] on mount.
+//   * Focuses the first visible [data-bulk-power-row] on mount and on the
+//     server's "bulk-power-refocus" (after the shortcuts dialog closes).
 //   * J/L on a focused row → push "set_group_verdict" (full points / zero)
 //     with that card's {block index, group text} payload — or, on a checkbox
 //     pattern card, "set_pattern_verdict" with its {group, pattern}. K opens the manual
@@ -98,6 +99,8 @@ export const BulkPowerKeys = {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const active = document.activeElement;
       if (active && active.matches("input, textarea, select, [contenteditable]")) return;
+      // An open dialog (the shortcuts) owns the keyboard.
+      if (document.querySelector("dialog.modal-open")) return;
 
       const url = { ArrowLeft: this.el.dataset.prevUrl, ArrowRight: this.el.dataset.nextUrl }[
         e.key
@@ -108,6 +111,12 @@ export const BulkPowerKeys = {
     };
 
     window.addEventListener("keydown", this.navHandler);
+
+    // Server-pushed after the shortcuts dialog closes.
+    this.handleEvent("bulk-power-refocus", () => {
+      setTimeout(focusFirst, 0);
+      setTimeout(focusFirst, 80);
+    });
 
     // Server-pushed after open_manual_input: focus + select the points input
     // once the patched DOM is in place (same double-timeout pattern as above).

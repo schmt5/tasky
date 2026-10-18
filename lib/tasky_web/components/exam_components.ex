@@ -708,4 +708,80 @@ defmodule TaskyWeb.ExamComponents do
     </button>
     """
   end
+
+  attr :rest, :global
+
+  @doc """
+  Opens the shortcuts dialog (`shortcuts_modal/1`) of a correction view.
+  """
+  def shortcuts_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 px-2.5 py-1.5 rounded-lg border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-sky-600 focus-visible:ring-offset-2"
+      {@rest}
+    >
+      <.icon name="hero-command-line" class="w-4 h-4" /> Tastenkürzel
+    </button>
+    """
+  end
+
+  attr :keys, :list, required: true, doc: "`{[key], description}`, in reading order"
+  attr :hint, :string, required: true
+  attr :on_close, :string, required: true
+
+  @doc """
+  The keyboard shortcuts of a correction view with what each one does. The
+  caller guards it with its own `show` assign and resets that on `on_close`.
+  """
+  def shortcuts_modal(assigns) do
+    ~H"""
+    <dialog id="keys-modal" class="modal modal-open" phx-window-keydown={@on_close} phx-key="escape">
+      <div class="modal-backdrop bg-stone-900/50" phx-click={@on_close}></div>
+      <div class="modal-box max-w-lg p-0 bg-white rounded-[16px] shadow-2xl">
+        <div class="px-6 pt-6 pb-4 border-b border-stone-100 flex items-start gap-4">
+          <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
+            <.icon name="hero-command-line" class="w-5 h-5 text-sky-500" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="text-lg font-semibold text-stone-900">Tastenkürzel</h3>
+            <p class="text-sm text-stone-500 mt-1">{@hint}</p>
+          </div>
+          <div class="tooltip tooltip-left tooltip-delayed" data-tip="Schliessen (Esc)">
+            <button
+              type="button"
+              phx-click={@on_close}
+              aria-label="Schliessen"
+              class="text-stone-400 hover:text-stone-700 transition-colors duration-150"
+            >
+              <.icon name="hero-x-mark" class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        <dl id="keys-list" class="px-6 py-4 divide-y divide-stone-100">
+          <div :for={{keys, text} <- @keys} class="flex items-start gap-4 py-3">
+            <dt class="w-24 shrink-0 flex items-center gap-1 flex-wrap">
+              <kbd
+                :for={key <- keys}
+                class="px-2 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-xs"
+              >
+                {key}
+              </kbd>
+            </dt>
+            <dd class="text-sm text-stone-700 leading-relaxed">{text}</dd>
+          </div>
+        </dl>
+        <div class="px-6 pb-6 pt-3 flex items-center justify-end border-t border-stone-100">
+          <button
+            type="button"
+            phx-click={@on_close}
+            class="inline-flex items-center gap-2 text-stone-700 text-sm font-semibold px-4 py-2 rounded-[8px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
+          >
+            Schliessen
+          </button>
+        </div>
+      </div>
+    </dialog>
+    """
+  end
 end

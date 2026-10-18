@@ -1,7 +1,9 @@
 defmodule TaskyWeb.ExamLive.CorrectionPart do
   use TaskyWeb, :live_view
 
-  import TaskyWeb.ExamComponents, only: [corrected_badge: 1, corrected_toggle: 1]
+  import TaskyWeb.ExamComponents,
+    only: [corrected_badge: 1, corrected_toggle: 1, shortcuts_button: 1, shortcuts_modal: 1]
+
   import TaskyWeb.FileComponents
 
   alias Tasky.Exams
@@ -95,9 +97,16 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]"
               >
                 <div class="px-5 pt-5 pb-4 border-b border-stone-100">
-                  <h2 class="text-base font-semibold text-stone-800 truncate">
-                    {@current_part.label}
-                  </h2>
+                  <div class="flex items-start justify-between gap-3">
+                    <h2 class="text-base font-semibold text-stone-800 truncate">
+                      {@current_part.label}
+                    </h2>
+                    <.shortcuts_button
+                      :if={@power_blocks_count > 0}
+                      id="show-keys-modal"
+                      phx-click="show_keys_modal"
+                    />
+                  </div>
                   <p class="text-sm font-semibold text-stone-700 mt-1">
                     {@submission.firstname} {@submission.lastname}
                   </p>
@@ -109,18 +118,6 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                       <span class="text-xs font-medium text-purple-600">Automatisch korrigiert</span>
                     </div>
                   <% end %>
-                  <div
-                    :if={@power_blocks_count > 0}
-                    id="power-keys-legend"
-                    class="mt-3 flex items-center gap-3 flex-wrap text-xs text-stone-500"
-                  >
-                    <span :for={{key, label} <- power_keys()} class="inline-flex items-center gap-1">
-                      <kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-200 rounded text-stone-700 font-mono text-[10px]">
-                        {key}
-                      </kbd>
-                      {label}
-                    </span>
-                  </div>
                 </div>
 
                 <div>
@@ -348,6 +345,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
             </aside>
           </div>
         </div>
+
+        <.shortcuts_modal
+          :if={@show_keys_modal}
+          keys={power_keys()}
+          hint="Die Kürzel wirken auf die markierte Antwortzeile (blauer Rahmen). Ein Klick auf eine Zeile markiert sie."
+          on_close="close_keys_modal"
+        />
 
         <%= if @show_sample_solution_modal do %>
           <dialog
@@ -704,6 +708,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
      |> assign(:submissions, submissions)
      |> assign(:upload_fields, Exams.list_upload_fields(exam))
      |> assign(:show_sample_solution_modal, false)
+     |> assign(:show_keys_modal, false)
      |> assign(:sample_solution_json, nil)}
   end
 
@@ -853,9 +858,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
   defp hand_set_points?(_points, _sum), do: false
 
-  # The keyboard legend above the answer rows.
-  defp power_keys,
-    do: [{"J", "Volle Punkte"}, {"K", "Manuell"}, {"L", "0 Punkte"}, {"Tab", "Nächste Zeile"}]
+  # The shortcuts of the power panel, as the PowerView hook and the manual
+  # points form handle them, for the "Tastenkürzel" dialog.
+  defp power_keys do
+    [
+      {["J"], "Volle Punkte für die Zeile. Nochmals drücken nimmt die Bewertung zurück."},
+      {["K"], "Manuelle Punkte für die Zeile eingeben."},
+      {["L"], "0 Punkte für die Zeile. Nochmals drücken nimmt die Bewertung zurück."},
+      {["Tab"], "Zur nächsten Zeile."},
+      {["⇧", "Tab"], "Zur vorherigen Zeile."},
+      {["Enter"], "Manuelle Punkte übernehmen."},
+      {["Esc"], "Manuelle Eingabe abbrechen."}
+    ]
+  end
 
   defp checkbox_matches(blocks),
     do: Enum.count(blocks, &(&1.checked == &1.expected_checked))
@@ -911,6 +926,18 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
   def handle_event("close_sample_solution_modal", _params, socket) do
     {:noreply, assign(socket, :show_sample_solution_modal, false)}
+  end
+
+  def handle_event("show_keys_modal", _params, socket) do
+    {:noreply, assign(socket, :show_keys_modal, true)}
+  end
+
+  # Back on the first answer row, so the shortcuts just read work right away.
+  def handle_event("close_keys_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_keys_modal, false)
+     |> push_event("power-view-refocus", %{})}
   end
 
   def handle_event("set_points", %{"points" => raw}, socket) do

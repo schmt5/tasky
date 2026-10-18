@@ -63,9 +63,24 @@ defmodule TaskyWeb.ExamCorrectionPartLiveTest do
     {:ok, view, _html} = open(conn, ctx.teacher, exam, submission, "q-1")
 
     assert has_element?(view, "#power-panel #power-rows [data-power-row]")
-    assert has_element?(view, "#power-keys-legend")
+    assert has_element?(view, "#show-keys-modal")
     # Points come from the rows here, so there are no Max / 0 shortcuts.
     refute has_element?(view, "#points-max")
+  end
+
+  test "the shortcuts are explained in a dialog", %{conn: conn} = ctx do
+    exam = exam_fixture(scope: ctx.scope, status: "running", attrs: %{content: @content})
+    submission = submitted(exam)
+
+    {:ok, view, _html} = open(conn, ctx.teacher, exam, submission, "q-1")
+
+    refute has_element?(view, "#keys-modal")
+
+    view |> element("#show-keys-modal") |> render_click()
+    assert has_element?(view, "#keys-modal #keys-list")
+
+    render_hook(view, "close_keys_modal", %{})
+    refute has_element?(view, "#keys-modal")
   end
 
   test "without answer fields the points go in by hand", %{conn: conn} = ctx do

@@ -101,4 +101,16 @@ defmodule TaskyWeb.ExamCorrectionBulkNavLiveTest do
 
     refute has_element?(view, "#bulk-corrected-badge")
   end
+
+  test "the shortcuts are explained in a dialog", %{conn: conn} = ctx do
+    {:ok, view, _html} = open(conn, ctx.teacher, ctx.exam, "q-2")
+
+    refute has_element?(view, "#keys-modal")
+
+    view |> element("#show-keys-modal") |> render_click()
+    assert has_element?(view, "#keys-modal #keys-list")
+
+    render_hook(view, "close_keys_modal", %{})
+    refute has_element?(view, "#keys-modal")
+  end
 end

@@ -1,7 +1,8 @@
 defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
   use TaskyWeb, :live_view
 
-  import TaskyWeb.ExamComponents, only: [corrected_badge: 1, corrected_toggle: 1]
+  import TaskyWeb.ExamComponents,
+    only: [corrected_badge: 1, corrected_toggle: 1, shortcuts_button: 1, shortcuts_modal: 1]
 
   alias Tasky.Correction.CheckboxPatterns
   alias Tasky.Exams
@@ -115,8 +116,33 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           </div>
         <% end %>
       </div>
+
+      <.shortcuts_modal
+        :if={@show_keys_modal}
+        keys={bulk_keys()}
+        hint="J, K und L wirken auf die markierte Antwortkarte (blauer Rahmen). Ein Klick auf eine Karte markiert sie."
+        on_close="close_keys_modal"
+      />
     </Layouts.app>
     """
+  end
+
+  # The shortcuts of this view, as the BulkPowerKeys hook and the manual
+  # points forms handle them, for the "Tastenkürzel" dialog.
+  defp bulk_keys do
+    [
+      {["J"],
+       "Volle Punkte für alle mit dieser Antwort. Nochmals drücken nimmt die Bewertung zurück."},
+      {["K"], "Manuelle Punkte für alle mit dieser Antwort eingeben."},
+      {["L"],
+       "0 Punkte für alle mit dieser Antwort. Nochmals drücken nimmt die Bewertung zurück."},
+      {["Tab"], "Zur nächsten Antwortkarte."},
+      {["⇧", "Tab"], "Zur vorherigen Antwortkarte."},
+      {["←"], "Zur vorherigen Frage."},
+      {["→"], "Zur nächsten Frage."},
+      {["Enter"], "Manuelle Punkte übernehmen."},
+      {["Esc"], "Manuelle Eingabe abbrechen."}
+    ]
   end
 
   # One numbered box per question; the full label lives in the tooltip, so a
@@ -274,9 +300,12 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
           <.icon name="hero-information-circle" class="w-4 h-4 text-stone-400" />
           <h2 class="text-lg font-semibold text-stone-800">Antworten</h2>
         </div>
-        <div class="text-xs text-stone-500">
-          {length(@answer_blocks)}
-          {if length(@answer_blocks) == 1, do: "Antwortfeld", else: "Antwortfelder"} · {@total_submissions} Teilnehmende
+        <div class="flex items-center gap-3">
+          <div class="text-xs text-stone-500">
+            {length(@answer_blocks)}
+            {if length(@answer_blocks) == 1, do: "Antwortfeld", else: "Antwortfelder"} · {@total_submissions} Teilnehmende
+          </div>
+          <.shortcuts_button id="show-keys-modal" phx-click="show_keys_modal" />
         </div>
       </div>
 
@@ -1028,6 +1057,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:answer_blocks, answer_blocks)
          |> assign(:answer_order, answer_order(answer_blocks, checkbox_scoring))
          |> assign(:manual_input, nil)
+         |> assign(:show_keys_modal, false)
          |> assign(:is_multi_input, length(answer_blocks) > 1)
          |> assign(:total_submissions, length(submissions))
          |> assign(:part_already_done, count_part_done(submissions, part_id))
@@ -1228,6 +1258,18 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     else
       _ -> {:noreply, assign(socket, :manual_input, nil)}
     end
+  end
+
+  def handle_event("show_keys_modal", _params, socket) do
+    {:noreply, assign(socket, :show_keys_modal, true)}
+  end
+
+  # Back on the first answer card, so the shortcuts just read work right away.
+  def handle_event("close_keys_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_keys_modal, false)
+     |> push_event("bulk-power-refocus", %{})}
   end
 
   def handle_event("toggle_part_corrected", _params, socket) do
