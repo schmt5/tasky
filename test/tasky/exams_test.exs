@@ -751,6 +751,30 @@ defmodule Tasky.ExamsTest do
       assert withdrawn.return_show_correction
     end
 
+    test "returning again changes the flags but keeps the return date" do
+      exam = exam_fixture(participation_mode: "assigned", status: "finished")
+      scope = teacher_scope(exam)
+      first_returned_at = ~U[2026-01-05 08:00:00Z]
+
+      {:ok, returned} =
+        Exams.return_exam(scope, exam, %{show_content: true, show_sample_solution: false})
+
+      # Backdate it, so an overwrite with "now" cannot pass unnoticed.
+      returned =
+        returned
+        |> Ecto.Changeset.change(returned_at: first_returned_at)
+        |> Tasky.Repo.update!()
+
+      assert {:ok, updated} =
+               Exams.return_exam(scope, returned, %{
+                 show_content: true,
+                 show_sample_solution: true
+               })
+
+      assert updated.returned_at == first_returned_at
+      assert updated.return_show_sample_solution
+    end
+
     test "refuses an unfinished exam" do
       exam = exam_fixture(participation_mode: "assigned", status: "running")
 

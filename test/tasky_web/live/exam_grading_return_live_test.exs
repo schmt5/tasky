@@ -38,12 +38,24 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
     conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/grading")
   end
 
-  test "the return button appears only in assigned mode", %{conn: conn} do
+  test "the return card appears only in assigned mode", %{conn: conn} do
     %{teacher: teacher, exam: exam} = graded_exam("anonymous")
-    {:ok, _view, html} = open_grading(conn, teacher, exam)
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
 
-    refute html =~ "Prüfung zurückgeben"
-    assert html =~ "Exportieren"
+    refute has_element?(view, "#return-card")
+    refute has_element?(view, "#open-return-modal-btn")
+    assert has_element?(view, "#open-export-modal-btn")
+  end
+
+  test "before the return the card offers the action, not the header", %{conn: conn} do
+    %{teacher: teacher, exam: exam} = graded_exam("assigned")
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
+
+    assert has_element?(view, "#return-card #open-return-modal-btn")
+    refute has_element?(view, "#return-visibility")
+    refute has_element?(view, "#withdraw-return-btn")
+    # The only submission has no mark yet.
+    assert has_element?(view, "#return-card .ungraded-hint")
   end
 
   test "returning stores the chosen options on the exam", %{conn: conn} do
@@ -92,19 +104,108 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
     refute reloaded.return_show_correction
   end
 
-  test "a returned exam shows the badge and can be withdrawn", %{conn: conn} do
+  test "a returned exam shows what learners see and can be withdrawn", %{conn: conn} do
     %{teacher: teacher, scope: scope, exam: exam} = graded_exam("assigned")
     {:ok, exam} = Exams.return_exam(scope, exam, %{show_content: true, show_correction: true})
 
-    {:ok, view, html} = open_grading(conn, teacher, exam)
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
 
-    assert html =~ "Zurückgegeben am"
-    refute html =~ "Prüfung zurückgeben"
+    assert has_element?(view, "#return-visibility")
+    refute has_element?(view, "#return-status")
+    refute has_element?(view, "#open-return-modal-btn")
 
-    html = view |> element("#withdraw-return-btn") |> render_click()
+    # The card button only asks; nothing is withdrawn before the confirmation.
+    view |> element("#withdraw-return-btn") |> render_click()
+    assert has_element?(view, "#withdraw-modal")
+    assert Exams.returned?(Exams.get_exam!(scope, exam.id))
 
-    assert html =~ "Prüfung zurückgeben"
+    view |> element("#confirm-withdraw-btn") |> render_click()
+
+    refute has_element?(view, "#withdraw-modal")
+    assert has_element?(view, "#return-card #open-return-modal-btn")
     refute Exams.returned?(Exams.get_exam!(scope, exam.id))
+  end
+
+  test "cancelling the withdraw dialog keeps the exam returned", %{conn: conn} do
+    %{teacher: teacher, scope: scope, exam: exam} = graded_exam("assigned")
+    {:ok, exam} = Exams.return_exam(scope, exam, %{show_content: true})
+
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
+    view |> element("#withdraw-return-btn") |> render_click()
+
+    view
+    |> element("#withdraw-modal button[phx-click=close_withdraw_modal]", "Abbrechen")
+    |> render_click()
+
+    refute has_element?(view, "#withdraw-modal")
+    assert Exams.returned?(Exams.get_exam!(scope, exam.id))
+  end
+
+  test "a returned exam lists what the learners see", %{conn: conn} do
+    %{teacher: teacher, scope: scope, exam: exam} = graded_exam("assigned")
+
+    {:ok, exam} =
+      Exams.return_exam(scope, exam, %{
+        show_points_and_mark: true,
+        show_content: true,
+        show_correction: false,
+        show_sample_solution: false
+      })
+
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
+
+    assert has_element?(view, ~s(#return-visibility-show_points_and_mark[data-released="true"]))
+    assert has_element?(view, ~s(#return-visibility-show_content[data-released="true"]))
+    assert has_element?(view, ~s(#return-visibility-show_correction[data-released="false"]))
+    assert has_element?(view, ~s(#return-visibility-show_sample_solution[data-released="false"]))
+  end
+
+  test "the release of a returned exam can be adjusted in place", %{conn: conn} do
+    %{teacher: teacher, scope: scope, exam: exam} = graded_exam("assigned")
+
+    {:ok, exam} =
+      Exams.return_exam(scope, exam, %{show_content: true, show_sample_solution: false})
+
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
+    view |> element("#edit-return-btn") |> render_click()
+
+    view
+    |> element(~s(#return-modal input[phx-value-option="show_sample_solution"]))
+    |> render_click()
+
+    view |> element("#confirm-return-btn") |> render_click()
+
+    reloaded = Exams.get_exam!(scope, exam.id)
+    assert Exams.returned?(reloaded)
+    assert reloaded.returned_at == exam.returned_at
+    assert reloaded.return_show_sample_solution
+
+    assert has_element?(view, ~s(#return-visibility-show_sample_solution[data-released="true"]))
+  end
+
+  test "cancelling the modal discards the toggled options", %{conn: conn} do
+    %{teacher: teacher, scope: scope, exam: exam} = graded_exam("assigned")
+
+    {:ok, exam} =
+      Exams.return_exam(scope, exam, %{show_content: true, show_sample_solution: false})
+
+    {:ok, view, _html} = open_grading(conn, teacher, exam)
+    view |> element("#edit-return-btn") |> render_click()
+
+    view
+    |> element(~s(#return-modal input[phx-value-option="show_sample_solution"]))
+    |> render_click()
+
+    view
+    |> element("#return-modal button[phx-click=close_return_modal]", "Abbrechen")
+    |> render_click()
+
+    view |> element("#edit-return-btn") |> render_click()
+
+    refute has_element?(
+             view,
+             ~s(#return-modal input[phx-value-option="show_sample_solution"][checked])
+           )
   end
 
   test "the modal pre-fills with what the exam was returned with", %{conn: conn} do
@@ -115,6 +216,7 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
 
     {:ok, view, _html} = open_grading(conn, teacher, exam)
     view |> element("#withdraw-return-btn") |> render_click()
+    view |> element("#confirm-withdraw-btn") |> render_click()
     html = view |> element("#open-return-modal-btn") |> render_click()
 
     # show_content was off when it was returned, so the correction box is
@@ -123,7 +225,7 @@ defmodule TaskyWeb.ExamGradingReturnLiveTest do
   end
 
   # The return action must not disturb the export control it sits next to.
-  test "the export control still renders next to the return button", %{conn: conn} do
+  test "the export control still renders next to the return card", %{conn: conn} do
     %{teacher: teacher, exam: exam} = graded_exam("assigned")
     {:ok, view, _html} = open_grading(conn, teacher, exam)
 

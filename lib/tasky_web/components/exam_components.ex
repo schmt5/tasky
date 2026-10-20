@@ -322,7 +322,11 @@ defmodule TaskyWeb.ExamComponents do
   Im freien Modus fällt „Musterlösung anzeigen“ weg: eine Musterlösung wird über
   Antwortfelder erfasst, und die gibt es dort nicht — die Option hätte immer
   eine leere Seite angehängt. „Korrektur anzeigen“ bleibt, beschreibt dort aber
-  die Anmerkungen der Lehrperson statt der Antwortblock-Emoji.
+  nur die Anmerkungen der Lehrperson: ohne Antwortfelder gibt es keine
+  Verdikte und keine Punkte pro Feld.
+
+  `short_label` ist die Kurzform für die Rückgabe-Karte der Benotung, die
+  auflistet, was die Lernenden sehen.
   """
   def submission_view_options(exam) do
     free? = free_document?(exam)
@@ -331,24 +335,27 @@ defmodule TaskyWeb.ExamComponents do
       %{
         key: :show_points_and_mark,
         label: "Punkte und Note anzeigen",
-        description: "Zeigt die erreichte Punktzahl und die berechnete Note.",
+        short_label: "Punkte und Note",
+        description: "Zeigt die erreichte Punktzahl und die Note.",
         requires: nil
       },
       %{
         key: :show_content,
         label: "Inhalt anzeigen",
-        description: "Die Antworten der Teilnehmer:in werden vollständig abgebildet.",
+        short_label: "Antworten",
+        description: "Die Antworten der Lernenden werden vollständig abgebildet.",
         requires: nil
       },
       %{
         key: :show_correction,
         label: "Korrektur anzeigen",
+        short_label: "Korrektur",
         description:
           if(free?,
             do:
-              "Zeigt die korrigierte Fassung mit den Anmerkungen der Lehrperson. Nur verfügbar, wenn Inhalt angezeigt wird.",
+              "Zeigt die korrigierte Fassung mit deinen Anmerkungen. Nur verfügbar, wenn Inhalt angezeigt wird.",
             else:
-              "Markiert jeden Antwortblock mit einem 🟢 (richtig), 🟡 (halb richtig) oder 🔴 (falsch) Emoji. Nur verfügbar, wenn Inhalt angezeigt wird."
+              "Zeigt die korrigierte Fassung mit deinen Anmerkungen. Jedes Antwortfeld ist farbig als richtig, teilweise richtig oder falsch markiert und zeigt die erreichten Punkte. Nur verfügbar, wenn Inhalt angezeigt wird."
           ),
         requires: :show_content
       }
@@ -360,6 +367,7 @@ defmodule TaskyWeb.ExamComponents do
           %{
             key: :show_sample_solution,
             label: "Musterlösung anzeigen",
+            short_label: "Musterlösung",
             description:
               "Zeigt die Musterlösung direkt unter jedem Antwortfeld. Ohne angezeigten Inhalt hängt sie als eigenes Dokument an.",
             requires: nil

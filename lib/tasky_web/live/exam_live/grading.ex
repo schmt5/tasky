@@ -34,22 +34,6 @@ defmodule TaskyWeb.ExamLive.Grading do
             </div>
 
             <div class="flex items-center gap-3">
-              <%= if @assigned_mode? and @returned? do %>
-                <span class="inline-flex items-center gap-1.5 bg-sky-100 text-sky-700 text-[13px] font-semibold px-3 py-1.5 rounded-full">
-                  <.icon name="hero-arrow-uturn-right" class="w-4 h-4" />
-                  Zurückgegeben am {Calendar.strftime(@exam.returned_at, "%d.%m.%Y")}
-                </span>
-                <button
-                  type="button"
-                  id="withdraw-return-btn"
-                  phx-click="withdraw_return"
-                  data-confirm="Die Teilnehmenden verlieren damit den Zugriff auf ihre korrigierte Prüfung. Rückgabe wirklich zurückziehen?"
-                  class="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
-                >
-                  <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Rückgabe zurückziehen
-                </button>
-              <% end %>
-
               <.link
                 id="grading-config-btn"
                 navigate={~p"/exams/#{@exam}/correction/grading/config"}
@@ -67,24 +51,20 @@ defmodule TaskyWeb.ExamLive.Grading do
               >
                 <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Exportieren
               </button>
-
-              <%= if @assigned_mode? and not @returned? do %>
-                <button
-                  type="button"
-                  id="open-return-modal-btn"
-                  phx-click="open_return_modal"
-                  disabled={@submissions == []}
-                  class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500"
-                >
-                  <.icon name="hero-arrow-uturn-right" class="w-4 h-4" /> Prüfung zurückgeben
-                </button>
-              <% end %>
             </div>
           </div>
         </div>
       </div>
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-4">
+        <.return_card
+          :if={@assigned_mode?}
+          exam={@exam}
+          returned?={@returned?}
+          learners={length(@submissions)}
+          ungraded={@stats.ungraded}
+        />
+
         <.stats_card :if={@submissions != []} stats={@stats} />
 
         <%!-- Table --%>
@@ -238,9 +218,11 @@ defmodule TaskyWeb.ExamLive.Grading do
             <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
               <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
-                  <.icon name="hero-arrow-uturn-right" class="w-5 h-5" />
+                  <.return_icon class="w-5 h-5" />
                 </div>
-                <h3 class="text-lg font-semibold text-stone-900">Prüfung zurückgeben</h3>
+                <h3 class="text-lg font-semibold text-stone-900">
+                  {if @returned?, do: "Freigabe anpassen", else: "Prüfung zurückgeben"}
+                </h3>
               </div>
               <button
                 type="button"
@@ -252,10 +234,17 @@ defmodule TaskyWeb.ExamLive.Grading do
             </div>
 
             <div class="px-6 py-5 space-y-4">
-              <p class="text-sm text-stone-500">
-                Alle {length(@submissions)} Teilnehmenden sehen ihre korrigierte Prüfung danach
-                auf ihrem Dashboard. Du kannst die Rückgabe jederzeit zurückziehen.
+              <p class="text-sm text-stone-500 leading-relaxed">
+                <%= if @returned? do %>
+                  Lege fest, was die Lernenden sehen. Die Änderung gilt sofort – die
+                  Prüfung bleibt zurückgegeben.
+                <% else %>
+                  Die Lernenden sehen ihre korrigierte Prüfung danach auf dem Dashboard.
+                  Du kannst die Rückgabe jederzeit anpassen oder zurückziehen.
+                <% end %>
               </p>
+
+              <.ungraded_hint :if={@stats.ungraded > 0} count={@stats.ungraded} />
 
               <ExamComponents.submission_view_option_checkbox
                 :for={option <- ExamComponents.submission_view_options(@exam)}
@@ -280,7 +269,62 @@ defmodule TaskyWeb.ExamLive.Grading do
                 phx-click="confirm_return"
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
               >
-                <.icon name="hero-arrow-uturn-right" class="w-4 h-4" /> Jetzt zurückgeben
+                {if @returned?, do: "Änderungen übernehmen", else: "Jetzt zurückgeben"}
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
+
+      <%!-- Withdraw confirmation --%>
+      <%= if @show_withdraw_modal do %>
+        <dialog
+          id="withdraw-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_withdraw_modal"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_withdraw_modal"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[16px] shadow-2xl">
+            <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
+                  <.icon name="hero-arrow-uturn-left" class="w-5 h-5" />
+                </div>
+                <h3 class="text-lg font-semibold text-stone-900">Rückgabe zurückziehen?</h3>
+              </div>
+              <button
+                type="button"
+                phx-click="close_withdraw_modal"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors duration-150 cursor-pointer"
+              >
+                <.icon name="hero-x-mark" class="w-5 h-5" />
+              </button>
+            </div>
+
+            <div class="px-6 py-5">
+              <p class="text-sm text-stone-500 leading-relaxed">
+                Die Lernenden verlieren damit den Zugriff auf ihre korrigierte Prüfung.
+                Die Freigabe bleibt gespeichert – gibst du die Prüfung wieder zurück, ist
+                sie vorausgefüllt.
+              </p>
+            </div>
+
+            <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                phx-click="close_withdraw_modal"
+                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                id="confirm-withdraw-btn"
+                phx-click="withdraw_return"
+                class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+              >
+                Rückgabe zurückziehen
               </button>
             </div>
           </div>
@@ -559,6 +603,179 @@ defmodule TaskyWeb.ExamLive.Grading do
       Enum.map_join(buckets, ", ", &"#{bucket_label(&1)}: #{&1.count}")
   end
 
+  attr :exam, :map, required: true
+  attr :returned?, :boolean, required: true
+  attr :learners, :integer, required: true
+  attr :ungraded, :integer, required: true
+
+  # The whole return lifecycle in one place: before the return the action,
+  # afterwards what the learners can see. The visibility list is read from the
+  # exam, not from @return_options — those are the modal's draft.
+  defp return_card(assigns) do
+    released = ExamSubmissionView.options_from_exam(assigns.exam)
+
+    # Every option in its fixed order, released or not: the line keeps its
+    # shape, and what is missing reads as missing rather than as absent.
+    visibility =
+      assigns.exam
+      |> ExamComponents.submission_view_options()
+      |> Enum.map(&{&1, Map.fetch!(released, &1.key)})
+
+    assigns = assign(assigns, :visibility, visibility)
+
+    ~H"""
+    <section
+      id="return-card"
+      aria-labelledby="return-card-title"
+      class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-6"
+    >
+      <div class="flex flex-col md:flex-row md:items-start gap-5">
+        <div class={[
+          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+          if(@returned?, do: "bg-emerald-50 text-emerald-600", else: "bg-sky-50 text-sky-600")
+        ]}>
+          <.return_icon class="w-5 h-5" />
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 id="return-card-title" class="text-base font-semibold text-stone-900">
+              Rückgabe an die Lernenden
+            </h2>
+            <span
+              :if={not @returned?}
+              id="return-status"
+              class="inline-flex items-center bg-stone-100 text-stone-600 text-xs font-semibold px-2.5 py-1 rounded-full"
+            >
+              Noch nicht zurückgegeben
+            </span>
+          </div>
+
+          <%= if @returned? do %>
+            <p class="text-sm text-stone-500 mt-1.5 leading-relaxed">
+              Die Lernenden können ihre Prüfung jetzt auf ihrem Dashboard einsehen.
+            </p>
+          <% else %>
+            <p class="text-sm text-stone-500 mt-1.5 leading-relaxed max-w-2xl">
+              <%= if @learners == 0 do %>
+                Es sind keine Lernenden zugewiesen – es gibt niemanden, dem du die Prüfung
+                zurückgeben könntest.
+              <% else %>
+                Die Lernenden sehen ihre korrigierte Prüfung nach der Rückgabe auf dem Dashboard –
+                mit genau den Inhalten, die du freigibst.
+              <% end %>
+            </p>
+          <% end %>
+
+          <div :if={@ungraded > 0} class="mt-4">
+            <.ungraded_hint count={@ungraded} />
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 md:shrink-0">
+          <%= if @returned? do %>
+            <button
+              type="button"
+              id="withdraw-return-btn"
+              phx-click="open_withdraw_modal"
+              class="inline-flex items-center gap-2 text-sm font-semibold text-stone-600 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
+            >
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Rückgabe zurückziehen
+            </button>
+            <button
+              type="button"
+              id="edit-return-btn"
+              phx-click="open_return_modal"
+              class="inline-flex items-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150"
+            >
+              <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Freigabe anpassen
+            </button>
+          <% else %>
+            <button
+              type="button"
+              id="open-return-modal-btn"
+              phx-click="open_return_modal"
+              disabled={@learners == 0}
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500"
+            >
+              Prüfung zurückgeben
+            </button>
+          <% end %>
+        </div>
+      </div>
+
+      <%!-- Full width under the head: next to the buttons the list would wrap
+           early and break apart. --%>
+      <div :if={@returned?} class="mt-5 pt-4 border-t border-stone-100">
+        <ul
+          id="return-visibility"
+          class="flex flex-wrap gap-x-5 gap-y-1.5 text-sm"
+        >
+          <li
+            :for={{option, released?} <- @visibility}
+            id={"return-visibility-#{option.key}"}
+            data-released={to_string(released?)}
+            class={[
+              "inline-flex items-center gap-1.5",
+              if(released?,
+                do: "text-stone-700",
+                else: "text-stone-400 line-through decoration-stone-300"
+              )
+            ]}
+          >
+            <.icon
+              name={if(released?, do: "hero-check-mini", else: "hero-minus-mini")}
+              class={["w-4 h-4", if(released?, do: "text-emerald-600", else: "text-stone-300")]}
+            />
+            {option.short_label}
+            <span :if={not released?} class="sr-only">(nicht freigegeben)</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+    """
+  end
+
+  attr :class, :string, default: nil
+
+  # Heroicons has no symbol for "a corrected sheet goes back": the sheet with
+  # a check and a line is the graded exam, the arrow leaving it is the return.
+  # Drawn on the Heroicons outline grid (24, stroke 1.5) to sit beside them.
+  defp return_icon(assigns) do
+    ~H"""
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      class={@class}
+    >
+      <path d="M11.75 20.25H5.75a1.5 1.5 0 0 1-1.5-1.5V5.25a1.5 1.5 0 0 1 1.5-1.5h6.44a1.5 1.5 0 0 1 1.06.44l3.56 3.56a1.5 1.5 0 0 1 .44 1.06v1.94" />
+      <path d="M7.25 10.5l1.25 1.25 2.25-2.5" />
+      <path d="M7.25 15h3" />
+      <path d="M14 13.5v1.5a2.25 2.25 0 0 0 2.25 2.25h3.5" />
+      <path d="M17.75 15.25l2 2-2 2" />
+    </svg>
+    """
+  end
+
+  attr :count, :integer, required: true
+
+  # A warning, not a block: a learner who missed the exam has no mark, and
+  # that must not hold back the return for the rest of the class.
+  defp ungraded_hint(assigns) do
+    ~H"""
+    <p class="ungraded-hint inline-flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      <.icon name="hero-exclamation-triangle-mini" class="w-4 h-4 shrink-0 text-amber-500" />
+      {@count} {learner_word(@count)} {if @count == 1, do: "hat", else: "haben"} noch keine Note.
+    </p>
+    """
+  end
+
   attr :row, :map, required: true
   attr :step, :string, required: true
 
@@ -658,6 +875,7 @@ defmodule TaskyWeb.ExamLive.Grading do
     })
     |> assign(:export_status, nil)
     |> assign(:show_return_modal, false)
+    |> assign(:show_withdraw_modal, false)
     |> assign_return_state(exam)
   end
 
@@ -738,8 +956,13 @@ defmodule TaskyWeb.ExamLive.Grading do
     {:noreply, assign(socket, :show_return_modal, true)}
   end
 
+  # Cancelling drops the draft: the next opening starts from what the exam
+  # was returned with (or the defaults), not from abandoned toggles.
   def handle_event("close_return_modal", _params, socket) do
-    {:noreply, assign(socket, :show_return_modal, false)}
+    {:noreply,
+     socket
+     |> assign(:show_return_modal, false)
+     |> assign_return_state(socket.assigns.exam)}
   end
 
   def handle_event("toggle_return_option", %{"option" => option}, socket) do
@@ -750,6 +973,11 @@ defmodule TaskyWeb.ExamLive.Grading do
   end
 
   def handle_event("confirm_return", _params, socket) do
+    message =
+      if socket.assigns.returned?,
+        do: "Freigabe aktualisiert.",
+        else: "Prüfung an die Lernenden zurückgegeben."
+
     case Exams.return_exam(
            socket.assigns.current_scope,
            socket.assigns.exam,
@@ -761,7 +989,7 @@ defmodule TaskyWeb.ExamLive.Grading do
          |> assign(:exam, exam)
          |> assign(:show_return_modal, false)
          |> assign_return_state(exam)
-         |> put_flash(:info, "Prüfung an die Teilnehmenden zurückgegeben.")}
+         |> put_flash(:info, message)}
 
       {:error, _reason} ->
         {:noreply,
@@ -771,7 +999,17 @@ defmodule TaskyWeb.ExamLive.Grading do
     end
   end
 
+  def handle_event("open_withdraw_modal", _params, socket) do
+    {:noreply, assign(socket, :show_withdraw_modal, true)}
+  end
+
+  def handle_event("close_withdraw_modal", _params, socket) do
+    {:noreply, assign(socket, :show_withdraw_modal, false)}
+  end
+
   def handle_event("withdraw_return", _params, socket) do
+    socket = assign(socket, :show_withdraw_modal, false)
+
     case Exams.withdraw_exam_return(socket.assigns.current_scope, socket.assigns.exam) do
       {:ok, exam} ->
         {:noreply,

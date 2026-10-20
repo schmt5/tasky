@@ -885,13 +885,17 @@ defmodule Tasky.Exams do
   @doc """
   Hands the corrected exam back to all assigned participants. `opts` carries
   the same four flags as the PDF export and decides what they get to see.
+
+  On an exam that is already returned this only changes the flags: the
+  learners keep their access, and `returned_at` stays the date it was first
+  handed back.
   """
   def return_exam(scope, %Exam{} = exam, opts) do
     with :ok <- Policy.authorize(scope, exam.teacher_id),
          :ok <- validate_returnable(exam) do
       exam
       |> Exam.return_changeset(%{
-        returned_at: DateTime.utc_now(:second),
+        returned_at: exam.returned_at || DateTime.utc_now(:second),
         return_show_points_and_mark: !!opts[:show_points_and_mark],
         return_show_content: !!opts[:show_content],
         return_show_correction: !!opts[:show_correction],
