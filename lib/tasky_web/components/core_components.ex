@@ -745,18 +745,22 @@ defmodule TaskyWeb.CoreComponents do
 
   def breadcrumbs(assigns) do
     ~H"""
-    <nav class="flex items-center gap-1.5 text-[13px] font-semibold flex-wrap">
+    <%!-- One line, and only the current page gives way: it can be a long
+         question text, which used to run under the actions next to the
+         trail. Wrapping instead pushed a short last crumb onto a line of its
+         own, right above the page title it repeats. --%>
+    <nav class="flex items-center gap-1.5 text-[13px] font-semibold min-w-0">
       <%= for {crumb, index} <- Enum.with_index(@crumbs) do %>
         <%= if index < length(@crumbs) - 1 do %>
           <.link
             navigate={crumb.navigate}
-            class="text-stone-400 hover:text-stone-700 transition-colors duration-150 whitespace-nowrap"
+            class="shrink-0 max-w-64 truncate text-stone-400 hover:text-stone-700 transition-colors duration-150"
           >
             {crumb.label}
           </.link>
-          <span class="text-stone-300 select-none">/</span>
+          <span class="shrink-0 text-stone-300 select-none">/</span>
         <% else %>
-          <span class="text-stone-800 whitespace-nowrap">{crumb.label}</span>
+          <span class="min-w-0 truncate text-stone-800">{crumb.label}</span>
         <% end %>
       <% end %>
     </nav>
