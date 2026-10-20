@@ -1,11 +1,14 @@
 defmodule TaskyWeb.ExamLive.Correction do
   use TaskyWeb, :live_view
 
-  import TaskyWeb.ExamComponents, only: [corrected_badge: 1]
+  import TaskyWeb.ExamComponents,
+    only: [corrected_badge: 1, remove_participant_modal: 1, participant_name: 1]
+
   import TaskyWeb.FileComponents
 
   alias Tasky.Exams
   alias Tasky.Grading
+  alias TaskyWeb.Params
 
   @impl true
   def render(assigns) do
@@ -116,12 +119,16 @@ defmodule TaskyWeb.ExamLive.Correction do
           <% end %>
         </div>
       </div>
+
+      <.remove_participant_modal :if={@removing_submission} submission={@removing_submission} />
     </Layouts.app>
     """
   end
 
-  # One row per question, because the teacher works question by question: the
-  # question column stays pinned while the participant columns scroll past.
+  # One row per question, because the teacher works question by question: only
+  # the question column stays pinned, status and action scroll away with the
+  # participants. The question column has a fixed width, so the last, empty
+  # column takes up the rest of the card instead of the question.
   defp render_by_question(assigns) do
     ~H"""
     <div class="overflow-x-auto">
@@ -130,19 +137,27 @@ defmodule TaskyWeb.ExamLive.Correction do
           <tr class="bg-stone-50 border-b border-stone-100">
             <th
               scope="col"
-              class="sticky left-0 z-10 bg-stone-50 px-6 py-3 border-r border-stone-200 min-w-[34rem]"
+              class="sticky left-0 z-10 bg-stone-50 px-6 py-3 border-r border-stone-200 w-[22rem] min-w-[22rem] max-w-[22rem] text-xs font-semibold text-stone-500 uppercase tracking-wide"
             >
-              <div class="flex items-center gap-4 text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                <span class="flex-1">Frage</span>
-                <span class="w-32">Status</span>
-                <span class="w-36">Aktion</span>
-              </div>
+              Frage
+            </th>
+            <th
+              scope="col"
+              class="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap"
+            >
+              Status
+            </th>
+            <th
+              scope="col"
+              class="px-4 py-3 border-r border-stone-100 text-xs font-semibold text-stone-500 uppercase tracking-wide whitespace-nowrap"
+            >
+              Aktion
             </th>
             <th
               :for={submission <- @submissions}
               id={"correction-participant-#{submission.id}"}
               scope="col"
-              class="px-2 py-3 min-w-[84px] max-w-[96px]"
+              class="group/participant relative px-2 py-3 min-w-[84px] max-w-[96px]"
             >
               <div
                 class={[
@@ -156,7 +171,17 @@ defmodule TaskyWeb.ExamLive.Correction do
                   {submission.firstname}
                 </span>
               </div>
+              <div
+                class="absolute top-1 right-1 tooltip tooltip-bottom tooltip-delayed"
+                data-tip="Aus Prüfung entfernen"
+              >
+                <.remove_participant_button
+                  submission={submission}
+                  class="opacity-0 group-hover/participant:opacity-100"
+                />
+              </div>
             </th>
+            <th aria-hidden="true" class="w-full"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-stone-100">
@@ -168,47 +193,43 @@ defmodule TaskyWeb.ExamLive.Correction do
           >
             <th
               scope="row"
-              class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-3 border-r border-stone-200 font-normal transition-colors duration-150"
+              class="sticky left-0 z-10 bg-white group-hover:bg-stone-50 px-6 py-3 border-r border-stone-200 w-[22rem] min-w-[22rem] max-w-[22rem] font-normal transition-colors duration-150"
             >
-              <div class="flex items-center gap-4">
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-semibold text-stone-800 line-clamp-2">{part.label}</p>
-                  <p class="text-xs text-stone-400 mt-0.5 tabular-nums">
-                    max. {max_points_label(@exam, part)}
-                  </p>
-                </div>
-                <div class="w-32">
-                  {render_part_status(%{
-                    status: part_status(@done_counts, part, @submissions),
-                    done: Map.get(@done_counts, part.id, 0),
-                    total: length(@submissions)
-                  })}
-                </div>
-                <div class="w-36">
-                  <%!-- Secondary on every row: "Korrektur fortsetzen" above is
-                       the one primary action of the page. --%>
-                  <.link
-                    id={"correction-action-#{part.id}"}
-                    navigate={~p"/exams/#{@exam}/correction/bulk/#{part.id}"}
-                    class={[
-                      "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
-                      if(part_status(@done_counts, part, @submissions) == :done,
-                        do:
-                          "text-stone-600 border-stone-200 bg-white hover:bg-stone-100 hover:border-stone-300 hover:text-stone-700 focus-visible:ring-stone-400",
-                        else:
-                          "text-green-700 border-green-500 bg-transparent hover:bg-green-50 hover:border-green-600 focus-visible:ring-green-600"
-                      )
-                    ]}
-                  >
-                    <%= if part_status(@done_counts, part, @submissions) == :done do %>
-                      <.icon name="hero-eye" class="w-4 h-4" /> Überprüfen
-                    <% else %>
-                      <.icon name="hero-pencil-square" class="w-4 h-4" /> Korrigieren
-                    <% end %>
-                  </.link>
-                </div>
-              </div>
+              <p class="text-sm font-semibold text-stone-800 line-clamp-3">{part.label}</p>
+              <p class="text-xs text-stone-400 mt-0.5 tabular-nums">
+                max. {max_points_label(@exam, part)}
+              </p>
             </th>
+            <td class="px-4 py-3 whitespace-nowrap">
+              {render_part_status(%{
+                status: part_status(@done_counts, part, @submissions),
+                done: Map.get(@done_counts, part.id, 0),
+                total: length(@submissions)
+              })}
+            </td>
+            <td class="px-4 py-3 border-r border-stone-100 whitespace-nowrap">
+              <%!-- Secondary on every row: "Korrektur fortsetzen" above is
+                   the one primary action of the page. --%>
+              <.link
+                id={"correction-action-#{part.id}"}
+                navigate={~p"/exams/#{@exam}/correction/bulk/#{part.id}"}
+                class={[
+                  "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-4 focus-visible:ring-offset-2",
+                  if(part_status(@done_counts, part, @submissions) == :done,
+                    do:
+                      "text-stone-600 border-stone-200 bg-white hover:bg-stone-100 hover:border-stone-300 hover:text-stone-700 focus-visible:ring-stone-400",
+                    else:
+                      "text-green-700 border-green-500 bg-transparent hover:bg-green-50 hover:border-green-600 focus-visible:ring-green-600"
+                  )
+                ]}
+              >
+                <%= if part_status(@done_counts, part, @submissions) == :done do %>
+                  <.icon name="hero-eye" class="w-4 h-4" /> Überprüfen
+                <% else %>
+                  <.icon name="hero-pencil-square" class="w-4 h-4" /> Korrigieren
+                <% end %>
+              </.link>
+            </td>
             <td :for={submission <- @submissions} class="px-2 py-3 text-center">
               <div
                 class="tooltip tooltip-delayed"
@@ -234,6 +255,7 @@ defmodule TaskyWeb.ExamLive.Correction do
                 </.link>
               </div>
             </td>
+            <td aria-hidden="true"></td>
           </tr>
         </tbody>
         <tfoot class="border-t-2 border-stone-200">
@@ -245,6 +267,7 @@ defmodule TaskyWeb.ExamLive.Correction do
               Total
               <span class="normal-case font-normal">(max. {format_points(@total_max_points)})</span>
             </th>
+            <td colspan="2" class="border-r border-stone-100"></td>
             <td
               :for={submission <- @submissions}
               id={"correction-total-#{submission.id}"}
@@ -252,6 +275,7 @@ defmodule TaskyWeb.ExamLive.Correction do
             >
               {format_points(total_points(submission))}
             </td>
+            <td aria-hidden="true"></td>
           </tr>
           <tr :if={@has_upload_fields} class="bg-stone-50 border-t border-stone-100">
             <th
@@ -260,6 +284,7 @@ defmodule TaskyWeb.ExamLive.Correction do
             >
               Dateien
             </th>
+            <td colspan="2" class="border-r border-stone-100"></td>
             <td :for={submission <- @submissions} class="px-2 py-3">
               <div class="flex flex-col items-center gap-1">
                 <%= case Map.get(@submission_files, submission.id, []) do %>
@@ -283,10 +308,34 @@ defmodule TaskyWeb.ExamLive.Correction do
                 <% end %>
               </div>
             </td>
+            <td aria-hidden="true"></td>
           </tr>
         </tfoot>
       </table>
     </div>
+    """
+  end
+
+  attr :submission, :map, required: true
+  attr :class, :any, default: nil
+
+  # Shown on hover only: removing someone is rare, and the correction table
+  # should not be dotted with destructive buttons.
+  defp remove_participant_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id={"remove-participant-#{@submission.id}"}
+      phx-click="ask_remove_participant"
+      phx-value-submission_id={@submission.id}
+      aria-label={"#{participant_name(@submission)} aus der Prüfung entfernen"}
+      class={[
+        "flex items-center justify-center w-6 h-6 rounded-full text-stone-400 bg-white border border-stone-200 shadow-sm transition-all duration-150 hover:text-red-600 hover:bg-red-50 hover:border-red-200 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-red-400",
+        @class
+      ]}
+    >
+      <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+    </button>
     """
   end
 
@@ -383,6 +432,12 @@ defmodule TaskyWeb.ExamLive.Correction do
                       <span class="text-stone-400">Nicht abgegeben</span>
                     <% end %>
                   </p>
+                </div>
+                <div class="ml-auto tooltip tooltip-delayed" data-tip="Aus Prüfung entfernen">
+                  <.remove_participant_button
+                    submission={submission}
+                    class="opacity-0 group-hover:opacity-100"
+                  />
                 </div>
               </div>
             </td>
@@ -522,9 +577,43 @@ defmodule TaskyWeb.ExamLive.Correction do
      |> assign(:parts, parts)
      |> assign_progress(submissions)
      |> assign(:bulk_status, :idle)
+     |> assign(:removing_submission, nil)
      |> assign(:has_upload_fields, Exams.list_upload_fields(exam) != [])
      |> assign(:submission_files, submission_files)
      |> assign(:total_max_points, total_max_points(exam))}
+  end
+
+  @impl true
+  def handle_event("ask_remove_participant", %{"submission_id" => raw}, socket) do
+    submission =
+      with id when not is_nil(id) <- Params.int(raw),
+           do: Exams.get_submission(socket.assigns.exam, id)
+
+    {:noreply, assign(socket, :removing_submission, submission)}
+  end
+
+  def handle_event("close_remove", _params, socket) do
+    {:noreply, assign(socket, :removing_submission, nil)}
+  end
+
+  # Someone who never showed up would otherwise keep an empty column here and
+  # an ungraded row in the grade overview.
+  def handle_event("remove_participant", %{"submission_id" => raw}, socket) do
+    exam = socket.assigns.exam
+    socket = assign(socket, :removing_submission, nil)
+
+    with id when not is_nil(id) <- Params.int(raw),
+         submission when not is_nil(submission) <- Exams.get_submission(exam, id),
+         {:ok, _} <- Exams.remove_participant(socket.assigns.current_scope, exam, submission) do
+      {:noreply,
+       socket
+       |> assign_progress(Enum.reject(socket.assigns.submissions, &(&1.id == submission.id)))
+       |> update(:submission_files, &Map.delete(&1, submission.id))
+       |> put_flash(:info, "#{participant_name(submission)} wurde aus der Prüfung entfernt.")}
+    else
+      _ ->
+        {:noreply, put_flash(socket, :error, "Teilnehmende:r konnte nicht entfernt werden.")}
+    end
   end
 
   @impl true

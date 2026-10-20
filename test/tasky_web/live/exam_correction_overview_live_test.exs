@@ -88,6 +88,33 @@ defmodule TaskyWeb.ExamCorrectionOverviewLiveTest do
     assert has_element?(view, second_q2 <> ~s|[data-corrected="false"]|)
   end
 
+  test "removing a participant drops their column and recounts the questions",
+       %{conn: conn} = ctx do
+    {:ok, view, _html} = open(conn, ctx.teacher, ctx.exam)
+
+    view |> element("#remove-participant-#{ctx.second.id}") |> render_click()
+    assert has_element?(view, "#remove-participant-modal")
+
+    view |> element("#confirm-remove-participant-btn") |> render_click()
+
+    refute has_element?(view, "#remove-participant-modal")
+    refute has_element?(view, "#correction-participant-#{ctx.second.id}")
+    assert has_element?(view, "#correction-participant-#{ctx.first.id}")
+    # Only the second participant was missing on q-2.
+    assert has_element?(view, ~s|#correction-part-q-2[data-status="done"]|)
+    assert is_nil(Exams.get_submission(ctx.exam, ctx.second.id))
+  end
+
+  test "cancelling keeps the participant", %{conn: conn} = ctx do
+    {:ok, view, _html} = open(conn, ctx.teacher, ctx.exam)
+
+    view |> element("#remove-participant-#{ctx.second.id}") |> render_click()
+    render_keydown(view, "close_remove", %{"key" => "Escape"})
+
+    refute has_element?(view, "#remove-participant-modal")
+    assert has_element?(view, "#correction-participant-#{ctx.second.id}")
+  end
+
   # Building the "Korrektur fortsetzen" link used to crash on the nil part id.
   test "an exam without questions shows its empty state", %{conn: conn} = ctx do
     scope = user_scope_fixture(ctx.teacher)

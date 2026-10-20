@@ -1,7 +1,8 @@
 defmodule TaskyWeb.ExamLive.Cockpit do
   use TaskyWeb, :live_view
 
-  import TaskyWeb.ExamComponents, only: [seb_derivation_alert: 1]
+  import TaskyWeb.ExamComponents,
+    only: [seb_derivation_alert: 1, remove_participant_modal: 1, participant_name: 1]
 
   alias Tasky.Exams
   alias TaskyWeb.Params
@@ -400,76 +401,9 @@ defmodule TaskyWeb.ExamLive.Cockpit do
         </div>
       </div>
 
-      <%!-- Start Exam Confirmation Modal --%>
-      <%= if @removing_submission do %>
-        <dialog
-          id="remove-participant-modal"
-          class="modal modal-open"
-          phx-window-keydown="close_remove"
-          phx-key="escape"
-        >
-          <div class="modal-backdrop bg-stone-900/50" phx-click="close_remove"></div>
-          <%!-- Pulling focus into the dialog also closes the actions menu,
-               which stays open for as long as it holds focus. --%>
-          <div
-            phx-mounted={JS.focus_first()}
-            class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200"
-          >
-            <div class="p-6 border-b border-stone-100">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
-                  <.icon name="hero-user-minus" class="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-stone-800">Aus Prüfung entfernen</h3>
-                  <p class="text-xs text-stone-400 mt-0.5">{full_name(@removing_submission)}</p>
-                </div>
-              </div>
-            </div>
-            <div class="p-6">
-              <p class="text-sm text-stone-600 leading-relaxed">
-                Möchtest du
-                <span class="font-semibold text-stone-800">{full_name(@removing_submission)}</span>
-                aus der Prüfung entfernen?
-              </p>
-              <div
-                :if={remove_warning(@removing_submission)}
-                id="remove-participant-warning"
-                class="bg-red-50 rounded-lg p-3 mt-4 border border-red-100"
-              >
-                <div class="flex items-start gap-2.5">
-                  <.icon
-                    name="hero-exclamation-triangle"
-                    class="w-4 h-4 text-red-500 shrink-0 mt-0.5"
-                  />
-                  <p class="text-xs text-red-700 leading-relaxed">
-                    {remove_warning(@removing_submission)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div class="p-6 pt-0 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                phx-click="close_remove"
-                class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                id="confirm-remove-participant-btn"
-                phx-click="remove_participant"
-                phx-value-submission_id={@removing_submission.id}
-                class="inline-flex items-center gap-2 bg-red-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(239,68,68,0.25)] transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
-              >
-                <.icon name="hero-user-minus" class="w-4 h-4" /> Entfernen
-              </button>
-            </div>
-          </div>
-        </dialog>
-      <% end %>
+      <.remove_participant_modal :if={@removing_submission} submission={@removing_submission} />
 
+      <%!-- Start Exam Confirmation Modal --%>
       <%= if @confirm_action == :start_exam do %>
         <dialog
           id="start-exam-modal"
@@ -941,18 +875,6 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
   # The removal deletes answers and files for good, so the confirmation says
   # what is at stake for this particular person.
-  defp remove_warning(%{submitted: true}),
-    do: "Die Abgabe wird samt Antworten und Dateien endgültig gelöscht."
-
-  defp remove_warning(%{content: content}) when is_map(content) and map_size(content) > 0,
-    do:
-      "Die bereits erfassten Antworten werden endgültig gelöscht. Eine laufende Sitzung wird sofort beendet."
-
-  defp remove_warning(_submission), do: nil
-
-  defp full_name(submission),
-    do: String.trim("#{submission.firstname} #{submission.lastname}")
-
   # Map of present exam_token => %{in_seb: bool}. A participant counts as in SEB
   # if any of their tracked sessions reports it (e.g. the SEB window alongside a
   # still-open gate tab).
@@ -1202,7 +1124,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
        socket
        |> refresh_submissions()
        |> assign_assignable()
-       |> put_flash(:info, "#{full_name(submission)} wurde aus der Prüfung entfernt.")}
+       |> put_flash(:info, "#{participant_name(submission)} wurde aus der Prüfung entfernt.")}
     else
       _ ->
         {:noreply, put_flash(socket, :error, "Teilnehmende:r konnte nicht entfernt werden.")}
