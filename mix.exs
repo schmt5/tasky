@@ -105,6 +105,10 @@ defmodule Tasky.MixProject do
         "cmd npm install --prefix assets"
       ],
       "assets.build": ["compile", "tailwind tasky", "esbuild tasky"],
+      "assets.test": [
+        "esbuild tasky_test",
+        "cmd node --test _build/assets_test/editorExtensions.test.mjs"
+      ],
       "assets.deploy": [
         "tailwind tasky --minify",
         "esbuild tasky --minify",

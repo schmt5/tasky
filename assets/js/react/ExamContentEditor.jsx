@@ -5,29 +5,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { TaskList } from "@tiptap/extension-list/task-list";
-import { TableKit } from "@tiptap/extension-table";
-import { Highlight } from "@tiptap/extension-highlight";
-import { TextStyle, Color } from "@tiptap/extension-text-style";
-import { Placeholder } from "@tiptap/extensions";
-import Image from "@tiptap/extension-image";
 import * as solutionEditorStore from "./solutionEditorStore";
+import { unwrapAnswerSlice, withFreshAnswerIds } from "./editor/extensions";
 import {
-  HeadingWithPartId,
-  PartIdStamper,
-  Lueckentext,
-  AnswerBlock,
-  SolutionHint,
-  Callout,
-  TaskItemWithId,
-  TeacherComment,
-  PreventNodeDeletion,
-  LockExamContent,
-  PaperAnswerLines,
-  unwrapAnswerSlice,
-  withFreshAnswerIds,
-} from "./editor/extensions";
+  buildEditorExtensions,
+  findUnreadableContent,
+} from "./editor/editorExtensions";
 import { Toolbar } from "./editor/Toolbar";
 import { useAutosave } from "./editor/useAutosave";
 import { EDITOR_MODES } from "./editor/modes";
@@ -107,44 +90,34 @@ export default function ExamContentEditor({
     [],
   );
 
+  // Built once, like useEditor itself: the flags and showLockHint are stable.
+  const [extensions] = useState(() =>
+    buildEditorExtensions({
+      lockContent,
+      protectAnswers,
+      paperMode,
+      placeholder,
+      onLockBlocked: showLockHint,
+    }),
+  );
+
+  // A document the schema cannot read would silently open EMPTY (see
+  // findUnreadableContent) — show an error instead, and never let the empty
+  // stand-in reach autosave.
+  const [contentError] = useState(() => {
+    const error = findUnreadableContent(extensions, initialContent);
+    if (error) console.error("ExamContentEditor: unreadable document", error);
+    return error;
+  });
+  const canEdit = editable && !contentError;
+
   const editor = useEditor({
-    extensions: [
-      // StarterKit bringt die Link-Extension mit (autolink, linkOnPaste,
-      // target="_blank" + rel="noopener noreferrer nofollow" sind Defaults);
-      // nur das Default-Protokoll wäre http, ein gepastetes "www.foo.ch" also
-      // unverschlüsselt.
-      StarterKit.configure({
-        horizontalRule: false,
-        heading: false,
-        link: { defaultProtocol: "https" },
-      }),
-      HeadingWithPartId,
-      ...(lockContent ? [] : [PartIdStamper]),
-      Lueckentext,
-      AnswerBlock,
-      SolutionHint,
-      Callout,
-      TaskList,
-      TaskItemWithId.configure({ nested: true }),
-      TableKit.configure({ table: { resizable: true } }),
-      Highlight.configure({ multicolor: true }),
-      TextStyle,
-      Color,
-      Image,
-      ...(placeholder ? [Placeholder.configure({ placeholder })] : []),
-      ...(protectAnswers ? [PreventNodeDeletion] : []),
-      // Must come after PreventNodeDeletion so its Backspace binding wins:
-      // later extensions take precedence for the same key in Tiptap.
-      ...(paperMode ? [PaperAnswerLines] : []),
-      ...(lockContent
-        ? [LockExamContent.configure({ onBlocked: showLockHint })]
-        : []),
-      ...(correctionMode ? [TeacherComment] : []),
-    ],
-    editable: editable,
-    content: isEmptyDoc(initialContent) ? "" : initialContent,
+    extensions,
+    editable: canEdit,
+    content:
+      contentError || isEmptyDoc(initialContent) ? "" : initialContent,
     onUpdate: ({ editor }) => {
-      if (editable) scheduleSave(editor.getJSON());
+      if (canEdit) scheduleSave(editor.getJSON());
     },
     onFocus: () => {
       if (externalToolbar && partId) solutionEditorStore.setActive(partId);
@@ -221,6 +194,18 @@ export default function ExamContentEditor({
       sentinel.remove();
     };
   }, [editable, externalToolbar, editor]);
+
+  if (contentError) {
+    return (
+      <div
+        role="alert"
+        className="p-4 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg"
+      >
+        Inhalt konnte nicht angezeigt werden.
+        {editable && " Bitte die Seite neu laden und nicht weiterarbeiten."}
+      </div>
+    );
+  }
 
   if (!editor) return null;
 

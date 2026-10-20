@@ -126,4 +126,5 @@ jobs:
       - run: mix deps.get
       - run: mix assets.setup
       - run: npx --prefix assets tsc --noEmit -p assets/tsconfig.json
+      - run: mix assets.test
       - run: mix assets.build

@@ -58,6 +58,13 @@ config :esbuild,
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --format=esm --splitting --chunk-names=chunks/[name]-[hash] --jsx=automatic --define:process.env.NODE_ENV=\"production\" --external:/fonts/* --external:/images/* --alias:@=.),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
+  ],
+  # Editor tests for `mix assets.test`, bundled for Node.
+  tasky_test: [
+    args:
+      ~w(js/react/editor/editorExtensions.test.js --bundle --platform=node --format=esm --jsx=automatic --outfile=../_build/assets_test/editorExtensions.test.mjs),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
 # Configure tailwind (the version is required)
