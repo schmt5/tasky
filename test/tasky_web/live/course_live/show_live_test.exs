@@ -153,8 +153,10 @@ defmodule TaskyWeb.CourseLive.ShowTest do
       assert html =~ "Kurs wird dupliziert"
       assert html =~ "0/1"
 
+      # The redirect follows the copy run in the background. The default
+      # 100 ms receive timeout is too tight for a loaded CI runner.
       [copy] = Enum.reject(Courses.list_courses(scope), &(&1.id == course.id))
-      assert_redirect(lv, ~p"/courses/#{copy}")
+      assert_redirect(lv, ~p"/courses/#{copy}", 10_000)
     end
   end
 
