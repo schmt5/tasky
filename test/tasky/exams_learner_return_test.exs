@@ -120,6 +120,73 @@ defmodule Tasky.ExamsLearnerReturnTest do
     end
   end
 
+  # Ein 🟡 allein liest sich wie „ein halber Punkt", auch bei 1.5 von 2
+  # Punkten. Am Feld steht darum die Zahl, die wirklich vergeben wurde.
+  describe "learner_points/2" do
+    test "awards the block maximum, the manual points or zero" do
+      exam = exam(%{sample_solution_points: %{"q-1" => 2}})
+
+      for {verdict, expected} <- [{"correct", "2"}, {1.5, "1.5"}, {"wrong", "0"}, {0, "0"}] do
+        submission =
+          submission(%{
+            corrected_content: doc([heading(), answer_block("a", "pdf")]),
+            block_verdicts: %{"a" => verdict}
+          })
+
+        assert Exams.learner_points(exam, submission) == %{"a" => expected}
+      end
+    end
+
+    # Ohne konfigurierte Punkte gäbe es für ✅/❌ nur eine erfundene Zahl — das
+    # Feld behält sein Zeichen. Manuell vergebene Punkte sind selbst die Zahl.
+    test "without configured points only manual points have a number" do
+      for {verdict, expected} <- [{"correct", %{}}, {"wrong", %{}}, {2, %{"a" => "2"}}] do
+        submission =
+          submission(%{
+            corrected_content: doc([heading(), answer_block("a", "pdf")]),
+            block_verdicts: %{"a" => verdict}
+          })
+
+        assert Exams.learner_points(exam(), submission) == expected
+      end
+    end
+
+    test "an unjudged block has no points" do
+      exam = exam(%{sample_solution_points: %{"q-1" => 2}})
+      submission = submission(%{corrected_content: doc([heading(), answer_block("a", "pdf")])})
+
+      assert Exams.learner_points(exam, submission) == %{}
+    end
+  end
+
+  describe "return_doc_for_learner/4" do
+    test "the points land next to the verdict on the answer node" do
+      base = doc([heading(), answer_block("a", "pdf")])
+
+      %{"content" => [_heading, answer, %{"content" => [twin]}]} =
+        Exams.return_doc_for_learner(exam(), base, %{"a" => "half"}, points: %{"a" => "1.5"})
+
+      assert answer["attrs"]["verdict"] == "half"
+      assert answer["attrs"]["points"] == "1.5"
+      refute Map.has_key?(twin["attrs"], "points")
+    end
+
+    # Korrektur freigegeben, Musterlösung nicht: Verdikt und Punkte ans Feld,
+    # aber keine Vorgabe darunter.
+    test "without the sample solution the field is judged but gets no hint" do
+      base = doc([heading(), answer_block("a", "pdf 🟡")])
+
+      assert %{"content" => [_heading, answer]} =
+               Exams.return_doc_for_learner(exam(), base, %{"a" => "half"},
+                 points: %{"a" => "1.5"},
+                 sample_solution: false
+               )
+
+      assert answer["attrs"]["points"] == "1.5"
+      assert answer["content"] == [paragraph("pdf")]
+    end
+  end
+
   describe "return_doc_for_learner/3" do
     test "hangs the sample solution under the answer field" do
       base = doc([heading(), answer_block("a", "pdf")])

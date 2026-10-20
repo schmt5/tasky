@@ -708,6 +708,61 @@
     content: "\274C";
 }
 
+/* Zurückgegebene Prüfung: wo Punkte bekannt sind (`data-points`, siehe
+   `Tasky.Exams.learner_points/2`), steht statt des Zeichens die erreichte
+   Punktzahl als Badge in der Verdikt-Farbe. Ein 🟡 allein las sich wie „ein
+   halber Punkt", auch bei 1.5 von 2 Punkten. Die Selbstkontrolle einer
+   Lerneinheit kennt keine Punkte und behält ✅/❌. */
+.exam-editor__content .ProseMirror [data-verdict][data-points]::after {
+    content: attr(data-points) "\00a0P.";
+    display: inline-block;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    border-radius: 9999px;
+    background: #ffffff;
+    font-size: 0.75em;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+    white-space: nowrap;
+    vertical-align: 0.1em;
+}
+
+/* Am Antwortfeld sitzt das Badge als Etikett auf dem oberen Rand, statt rechts
+   eine Spalte zu reservieren: In schmalen Tabellenzellen bliebe der Antwort
+   sonst kaum Breite, und sie bräche Buchstabe für Buchstabe um. */
+.exam-editor__content .ProseMirror .answer-block[data-verdict][data-points] {
+    padding-right: 14px;
+    margin-top: 0.85em;
+}
+
+.exam-editor__content .ProseMirror .answer-block[data-verdict][data-points]::after {
+    top: 0;
+    right: 10px;
+    transform: translateY(-50%);
+}
+
+.exam-editor__content .ProseMirror li[data-verdict][data-points]::after {
+    align-self: flex-start;
+    margin-top: 0.15em;
+    margin-left: auto;
+}
+
+.exam-editor__content .ProseMirror [data-verdict="correct"][data-points]::after {
+    color: #059669;
+    border-color: #34d399;
+}
+
+.exam-editor__content .ProseMirror [data-verdict="half"][data-points]::after {
+    color: #b45309;
+    border-color: #fcd34d;
+}
+
+.exam-editor__content .ProseMirror [data-verdict="wrong"][data-points]::after {
+    color: #dc2626;
+    border-color: #fca5a5;
+}
+
 .exam-editor__content .ProseMirror .answer-block[data-verdict="correct"] {
     border-color: #34d399;
     background: #ecfdf5;

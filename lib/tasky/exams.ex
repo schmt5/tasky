@@ -2639,31 +2639,69 @@ defmodule Tasky.Exams do
   """
   @spec learner_verdicts(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
   def learner_verdicts(%Exam{} = exam, %ExamSubmission{} = submission) do
+    exam
+    |> judged_answers(submission)
+    |> Map.new(fn {answer_id, verdict, block_max} ->
+      {answer_id, Grading.marker_verdict(verdict, block_max)}
+    end)
+  end
+
+  @doc """
+  Die erreichten Punkte einer Abgabe pro Antwortfeld, keyed by `answerId`, als
+  Anzeigetext (`Grading.format_points/1`) — für Lernende, die am Feld die
+  Punktzahl statt ✅/🟡/❌ sehen.
+
+  Ein 🟡 allein liest sich wie „ein halber Punkt", auch bei 1.5 von 2 Punkten;
+  die Zahl sagt, was wirklich vergeben wurde. Gerechnet wird mit
+  `Grading.awarded_points/2`, demselben Pfad wie die Gesamtpunktzahl.
+
+  Ohne Blockmaximum (keine Punkte konfiguriert, oder ein Block mit 0 Punkten)
+  gibt es für ein Wort-Verdikt keine Zahl: das Feld fehlt in der Map und behält
+  sein Zeichen. Manuell vergebene Punkte sind selbst die Zahl.
+  """
+  @spec learner_points(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
+  def learner_points(%Exam{} = exam, %ExamSubmission{} = submission) do
+    exam
+    |> judged_answers(submission)
+    |> Enum.reduce(%{}, fn {answer_id, verdict, block_max}, acc ->
+      if is_number(verdict) or (is_number(block_max) and block_max > 0) do
+        Map.put(
+          acc,
+          answer_id,
+          Grading.format_points(Grading.awarded_points(verdict, block_max))
+        )
+      else
+        acc
+      end
+    end)
+  end
+
+  # `{answerId, verdict, block_max}` für jedes bewertete Antwortfeld, mit der
+  # Quellen-Rangfolge aus `learner_verdicts/2`.
+  defp judged_answers(exam, submission) do
     explicit = submission.block_verdicts || %{}
 
     submission
     |> correction_content()
     |> split_content_into_parts(exam.answer_mode)
-    |> Enum.reduce(%{}, fn part, acc ->
+    |> Enum.flat_map(fn part ->
       blocks = NodePatcher.list_answer_blocks(part.nodes)
       points = resolve_block_points(exam, part.id, blocks)
 
-      Enum.reduce(blocks, acc, fn entry, acc ->
+      Enum.flat_map(blocks, fn entry ->
         verdict =
           (entry.answer_id && Map.get(explicit, entry.answer_id)) || entry.inferred_verdict
 
-        if is_binary(entry.answer_id) and not is_nil(verdict) do
-          block_max = points && Map.get(points, entry.index)
-          Map.put(acc, entry.answer_id, Grading.marker_verdict(verdict, block_max))
-        else
-          acc
-        end
+        if is_binary(entry.answer_id) and not is_nil(verdict),
+          do: [{entry.answer_id, verdict, points && Map.get(points, entry.index)}],
+          else: []
       end)
     end)
   end
 
   @doc """
-  Das zurückgegebene Dokument mit der Musterlösung an den Antwortfeldern.
+  Das zurückgegebene Dokument mit Verdikten und Musterlösung an den
+  Antwortfeldern.
 
   `base_doc` ist, was die/der Lernende ohnehin zu sehen bekäme — die Korrektur
   der Lehrperson oder die eigenen Antworten. `verdicts` ist `learner_verdicts/2`
@@ -2674,14 +2712,24 @@ defmodule Tasky.Exams do
   da, hätte jedes korrigierte Feld zwei Marker. Ohne Verdikte wird der Text
   nicht angefasst — dort gibt es keine Korrektur, und was die/der Lernende
   geschrieben hat, bleibt stehen.
+
+  Optionen:
+
+    * `:points` — `learner_points/2`; das Feld zeigt dann die Punktzahl statt
+      des Zeichens. Default `%{}`.
+    * `:sample_solution` — `false`, wenn die Musterlösung nicht freigegeben ist:
+      Verdikte und Punkte kommen trotzdem ans Feld, nur ohne Vorgabe darunter.
+      Default `true`.
   """
-  @spec return_doc_for_learner(Exam.t(), map() | nil, map()) :: map()
-  def return_doc_for_learner(%Exam{} = exam, base_doc, verdicts) when is_map(verdicts) do
+  @spec return_doc_for_learner(Exam.t(), map() | nil, map(), keyword()) :: map()
+  def return_doc_for_learner(%Exam{} = exam, base_doc, verdicts, opts \\ [])
+      when is_map(verdicts) do
     base_doc = base_doc || %{}
+    sample = if Keyword.get(opts, :sample_solution, true), do: exam.sample_solution
 
     base_doc
     |> strip_markers(verdicts)
-    |> SolutionHints.annotate(exam.sample_solution, verdicts)
+    |> SolutionHints.annotate(sample, verdicts, Keyword.get(opts, :points, %{}))
   end
 
   defp strip_markers(doc, verdicts) when map_size(verdicts) == 0, do: doc

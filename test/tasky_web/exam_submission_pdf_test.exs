@@ -78,4 +78,18 @@ defmodule TaskyWeb.ExamSubmissionPdfTest do
                show_sample_solution: true
              })
   end
+
+  # Die Punktzahl am Feld ersetzt das „½" — sie muss den Typst-Pfad heil
+  # durchlaufen, mit und ohne Musterlösung.
+  test "render/3 draws the points of a judged field" do
+    submission = %{submission() | block_verdicts: %{"a" => 1.5}}
+
+    for sample? <- [true, false] do
+      opts = %{show_correction: true, show_sample_solution: sample?}
+
+      assert [%{"doc" => doc}] = ExamSubmissionPdf.data(exam(), submission, opts)["sections"]
+      assert inspect(doc) =~ ~s("points" => "1.5")
+      assert {:ok, "%PDF" <> _} = ExamSubmissionPdf.render(exam(), submission, opts)
+    end
+  end
 end

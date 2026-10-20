@@ -94,12 +94,21 @@ const answerIdAttribute = {
 // gesetzt von `Tasky.Tasks.SelfCheck` und nur im Read-only-Viewer sichtbar.
 // Bewusst ein Attribut statt eines ✅/❌ im Text: das Rendern ist Sache des
 // Stylesheets, das Dokument bleibt sauber.
+//
+// In der zurückgegebenen Prüfung kommt die erreichte Punktzahl dazu ("1.5",
+// `Tasky.Exams.learner_points/2`); das Stylesheet zeigt dann sie statt 🟡.
 const verdictAttribute = {
   verdict: {
     default: null,
     parseHTML: (el: HTMLElement) => el.getAttribute("data-verdict"),
     renderHTML: (attrs: Record<string, unknown>) =>
       attrs.verdict ? { "data-verdict": attrs.verdict } : {},
+  },
+  points: {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.getAttribute("data-points"),
+    renderHTML: (attrs: Record<string, unknown>) =>
+      attrs.points != null ? { "data-points": attrs.points } : {},
   },
 };
 

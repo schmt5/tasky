@@ -87,6 +87,30 @@
   verdict.sign,
 )
 
+// The points a returned exam awarded for the field ("1.5", set by
+// `Tasky.Exams.learner_points/2`), or none — a self-check has no points.
+#let points-of(node) = {
+  let p = attrs-of(node).at("points", default: none)
+  if type(p) == str and p != "" { p } else { none }
+}
+
+// As in the stylesheet: where the points are known, a badge with the points
+// replaces the sign. A lone "½" read as "half a point", even for 1.5 of 2.
+#let verdict-mark(node, verdict) = {
+  let points = points-of(node)
+  if points == none {
+    verdict-sign(verdict)
+  } else {
+    box(
+      fill: white,
+      stroke: 0.75pt + verdict.stroke,
+      radius: 6pt,
+      inset: (x: 4pt, y: 2pt),
+      text(weight: "bold", fill: verdict.ink, size: 0.75em, points + "\u{a0}P."),
+    )
+  }
+}
+
 // --- Inline ------------------------------------------------------------------
 
 #let apply-mark(body, mark) = {
@@ -180,7 +204,7 @@
       outset: (y: 3pt),
       {
         if blank(children-of(node)) { h(2.5em) } else { filled }
-        if verdict != none { h(0.4em); verdict-sign(verdict) }
+        if verdict != none { h(0.4em); verdict-mark(node, verdict) }
       },
     )
   }
@@ -229,6 +253,9 @@
     )
   } else {
     let verdict = verdict-of(node)
+    // As in the stylesheet: the points badge sits on the top border like a tag
+    // instead of reserving a column, which narrow table cells cannot spare.
+    let tagged = verdict != none and points-of(node) != none
     block(
       width: 100%,
       breakable: true,
@@ -236,11 +263,15 @@
       stroke: if verdict != none { 0.75pt + verdict.stroke } else { field-stroke(ctx) },
       radius: 6pt,
       inset: (x: 10pt, y: 8pt),
-      above: 0.6em,
+      above: if tagged { 0.6em + 6pt } else { 0.6em },
       below: 0.6em,
       {
-        if verdict != none { place(top + right, dx: 2pt, verdict-sign(verdict)) }
-        pad(right: if verdict != none { 1.4em } else { 0pt }, {
+        if tagged {
+          place(top + right, dx: -2pt, dy: -11.5pt, verdict-mark(node, verdict))
+        } else if verdict != none {
+          place(top + right, dx: 2pt, verdict-mark(node, verdict))
+        }
+        pad(right: if verdict != none and not tagged { 1.4em } else { 0pt }, {
           // Typst has no min-height: an unanswered field still needs a body.
           if blank(kids) { v(1.4em) } else { render-blocks(kids, ctx, render-node) }
         })
@@ -268,7 +299,7 @@
     align: (left + top, left + top, right + top),
     pad(top: 0.15em, tick-box(checked)),
     render-blocks(children-of(node), ctx, render-node),
-    if verdict != none { verdict-sign(verdict) },
+    if verdict != none { verdict-mark(node, verdict) },
   )
 
   // As in the stylesheet: the geometry belongs to the list, so ungraded rows

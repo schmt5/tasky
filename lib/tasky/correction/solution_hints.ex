@@ -17,7 +17,7 @@ defmodule Tasky.Correction.SolutionHints do
 
   Geteilt von beiden Flächen, die Lernenden eine Musterlösung vorlegen: der
   Selbstkontrolle einer Lerneinheit (`Tasky.Tasks.SelfCheck`) und der
-  zurückgegebenen Prüfung (`Tasky.Exams.return_doc_for_learner/3`). Die Regel,
+  zurückgegebenen Prüfung (`Tasky.Exams.return_doc_for_learner/4`). Die Regel,
   wie eine Vorgabe neben einer Antwort aussieht, steht deshalb genau hier — die
   beiden Flächen dürfen nicht auseinanderlaufen.
 
@@ -47,13 +47,18 @@ defmodule Tasky.Correction.SolutionHints do
   `answerId => "correct" | "half" | "wrong"`. Fehlt zu einer id ein Verdikt,
   bleibt der Knoten unmarkiert — die Musterlösung erscheint trotzdem.
 
+  `points` (optional, nur in der zurückgegebenen Prüfung) ist eine Map
+  `answerId => "1.5"`: die erreichte Punktzahl als `attrs["points"]`. Wo sie
+  steht, zeichnen Stylesheet und PDF die Zahl statt des Zeichens.
+
   Das `;` wird beim Bauen des Hinweises aufgelöst
   (`AnswerVariants.humanize_answer/2`): bewertet wurde gegen jede einzelne
   Variante, gezeigt wird die lesbare Liste.
   """
-  @spec annotate(map() | nil, map() | nil, map()) :: map()
-  def annotate(base_doc, sample, verdicts) when is_map(verdicts) do
-    ctx = %{verdicts: verdicts, sample: sample || %{}}
+  @spec annotate(map() | nil, map() | nil, map(), map()) :: map()
+  def annotate(base_doc, sample, verdicts, points \\ %{})
+      when is_map(verdicts) and is_map(points) do
+    ctx = %{verdicts: verdicts, points: points, sample: sample || %{}}
     base_doc = base_doc || %{}
 
     Map.merge(base_doc, %{"type" => "doc", "content" => expand(doc_nodes(base_doc), ctx)})
@@ -150,7 +155,7 @@ defmodule Tasky.Correction.SolutionHints do
   defp strip_for_twin(node), do: clean_attrs(node)
 
   defp clean_attrs(%{"attrs" => attrs} = node) when is_map(attrs) do
-    Map.put(node, "attrs", attrs |> Map.drop(["answerId", "verdict"]))
+    Map.put(node, "attrs", attrs |> Map.drop(["answerId", "verdict", "points"]))
   end
 
   defp clean_attrs(node), do: node
@@ -158,14 +163,25 @@ defmodule Tasky.Correction.SolutionHints do
   defp hint(nodes), do: %{"type" => "solutionHint", "content" => nodes}
 
   defp put_verdict(node, ctx) do
-    case Map.get(ctx.verdicts, answer_id(node)) do
+    id = answer_id(node)
+
+    case Map.get(ctx.verdicts, id) do
       nil ->
         node
 
       verdict ->
-        Map.put(node, "attrs", node |> Map.get("attrs", %{}) |> Map.put("verdict", verdict))
+        attrs =
+          node
+          |> Map.get("attrs", %{})
+          |> Map.put("verdict", verdict)
+          |> put_points(Map.get(ctx.points, id))
+
+        Map.put(node, "attrs", attrs)
     end
   end
+
+  defp put_points(attrs, nil), do: attrs
+  defp put_points(attrs, points), do: Map.put(attrs, "points", points)
 
   # Der Anzeigepfad, und nur er: bewertet wird gegen jede einzelne Variante
   # (`AnswerVariants.split/1` bei den Bewertern), gezeigt wird die Liste.

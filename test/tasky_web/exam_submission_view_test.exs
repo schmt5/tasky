@@ -210,6 +210,34 @@ defmodule TaskyWeb.ExamSubmissionViewTest do
       refute with_correction =~ "✅"
     end
 
+    # Ohne freigegebene Musterlösung lief die Korrektur früher als ✅/🟡/❌ im
+    # Text durch — dort war keine Punktzahl möglich.
+    test "the correction alone puts verdict and points on the field" do
+      exam =
+        exam_fixture(
+          attrs: %{
+            content: question_doc(),
+            sample_solution: sample(),
+            sample_solution_points: %{"q-1" => 2}
+          }
+        )
+
+      submission =
+        submission_with(%{
+          content: question_doc("pdf"),
+          corrected_content: question_doc("pdf 🟡"),
+          block_verdicts: %{"a" => 1.5}
+        })
+
+      [%{doc_json: json}] =
+        ExamSubmissionView.sections(exam, submission, %{show_content: true, show_correction: true})
+
+      assert json =~ ~s("verdict":"half")
+      assert json =~ ~s("points":"1.5")
+      refute json =~ "🟡"
+      refute json =~ "solutionHint"
+    end
+
     test "no options means no sections" do
       submission = submission_with(%{content: doc("Meine Antwort")})
 
