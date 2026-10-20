@@ -163,6 +163,37 @@ defmodule Tasky.ExamsLearnerReturnTest do
       assert answer["content"] == [paragraph("pdf")]
     end
 
+    # Ist die Antwort formatiert (z.B. hervorgehoben), steht der Marker in einem
+    # eigenen Textknoten. Bliebe der leer zurück, verwirft Tiptap das ganze
+    # Dokument ("Empty text nodes are not allowed") und die Rückgabe bleibt weiss.
+    test "a marker in its own text node leaves no empty text node behind" do
+      highlighted = %{
+        "type" => "text",
+        "text" => "pdf",
+        "marks" => [%{"type" => "highlight", "attrs" => %{"color" => "#bbf7d0"}}]
+      }
+
+      base =
+        doc([
+          heading(),
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "a"},
+            "content" => [
+              %{
+                "type" => "paragraph",
+                "content" => [highlighted, %{"type" => "text", "text" => " ✅"}]
+              }
+            ]
+          }
+        ])
+
+      %{"content" => [_heading, answer, _hint]} =
+        Exams.return_doc_for_learner(exam(), base, %{"a" => "correct"})
+
+      assert answer["content"] == [%{"type" => "paragraph", "content" => [highlighted]}]
+    end
+
     # Ohne Verdikte gibt es keine Korrektur, die den Text ersetzen würde — was
     # die/der Lernende geschrieben hat, bleibt unangetastet.
     test "without verdicts the answer text is left alone" do

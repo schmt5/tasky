@@ -201,16 +201,22 @@ defmodule Tasky.AI.NodePatcher do
 
   defp annotate_node(node, counter), do: {node, counter}
 
+  # A marker after formatted text (e.g. a highlighted answer) sits in its own
+  # text leaf. Stripping it must drop the leaf: ProseMirror rejects empty text
+  # nodes, and Tiptap then silently renders the whole document empty.
   defp strip_markers(content) when is_list(content) do
-    Enum.map(content, fn
+    Enum.flat_map(content, fn
       %{"type" => "text", "text" => text} = leaf ->
-        Map.put(leaf, "text", Regex.replace(@trailing_marker_regex, text, ""))
+        case Regex.replace(@trailing_marker_regex, text, "") do
+          "" -> []
+          stripped -> [Map.put(leaf, "text", stripped)]
+        end
 
       %{"content" => inner} = node when is_list(inner) ->
-        Map.put(node, "content", strip_markers(inner))
+        [Map.put(node, "content", strip_markers(inner))]
 
       other ->
-        other
+        [other]
     end)
   end
 
