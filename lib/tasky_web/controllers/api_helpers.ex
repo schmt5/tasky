@@ -29,7 +29,7 @@ defmodule TaskyWeb.ApiHelpers do
       {:error, %Ecto.Changeset{} = changeset} ->
         conn
         |> put_status(:unprocessable_entity)
-        |> json(%{error: "Invalid content", details: translate_errors(changeset)})
+        |> json(%{error: "Ungültiger Inhalt.", details: translate_errors(changeset)})
 
       {:error, _other} ->
         json_error(conn, :unprocessable_entity, "Speichern fehlgeschlagen.")
@@ -38,6 +38,6 @@ defmodule TaskyWeb.ApiHelpers do
 
   @doc "Flattens changeset errors into a `%{field => [message]}` map."
   def translate_errors(%Ecto.Changeset{} = changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+    Ecto.Changeset.traverse_errors(changeset, &TaskyWeb.CoreComponents.translate_error/1)
   end
 end

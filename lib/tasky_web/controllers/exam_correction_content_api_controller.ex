@@ -25,10 +25,10 @@ defmodule TaskyWeb.ExamCorrectionContentApiController do
     )
   rescue
     ArgumentError ->
-      json_error(conn, :unprocessable_entity, "Unknown part_id")
+      json_error(conn, :unprocessable_entity, "Unbekannter Prüfungsteil.")
   end
 
   def update(conn, _params) do
-    json_error(conn, :bad_request, "Missing or invalid params")
+    json_error(conn, :bad_request, "Ungültige Anfrage.")
   end
 end

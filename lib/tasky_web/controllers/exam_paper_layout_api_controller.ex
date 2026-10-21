@@ -21,6 +21,6 @@ defmodule TaskyWeb.ExamPaperLayoutApiController do
   end
 
   def update(conn, _params) do
-    json_error(conn, :bad_request, "Missing or invalid content field")
+    json_error(conn, :bad_request, "Ungültiger Inhalt.")
   end
 end

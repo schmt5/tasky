@@ -110,3 +110,14 @@ msgstr ""
 
 msgid "must be equal to %{number}"
 msgstr ""
+
+msgid "must be not equal to %{number}"
+msgstr ""
+
+## From Ecto.Changeset.foreign_key_constraint/3
+msgid "does not exist"
+msgstr ""
+
+## From Ecto.Changeset.exclusion_constraint/3
+msgid "violates an exclusion constraint"
+msgstr ""

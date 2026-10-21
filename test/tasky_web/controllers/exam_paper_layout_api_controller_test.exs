@@ -108,7 +108,7 @@ defmodule TaskyWeb.ExamPaperLayoutApiControllerTest do
         |> put_req_header("content-type", "application/json")
         |> put(~p"/api/exams/#{exam}/paper-layout", %{})
 
-      assert json_response(conn, 400)["error"] =~ "content"
+      assert json_response(conn, 400)["error"] =~ "Inhalt"
     end
 
     test "another teacher cannot write the layout", %{conn: conn} do

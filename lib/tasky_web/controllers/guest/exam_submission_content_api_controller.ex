@@ -14,10 +14,10 @@ defmodule TaskyWeb.Guest.ExamSubmissionContentApiController do
 
     case Exams.update_exam_submission_content(submission, content) do
       {:error, :already_submitted} ->
-        json_error(conn, :conflict, "Submission already submitted")
+        json_error(conn, :conflict, "Die Abgabe ist bereits eingereicht.")
 
       {:error, :exam_not_running} ->
-        json_error(conn, :conflict, "Exam is not running")
+        json_error(conn, :conflict, "Die Prüfung läuft nicht.")
 
       result ->
         render_save_result(conn, result)
@@ -25,6 +25,6 @@ defmodule TaskyWeb.Guest.ExamSubmissionContentApiController do
   end
 
   def update(conn, _params) do
-    json_error(conn, :bad_request, "Missing or invalid content field")
+    json_error(conn, :bad_request, "Ungültiger Inhalt.")
   end
 end

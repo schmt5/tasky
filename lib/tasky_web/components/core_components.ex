@@ -129,7 +129,7 @@ defmodule TaskyWeb.CoreComponents do
         <button
           type="button"
           class="-mr-1 shrink-0 rounded-lg p-1 text-stone-400 transition-colors duration-150 hover:bg-stone-900/5 hover:text-stone-600"
-          aria-label={gettext("close")}
+          aria-label="Schliessen"
         >
           <.icon name="hero-x-mark" class="size-4" />
         </button>
@@ -466,7 +466,7 @@ defmodule TaskyWeb.CoreComponents do
         <tr>
           <th :for={col <- @col}>{col[:label]}</th>
           <th :if={@action != []}>
-            <span class="sr-only">{gettext("Actions")}</span>
+            <span class="sr-only">Aktionen</span>
           </th>
         </tr>
       </thead>

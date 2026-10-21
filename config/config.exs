@@ -24,6 +24,10 @@ config :tasky,
   ecto_repos: [Tasky.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# The UI is German-only: Ecto's default validation messages are translated
+# through priv/gettext/de/LC_MESSAGES/errors.po.
+config :tasky, TaskyWeb.Gettext, default_locale: "de"
+
 # .m4a (voice recordings for exam file submissions) is unknown to the MIME
 # library by default; LiveView's allow_upload accept filter requires it.
 config :mime, :types, %{

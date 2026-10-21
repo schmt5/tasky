@@ -13,10 +13,10 @@ defmodule TaskyWeb.ExamSampleSolutionApiController do
     render_save_result(conn, Exams.save_sample_solution_part(scope, exam, part_id, nodes))
   rescue
     ArgumentError ->
-      json_error(conn, :unprocessable_entity, "Unknown part_id")
+      json_error(conn, :unprocessable_entity, "Unbekannter Prüfungsteil.")
   end
 
   def update_part(conn, _params) do
-    json_error(conn, :bad_request, "Missing or invalid params")
+    json_error(conn, :bad_request, "Ungültige Anfrage.")
   end
 end

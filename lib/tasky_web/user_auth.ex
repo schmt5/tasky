@@ -228,7 +228,7 @@ defmodule TaskyWeb.UserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, "Bitte melde dich an, um diese Seite zu sehen.")
         |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
 
       {:halt, socket}
@@ -243,7 +243,7 @@ defmodule TaskyWeb.UserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must be an admin to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, "Diese Seite ist nur für Admins zugänglich.")
         |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}
@@ -258,7 +258,7 @@ defmodule TaskyWeb.UserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must be a teacher to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, "Diese Seite ist nur für Lehrpersonen zugänglich.")
         |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}
@@ -275,7 +275,7 @@ defmodule TaskyWeb.UserAuth do
         socket
         |> Phoenix.LiveView.put_flash(
           :error,
-          "You must be an admin or teacher to access this page."
+          "Diese Seite ist nur für Admins und Lehrpersonen zugänglich."
         )
         |> Phoenix.LiveView.redirect(to: ~p"/")
 
@@ -291,7 +291,7 @@ defmodule TaskyWeb.UserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must be a student to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, "Diese Seite ist nur für Lernende zugänglich.")
         |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}
@@ -333,7 +333,7 @@ defmodule TaskyWeb.UserAuth do
 
       true ->
         conn
-        |> put_flash(:error, "You must log in to access this page.")
+        |> put_flash(:error, "Bitte melde dich an, um diese Seite zu sehen.")
         |> maybe_store_return_to()
         |> redirect(to: ~p"/users/log-in")
         |> halt()
@@ -375,7 +375,7 @@ defmodule TaskyWeb.UserAuth do
     if conn.assigns.current_scope && Scope.admin?(conn.assigns.current_scope) do
       conn
     else
-      deny_role(conn, "You must be an admin to access this page.")
+      deny_role(conn, "Diese Seite ist nur für Admins zugänglich.")
     end
   end
 
@@ -386,7 +386,7 @@ defmodule TaskyWeb.UserAuth do
     if conn.assigns.current_scope && Scope.teacher?(conn.assigns.current_scope) do
       conn
     else
-      deny_role(conn, "You must be a teacher to access this page.")
+      deny_role(conn, "Diese Seite ist nur für Lehrpersonen zugänglich.")
     end
   end
 
@@ -397,7 +397,7 @@ defmodule TaskyWeb.UserAuth do
     if conn.assigns.current_scope && Scope.admin_or_teacher?(conn.assigns.current_scope) do
       conn
     else
-      deny_role(conn, "You must be an admin or teacher to access this page.")
+      deny_role(conn, "Diese Seite ist nur für Admins und Lehrpersonen zugänglich.")
     end
   end
 
@@ -408,7 +408,7 @@ defmodule TaskyWeb.UserAuth do
     if conn.assigns.current_scope && Scope.student?(conn.assigns.current_scope) do
       conn
     else
-      deny_role(conn, "You must be a student to access this page.")
+      deny_role(conn, "Diese Seite ist nur für Lernende zugänglich.")
     end
   end
 end

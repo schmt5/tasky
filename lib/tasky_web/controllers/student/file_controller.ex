@@ -31,7 +31,7 @@ defmodule TaskyWeb.Student.FileController do
            ) do
       serve_download(conn, source, file.original_name, file.content_type)
     else
-      _ -> conn |> put_status(:not_found) |> text("Not found")
+      _ -> conn |> put_status(:not_found) |> text("Nicht gefunden")
     end
   end
 end

@@ -73,5 +73,5 @@ defmodule TaskyWeb.TaskSubmissionFileController do
     |> put_resp_header("x-content-type-options", "nosniff")
   end
 
-  defp not_found(conn), do: conn |> put_status(:not_found) |> text("Not found")
+  defp not_found(conn), do: conn |> put_status(:not_found) |> text("Nicht gefunden")
 end

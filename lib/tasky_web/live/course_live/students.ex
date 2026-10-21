@@ -347,7 +347,7 @@ defmodule TaskyWeb.CourseLive.Students do
 
         {:noreply,
          socket
-         |> put_flash(:info, "Student enrolled successfully")
+         |> put_flash(:info, "In den Kurs eingeschrieben")
          |> assign(:has_students, true)
          |> assign(:student_count, socket.assigns.student_count + 1)
          |> stream_insert(:enrolled_students, student)
@@ -362,7 +362,7 @@ defmodule TaskyWeb.CourseLive.Students do
          )}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to enroll student")}
+        {:noreply, put_flash(socket, :error, "Einschreiben fehlgeschlagen")}
 
       nil ->
         {:noreply, socket}
@@ -381,13 +381,13 @@ defmodule TaskyWeb.CourseLive.Students do
 
         {:noreply,
          socket
-         |> put_flash(:info, "Student unenrolled successfully")
+         |> put_flash(:info, "Aus dem Kurs ausgetragen")
          |> assign(:has_students, new_count > 0)
          |> assign(:student_count, new_count)
          |> stream_delete(:enrolled_students, student)}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to unenroll student")}
+        {:noreply, put_flash(socket, :error, "Austragen fehlgeschlagen")}
 
       nil ->
         {:noreply, socket}

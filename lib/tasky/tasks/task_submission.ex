@@ -72,7 +72,7 @@ defmodule Tasky.Tasks.TaskSubmission do
     |> foreign_key_constraint(:student_id)
     |> unique_constraint([:task_id, :student_id],
       name: :task_submissions_task_id_student_id_index,
-      message: "submission already exists for this student and task"
+      message: "ist für diese Aufgabe bereits vorhanden"
     )
   end
 

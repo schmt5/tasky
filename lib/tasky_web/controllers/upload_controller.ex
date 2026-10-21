@@ -15,7 +15,7 @@ defmodule TaskyWeb.UploadController do
   def show(conn, %{"exam_id" => exam_id, "filename" => filename}) do
     case Uploads.fetch_exam_image(exam_id, filename) do
       {:ok, {source, content_type}} -> serve_inline(conn, source, content_type)
-      {:error, _} -> conn |> put_status(:not_found) |> text("Not found")
+      {:error, _} -> conn |> put_status(:not_found) |> text("Nicht gefunden")
     end
   end
 
@@ -33,14 +33,14 @@ defmodule TaskyWeb.UploadController do
            ) do
       serve_download(conn, source, attachment.original_name, attachment.content_type)
     else
-      _ -> conn |> put_status(:not_found) |> text("Not found")
+      _ -> conn |> put_status(:not_found) |> text("Nicht gefunden")
     end
   end
 
   def task_image(conn, %{"task_id" => task_id, "filename" => filename}) do
     case Uploads.fetch_task_image(task_id, filename) do
       {:ok, {source, content_type}} -> serve_inline(conn, source, content_type)
-      {:error, _} -> conn |> put_status(:not_found) |> text("Not found")
+      {:error, _} -> conn |> put_status(:not_found) |> text("Nicht gefunden")
     end
   end
 
@@ -58,7 +58,7 @@ defmodule TaskyWeb.UploadController do
            ) do
       serve_download(conn, source, attachment.original_name, attachment.content_type)
     else
-      _ -> conn |> put_status(:not_found) |> text("Not found")
+      _ -> conn |> put_status(:not_found) |> text("Nicht gefunden")
     end
   end
 end
