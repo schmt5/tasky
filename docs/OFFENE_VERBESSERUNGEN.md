@@ -1,6 +1,6 @@
 # Offene Verbesserungen
 
-Sammlung von Verbesserungen. Offen sind nur noch «Später: eigenes UI für die
+Sammlung von Verbesserungen. Offen sind «Später: eigenes UI für die
 Korrektur-Optionen» und «Spalte `tasks.locked` entfernen»; alle anderen
 Punkte sind umgesetzt.
 
@@ -114,6 +114,63 @@ Checkboxen untereinander, und auf einen Blick erkennbar machen:
 - welche Checkboxen damit richtig bzw. falsch beantwortet sind.
 
 Das ist voraussichtlich eine grössere Änderung.
+
+### «Punkte für eine 6» statt überschriebener Maximalpunkte
+
+**Status:** umgesetzt.
+
+Heute überschreibt die Karte «Maximalpunkte für Benotung» auf der
+Benotungskonfiguration die Summe der Musterlösung (`exams.grading_max_points`).
+Danach ist die Summe der Musterlösung nirgends mehr sichtbar, und die
+«Maximalpunkte» der Tabelle, des PDFs und der Lernenden-Ansicht sind plötzlich
+etwas anderes als die Punkte, die man erreichen kann.
+
+Ziel: Es gibt zwei getrennte Zahlen, und man sieht beide.
+
+- **Maximalpunkte** = Summe der Musterlösung. Nicht editierbar, nur Anzeige.
+- **Punkte für eine 6** = ab hier gibt es die 6. Editierbar, Standard ist die
+  Maximalpunktzahl. Darf darunter liegen, damit auch ohne alle Punkte eine 6
+  möglich ist.
+
+**Rechnung bleibt dieselbe.** `Grading.mark/3` teilt schon heute durch einen
+Wert und klemmt auf [1, 6]. Dieser Wert heisst nur neu «Punkte für eine 6».
+Punkte darüber ergeben weiterhin eine 6.
+
+**Keine Migration.** Die Spalte `grading_max_points` behält Name und Bedeutung;
+bestehende Überschreibungen sind bereits «Punkte für eine 6». Eine Umbenennung
+der Spalte wäre ein eigener, späterer Deploy (siehe `tasks.locked`).
+
+Schritte:
+
+1. **Domain (`Tasky.Exams`).** `grading_max_points/1` heisst
+   `points_for_six/1` (gleiche Logik: Override, sonst Musterlösung). Neu
+   `total_points/1` für die Summe der Musterlösung, `nil` bei 0.
+   `grading_result/2` liefert zusätzlich `total_points`, `max_points` wird zu
+   `points_for_six`. Alle Aufrufer ziehen mit (Grading-Seite, Lernenden-
+   Ansicht, beide PDFs, `Paper`).
+2. **Karte (`ExamComponents.max_points_card`).** Titel «Punkte für eine 6».
+   Darunter eine ruhige Zeile «Maximalpunkte: X (Summe der Musterlösung)».
+   Formel-Text anpassen: «Note = (Punkte / Punkte für eine 6) × 5 + 1, höchstens 6.»
+   Zurücksetzen-Button setzt auf die Maximalpunkte. Tooltip entsprechend.
+   Event-Namen (`set_max_points` usw.) in `grading_config.ex` zu
+   `set_points_for_six` umbenennen; Tests mitziehen.
+3. **Anzeigen.** Tabelle, Lernenden-Ansicht und PDF zeigen `Punkte / Maximalpunkte`
+   (Summe der Musterlösung). Weicht «Punkte für eine 6» ab, steht es klein
+   daneben: «6 ab 18». Die Papier-Vorlage (`Paper`, `ExamPaperPdf`) zeigt
+   weiterhin die Maximalpunkte.
+4. **Freie Dokumente ohne Punkte in der Musterlösung.** Maximalpunkte sind dort
+   0 bzw. `nil`; «Punkte für eine 6» ist dann Pflicht, sonst gibt es keine
+   Note. Die Karte zeigt den Hinweis statt «Maximalpunkte: –».
+5. **Validierung.** Bleibt: grösser als 0. Zusätzlich keine Obergrenze, damit
+   ein Wert über den Maximalpunkten (6 praktisch unerreichbar) nicht
+   stillschweigend abgelehnt wird; die Karte warnt dann nur.
+6. **Tests.** `exam_grading_config_live_test.exs` (Texte, Events, Zurücksetzen),
+   `exams_test.exs` (`grading_result`, `total_points`, Note mit Punkten über der
+   6-Schwelle bleibt 6.0), `exam_submission_pdf_test.exs`, `pdf_test.exs`.
+
+**Entscheid:** Die Tabelle zeigt «Punkte / Maximalpunkte» pro Zeile und die
+6-Schwelle («6 ab X») einmal in der Kopfzeile, nur wenn sie von den
+Maximalpunkten abweicht. Die Papier-Vorlage zeigt nur die Maximalpunkte.
 
 ### Cockpit: Lernende nach Status filtern
 

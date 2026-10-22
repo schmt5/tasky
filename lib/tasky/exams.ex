@@ -1108,12 +1108,27 @@ defmodule Tasky.Exams do
   def mark_step_configured?(%Exam{}), do: true
 
   @doc """
-  The max points every mark of the exam divides by: the teacher's explicit
-  override, else the sum of the sample solution's points. `nil` when that
-  leaves nothing to divide by — no max, no mark.
+  The points that earn a 6 — what every mark of the exam divides by: the
+  teacher's explicit override, else the sum of the sample solution's points.
+  `nil` when that leaves nothing to divide by — no divisor, no mark.
+
+  Not the same as `total_points/1`: the override may sit below the total (a 6
+  without every point) or above it.
   """
-  def grading_max_points(%Exam{} = exam) do
+  def points_for_six(%Exam{} = exam) do
     case exam.grading_max_points || Grading.sum_points(exam.sample_solution_points) do
+      n when is_number(n) and n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The most points the exam can award: the sum of the sample solution's
+  points, whatever the teacher set as the points for a 6. `nil` when the
+  sample solution has no points (free documents).
+  """
+  def total_points(%Exam{} = exam) do
+    case Grading.sum_points(exam.sample_solution_points) do
       n when is_number(n) and n > 0 -> n
       _ -> nil
     end
@@ -1122,7 +1137,8 @@ defmodule Tasky.Exams do
   @doc """
   Everything the grading surfaces need for one submission, in one call:
 
-      %{points:, max_points:, mark_step:, calculated_mark:, effective_mark:}
+      %{points:, total_points:, points_for_six:, mark_step:, calculated_mark:,
+       effective_mark:}
 
   **This is the only place the `submission.mark || calculated` precedence
   exists.** It used to be inlined in the grading table, the PDF export and
@@ -1133,13 +1149,14 @@ defmodule Tasky.Exams do
   """
   def grading_result(%Exam{} = exam, %ExamSubmission{} = submission) do
     step = mark_step(exam)
-    max_points = grading_max_points(exam)
+    points_for_six = points_for_six(exam)
     points = Grading.sum_points(submission.points_per_part)
-    calculated = Grading.mark(points, max_points, step)
+    calculated = Grading.mark(points, points_for_six, step)
 
     %{
       points: points,
-      max_points: max_points,
+      total_points: total_points(exam),
+      points_for_six: points_for_six,
       mark_step: step,
       calculated_mark: calculated,
       effective_mark: submission.mark || calculated

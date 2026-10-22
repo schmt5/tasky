@@ -283,6 +283,16 @@ defmodule Tasky.Grading do
 
   def mark(_, _, _), do: nil
 
+  @doc """
+  The «6 ab X» note shown beside a points total, or `nil` when it adds nothing:
+  no points for a 6, or they equal the total.
+  """
+  def six_hint(total, points_for_six) when is_number(points_for_six) do
+    if points_for_six != total, do: "6 ab " <> format_points(points_for_six)
+  end
+
+  def six_hint(_total, _points_for_six), do: nil
+
   @doc "Quarter-rounds a points value; whole numbers come back as integers."
   def normalize_points(n) when is_number(n), do: n |> round_quarter() |> integerize()
 

@@ -169,7 +169,7 @@ defmodule TaskyWeb.ExamLive.Paper do
     |> assign(:page_title, "#{exam.name} – Papierversion")
     |> assign(:exam, exam)
     |> assign(:doc_json, Jason.encode!(doc))
-    |> assign(:max_points, Exams.grading_max_points(exam))
+    |> assign(:max_points, Exams.total_points(exam))
     |> assign(:free_document, free_document)
     |> assign(:lined_pages, if(free_document, do: ExamPaper.lined_page_count(), else: 0))
     |> assign(:rules_per_page, ExamPaper.rules_per_page())

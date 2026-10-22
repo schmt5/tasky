@@ -89,6 +89,7 @@ defmodule TaskyWeb.ExamLive.Grading do
                   <.sortable_th
                     field={:points}
                     label="Punkte"
+                    hint={@six_hint}
                     sort={@sort}
                     exam={@exam}
                     align="right"
@@ -121,8 +122,8 @@ defmodule TaskyWeb.ExamLive.Grading do
                   <td class="px-4 py-3 text-right">
                     <span class="font-mono text-sm font-semibold text-stone-700">
                       {format_points(row.points)}
-                      <span class="text-stone-400 font-normal">
-                        / {format_points(@effective_max_points)}
+                      <span :if={@total_points} class="text-stone-400 font-normal">
+                        / {format_points(@total_points)}
                       </span>
                     </span>
                   </td>
@@ -387,6 +388,7 @@ defmodule TaskyWeb.ExamLive.Grading do
   attr :exam, :map, required: true
   attr :align, :string, default: "left", values: ~w(left right)
   attr :class, :any, default: "px-4"
+  attr :hint, :string, default: nil, doc: "small note under the label, e.g. «6 ab 18»"
 
   defp sortable_th(assigns) do
     {active_field, active_dir} = assigns.sort
@@ -435,6 +437,13 @@ defmodule TaskyWeb.ExamLive.Grading do
           />
         </span>
       </.link>
+      <span
+        :if={@hint}
+        id={"sort-#{@field}-hint"}
+        class="block text-[11px] font-normal normal-case tracking-normal text-stone-400"
+      >
+        {@hint}
+      </span>
     </th>
     """
   end
@@ -854,15 +863,15 @@ defmodule TaskyWeb.ExamLive.Grading do
 
   defp mount_configured(socket, exam, params) do
     submissions = Exams.list_exam_submissions(exam)
-    sample_solution_total = sum_sample_solution_points(exam)
-    effective_max_points = exam.grading_max_points || sample_solution_total
+    total_points = Exams.total_points(exam)
 
     socket
     |> assign(:page_title, exam.name <> " – Benotung")
     |> assign(:exam, exam)
     |> assign(:mark_step, Exams.mark_step(exam))
     |> assign(:submissions, submissions)
-    |> assign(:effective_max_points, effective_max_points)
+    |> assign(:total_points, total_points)
+    |> assign(:six_hint, Grading.six_hint(total_points, Exams.points_for_six(exam)))
     # Sorted here and not only in handle_params/3: should that call not
     # happen, :rows and :sort are set all the same.
     |> apply_sort(params)
@@ -1149,8 +1158,6 @@ defmodule TaskyWeb.ExamLive.Grading do
       |> Map.put(:submission, s)
     end)
   end
-
-  defp sum_sample_solution_points(exam), do: Grading.sum_points(exam.sample_solution_points)
 
   defp format_mark(mark), do: Grading.format_mark(mark, "")
 

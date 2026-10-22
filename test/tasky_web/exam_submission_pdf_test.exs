@@ -50,6 +50,7 @@ defmodule TaskyWeb.ExamSubmissionPdfTest do
       assert data["show_points_and_mark"]
       assert data["points"] == "2.5"
       assert data["max_points"] == "4"
+      assert data["six_hint"] == nil
       assert is_binary(data["mark"])
     end
 

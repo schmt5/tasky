@@ -377,6 +377,51 @@ defmodule Tasky.ExamsTest do
     end
   end
 
+  describe "points for a 6 and total points" do
+    test "the override moves the 6 but never the total" do
+      exam = %Exam{
+        mark_step: "0.25",
+        grading_max_points: 8.0,
+        sample_solution_points: %{"p1" => 8, "p2" => 2}
+      }
+
+      assert Exams.total_points(exam) == 10
+      assert Exams.points_for_six(exam) == 8.0
+
+      full = %ExamSubmission{points_per_part: %{"p1" => 8, "p2" => 2}, mark: nil}
+      at_six = %ExamSubmission{points_per_part: %{"p1" => 8}, mark: nil}
+
+      assert %{total_points: 10, points_for_six: 8.0, calculated_mark: 6.0} =
+               Exams.grading_result(exam, full)
+
+      assert %{calculated_mark: 6.0} = Exams.grading_result(exam, at_six)
+    end
+
+    test "without an override both follow the sample solution" do
+      exam = %Exam{grading_max_points: nil, sample_solution_points: %{"p1" => 4}}
+
+      assert Exams.total_points(exam) == 4
+      assert Exams.points_for_six(exam) == 4
+    end
+
+    test "a free document has no total, only the points for a 6" do
+      exam = %Exam{grading_max_points: 12.0, sample_solution_points: %{}}
+
+      assert Exams.total_points(exam) == nil
+      assert Exams.points_for_six(exam) == 12.0
+    end
+  end
+
+  describe "Grading.six_hint/2" do
+    test "names the threshold only when it differs from the total" do
+      assert Tasky.Grading.six_hint(10, 8.0) == "6 ab 8"
+      assert Tasky.Grading.six_hint(10, 12) == "6 ab 12"
+      assert Tasky.Grading.six_hint(nil, 12) == "6 ab 12"
+      assert Tasky.Grading.six_hint(10, 10) == nil
+      assert Tasky.Grading.six_hint(10, nil) == nil
+    end
+  end
+
   describe "grading_result/2" do
     test "the manual override wins over the calculated mark" do
       exam = %Exam{
@@ -387,7 +432,7 @@ defmodule Tasky.ExamsTest do
 
       submission = %ExamSubmission{points_per_part: %{"p1" => 7.4}, mark: nil}
 
-      assert %{points: 7.4, max_points: 10.0, mark_step: "0.1"} =
+      assert %{points: 7.4, points_for_six: 10.0, total_points: nil, mark_step: "0.1"} =
                result = Exams.grading_result(exam, submission)
 
       assert result.calculated_mark == 4.7
@@ -410,7 +455,7 @@ defmodule Tasky.ExamsTest do
       exam = %Exam{mark_step: "0.25", grading_max_points: nil, sample_solution_points: %{}}
       submission = %ExamSubmission{points_per_part: %{"p1" => 3}, mark: nil}
 
-      assert %{max_points: nil, calculated_mark: nil, effective_mark: nil} =
+      assert %{points_for_six: nil, calculated_mark: nil, effective_mark: nil} =
                Exams.grading_result(exam, submission)
     end
 
@@ -423,7 +468,7 @@ defmodule Tasky.ExamsTest do
 
       submission = %ExamSubmission{points_per_part: %{"p1" => 7.4}, mark: nil}
 
-      assert %{max_points: 10, mark_step: "0.25", effective_mark: 4.75} =
+      assert %{total_points: 10, points_for_six: 10, mark_step: "0.25", effective_mark: 4.75} =
                Exams.grading_result(exam, submission)
     end
   end

@@ -18,6 +18,7 @@ defmodule Tasky.PDFTest do
       "show_points_and_mark" => true,
       "points" => "12,5",
       "max_points" => "20",
+      "six_hint" => nil,
       "mark" => "4.5",
       "sections" => sections
     }
@@ -159,6 +160,12 @@ defmodule Tasky.PDFTest do
 
     test "renders an empty submission" do
       assert {:ok, "%PDF" <> _} = PDF.render("submission", submission_data([]))
+    end
+
+    test "renders a submission with the 6 threshold and without a total" do
+      data = %{submission_data([]) | "six_hint" => "6 ab 18"}
+      assert {:ok, "%PDF" <> _} = PDF.render("submission", data)
+      assert {:ok, "%PDF" <> _} = PDF.render("submission", %{data | "max_points" => nil})
     end
 
     test "treats document text as text, never as Typst markup" do

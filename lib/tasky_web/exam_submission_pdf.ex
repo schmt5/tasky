@@ -30,7 +30,12 @@ defmodule TaskyWeb.ExamSubmissionPdf do
   def data(%Exam{} = exam, %ExamSubmission{} = submission, opts) do
     opts = ExamSubmissionView.normalize_options(opts)
 
-    %{points: points, max_points: max_points, effective_mark: mark} =
+    %{
+      points: points,
+      total_points: total_points,
+      points_for_six: points_for_six,
+      effective_mark: mark
+    } =
       Exams.grading_result(exam, submission)
 
     %{
@@ -38,7 +43,8 @@ defmodule TaskyWeb.ExamSubmissionPdf do
       "student_name" => String.trim("#{submission.firstname} #{submission.lastname}"),
       "show_points_and_mark" => opts.show_points_and_mark,
       "points" => Grading.format_points(points),
-      "max_points" => Grading.format_points(max_points),
+      "max_points" => total_points && Grading.format_points(total_points),
+      "six_hint" => Grading.six_hint(total_points, points_for_six),
       "mark" => Grading.format_mark(mark),
       "sections" =>
         exam

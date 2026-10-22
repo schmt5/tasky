@@ -445,61 +445,91 @@ defmodule TaskyWeb.ExamComponents do
   end
 
   @doc """
-  Die Karte „Maximalpunkte für Benotung“ auf der Benotungskonfiguration.
+  Die Karte „Punkte für eine 6“ auf der Benotungskonfiguration.
 
   Die Karte zeigt nur einen Entwurf: Die Seite implementiert die Events
-  `set_max_points`, `adjust_max_points` und `reset_max_points` und schreibt
+  `set_points_for_six`, `adjust_points_for_six` und `reset_points_for_six` und schreibt
   den Wert erst beim Speichern.
 
-  Der Zurücksetzen-Button erscheint nur, wenn der Wert die Musterlösung
-  überschreibt und die Musterlösung überhaupt Punkte hat — ein Zurücksetzen
-  auf 0 hiesse «keine Note für niemanden».
+  Die Maximalpunkte (Summe der Musterlösung) stehen als Anzeige darunter und
+  sind hier nicht editierbar. Der Wert darf darunter liegen (die 6 gibt es
+  dann schon früher) und auch darüber (die 6 ist dann nicht erreichbar, die
+  Karte warnt).
+
+  Der Zurücksetzen-Button erscheint nur, wenn der Wert von den Maximalpunkten
+  abweicht und die Musterlösung überhaupt Punkte hat — ein Zurücksetzen auf 0
+  hiesse «keine Note für niemanden».
 
   Die Schritte hier sind bewusst 0.25 und folgen *nicht* dem Notenraster der
   Prüfung: Punkte liegen immer auf dem 0.25er-Gitter.
   """
-  attr :value, :any, required: true, doc: "die effektiven Maximalpunkte"
+  attr :value, :any, required: true, doc: "die effektiven Punkte für eine 6"
   attr :sample_solution_total, :any, required: true
   attr :free_document, :boolean, required: true
   attr :overridden, :boolean, default: false, doc: "der Wert überschreibt die Musterlösung"
   attr :error, :string, default: nil
 
-  def max_points_card(assigns) do
+  def points_for_six_card(assigns) do
     ~H"""
     <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] p-5 flex items-center gap-6">
       <div class="w-10 h-10 rounded-[10px] bg-sky-50 flex items-center justify-center shrink-0">
         <.icon name="hero-calculator" class="w-5 h-5 text-sky-500" />
       </div>
       <div class="flex-1">
-        <h2 class="text-md font-semibold text-stone-800">Maximalpunkte für Benotung</h2>
+        <h2 class="text-md font-semibold text-stone-800">Punkte für eine 6</h2>
         <p class="text-xs text-stone-500 mt-0.5">
-          Note = (erreichte Punkte / Maximalpunkte) × 5 + 1.
+          Note = (erreichte Punkte / Punkte für eine 6) × 5 + 1, höchstens 6.
         </p>
         <p class="text-xs text-stone-500 mt-0.5">
           Mit dieser Formel wird die Note berechnet. Du kannst jede Note danach selber anpassen.
         </p>
-        <p :if={@error} id="grading-max-points-error" class="text-xs font-medium text-red-600 mt-1.5">
+        <p
+          :if={@error}
+          id="grading-points-for-six-error"
+          class="text-xs font-medium text-red-600 mt-1.5"
+        >
           {@error}
         </p>
         <p
           :if={is_nil(@error) and not @overridden}
-          id="grading-max-points-source"
+          id="grading-points-for-six-source"
           class="text-xs text-stone-400 mt-1.5"
         >
-          Entspricht der Summe der Musterlösung.
+          Entspricht den Maximalpunkten.
+        </p>
+        <p
+          :if={is_number(@sample_solution_total) and @sample_solution_total > 0}
+          id="grading-max-points-total"
+          class="text-xs text-stone-500 mt-1.5"
+        >
+          Maximalpunkte:
+          <span class="font-mono font-medium text-stone-700">
+            {Tasky.Grading.format_points(@sample_solution_total)}
+          </span>
+          (Summe der Musterlösung)
+        </p>
+        <p
+          :if={
+            is_nil(@error) and is_number(@sample_solution_total) and
+              @sample_solution_total > 0 and @value > @sample_solution_total
+          }
+          id="grading-points-for-six-warning"
+          class="text-xs font-medium text-amber-600 mt-1.5"
+        >
+          Mehr als die Maximalpunkte: Eine 6 ist so nicht erreichbar.
         </p>
       </div>
       <div class="shrink-0 inline-flex items-center gap-2">
         <div
           :if={@overridden and is_number(@sample_solution_total) and @sample_solution_total > 0}
           class="tooltip tooltip-top tooltip-delayed"
-          data-tip={"Auf Musterlösung zurücksetzen (#{Tasky.Grading.format_points(@sample_solution_total)} Punkte)"}
+          data-tip={"Auf die Maximalpunkte zurücksetzen (#{Tasky.Grading.format_points(@sample_solution_total)} Punkte)"}
         >
           <button
             type="button"
-            id="reset-max-points-btn"
-            phx-click="reset_max_points"
-            aria-label="Auf Musterlösung zurücksetzen"
+            id="reset-points-for-six-btn"
+            phx-click="reset_points_for_six"
+            aria-label="Auf die Maximalpunkte zurücksetzen"
             class="inline-flex items-center justify-center w-8 h-8 mr-1 rounded-full text-stone-400 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"
           >
             <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
@@ -508,7 +538,7 @@ defmodule TaskyWeb.ExamComponents do
         <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte weniger">
           <button
             type="button"
-            phx-click="adjust_max_points"
+            phx-click="adjust_points_for_six"
             phx-value-direction="down"
             disabled={@value <= 0}
             aria-label="0.25 Punkte weniger"
@@ -517,11 +547,11 @@ defmodule TaskyWeb.ExamComponents do
             <.icon name="hero-minus" class="w-4 h-4" />
           </button>
         </div>
-        <form phx-change="set_max_points" phx-submit="set_max_points">
+        <form phx-change="set_points_for_six" phx-submit="set_points_for_six">
           <input
-            id="grading-max-points-input"
+            id="grading-points-for-six-input"
             type="number"
-            name="max_points"
+            name="points_for_six"
             value={@value}
             step="0.25"
             min="0"
@@ -533,7 +563,7 @@ defmodule TaskyWeb.ExamComponents do
         <div class="tooltip tooltip-top tooltip-delayed" data-tip="0.25 Punkte mehr">
           <button
             type="button"
-            phx-click="adjust_max_points"
+            phx-click="adjust_points_for_six"
             phx-value-direction="up"
             aria-label="0.25 Punkte mehr"
             class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:bg-stone-100/60 hover:text-stone-700 transition-colors duration-150"

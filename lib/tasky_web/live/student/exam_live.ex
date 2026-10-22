@@ -44,9 +44,12 @@ defmodule TaskyWeb.Student.ExamLive do
               </span>
               <span class="font-mono text-2xl font-semibold text-stone-800">
                 {Grading.format_points(@points)}
-                <span class="text-stone-400 font-normal text-lg">
-                  / {Grading.format_points(@max_points)}
+                <span :if={@total_points} class="text-stone-400 font-normal text-lg">
+                  / {Grading.format_points(@total_points)}
                 </span>
+              </span>
+              <span :if={@six_hint} id="student-six-hint" class="text-xs text-stone-400 block mt-1">
+                {@six_hint}
               </span>
             </div>
             <div>
@@ -116,7 +119,12 @@ defmodule TaskyWeb.Student.ExamLive do
 
     # Same single call as the grading table and the PDF export — the learner
     # must never be shown a different mark than the teacher graded.
-    %{points: points, max_points: max_points, effective_mark: mark} =
+    %{
+      points: points,
+      total_points: total_points,
+      points_for_six: points_for_six,
+      effective_mark: mark
+    } =
       Exams.grading_result(exam, submission)
 
     socket
@@ -125,7 +133,8 @@ defmodule TaskyWeb.Student.ExamLive do
     |> assign(:submission, submission)
     |> assign(:options, options)
     |> assign(:points, points)
-    |> assign(:max_points, max_points)
+    |> assign(:total_points, total_points)
+    |> assign(:six_hint, Grading.six_hint(total_points, points_for_six))
     |> assign(:mark, mark)
     |> assign(:sections, ExamSubmissionView.sections(exam, submission, options))
   end

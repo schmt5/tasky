@@ -3,7 +3,8 @@
 //
 // Data (`data.json`):
 //   exam_name: str, student_name: str,
-//   show_points_and_mark: bool, points: str, max_points: str, mark: str,
+//   show_points_and_mark: bool, points: str, max_points: str | none, six_hint: str | none,
+//   mark: str,
 //   sections: [(key: str, heading: str | none, doc: Tiptap doc)]
 
 #import "/tiptap.typ": render-doc, stone
@@ -48,7 +49,13 @@
           column-gutter: 8mm,
           stat("Punkte", {
             text(weight: "semibold", data.points)
-            text(fill: stone.s400, " / " + data.max_points)
+            if data.max_points != none {
+              text(fill: stone.s400, " / " + data.max_points)
+            }
+            if data.six_hint != none {
+              linebreak()
+              text(size: 8pt, fill: stone.s400, data.six_hint)
+            }
           }),
           stat("Note", text(weight: "semibold", data.mark)),
         )

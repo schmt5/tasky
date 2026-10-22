@@ -52,8 +52,8 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
 
       assert html =~ "Konfigurieren"
       assert html =~ "grading-config-btn"
-      # The max points live on the configuration page only.
-      refute html =~ "Maximalpunkte für Benotung"
+      # The points for a 6 live on the configuration page only.
+      refute html =~ "Punkte für eine 6"
       refute html =~ "er-Schritte"
     end
   end
@@ -69,7 +69,7 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       assert html =~ "Viertelnoten"
       assert html =~ "Zehntelnoten"
       assert html =~ "Benotung starten"
-      assert html =~ "Maximalpunkte für Benotung"
+      assert html =~ "Punkte für eine 6"
       refute html =~ "save-grading-config-btn"
     end
 
@@ -131,13 +131,45 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/grading/config")
     end
 
-    test "max points are a draft until Speichern", %{conn: conn} do
+    test "the total stays visible while the points for a 6 are edited", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      assert has_element?(view, "#grading-max-points-total", "10")
+      refute has_element?(view, "#grading-points-for-six-warning")
+
+      render_change(view, "set_points_for_six", %{"points_for_six" => "8"})
+
+      assert has_element?(view, "#grading-max-points-total", "10")
+      assert has_element?(view, "#grading-points-for-six-input[value='8']")
+    end
+
+    test "more points for a 6 than the total warns", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = configured_exam(10)
+      {:ok, view, _html} = open_config(conn, teacher, exam)
+
+      render_change(view, "set_points_for_six", %{"points_for_six" => "12"})
+
+      assert has_element?(view, "#grading-points-for-six-warning")
+    end
+
+    test "the grading table shows the total and where the 6 starts", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = configured_exam(10)
+      {:ok, exam} = Exams.update_grading_max_points(scope, exam, 8)
+
+      {:ok, view, _html} =
+        conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/correction/grading")
+
+      assert has_element?(view, "#sort-points-hint", "6 ab 8")
+    end
+
+    test "points for a 6 are a draft until Speichern", %{conn: conn} do
       %{teacher: teacher, exam: exam} = configured_exam(10)
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
       assert has_element?(view, "#save-grading-config-btn[disabled]")
 
-      render_change(view, "set_max_points", %{"max_points" => "12"})
+      render_change(view, "set_points_for_six", %{"points_for_six" => "12"})
 
       assert Tasky.Repo.reload!(exam).grading_max_points == nil
       refute has_element?(view, "#save-grading-config-btn[disabled]")
@@ -154,10 +186,10 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       %{teacher: teacher, exam: exam} = configured_exam(10)
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
-      render_click(view, "adjust_max_points", %{"direction" => "up"})
+      render_click(view, "adjust_points_for_six", %{"direction" => "up"})
 
       assert Tasky.Repo.reload!(exam).grading_max_points == nil
-      assert has_element?(view, ~s|#grading-max-points-input[value="10.25"]|)
+      assert has_element?(view, ~s|#grading-points-for-six-input[value="10.25"]|)
     end
 
     test "reset goes back to the sample solution and saves as no override", %{conn: conn} do
@@ -165,10 +197,10 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       {:ok, exam} = Exams.update_grading_max_points(scope, exam, 8)
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
-      view |> element("#reset-max-points-btn") |> render_click()
+      view |> element("#reset-points-for-six-btn") |> render_click()
 
-      assert has_element?(view, ~s|#grading-max-points-input[value="10"]|)
-      refute has_element?(view, "#reset-max-points-btn")
+      assert has_element?(view, ~s|#grading-points-for-six-input[value="10"]|)
+      refute has_element?(view, "#reset-points-for-six-btn")
 
       view |> element("#save-grading-config-btn") |> render_click()
 
@@ -179,17 +211,17 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       %{teacher: teacher, exam: exam} = configured_exam(10)
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
-      refute has_element?(view, "#reset-max-points-btn")
-      assert has_element?(view, "#grading-max-points-source")
+      refute has_element?(view, "#reset-points-for-six-btn")
+      assert has_element?(view, "#grading-points-for-six-source")
     end
 
     test "an invalid value blocks saving", %{conn: conn} do
       %{teacher: teacher, exam: exam} = configured_exam(10)
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
-      render_change(view, "set_max_points", %{"max_points" => "0"})
+      render_change(view, "set_points_for_six", %{"points_for_six" => "0"})
 
-      assert has_element?(view, "#grading-max-points-error")
+      assert has_element?(view, "#grading-points-for-six-error")
       assert has_element?(view, "#save-grading-config-btn[disabled]")
     end
 
@@ -198,7 +230,7 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
       view |> element(~s|input[name="mark_step"][value="0.1"]|) |> render_click()
-      render_change(view, "set_max_points", %{"max_points" => "9.5"})
+      render_change(view, "set_points_for_six", %{"points_for_six" => "9.5"})
       view |> element("#save-grading-config-btn") |> render_click()
 
       exam = Tasky.Repo.reload!(exam)
@@ -225,7 +257,7 @@ defmodule TaskyWeb.ExamGradingConfigLiveTest do
       %{teacher: teacher, exam: exam} = finished_exam()
       {:ok, view, _html} = open_config(conn, teacher, exam)
 
-      render_change(view, "set_max_points", %{"max_points" => "20"})
+      render_change(view, "set_points_for_six", %{"points_for_six" => "20"})
       assert Tasky.Repo.reload!(exam).grading_max_points == nil
 
       assert {:error, {:live_redirect, _}} =

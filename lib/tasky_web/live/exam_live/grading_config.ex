@@ -1,6 +1,6 @@
 defmodule TaskyWeb.ExamLive.GradingConfig do
   @moduledoc """
-  Wie wird benotet: das Notenraster und die Maximalpunkte.
+  Wie wird benotet: das Notenraster und die Punkte für eine 6.
 
   Doppelrolle wie `ExamLive.CockpitConfig`. Beim ersten Mal ist sie der
   Zwischenschritt in die Benotung — `ExamLive.Grading` schickt jede Prüfung
@@ -9,10 +9,10 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
   Seite die Konfiguration, erreichbar über den Kopf der Benotungstabelle.
 
   Die ganze Seite schreibt erst auf Klick auf den Button — Raster und
-  Maximalpunkte zusammen über `Exams.update_grading_config/3`. Bis dahin sind
+  Punkte für eine 6 zusammen über `Exams.update_grading_config/3`. Bis dahin sind
   beide ein Entwurf in den Assigns. Beim Raster ist das zwingend: es rundet
   bestehende manuelle Noten mit, und das soll an einem Speichern hängen und
-  nicht am Durchklicken der Optionen. Die Maximalpunkte folgen derselben
+  nicht am Durchklicken der Optionen. Die Punkte für eine 6 folgen derselben
   Regel, damit es auf der Seite nur eine Art zu speichern gibt.
   """
   use TaskyWeb, :live_view
@@ -42,12 +42,12 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
 
       <div class="max-w-6xl mx-auto px-8 pb-8 space-y-6">
         <div class="max-w-3xl">
-          <ExamComponents.max_points_card
-            value={effective_max_points(@draft_max_points, @sample_solution_total)}
+          <ExamComponents.points_for_six_card
+            value={effective_points_for_six(@draft_points_for_six, @sample_solution_total)}
             sample_solution_total={@sample_solution_total}
             free_document={@free_document}
-            overridden={not is_nil(@draft_max_points)}
-            error={@max_points_error}
+            overridden={not is_nil(@draft_points_for_six)}
+            error={@points_for_six_error}
           />
         </div>
 
@@ -108,7 +108,7 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
               type="button"
               id="start-grading-btn"
               phx-click="save"
-              disabled={not is_nil(@max_points_error)}
+              disabled={not is_nil(@points_for_six_error)}
               class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
             >
               <.icon name="hero-academic-cap" class="w-4 h-4" /> Benotung starten
@@ -126,7 +126,7 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
                 type="button"
                 id="save-grading-config-btn"
                 phx-click="save"
-                disabled={not @dirty? or not is_nil(@max_points_error)}
+                disabled={not @dirty? or not is_nil(@points_for_six_error)}
                 class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-sky-500 disabled:active:scale-100"
               >
                 <.icon name="hero-check" class="w-4 h-4" /> Speichern
@@ -169,8 +169,8 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
      |> assign(:selected_step, Exams.mark_step(exam))
      |> assign(:free_document, Exams.free_document?(exam))
      |> assign(:sample_solution_total, sample_solution_total)
-     |> assign(:draft_max_points, exam.grading_max_points)
-     |> assign(:max_points_error, nil)
+     |> assign(:draft_points_for_six, exam.grading_max_points)
+     |> assign(:points_for_six_error, nil)
      |> assign_dirty()
      |> assign_chrome()}
   end
@@ -219,7 +219,7 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
   end
 
   def handle_event("save", _params, socket) do
-    %{current_scope: scope, exam: exam, selected_step: step, draft_max_points: max_points} =
+    %{current_scope: scope, exam: exam, selected_step: step, draft_points_for_six: max_points} =
       socket.assigns
 
     # Untouched max points stay out of the write, so saving the mark step
@@ -237,47 +237,47 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
         {:noreply, put_flash(socket, :error, "Unbekannte Notenschritte.")}
 
       {:error, :invalid_max_points} ->
-        {:noreply, put_flash(socket, :error, "Maximalpunkte müssen grösser als 0 sein.")}
+        {:noreply, put_flash(socket, :error, "Die Punkte für eine 6 müssen grösser als 0 sein.")}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Konfiguration konnte nicht gespeichert werden.")}
     end
   end
 
-  # Die Maximalpunkte-Events ändern nur den Entwurf; geschrieben wird erst
+  # Die Events für die Punkte für eine 6 ändern nur den Entwurf; geschrieben wird erst
   # in "save".
-  def handle_event("set_max_points", %{"max_points" => raw}, socket) do
+  def handle_event("set_points_for_six", %{"points_for_six" => raw}, socket) do
     case Grading.parse_points(raw) do
       n when is_number(n) and n > 0 ->
-        {:noreply, put_draft_max_points(socket, Grading.normalize_points(n))}
+        {:noreply, put_draft_points_for_six(socket, Grading.normalize_points(n))}
 
       _ ->
         {:noreply,
          socket
-         |> assign(:max_points_error, "Maximalpunkte müssen grösser als 0 sein.")
+         |> assign(:points_for_six_error, "Die Punkte für eine 6 müssen grösser als 0 sein.")
          |> assign_dirty()}
     end
   end
 
-  def handle_event("adjust_max_points", %{"direction" => dir}, socket) do
-    %{draft_max_points: draft, sample_solution_total: total} = socket.assigns
+  def handle_event("adjust_points_for_six", %{"direction" => dir}, socket) do
+    %{draft_points_for_six: draft, sample_solution_total: total} = socket.assigns
     delta = if dir == "up", do: 0.25, else: -0.25
-    # Gleicher Boden wie in der Benotungstabelle: 0 Maximalpunkte hiesse
+    # Gleicher Boden wie in der Benotungstabelle: 0 Punkte für eine 6 hiesse
     # «keine Note für niemanden».
-    new_value = max((effective_max_points(draft, total) || 0) + delta, 0.25)
-    {:noreply, put_draft_max_points(socket, Grading.normalize_points(new_value))}
+    new_value = max((effective_points_for_six(draft, total) || 0) + delta, 0.25)
+    {:noreply, put_draft_points_for_six(socket, Grading.normalize_points(new_value))}
   end
 
   # Zurück auf «folgt der Musterlösung»: nil, nicht die aktuelle Summe —
   # sonst folgte der Wert einer später geänderten Musterlösung nicht mehr.
-  def handle_event("reset_max_points", _params, socket) do
-    {:noreply, put_draft_max_points(socket, nil)}
+  def handle_event("reset_points_for_six", _params, socket) do
+    {:noreply, put_draft_points_for_six(socket, nil)}
   end
 
-  defp put_draft_max_points(socket, value) do
+  defp put_draft_points_for_six(socket, value) do
     socket
-    |> assign(:draft_max_points, value)
-    |> assign(:max_points_error, nil)
+    |> assign(:draft_points_for_six, value)
+    |> assign(:points_for_six_error, nil)
     |> assign_dirty()
   end
 
@@ -285,19 +285,20 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
   # der Musterlösung trifft, ist gegenüber «keine Überschreibung» keine
   # Änderung.
   defp assign_dirty(socket) do
-    %{exam: exam, selected_step: step, draft_max_points: draft, sample_solution_total: total} =
+    %{exam: exam, selected_step: step, draft_points_for_six: draft, sample_solution_total: total} =
       socket.assigns
 
     dirty? =
       step != exam.mark_step or
-        not is_nil(socket.assigns.max_points_error) or
-        effective_max_points(draft, total) != effective_max_points(exam.grading_max_points, total)
+        not is_nil(socket.assigns.points_for_six_error) or
+        effective_points_for_six(draft, total) !=
+          effective_points_for_six(exam.grading_max_points, total)
 
     assign(socket, :dirty?, dirty?)
   end
 
-  defp effective_max_points(nil, sample_solution_total), do: sample_solution_total
-  defp effective_max_points(value, _sample_solution_total), do: value
+  defp effective_points_for_six(nil, sample_solution_total), do: sample_solution_total
+  defp effective_points_for_six(value, _sample_solution_total), do: value
 
   defp after_save(socket, updated, rounded) do
     if socket.assigns.pending? do
@@ -308,8 +309,8 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
       socket
       |> assign(:exam, updated)
       |> assign(:selected_step, updated.mark_step)
-      |> assign(:draft_max_points, updated.grading_max_points)
-      |> assign(:max_points_error, nil)
+      |> assign(:draft_points_for_six, updated.grading_max_points)
+      |> assign(:points_for_six_error, nil)
       |> assign_dirty()
       |> put_flash(:info, saved_message(rounded))
     end

@@ -26,7 +26,7 @@ defmodule Tasky.ExamPaperPdf do
     %{
       "exam_name" => exam.name,
       "max_points" =>
-        case Exams.grading_max_points(exam) do
+        case Exams.total_points(exam) do
           nil -> nil
           max_points -> Grading.format_points(max_points)
         end,
