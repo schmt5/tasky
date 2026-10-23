@@ -233,7 +233,7 @@ defmodule TaskyWeb.ExamSubmissionViewTest do
         ExamSubmissionView.sections(exam, submission, %{show_content: true, show_correction: true})
 
       assert json =~ ~s("verdict":"half")
-      assert json =~ ~s("points":"1.5")
+      assert json =~ ~s("points":"1.5 / 2")
       refute json =~ "🟡"
       refute json =~ "solutionHint"
     end

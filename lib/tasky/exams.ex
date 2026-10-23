@@ -3169,8 +3169,8 @@ defmodule Tasky.Exams do
 
   @doc """
   Die erreichten Punkte einer Abgabe pro Antwortfeld, keyed by `answerId`, als
-  Anzeigetext (`Grading.format_points/1`) — für Lernende, die am Feld die
-  Punktzahl statt ✅/🟡/❌ sehen.
+  Anzeigetext — für Lernende, die am Feld die Punktzahl statt ✅/🟡/❌ sehen.
+  Mit bekanntem Blockmaximum steht es dabei: `"1 / 2"`, sonst nur `"1.5"`.
 
   Ein 🟡 allein liest sich wie „ein halber Punkt", auch bei 1.5 von 2 Punkten;
   die Zahl sagt, was wirklich vergeben wurde. Gerechnet wird mit
@@ -3185,17 +3185,52 @@ defmodule Tasky.Exams do
     exam
     |> judged_answers(submission)
     |> Enum.reduce(%{}, fn {answer_id, verdict, block_max}, acc ->
-      if is_number(verdict) or (is_number(block_max) and block_max > 0) do
-        Map.put(
-          acc,
-          answer_id,
-          Grading.format_points(Grading.awarded_points(verdict, block_max))
-        )
+      awarded = Grading.format_points(Grading.awarded_points(verdict, block_max))
+
+      cond do
+        is_number(block_max) and block_max > 0 ->
+          Map.put(acc, answer_id, awarded <> " / " <> Grading.format_points(block_max))
+
+        is_number(verdict) ->
+          Map.put(acc, answer_id, awarded)
+
+        true ->
+          acc
+      end
+    end)
+  end
+
+  @doc """
+  Die erreichten Punkte pro Frage, keyed by part id, als Anzeigetext `"2/4"` —
+  für die Frage-Überschrift der zurückgegebenen Prüfung.
+
+  Nur Fragen mit mehr als einem Antwortfeld: Bei einem einzigen Feld steht
+  dieselbe Zahl schon am Feld. Gezählt wird, was in `points_per_part`
+  gespeichert ist, also dieselbe Zahl, die in die Gesamtpunktzahl eingeht.
+  Ohne Punkte der Frage oder ohne gespeicherte Punkte fehlt die Frage.
+  """
+  @spec learner_part_points(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
+  def learner_part_points(%Exam{answer_mode: "answer_fields"} = exam, %ExamSubmission{} = sub) do
+    max_by_part = exam.sample_solution_points || %{}
+    points_by_part = sub.points_per_part || %{}
+
+    sub
+    |> correction_content()
+    |> split_content_into_parts(exam.answer_mode)
+    |> Enum.reduce(%{}, fn part, acc ->
+      max = Map.get(max_by_part, part.id)
+      points = Map.get(points_by_part, part.id)
+      fields = length(NodePatcher.list_answer_blocks(part.nodes))
+
+      if fields > 1 and is_number(max) and max > 0 and is_number(points) do
+        Map.put(acc, part.id, Grading.format_points(points) <> "/" <> Grading.format_points(max))
       else
         acc
       end
     end)
   end
+
+  def learner_part_points(%Exam{}, %ExamSubmission{}), do: %{}
 
   # `{answerId, verdict, block_max}` für jedes bewertete Antwortfeld, mit der
   # Quellen-Rangfolge aus `learner_verdicts/2`.
@@ -3238,6 +3273,8 @@ defmodule Tasky.Exams do
 
     * `:points` — `learner_points/2`; das Feld zeigt dann die Punktzahl statt
       des Zeichens. Default `%{}`.
+    * `:part_points` — `learner_part_points/2`; die Frage-Überschrift bekommt
+      sie als `points`-Attribut und zeigt sie darunter. Default `%{}`.
     * `:sample_solution` — `false`, wenn die Musterlösung nicht freigegeben ist:
       Verdikte und Punkte kommen trotzdem ans Feld, nur ohne Vorgabe darunter.
       Default `true`.
@@ -3251,6 +3288,25 @@ defmodule Tasky.Exams do
     base_doc
     |> strip_markers(verdicts)
     |> SolutionHints.annotate(sample, verdicts, Keyword.get(opts, :points, %{}))
+    |> put_part_points(exam.answer_mode, Keyword.get(opts, :part_points, %{}))
+  end
+
+  defp put_part_points(doc, _mode, part_points) when map_size(part_points) == 0, do: doc
+
+  defp put_part_points(doc, mode, part_points) do
+    parts =
+      doc
+      |> split_content_into_parts(mode)
+      |> Enum.map(fn
+        %{id: id, nodes: [heading | rest]} = part when is_map_key(part_points, id) ->
+          attrs = Map.put(heading["attrs"] || %{}, "points", part_points[id])
+          %{part | nodes: [Map.put(heading, "attrs", attrs) | rest]}
+
+        part ->
+          part
+      end)
+
+    Map.merge(doc, assemble_parts_into_content(content_preamble(doc, mode), parts))
   end
 
   defp strip_markers(doc, verdicts) when map_size(verdicts) == 0, do: doc

@@ -118,6 +118,18 @@ defmodule Tasky.PDFTest do
       assert {:ok, "%PDF" <> _} = PDF.render("submission", data)
     end
 
+    test "renders the points under a question of a returned exam" do
+      question = %{
+        "type" => "heading",
+        "attrs" => %{"level" => 3, "partId" => "q-1", "points" => "2.5/4"},
+        "content" => [%{"type" => "text", "text" => "Frage 1"}]
+      }
+
+      data = submission_data([%{"key" => "content", "heading" => nil, "doc" => doc([question])}])
+
+      assert {:ok, "%PDF" <> _} = PDF.render("submission", data)
+    end
+
     test "renders the paper version, with and without ruled pages" do
       assert {:ok, "%PDF" <> _} = PDF.render("paper", paper_data(kitchen_sink_doc()))
 

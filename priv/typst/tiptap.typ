@@ -218,6 +218,9 @@
 
 #let heading-block(node, ctx, render-node) = {
   let level = attrs-of(node).at("level", default: 1)
+  // The points a returned exam awarded for the question ("2/4", set by
+  // `Tasky.Exams.learner_part_points/2`), shown under it as in the stylesheet.
+  let points = points-of(node)
   let size = if level == 1 { 1.8em } else if level == 2 { 1.4em } else { 1.15em }
   let above = if level == 1 { 1.2em } else if level == 2 { 1.1em } else { 1em }
   block(
@@ -225,7 +228,13 @@
     breakable: false,
     above: above,
     below: 0.6em,
-    text(size: size, weight: "semibold", render-inlines(children-of(node), ctx, render-node)),
+    {
+      text(size: size, weight: "semibold", render-inlines(children-of(node), ctx, render-node))
+      if points != none {
+        linebreak()
+        text(size: 0.8em, fill: stone.s500, "(" + points + "\u{a0}P.)")
+      }
+    },
   )
 }
 

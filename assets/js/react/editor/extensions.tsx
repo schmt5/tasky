@@ -54,6 +54,15 @@ export const HeadingWithPartId = Heading.extend({
         renderHTML: (attrs: Record<string, unknown>) =>
           attrs.partId ? { "data-part-id": attrs.partId } : {},
       },
+      // Erreichte Punkte der Frage in einer zurückgegebenen Prüfung ("2/4",
+      // `Tasky.Exams.learner_part_points/2`); das Stylesheet zeigt sie unter
+      // der Frage.
+      points: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-points"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.points != null ? { "data-points": attrs.points } : {},
+      },
     };
   },
 });

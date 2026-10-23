@@ -540,6 +540,19 @@
     margin-top: 0.8em;
 }
 
+/* Zurückgegebene Prüfung: die erreichten Punkte einer Frage mit mehreren
+   Antwortfeldern (`data-points`, siehe `Tasky.Exams.learner_part_points/2`)
+   stehen ruhig unter der Frage. */
+.exam-editor__content .ProseMirror h3[data-points]::after {
+    content: "(" attr(data-points) "\00a0P.)";
+    display: block;
+    margin-top: 0.15em;
+    font-size: 0.75em;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: #78716c;
+}
+
 .exam-editor__content .ProseMirror ul,
 .exam-editor__content .ProseMirror ol {
     padding-left: 1.4em;

@@ -123,10 +123,15 @@ defmodule Tasky.ExamsLearnerReturnTest do
   # Ein 🟡 allein liest sich wie „ein halber Punkt", auch bei 1.5 von 2
   # Punkten. Am Feld steht darum die Zahl, die wirklich vergeben wurde.
   describe "learner_points/2" do
-    test "awards the block maximum, the manual points or zero" do
+    test "awards the block maximum, the manual points or zero, out of the maximum" do
       exam = exam(%{sample_solution_points: %{"q-1" => 2}})
 
-      for {verdict, expected} <- [{"correct", "2"}, {1.5, "1.5"}, {"wrong", "0"}, {0, "0"}] do
+      for {verdict, expected} <- [
+            {"correct", "2 / 2"},
+            {1.5, "1.5 / 2"},
+            {"wrong", "0 / 2"},
+            {0, "0 / 2"}
+          ] do
         submission =
           submission(%{
             corrected_content: doc([heading(), answer_block("a", "pdf")]),
@@ -159,7 +164,62 @@ defmodule Tasky.ExamsLearnerReturnTest do
     end
   end
 
+  # Bei einem einzigen Feld stünde dieselbe Zahl zweimal da.
+  describe "learner_part_points/2" do
+    defp two_fields, do: doc([heading(), answer_block("a", "pdf"), answer_block("b", "png")])
+
+    test "a question with several fields gets its points out of its maximum" do
+      exam = exam(%{content: two_fields(), sample_solution_points: %{"q-1" => 4}})
+
+      submission =
+        submission(%{corrected_content: two_fields(), points_per_part: %{"q-1" => 2.5}})
+
+      assert Exams.learner_part_points(exam, submission) == %{"q-1" => "2.5/4"}
+    end
+
+    test "a question with one field gets none" do
+      exam = exam(%{sample_solution_points: %{"q-1" => 4}})
+
+      submission =
+        submission(%{
+          corrected_content: doc([heading(), answer_block("a", "pdf")]),
+          points_per_part: %{"q-1" => 4}
+        })
+
+      assert Exams.learner_part_points(exam, submission) == %{}
+    end
+
+    test "without points of the question or stored points there is nothing" do
+      submission = submission(%{corrected_content: two_fields(), points_per_part: %{"q-1" => 2}})
+      assert Exams.learner_part_points(exam(%{content: two_fields()}), submission) == %{}
+
+      exam = exam(%{content: two_fields(), sample_solution_points: %{"q-1" => 4}})
+
+      assert Exams.learner_part_points(exam, submission(%{corrected_content: two_fields()})) ==
+               %{}
+    end
+
+    test "a free document has no questions" do
+      exam = exam(%{answer_mode: "free_document", sample_solution_points: %{"document" => 4}})
+
+      assert Exams.learner_part_points(exam, submission(%{corrected_content: two_fields()})) ==
+               %{}
+    end
+  end
+
   describe "return_doc_for_learner/4" do
+    test "the question heading carries the points of the question" do
+      base = doc([heading(), answer_block("a", "pdf")])
+
+      %{"content" => [heading | _]} =
+        Exams.return_doc_for_learner(exam(), base, %{"a" => "half"},
+          part_points: %{"q-1" => "2/4"}
+        )
+
+      assert heading["attrs"]["points"] == "2/4"
+      assert heading["attrs"]["partId"] == "q-1"
+    end
+
     test "the points land next to the verdict on the answer node" do
       base = doc([heading(), answer_block("a", "pdf")])
 

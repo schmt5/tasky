@@ -89,7 +89,7 @@ defmodule TaskyWeb.ExamSubmissionPdfTest do
       opts = %{show_correction: true, show_sample_solution: sample?}
 
       assert [%{"doc" => doc}] = ExamSubmissionPdf.data(exam(), submission, opts)["sections"]
-      assert inspect(doc) =~ ~s("points" => "1.5")
+      assert inspect(doc) =~ ~s("points" => "1.5 / )
       assert {:ok, "%PDF" <> _} = ExamSubmissionPdf.render(exam(), submission, opts)
     end
   end

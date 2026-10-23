@@ -116,13 +116,16 @@ defmodule TaskyWeb.ExamSubmissionView do
   # teilweise richtigen Feld „1.5 P." und kein 🟡, das wie ein halber Punkt
   # aussieht.
   defp for_learner(exam, submission, doc, opts) do
-    {verdicts, points} =
+    {verdicts, points, part_points} =
       if opts.show_correction,
-        do: {Exams.learner_verdicts(exam, submission), Exams.learner_points(exam, submission)},
-        else: {%{}, %{}}
+        do:
+          {Exams.learner_verdicts(exam, submission), Exams.learner_points(exam, submission),
+           Exams.learner_part_points(exam, submission)},
+        else: {%{}, %{}, %{}}
 
     Exams.return_doc_for_learner(exam, doc, verdicts,
       points: points,
+      part_points: part_points,
       sample_solution: opts.show_sample_solution
     )
   end
