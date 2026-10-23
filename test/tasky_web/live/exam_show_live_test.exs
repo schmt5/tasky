@@ -105,4 +105,41 @@ defmodule TaskyWeb.ExamShowLiveTest do
       assert html =~ "Zweitversion"
     end
   end
+
+  describe "content" do
+    setup %{conn: conn} do
+      teacher = user_fixture(%{role: "teacher"})
+      %{conn: log_in_user(conn, teacher), scope: user_scope_fixture(teacher)}
+    end
+
+    test "shows the whole exam read-only with an edit action", %{conn: conn, scope: scope} do
+      content = %{
+        "type" => "doc",
+        "content" => [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Hallo"}]}
+        ]
+      }
+
+      exam = exam_fixture(scope: scope, attrs: %{content: content})
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+
+      assert has_element?(
+               view,
+               ~s(#exam-content-viewer-#{exam.id}[phx-hook="ExamReadOnlyViewer"])
+             )
+
+      assert has_element?(view, ~s(#edit-exam-content[href="/exams/#{exam.id}/content"]))
+      refute has_element?(view, "#exam-content-empty")
+    end
+
+    test "shows an empty state without content", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope)
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+
+      assert has_element?(view, "#exam-content-empty")
+      refute has_element?(view, "#exam-content-viewer-#{exam.id}")
+    end
+  end
 end

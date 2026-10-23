@@ -266,50 +266,45 @@ defmodule TaskyWeb.ExamLive.Show do
           </div>
         </div>
 
-        <%!-- Content Section --%>
-        <div class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-          <div class="p-6 border-b border-stone-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <h2 class="text-lg font-semibold text-stone-800">Inhalt</h2>
-                <p class="text-sm text-stone-500 mt-1">Vorschau des Prüfungsinhalts</p>
-              </div>
-              <.link
-                navigate={~p"/exams/#{@exam}/content"}
-                class={[
-                  "inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-[6px] transition-all duration-150 active:scale-[0.98]",
-                  if(@exam.status == "draft",
-                    do:
-                      "bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600",
-                    else:
-                      "text-stone-500 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
-                  )
-                ]}
-              >
-                <.icon name="hero-pencil" class="w-3.5 h-3.5" /> Bearbeiten
-              </.link>
-            </div>
+        <%!-- Content: the whole exam as learners will see it, read-only. --%>
+        <div
+          id="exam-content-card"
+          class="bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]"
+        >
+          <div class="flex justify-end px-6 pt-6">
+            <.link
+              id="edit-exam-content"
+              navigate={~p"/exams/#{@exam}/content"}
+              class={[
+                "inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-[10px] transition-all duration-150 active:scale-[0.98]",
+                if(@exam.status == "draft",
+                  do:
+                    "bg-sky-500 text-white shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600",
+                  else:
+                    "text-stone-600 border border-stone-200 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700"
+                )
+              ]}
+            >
+              <.icon name="hero-pencil" class="w-4 h-4" /> Bearbeiten
+            </.link>
           </div>
-          <div class="p-6">
-            <%= if @exam.content && @exam.content != %{} do %>
-              <% heading_text = extract_first_heading(@exam.content) %>
-              <%= if heading_text do %>
-                <div class="flex items-start gap-3">
-                  <div class="w-1 self-stretch rounded-full bg-stone-200 shrink-0"></div>
-                  <div>
-                    <p class="text-base text-stone-700 font-medium leading-relaxed">{heading_text}</p>
-                    <p class="text-xs text-stone-400 mt-2 tracking-wide uppercase">
-                      Auszug aus dem Prüfungsinhalt
-                    </p>
-                  </div>
-                </div>
-              <% else %>
-                <p class="text-sm text-stone-400 italic">
-                  Inhalt vorhanden, aber keine Überschrift gefunden
-                </p>
-              <% end %>
+          <div class="px-6 pb-6">
+            <%= if @content_json do %>
+              <div
+                id={"exam-content-viewer-#{@exam.id}"}
+                phx-hook="ExamReadOnlyViewer"
+                phx-update="ignore"
+                data-content={@content_json}
+              >
+              </div>
             <% else %>
-              <p class="text-sm text-stone-400">Kein Inhalt vorhanden</p>
+              <div
+                id="exam-content-empty"
+                class="flex flex-col items-center text-center py-12"
+              >
+                <.icon name="hero-document-text" class="w-8 h-8 mb-3 text-stone-300" />
+                <p class="text-sm font-medium text-stone-500">Noch kein Inhalt vorhanden.</p>
+              </div>
             <% end %>
           </div>
         </div>
@@ -325,25 +320,10 @@ defmodule TaskyWeb.ExamLive.Show do
     """
   end
 
-  defp extract_first_heading(%{"content" => blocks}) when is_list(blocks) do
-    Enum.find_value(blocks, fn
-      %{"type" => "heading", "content" => children} when is_list(children) ->
-        children
-        |> Enum.map_join("", fn
-          %{"text" => text} -> text
-          _ -> ""
-        end)
-        |> case do
-          "" -> nil
-          text -> text
-        end
-
-      _ ->
-        nil
-    end)
-  end
-
-  defp extract_first_heading(_), do: nil
+  # nil for an exam without blocks, so the card shows its empty state instead
+  # of a blank viewer.
+  defp content_json(%{"content" => [_ | _]} = content), do: Jason.encode!(content)
+  defp content_json(_content), do: nil
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -373,6 +353,7 @@ defmodule TaskyWeb.ExamLive.Show do
     socket
     |> assign(:exam, exam)
     |> assign(:archived?, Exams.archived?(exam))
+    |> assign(:content_json, content_json(exam.content))
   end
 
   @impl true
