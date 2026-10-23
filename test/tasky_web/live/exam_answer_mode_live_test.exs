@@ -82,8 +82,10 @@ defmodule TaskyWeb.ExamAnswerModeLiveTest do
       {conn, scope} = teacher_conn(conn)
       exam = exam_fixture(scope: scope, answer_mode: "free_document")
 
-      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}/edit")
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+      view |> element("#rename-exam") |> render_click()
 
+      assert has_element?(view, "#rename-exam-form-#{exam.id}")
       refute has_element?(view, "#exam_answer_mode-answer_fields")
     end
   end

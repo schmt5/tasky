@@ -40,12 +40,16 @@ defmodule TaskyWeb.ExamLive.Show do
                 class="dropdown dropdown-end menu z-[60] p-2 shadow-lg bg-white rounded-[10px] w-56 border border-stone-100"
               >
                 <li>
-                  <.link
-                    navigate={~p"/exams/#{@exam}/edit?return_to=show"}
+                  <button
+                    id="rename-exam"
+                    type="button"
+                    phx-click="rename"
+                    popovertarget="exam-actions-menu"
+                    popovertargetaction="hide"
                     class="flex items-center gap-2 text-sm text-stone-700"
                   >
                     <.icon name="hero-pencil" class="w-4 h-4 text-stone-400" /> Umbenennen
-                  </.link>
+                  </button>
                 </li>
                 <li>
                   <%!-- Here as well as in the cockpit: the paper copies are
@@ -61,8 +65,11 @@ defmodule TaskyWeb.ExamLive.Show do
                 </li>
                 <li>
                   <button
+                    id="duplicate-exam"
                     type="button"
                     phx-click="duplicate_exam"
+                    popovertarget="exam-actions-menu"
+                    popovertargetaction="hide"
                     class="flex items-center gap-2 text-sm text-stone-700"
                   >
                     <.icon name="hero-document-duplicate" class="w-4 h-4 text-stone-400" />
@@ -307,6 +314,13 @@ defmodule TaskyWeb.ExamLive.Show do
           </div>
         </div>
       </div>
+
+      <ExamComponents.rename_exam_modal
+        :if={@renaming_exam}
+        exam={@renaming_exam}
+        form={@rename_form}
+        source_name={@rename_source_name}
+      />
     </Layouts.app>
     """
   end
@@ -340,7 +354,8 @@ defmodule TaskyWeb.ExamLive.Show do
      |> assign(:page_title, exam.name)
      |> assign_exam(exam)
      |> assign(:answer_mode_option, ExamComponents.answer_mode_option(exam.answer_mode))
-     |> assign(:grading_available, grading_available?(exam))}
+     |> assign(:grading_available, grading_available?(exam))
+     |> close_rename()}
   end
 
   defp grading_available?(exam) do
@@ -404,11 +419,66 @@ defmodule TaskyWeb.ExamLive.Show do
            socket.assigns.exam,
            "Kopie von — #{socket.assigns.exam.name}"
          ) do
+      # Named here, over the original, and only then off to the copy — however
+      # the dialog is left, since the copy exists either way.
       {:ok, new_exam} ->
-        {:noreply, push_navigate(socket, to: ~p"/exams/#{new_exam}")}
+        {:noreply, open_rename(socket, new_exam, socket.assigns.exam.name)}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Prüfung konnte nicht kopiert werden.")}
     end
+  end
+
+  def handle_event("rename", _params, socket) do
+    {:noreply, open_rename(socket, socket.assigns.exam, nil)}
+  end
+
+  def handle_event("close_rename", _params, socket) do
+    case socket.assigns.renaming_exam do
+      %{id: id} = copy when id != socket.assigns.exam.id ->
+        {:noreply, push_navigate(socket, to: ~p"/exams/#{copy}")}
+
+      _ ->
+        {:noreply, close_rename(socket)}
+    end
+  end
+
+  def handle_event("validate_rename", %{"exam" => %{"name" => name}}, socket) do
+    changeset = Exams.change_exam(socket.assigns.renaming_exam, %{"name" => name})
+    {:noreply, assign(socket, :rename_form, to_form(changeset, action: :validate, as: :exam))}
+  end
+
+  def handle_event("save_rename", %{"exam" => %{"name" => name}}, socket) do
+    renaming = socket.assigns.renaming_exam
+
+    case Exams.update_exam(socket.assigns.current_scope, renaming, %{"name" => name}) do
+      {:ok, exam} when exam.id == socket.assigns.exam.id ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Prüfung umbenannt")
+         |> assign(:page_title, exam.name)
+         |> assign_exam(exam)
+         |> close_rename()}
+
+      {:ok, copy} ->
+        {:noreply, push_navigate(socket, to: ~p"/exams/#{copy}")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :rename_form, to_form(changeset, as: :exam))}
+    end
+  end
+
+  defp open_rename(socket, exam, source_name) do
+    socket
+    |> assign(:renaming_exam, exam)
+    |> assign(:rename_source_name, source_name)
+    |> assign(:rename_form, to_form(Exams.change_exam(exam), as: :exam))
+  end
+
+  defp close_rename(socket) do
+    socket
+    |> assign(:renaming_exam, nil)
+    |> assign(:rename_source_name, nil)
+    |> assign(:rename_form, nil)
   end
 end

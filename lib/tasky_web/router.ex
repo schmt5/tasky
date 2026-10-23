@@ -243,7 +243,6 @@ defmodule TaskyWeb.Router do
       # Before "/exams/:id", which would otherwise take "archive" as an id.
       live "/exams/archive", ExamLive.Archive, :archive
       live "/exams/:id", ExamLive.Show, :show
-      live "/exams/:id/edit", ExamLive.Form, :edit
       live "/exams/:id/paper", ExamLive.Paper, :paper
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
       live "/exams/:id/cockpit/config", ExamLive.CockpitConfig, :config

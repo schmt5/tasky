@@ -85,4 +85,59 @@ defmodule TaskyWeb.ExamIndexLiveTest do
       assert has_element?(view, "#archive-link")
     end
   end
+
+  describe "row actions" do
+    test "every exam offers view and duplicate", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope)
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+
+      assert has_element?(view, ~s(#view-#{exam.id}[href="/exams/#{exam.id}"]))
+      assert has_element?(view, "#duplicate-#{exam.id}")
+    end
+
+    test "duplicating opens the rename dialog for the copy", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, attrs: %{name: "Algebra"})
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+      view |> element("#duplicate-#{exam.id}") |> render_click()
+
+      copy = Enum.find(Tasky.Exams.list_exams(scope), &(&1.id != exam.id))
+      assert has_element?(view, "#rename-exam-form-#{copy.id}")
+      assert has_element?(view, "#exams-#{copy.id}")
+
+      view
+      |> form("#rename-exam-form-#{copy.id}", exam: %{name: "Algebra B"})
+      |> render_submit()
+
+      refute has_element?(view, "#rename-exam-modal")
+      assert Tasky.Exams.get_exam!(scope, copy.id).name == "Algebra B"
+      assert Tasky.Exams.get_exam!(scope, exam.id).name == "Algebra"
+    end
+
+    test "keeping the name leaves the copy in the list", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope)
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+      view |> element("#duplicate-#{exam.id}") |> render_click()
+      view |> element("#rename-exam-cancel") |> render_click()
+
+      refute has_element?(view, "#rename-exam-modal")
+      assert length(Tasky.Exams.list_exams(scope)) == 2
+    end
+
+    test "an empty name is refused", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope)
+
+      {:ok, view, _html} = live(conn, ~p"/exams")
+      view |> element("#duplicate-#{exam.id}") |> render_click()
+      copy = Enum.find(Tasky.Exams.list_exams(scope), &(&1.id != exam.id))
+
+      view
+      |> form("#rename-exam-form-#{copy.id}", exam: %{name: ""})
+      |> render_submit()
+
+      assert has_element?(view, "#rename-exam-modal")
+    end
+  end
 end

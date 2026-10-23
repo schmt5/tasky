@@ -12,7 +12,7 @@ defmodule TaskyWeb.ExamComponents do
 
   use Phoenix.Component
 
-  import TaskyWeb.CoreComponents, only: [icon: 1]
+  import TaskyWeb.CoreComponents, only: [icon: 1, input: 1]
 
   alias Phoenix.LiveView.JS
 
@@ -799,6 +799,128 @@ defmodule TaskyWeb.ExamComponents do
       "Die bereits erfassten Antworten werden endgültig gelöscht. Eine laufende Sitzung wird sofort beendet."
 
   defp remove_warning(_submission), do: nil
+
+  attr :exam, :map, required: true
+  attr :form, Phoenix.HTML.Form, required: true
+
+  attr :source_name, :string,
+    default: nil,
+    doc: "Name des Originals, wenn das eine frische Kopie ist"
+
+  @doc """
+  Umbenennen einer Prüfung im Dialog — von der Liste und von der Prüfungsseite
+  aus, und direkt nach dem Duplizieren, damit die Kopie gleich einen eigenen
+  Namen bekommt. Die LiveView behandelt `close_rename`, `validate_rename` und
+  `save_rename` (Params unter `"exam"`). Der Name ist beim Öffnen markiert:
+  Tippen ersetzt ihn, Pfeiltasten behalten ihn.
+  """
+  def rename_exam_modal(assigns) do
+    ~H"""
+    <dialog
+      id="rename-exam-modal"
+      class="modal modal-open"
+      phx-window-keydown="close_rename"
+      phx-key="escape"
+    >
+      <div class="modal-backdrop bg-stone-900/50" phx-click="close_rename"></div>
+      <div class="modal-box max-w-lg p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200 overflow-hidden">
+        <.form
+          for={@form}
+          id={"rename-exam-form-#{@exam.id}"}
+          phx-change="validate_rename"
+          phx-submit="save_rename"
+        >
+          <div class="px-6 pt-6 pb-5">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+                <.icon
+                  name={if(@source_name, do: "hero-document-duplicate", else: "hero-pencil")}
+                  class="w-5 h-5 text-sky-500"
+                />
+              </div>
+              <div class="min-w-0">
+                <h3 class="text-lg font-semibold text-stone-800">
+                  {if @source_name, do: "Kopie benennen", else: "Prüfung umbenennen"}
+                </h3>
+                <p :if={@source_name} class="text-xs text-stone-400 mt-0.5 truncate">
+                  Kopie von „{@source_name}“
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 pb-6">
+            <label
+              for={"rename-exam-name-#{@exam.id}"}
+              class="block text-[11px] tracking-[0.1em] uppercase font-semibold text-stone-400 mb-2"
+            >
+              Name der Prüfung
+            </label>
+            <.input
+              field={@form[:name]}
+              id={"rename-exam-name-#{@exam.id}"}
+              type="text"
+              autocomplete="off"
+              maxlength="255"
+              phx-hook=".SelectOnMount"
+              phx-debounce="200"
+              class="w-full font-serif text-[22px] leading-snug text-stone-900 px-4 py-3 rounded-[10px] border border-stone-200 bg-stone-50/60 outline-none transition-all duration-150 placeholder:text-stone-300 hover:border-stone-300 focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+              error_class="!border-red-300 focus:!ring-red-100"
+            />
+            <p
+              :if={@source_name}
+              class="flex items-start gap-2 text-xs text-stone-500 leading-relaxed mt-2"
+            >
+              <.icon name="hero-check-circle" class="w-4 h-4 text-emerald-500 shrink-0" />
+              Die Kopie ist als Entwurf angelegt. Gib ihr einen Namen, an dem du sie wiedererkennst.
+            </p>
+          </div>
+
+          <div class="px-6 py-4 bg-stone-50 border-t border-stone-100 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              id="rename-exam-cancel"
+              phx-click="close_rename"
+              class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-100"
+            >
+              {if @source_name, do: "Name behalten", else: "Abbrechen"}
+            </button>
+            <button
+              type="submit"
+              id="rename-exam-save"
+              phx-disable-with="Speichert…"
+              class="inline-flex items-center gap-2 bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+            >
+              <.icon name="hero-check" class="w-4 h-4" /> Speichern
+            </button>
+          </div>
+        </.form>
+      </div>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".SelectOnMount">
+        export default {
+          // After the patch, since it re-renders the button that opened the
+          // dialog and LiveView's focus restore would otherwise win. The dialog
+          // fades in from `visibility: hidden`, which refuses focus, so a
+          // first miss tries again once the fade is through.
+          mounted() {
+            const focus = () => {
+              this.el.focus();
+              this.el.select();
+              return document.activeElement === this.el;
+            };
+
+            setTimeout(() => {
+              if (!focus()) {
+                this.el.closest("dialog").addEventListener("transitionend", focus, { once: true });
+              }
+            });
+          }
+        }
+      </script>
+    </dialog>
+    """
+  end
 
   @doc "Vor- und Nachname, wie sie in Bestätigungen und Meldungen stehen."
   def participant_name(submission),

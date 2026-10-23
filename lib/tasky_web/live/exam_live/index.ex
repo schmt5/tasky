@@ -2,6 +2,7 @@ defmodule TaskyWeb.ExamLive.Index do
   use TaskyWeb, :live_view
 
   alias Tasky.Exams
+  alias TaskyWeb.ExamComponents
 
   @impl true
   def render(assigns) do
@@ -128,7 +129,7 @@ defmodule TaskyWeb.ExamLive.Index do
                 <% end %>
               </div>
             </.link>
-            <div class="flex items-center gap-2 shrink-0 pt-0.5">
+            <div class="flex items-center gap-1 shrink-0 pt-0.5">
               <%!-- Only finished exams offer it here: archiving is the step
                     after an exam is done. The exam page archives any status. --%>
               <button
@@ -141,11 +142,26 @@ defmodule TaskyWeb.ExamLive.Index do
               >
                 <.icon name="hero-archive-box" class="w-4 h-4" /> Archivieren
               </button>
-              <.link
-                navigate={~p"/exams/#{exam}/edit"}
+              <button
+                id={"duplicate-#{exam.id}"}
+                type="button"
+                phx-click="duplicate"
+                phx-value-id={exam.id}
+                phx-disable-with="Kopiert…"
                 class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-stone-100 hover:text-stone-700"
               >
-                <.icon name="hero-pencil-square" class="w-4 h-4" /> Umbenennen
+                <.icon name="hero-document-duplicate" class="w-4 h-4" /> Duplizieren
+              </button>
+              <.link
+                id={"view-#{exam.id}"}
+                navigate={~p"/exams/#{exam}"}
+                class="group/view inline-flex items-center gap-1.5 text-sky-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-sky-200 bg-sky-50/50 transition-all duration-150 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700"
+              >
+                Ansehen
+                <.icon
+                  name="hero-arrow-right"
+                  class="w-3.5 h-3.5 transition-transform duration-150 group-hover/view:translate-x-0.5"
+                />
               </.link>
             </div>
           </li>
@@ -170,6 +186,13 @@ defmodule TaskyWeb.ExamLive.Index do
           </.link>
         </div>
       </div>
+
+      <ExamComponents.rename_exam_modal
+        :if={@renaming_exam}
+        exam={@renaming_exam}
+        form={@rename_form}
+        source_name={@rename_source_name}
+      />
     </Layouts.app>
     """
   end
@@ -189,7 +212,8 @@ defmodule TaskyWeb.ExamLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Prüfungen")
-     |> assign(:status_filter_options, @status_filter_options)}
+     |> assign(:status_filter_options, @status_filter_options)
+     |> close_rename()}
   end
 
   # The filter lives in the URL, so it survives a reload and the way back from
@@ -219,6 +243,63 @@ defmodule TaskyWeb.ExamLive.Index do
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Die Prüfung konnte nicht archiviert werden.")}
     end
+  end
+
+  # The copy goes straight into the rename dialog: "Kopie von — …" is only a
+  # placeholder until the teacher gives it a name of its own.
+  def handle_event("duplicate", %{"id" => id}, socket) do
+    scope = socket.assigns.current_scope
+    source = Exams.get_exam!(scope, id)
+
+    case Exams.duplicate_exam(scope, source, "Kopie von — #{source.name}") do
+      {:ok, copy} ->
+        {:noreply,
+         socket
+         |> assign_exams()
+         |> open_rename(copy, source.name)}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Prüfung konnte nicht kopiert werden.")}
+    end
+  end
+
+  def handle_event("close_rename", _params, socket) do
+    {:noreply, close_rename(socket)}
+  end
+
+  def handle_event("validate_rename", %{"exam" => %{"name" => name}}, socket) do
+    changeset = Exams.change_exam(socket.assigns.renaming_exam, %{"name" => name})
+    {:noreply, assign(socket, :rename_form, to_form(changeset, action: :validate, as: :exam))}
+  end
+
+  def handle_event("save_rename", %{"exam" => %{"name" => name}}, socket) do
+    scope = socket.assigns.current_scope
+
+    case Exams.update_exam(scope, socket.assigns.renaming_exam, %{"name" => name}) do
+      {:ok, exam} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "„#{exam.name}“ gespeichert.")
+         |> close_rename()
+         |> assign_exams()}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :rename_form, to_form(changeset, as: :exam))}
+    end
+  end
+
+  defp open_rename(socket, exam, source_name) do
+    socket
+    |> assign(:renaming_exam, exam)
+    |> assign(:rename_source_name, source_name)
+    |> assign(:rename_form, to_form(Exams.change_exam(exam), as: :exam))
+  end
+
+  defp close_rename(socket) do
+    socket
+    |> assign(:renaming_exam, nil)
+    |> assign(:rename_source_name, nil)
+    |> assign(:rename_form, nil)
   end
 
   defp assign_exams(socket) do

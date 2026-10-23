@@ -67,4 +67,42 @@ defmodule TaskyWeb.ExamShowLiveTest do
       refute has_element?(view, "#archive-exam[data-confirm]")
     end
   end
+
+  describe "renaming and duplicating" do
+    setup %{conn: conn} do
+      teacher = user_fixture(%{role: "teacher"})
+      %{conn: log_in_user(conn, teacher), scope: user_scope_fixture(teacher)}
+    end
+
+    test "renames the exam in a dialog", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, attrs: %{name: "Alt"})
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+      view |> element("#rename-exam") |> render_click()
+
+      view
+      |> form("#rename-exam-form-#{exam.id}", exam: %{name: "Neu"})
+      |> render_submit()
+
+      refute has_element?(view, "#rename-exam-modal")
+      assert Tasky.Exams.get_exam!(scope, exam.id).name == "Neu"
+    end
+
+    test "names the copy, then opens it", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope, attrs: %{name: "Original"})
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+      view |> element("#duplicate-exam") |> render_click()
+
+      copy = Enum.find(Tasky.Exams.list_exams(scope), &(&1.id != exam.id))
+
+      {:ok, _copy_view, html} =
+        view
+        |> form("#rename-exam-form-#{copy.id}", exam: %{name: "Zweitversion"})
+        |> render_submit()
+        |> follow_redirect(conn, ~p"/exams/#{copy}")
+
+      assert html =~ "Zweitversion"
+    end
+  end
 end
