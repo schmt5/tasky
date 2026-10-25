@@ -17,6 +17,7 @@ import {
   AnswerBlock,
   SolutionHint,
   Callout,
+  BlockquoteGuarded,
   TaskItemWithId,
   Choice,
   ChoiceIdStamper,
@@ -53,6 +54,7 @@ export function buildEditorExtensions({
     StarterKit.configure({
       horizontalRule: false,
       heading: false,
+      blockquote: false,
       link: { defaultProtocol: "https" },
     }),
     HeadingWithPartId,
@@ -61,6 +63,7 @@ export function buildEditorExtensions({
     AnswerBlock,
     SolutionHint,
     Callout,
+    BlockquoteGuarded,
     TaskList,
     TaskItemWithId.configure({ nested: true }),
     // Choosing a radio is answering: only where answers are given (learner,

@@ -2,7 +2,8 @@
 // nodes, stable-id plumbing, deletion guards, participant content locking and
 // the clipboard transforms. Pure editor machinery — no React in here.
 
-import { Node, Mark, Extension, type Editor } from "@tiptap/core";
+import { Node, Mark, Extension, wrappingInputRule, type Editor } from "@tiptap/core";
+import { Blockquote, inputRegex as blockquoteInputRegex } from "@tiptap/extension-blockquote";
 import { Heading } from "@tiptap/extension-heading";
 import { TaskItem } from "@tiptap/extension-list/task-item";
 import {
@@ -221,9 +222,10 @@ const normalizeCalloutColor = (value: unknown): CalloutColor =>
     ? (value as CalloutColor)
     : DEFAULT_CALLOUT_COLOR;
 
-// A question heading must never end up inside a callout: ExamDoc splits the
-// document at TOP-LEVEL h3 only, so a wrapped question would vanish from the
-// part list — and Exams.prune_orphan_block_points then drops that part's
+// A question heading must never end up inside a callout or a blockquote:
+// ExamDoc splits the
+// document at TOP-LEVEL h3 only, so a wrapped question would vanish from
+// the part list — and Exams.prune_orphan_block_points then drops that part's
 // custom block points on the next save.
 function selectionContainsQuestionHeading(state: any): boolean {
   const { from, to } = state.selection;
@@ -232,6 +234,31 @@ function selectionContainsQuestionHeading(state: any): boolean {
     if (node.type.name === "heading" && node.attrs.level === 3) found = true;
   });
   return found;
+}
+
+// Lifts the whole content of the nearest `name` ancestor, not the selection's
+// own block range — `commands.lift()` (what Tiptap's Blockquote uses) would
+// merely outdent a list item when the cursor sits in a nested list and leave
+// the box standing.
+function liftWholeAncestor(
+  state: EditorState,
+  tr: Transaction,
+  dispatch: ((tr: Transaction) => void) | undefined,
+  name: string,
+): boolean {
+  const $from = state.selection.$from;
+  const depth = findAncestorDepth($from, name);
+  if (depth === null) return false;
+
+  const range = state.doc
+    .resolve($from.start(depth))
+    .blockRange(state.doc.resolve($from.end(depth)));
+  if (!range) return false;
+
+  const target = liftTarget(range);
+  if (target == null) return false;
+  if (dispatch) dispatch(tr.lift(range, target).scrollIntoView());
+  return true;
 }
 
 export const Callout = Node.create({
@@ -292,27 +319,62 @@ export const Callout = Node.create({
           return commands.wrapIn(this.name, { color: next });
         },
 
-      // Lifts the callout's whole content, not the selection's own block range
-      // — `commands.lift()` (what Blockquote uses) would merely outdent a list
-      // item when the cursor sits in a nested list and leave the box standing.
       unsetCallout:
         () =>
-        ({ state, tr, dispatch }: any) => {
-          const $from = state.selection.$from;
-          const depth = findAncestorDepth($from, this.name);
-          if (depth === null) return false;
-
-          const range = state.doc
-            .resolve($from.start(depth))
-            .blockRange(state.doc.resolve($from.end(depth)));
-          if (!range) return false;
-
-          const target = liftTarget(range);
-          if (target == null) return false;
-          if (dispatch) dispatch(tr.lift(range, target).scrollIntoView());
-          return true;
-        },
+        ({ state, tr, dispatch }: any) =>
+          liftWholeAncestor(state, tr, dispatch, this.name),
     } as any;
+  },
+});
+
+// --- Blockquote ("Zitat") --------------------------------------------------
+
+// Tiptap's Blockquote with the question-heading guard of the callout on every
+// way in — button, Mod-Shift-b and the "> " input rule — and the callout's
+// whole-box unwrap. Same node name, so stored documents read unchanged.
+export const BlockquoteGuarded = Blockquote.extend({
+  addCommands() {
+    const wrap =
+      () =>
+      ({ state, commands }: any) =>
+        !selectionContainsQuestionHeading(state) && commands.wrapIn(this.name);
+    const unwrap =
+      () =>
+      ({ state, tr, dispatch }: any) =>
+        liftWholeAncestor(state, tr, dispatch, this.name);
+
+    return {
+      setBlockquote: wrap,
+      unsetBlockquote: unwrap,
+      toggleBlockquote:
+        () =>
+        (props: any) =>
+          findAncestorDepth(props.state.selection.$from, this.name) === null
+            ? wrap()(props)
+            : unwrap()(props),
+    } as any;
+  },
+
+  // Always claims the key: a vetoed toggle would otherwise fall through to
+  // Bold's `Mod-B` (Shift makes the key a capital B).
+  addKeyboardShortcuts() {
+    return {
+      "Mod-Shift-b": () => {
+        this.editor.commands.toggleBlockquote();
+        return true;
+      },
+    };
+  },
+
+  addInputRules() {
+    const rule = wrappingInputRule({ find: blockquoteInputRegex, type: this.type });
+    const wrapTextblock = rule.handler;
+    rule.handler = (props) => {
+      const parent = props.state.doc.resolve(props.range.from).parent;
+      if (parent.type.name === "heading" && parent.attrs.level === 3) return null;
+      return wrapTextblock(props);
+    };
+    return [rule];
   },
 });
 

@@ -8,7 +8,7 @@ export interface EditorModePreset {
   hideAnswers?: boolean;
   /** Load PreventNodeDeletion: existing answer fields cannot be removed. */
   protectAnswers?: boolean;
-  /** Hide the "Hinweisbox" toolbar group. */
+  /** Hide the "Blöcke" toolbar group (Hinweisbox and Zitat). */
   hideCallout?: boolean;
   lockContent?: boolean;
   correctionMode?: boolean;
@@ -44,7 +44,8 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
    * which is the teacher's authoring control. On a locked document it either
    * does nothing or turns the learner's own answer into a heading — it has no
    * business being in the exam toolbar. `hideCallout` is there for the same
-   * reason: on a locked skeleton the callout command is simply vetoed.
+   * reason: on a locked skeleton the callout and blockquote commands are
+   * simply vetoed.
    */
   student: {
     hideAnswers: true,

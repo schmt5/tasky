@@ -23,6 +23,24 @@ export function TextColorIcon({ className }: IconProps) {
   );
 }
 
+export function BlockquoteIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 5v14" />
+      <path d="M9 8h11M9 12h11M9 16h7" />
+    </svg>
+  );
+}
+
 export function FreitextIcon({ className }: IconProps) {
   return (
     <svg

@@ -39,3 +39,20 @@ test("an empty document is not an error", () => {
   assert.equal(findUnreadableContent(readonly, {}), null);
   assert.equal(findUnreadableContent(readonly, { type: "doc", content: [] }), null);
 });
+
+// The blockquote now comes from our own extension instead of StarterKit:
+// documents stored before the switch must still read.
+test("a stored blockquote stays readable", () => {
+  const quoted = {
+    type: "doc",
+    content: [
+      {
+        type: "blockquote",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Zitat" }] }],
+      },
+    ],
+  };
+
+  assert.equal(findUnreadableContent(readonly, quoted), null);
+  assert.equal(findUnreadableContent(buildEditorExtensions({ lockContent: true }), quoted), null);
+});

@@ -44,6 +44,7 @@ import {
   type CalloutColor,
 } from "./constants";
 import {
+  BlockquoteIcon,
   TextColorIcon,
   FreitextAbcIcon,
   LueckentextIcon,
@@ -122,6 +123,8 @@ export function Toolbar({
       // False when the selection covers a question heading — wrapping one
       // would hide it from the server-side part splitting.
       canCallout: editor.can().setCallout(DEFAULT_CALLOUT_COLOR),
+      blockquote: editor.isActive("blockquote"),
+      canBlockquote: editor.can().toggleBlockquote(),
       canUndo: editor.can().undo(),
       canRedo: editor.can().redo(),
     }),
@@ -349,7 +352,17 @@ export function Toolbar({
           active.orderedList,
         ),
       ])}
-      {!hideCallout && group("Hinweisbox", [calloutMenu])}
+      {!hideCallout &&
+        group("Blöcke", [
+          calloutMenu,
+          btn(
+            "Zitat",
+            <BlockquoteIcon className={iconCls} />,
+            () => editor.chain().focus().toggleBlockquote().run(),
+            active.blockquote,
+            !active.canBlockquote,
+          ),
+        ])}
       {!hideQuestion &&
         group("Frage", [
           btn(
