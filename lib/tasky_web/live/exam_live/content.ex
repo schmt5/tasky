@@ -44,7 +44,12 @@ defmodule TaskyWeb.ExamLive.Content do
             ]} />
           </div>
 
-          <div class="inline-flex items-center gap-0.5 bg-sky-100/70 rounded-lg p-0.5">
+          <%!-- TabAnchor keeps the teacher's place between Inhalt and Musterlösung --%>
+          <div
+            id="content-tabs"
+            phx-hook="TabAnchor"
+            class="inline-flex items-center gap-0.5 bg-sky-100/70 rounded-lg p-0.5"
+          >
             <.tab_link
               label="Inhalt"
               active={@tab == "inhalt"}
