@@ -400,6 +400,61 @@ defmodule TaskyWeb.GuestExamLiveTest do
       assert html_response(conn, 403) =~ "Safe Exam Browser erforderlich"
     end
 
+    test "enforce: an exempted participant works in a plain browser", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      exam = set_mode(exam, "enforce")
+      {:ok, _} = Exams.set_seb_exempt(:system, exam, submission, true)
+
+      {:ok, view, _html} = open_exam(conn, submission)
+      refute has_element?(view, "#open-in-seb-btn")
+    end
+
+    test "granting the exemption lifts the gate at once", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      exam = set_mode(exam, "observe")
+      {:ok, view, _html} = open_exam(conn, submission)
+      assert has_element?(view, "#open-in-seb-btn")
+
+      {:ok, _} = Exams.set_seb_exempt(:system, exam, submission, true)
+
+      refute has_element?(view, "#open-in-seb-btn")
+    end
+
+    test "withdrawing the exemption brings the gate back", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      exam = set_mode(exam, "enforce")
+      {:ok, submission} = Exams.set_seb_exempt(:system, exam, submission, true)
+      {:ok, view, _html} = open_exam(conn, submission)
+      refute has_element?(view, "#open-in-seb-btn")
+
+      {:ok, _} = Exams.set_seb_exempt(:system, exam, submission, false)
+
+      assert has_element?(view, "#open-in-seb-btn")
+    end
+
+    test "someone else's exemption leaves the gate in place", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      exam = set_mode(exam, "observe")
+      other = exam_submission_fixture(exam, %{"email" => "other@example.com"})
+      {:ok, view, _html} = open_exam(conn, submission)
+
+      {:ok, _} = Exams.set_seb_exempt(:system, exam, other, true)
+
+      assert has_element?(view, "#open-in-seb-btn")
+    end
+
     test "a valid hash still stamps the session for the websocket", %{
       conn: conn,
       exam: exam,

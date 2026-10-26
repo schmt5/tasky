@@ -46,7 +46,7 @@ defmodule TaskyWeb.Plugs.SebGuard do
   def call(conn, %{on_reject: on_reject}) do
     with {:ok, submission} <- fetch_submission(conn),
          exam = submission.exam,
-         mode when mode != :off <- SebGuard.mode(exam) do
+         mode when mode != :off <- SebGuard.mode(exam, submission) do
       case SebGuard.check(exam, submission, conn.req_headers, canonical_request_url(conn)) do
         {:ok, :verified} ->
           conn
@@ -65,8 +65,8 @@ defmodule TaskyWeb.Plugs.SebGuard do
           reject(conn, on_reject, reason, submission)
       end
     else
-      # No token in the path, an unknown token, or SEB not in play: nothing to
-      # guard. An unknown token is the LiveView's and the controllers' own
+      # No token in the path, an unknown token, or SEB not in play (for this
+      # exam, or for this participant): nothing to guard. An unknown token is the LiveView's and the controllers' own
       # 404 to give, not ours.
       _ -> conn
     end

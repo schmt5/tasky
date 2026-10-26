@@ -23,6 +23,9 @@ defmodule Tasky.Exams.ExamSubmission do
     # refreshed; anything else is the teacher's and must survive a re-run.
     field :auto_block_verdicts, :map, default: %{}
     field :mark, :float
+    # Released by the teacher from the exam's SEB requirement. Never cast from
+    # participant input — see seb_exemption_changeset/2.
+    field :seb_exempt, :boolean, default: false
 
     belongs_to :exam, Tasky.Exams.Exam
     # Set for assigned participants, nil for anonymous ones. Also nil again
@@ -55,6 +58,19 @@ defmodule Tasky.Exams.ExamSubmission do
         []
       end
     end)
+  end
+
+  @doc """
+  Changeset for the teacher's SEB exemption. Kept apart from the participant
+  changesets: a `seb_exempt` in the enrolment payload would let anyone opt
+  themselves out of the Safe Exam Browser.
+  """
+  def seb_exemption_changeset(exam_submission, exempt?) when is_boolean(exempt?) do
+    # Forced: `change/2` drops a value equal to the struct's, so a caller
+    # holding a stale copy would have its withdrawal silently skipped.
+    exam_submission
+    |> change()
+    |> force_change(:seb_exempt, exempt?)
   end
 
   @doc false

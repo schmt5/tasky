@@ -49,7 +49,7 @@ defmodule TaskyWeb.SebGuardHook do
          submission when not is_nil(submission) <-
            Exams.get_exam_submission_by_token(token),
          exam = submission.exam,
-         mode when mode != :off <- SebGuard.mode(exam) do
+         mode when mode != :off <- SebGuard.mode(exam, submission) do
       case resolve(exam, submission, session, socket, token) do
         # The Config Key could not be derived at all. That is our bug, not this
         # participant's, so it must never be the reason a graded exam ends —
@@ -66,7 +66,7 @@ defmodule TaskyWeb.SebGuardHook do
       end
     else
       # Not an exam mount, an unknown token (the LiveView gives its own "Link
-      # ungültig"), or SEB not in play.
+      # ungültig"), or SEB not in play for this exam or this participant.
       _ -> {:cont, assign(socket, :seb_state, :unverified)}
     end
   end

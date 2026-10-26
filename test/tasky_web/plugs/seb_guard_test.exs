@@ -160,6 +160,55 @@ defmodule TaskyWeb.Plugs.SebGuardTest do
     end
   end
 
+  describe "a participant the teacher released from SEB" do
+    defp exempt(exam, submission) do
+      {:ok, submission} = Exams.set_seb_exempt(:system, exam, submission, true)
+      submission
+    end
+
+    test "reaches the exam in a plain browser under enforce", %{conn: conn} do
+      {exam, submission} = seb_exam("enforce")
+      exempt(exam, submission)
+
+      assert conn |> get(~p"/guest/exam/#{submission.exam_token}") |> Map.get(:status) == 200
+    end
+
+    test "can autosave in a plain browser under enforce", %{conn: conn} do
+      {exam, submission} = seb_exam("enforce")
+      exempt(exam, submission)
+
+      conn =
+        conn
+        |> put_req_header("content-type", "application/json")
+        |> put(~p"/api/guest/exam/#{submission.exam_token}/content", %{
+          "content" => %{"type" => "doc", "content" => []}
+        })
+
+      assert conn.status == 200
+    end
+
+    test "is refused again once the exemption is withdrawn", %{conn: conn} do
+      {exam, submission} = seb_exam("enforce")
+      submission = exempt(exam, submission)
+      {:ok, _} = Exams.set_seb_exempt(:system, exam, submission, false)
+
+      assert conn |> get(~p"/guest/exam/#{submission.exam_token}") |> Map.get(:status) == 403
+    end
+
+    test "does not open the exam for anyone else", %{conn: conn} do
+      {exam, submission} = seb_exam("enforce")
+      exempt(exam, submission)
+
+      {:ok, other} =
+        Exams.create_exam_submission(
+          exam,
+          Map.put(valid_enrollment_attrs(), "email", "other@example.com")
+        )
+
+      assert conn |> get(~p"/guest/exam/#{other.exam_token}") |> Map.get(:status) == 403
+    end
+  end
+
   describe "the way into SEB stays open" do
     test "the config download is reachable without a header", %{conn: conn} do
       {_exam, submission} = seb_exam("enforce")

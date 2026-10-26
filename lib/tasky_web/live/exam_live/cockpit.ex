@@ -234,11 +234,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                     {seb_verified_count(@present)} verifiziert
                   </span>
                   <span
-                    :if={seb_unverified_count(@present) > 0}
+                    :if={seb_unverified_count(@present, @seb_exempt_tokens) > 0}
                     class="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 text-sm font-semibold px-3 py-1.5 rounded-full"
                   >
                     <.icon name="hero-exclamation-triangle-mini" class="w-4 h-4" />
-                    {seb_unverified_count(@present)} ohne SEB-Schlüssel
+                    {seb_unverified_count(@present, @seb_exempt_tokens)} ohne SEB-Schlüssel
                   </span>
                 <% end %>
                 <span class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-sm font-semibold px-3 py-1.5 rounded-full">
@@ -317,9 +317,18 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                   ]} />
                 </div>
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-semibold text-stone-800 truncate">
-                    {submission.firstname} {submission.lastname}
-                  </p>
+                  <div class="flex items-center gap-2 min-w-0">
+                    <p class="text-sm font-semibold text-stone-800 truncate">
+                      {submission.firstname} {submission.lastname}
+                    </p>
+                    <span
+                      :if={@exam.seb_enabled and submission.seb_exempt}
+                      id={"seb-exempt-badge-#{submission.id}"}
+                      class="shrink-0 inline-flex items-center gap-1 bg-sky-50 text-sky-700 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    >
+                      <.icon name="hero-shield-exclamation-mini" class="w-3 h-3" /> ohne SEB
+                    </span>
+                  </div>
                   <p class="text-xs mt-0.5">
                     <span class={["font-medium", label_class]}>{label}</span>
                     <span :if={not @assigned_mode?} class="text-stone-300 mx-1">·</span>
@@ -367,6 +376,23 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                       >
                         <.icon name="hero-link" class="copy-icon w-4 h-4 text-stone-400" />
                         <span class="copy-label">Teilnahmelink kopieren</span>
+                      </button>
+                    </li>
+                    <li :if={@exam.seb_enabled}>
+                      <button
+                        id={"toggle-seb-exempt-#{submission.id}"}
+                        type="button"
+                        phx-click="toggle_seb_exempt"
+                        phx-value-submission_id={submission.id}
+                        class="flex items-center gap-2 text-sm text-stone-700"
+                      >
+                        <%= if submission.seb_exempt do %>
+                          <.icon name="hero-shield-check" class="w-4 h-4 text-stone-400" />
+                          <span>SEB wieder verlangen</span>
+                        <% else %>
+                          <.icon name="hero-shield-exclamation" class="w-4 h-4 text-stone-400" />
+                          <span>Ohne SEB zulassen</span>
+                        <% end %>
                       </button>
                     </li>
                     <li>
@@ -920,6 +946,11 @@ defmodule TaskyWeb.ExamLive.Cockpit do
           {"bg-stone-300", "text-stone-400", "Abwesend"}
         end
 
+      # Released from SEB by the teacher: the browser no longer matters, so
+      # neither state below is a reason for attention.
+      _present when submission.seb_exempt ->
+        {"bg-emerald-400", "text-emerald-500", present_label(exam.status, submission)}
+
       %{seb_state: :unverified, in_seb: false} when exam.seb_enabled ->
         {"bg-yellow-400", "text-yellow-600", "SEB noch nicht gestartet"}
 
@@ -944,8 +975,13 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   defp seb_verified_count(present),
     do: present |> Map.values() |> Enum.count(&(&1.seb_state != :unverified))
 
-  defp seb_unverified_count(present),
-    do: present |> Map.values() |> Enum.count(&(&1.seb_state == :unverified))
+  # Exempted participants are left out: a deliberate decision of the teacher's
+  # is not something to keep warning about.
+  defp seb_unverified_count(present, exempt_tokens) do
+    Enum.count(present, fn {token, meta} ->
+      meta.seb_state == :unverified and not MapSet.member?(exempt_tokens, token)
+    end)
+  end
 
   defp never_started?(%{submitted: false, content: content}) when is_map(content),
     do: map_size(content) == 0
@@ -978,6 +1014,10 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     socket
     |> assign(:submissions_count, length(submissions))
     |> assign(:submitted_count, Enum.count(submissions, & &1.submitted))
+    |> assign(
+      :seb_exempt_tokens,
+      for(s <- submissions, s.seb_exempt, into: MapSet.new(), do: s.exam_token)
+    )
     |> stream(:submissions, visible, reset: true)
   end
 
@@ -1021,6 +1061,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   # Re-streamed rather than inserted: under "In Bearbeitung" the row has to
   # leave the list, and the counters move with it.
   def handle_info({:submission_submitted, _submission}, socket) do
+    {:noreply, refresh_submissions(socket)}
+  end
+
+  # Also delivered to the tab that made the change; the re-stream is cheap and
+  # keeps a second cockpit tab in step.
+  def handle_info({:seb_exemption_changed, _submission}, socket) do
     {:noreply, refresh_submissions(socket)}
   end
 
@@ -1128,6 +1174,34 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     else
       _ ->
         {:noreply, put_flash(socket, :error, "Teilnehmende:r konnte nicht entfernt werden.")}
+    end
+  end
+
+  # Reversible in one click, so no confirmation dialog.
+  def handle_event("toggle_seb_exempt", %{"submission_id" => raw}, socket) do
+    exam = socket.assigns.exam
+
+    with id when not is_nil(id) <- Params.int(raw),
+         submission when not is_nil(submission) <- Exams.get_submission(exam, id),
+         {:ok, updated} <-
+           Exams.set_seb_exempt(
+             socket.assigns.current_scope,
+             exam,
+             submission,
+             not submission.seb_exempt
+           ) do
+      message =
+        if updated.seb_exempt,
+          do: "#{participant_name(updated)} darf ohne Safe Exam Browser teilnehmen.",
+          else: "#{participant_name(updated)} muss wieder den Safe Exam Browser verwenden."
+
+      {:noreply,
+       socket
+       |> refresh_submissions()
+       |> put_flash(:info, message)}
+    else
+      _ ->
+        {:noreply, put_flash(socket, :error, "Die SEB-Pflicht konnte nicht geändert werden.")}
     end
   end
 

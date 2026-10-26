@@ -23,7 +23,9 @@ defmodule TaskyWeb.SebGuard do
   `exam.seb_bypass_until` lies in the future:
 
     * `:off` — SEB is not required for this exam at all. Not a setting of its
-      own: it is what `seb_enabled: false` means.
+      own: it is what `seb_enabled: false` means — and, through `mode/2`, what
+      a submission the teacher released (`seb_exempt`) means for that one
+      participant.
     * `:observe` — check and report, never block. **The default**, because the
       Config Key derivation has to be confirmed against the SEB build actually
       installed in the exam room before it may lock anyone out.
@@ -83,6 +85,17 @@ defmodule TaskyWeb.SebGuard do
       _ -> :observe
     end
   end
+
+  @doc """
+  The effective mode for one participant: `:off` for a submission the teacher
+  released from the requirement, otherwise the exam's `mode/1`.
+
+  Every guard that has the submission at hand asks this rather than `mode/1`,
+  so the exemption cannot be honoured at one door and refused at another.
+  """
+  @spec mode(Exam.t(), ExamSubmission.t()) :: mode()
+  def mode(%Exam{}, %ExamSubmission{seb_exempt: true}), do: :off
+  def mode(%Exam{} = exam, %ExamSubmission{}), do: mode(exam)
 
   # The derivation costs ~75us and only runs for an exam that is actually set to
   # enforce and not already suspended — never on the `observe` path the dry run
@@ -160,7 +173,7 @@ defmodule TaskyWeb.SebGuard do
 
     report(exam, submission, observed, result)
 
-    case {result, mode(exam)} do
+    case {result, mode(exam, submission)} do
       {:ok, _mode} -> {:ok, :verified}
       # Our own failure, not the participant's. Never the reason a graded exam
       # ends for a whole class.
@@ -252,7 +265,7 @@ defmodule TaskyWeb.SebGuard do
   #
   # Broadcast rather than stored: exam-day diagnostics, not an audit trail.
   defp report(exam, submission, observed, {:error, :mismatch}) when is_binary(observed) do
-    if mode(exam) != :off do
+    if mode(exam, submission) != :off do
       Phoenix.PubSub.broadcast(
         Tasky.PubSub,
         topic(exam),

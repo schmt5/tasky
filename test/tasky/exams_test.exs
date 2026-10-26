@@ -734,6 +734,63 @@ defmodule Tasky.ExamsTest do
     end
   end
 
+  describe "set_seb_exempt/4" do
+    import Tasky.AccountsFixtures
+
+    test "releases a participant and puts them back" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      assert {:ok, %{seb_exempt: true}} =
+               Exams.set_seb_exempt(teacher_scope(exam), exam, submission, true)
+
+      assert Exams.get_submission(exam, submission.id).seb_exempt
+
+      assert {:ok, %{seb_exempt: false}} =
+               Exams.set_seb_exempt(teacher_scope(exam), exam, submission, false)
+
+      refute Exams.get_submission(exam, submission.id).seb_exempt
+    end
+
+    test "tells an open participant view" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      Exams.subscribe_exam(exam.id)
+
+      {:ok, _} = Exams.set_seb_exempt(teacher_scope(exam), exam, submission, true)
+
+      submission_id = submission.id
+      assert_receive {:seb_exemption_changed, %{id: ^submission_id, seb_exempt: true}}
+    end
+
+    test "only the exam's teacher may grant it" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      stranger = user_scope_fixture(user_fixture(%{role: "teacher"}))
+
+      assert {:error, :unauthorized} = Exams.set_seb_exempt(stranger, exam, submission, true)
+      refute Exams.get_submission(exam, submission.id).seb_exempt
+    end
+
+    test "refuses a submission of another exam" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+      other = exam_fixture(participation_mode: "anonymous", status: "running")
+      {:ok, submission} = Exams.create_exam_submission(other, enrollment_attrs())
+
+      assert {:error, :not_found} =
+               Exams.set_seb_exempt(teacher_scope(exam), exam, submission, true)
+    end
+
+    test "a participant cannot exempt themselves while enrolling" do
+      exam = exam_fixture(participation_mode: "anonymous", status: "running")
+
+      {:ok, submission} =
+        Exams.create_exam_submission(exam, Map.put(enrollment_attrs(), "seb_exempt", true))
+
+      refute submission.seb_exempt
+    end
+  end
+
   describe "list_assigned_exams/1 and get_submission_for_user/2" do
     import Tasky.AccountsFixtures
 

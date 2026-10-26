@@ -678,16 +678,6 @@ defmodule TaskyWeb.Guest.ExamLive do
     seb_state = socket.assigns[:seb_state] || :unverified
     verified? = seb_state != :unverified
 
-    seb_ok =
-      case SebGuard.mode(exam) do
-        :enforce -> verified?
-        :observe -> verified? or in_seb
-        # `:off` now means only one thing: this exam does not require SEB. The
-        # render `cond` already checks `seb_enabled`, so this is unreachable —
-        # but "nothing to gate" is the honest answer, not "sniff the browser".
-        :off -> true
-      end
-
     seb_reason = if verified? or not in_seb, do: :no_header, else: :mismatch
 
     if connected?(socket) do
@@ -733,7 +723,8 @@ defmodule TaskyWeb.Guest.ExamLive do
       |> assign(:show_submit_modal, false)
       |> assign(:submit_check, :checking)
       |> assign(:in_seb, in_seb)
-      |> assign(:seb_ok, seb_ok)
+      |> assign(:seb_state, seb_state)
+      |> assign_seb_ok()
       |> assign(:seb_reason, seb_reason)
       |> assign(:attachments, attachments)
       |> assign(:upload_fields, upload_fields)
@@ -755,6 +746,26 @@ defmodule TaskyWeb.Guest.ExamLive do
       end)
 
     {:ok, socket}
+  end
+
+  # The gate, recomputed whenever the teacher grants or withdraws this
+  # participant's SEB exemption — so it must only read assigns.
+  defp assign_seb_ok(socket) do
+    %{exam: exam, submission: submission, seb_state: seb_state, in_seb: in_seb} =
+      socket.assigns
+
+    verified? = seb_state != :unverified
+
+    seb_ok =
+      case SebGuard.mode(exam, submission) do
+        :enforce -> verified?
+        :observe -> verified? or in_seb
+        # This exam does not require SEB, or not from this participant: nothing
+        # to gate. "Sniff the browser" would be the wrong answer here.
+        :off -> true
+      end
+
+    assign(socket, :seb_ok, seb_ok)
   end
 
   defp submission_files_by_field(submission) do
@@ -916,6 +927,22 @@ defmodule TaskyWeb.Guest.ExamLive do
        socket
        |> assign(:removed, true)
        |> assign(:show_submit_modal, false)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # The teacher released this participant from the SEB requirement, or put
+  # them back under it. Only the flag is taken over: the broadcast copy's
+  # content is whatever the database held at that moment, not this editor's.
+  def handle_info({:seb_exemption_changed, updated}, socket) do
+    %{submission: submission} = socket.assigns
+
+    if submission.id == updated.id do
+      {:noreply,
+       socket
+       |> assign(:submission, %{submission | seb_exempt: updated.seb_exempt})
+       |> assign_seb_ok()}
     else
       {:noreply, socket}
     end

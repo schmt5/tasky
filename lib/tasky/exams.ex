@@ -855,6 +855,34 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Releases one participant from the exam's Safe Exam Browser requirement, or
+  puts them back under it.
+
+  Allowed at any point of the session, because the case it exists for — an SEB
+  that will not start on one laptop — shows up on exam day. Takes effect at
+  once: `TaskyWeb.Plugs.SebGuard` reads the submission fresh on every request,
+  and the broadcast `{:seb_exemption_changed, submission}` on the exam topic
+  lifts (or brings back) the gate in an open participant view.
+  """
+  def set_seb_exempt(scope, %Exam{} = exam, %ExamSubmission{} = submission, exempt?)
+      when is_boolean(exempt?) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_removable(exam, submission),
+         {:ok, updated} <-
+           submission
+           |> ExamSubmission.seb_exemption_changeset(exempt?)
+           |> Repo.update() do
+      Phoenix.PubSub.broadcast(
+        Tasky.PubSub,
+        "exam:#{exam.id}",
+        {:seb_exemption_changed, updated}
+      )
+
+      {:ok, updated}
+    end
+  end
+
+  @doc """
   The submission a logged-in participant owns for this exam, or nil. Exam and
   teacher preloaded.
   """
