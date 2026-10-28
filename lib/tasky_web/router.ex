@@ -210,6 +210,8 @@ defmodule TaskyWeb.Router do
     get "/tasks/:id/solution-files/:file_id", TaskSolutionFileController, :download
 
     get "/exams/:id/paper.pdf", ExamPaperController, :download
+    get "/tasks/:id/worksheet.pdf", TaskPdfController, :worksheet
+    get "/tasks/:id/solution.pdf", TaskPdfController, :solution
 
     live_session :tasks,
       on_mount: [{TaskyWeb.UserAuth, :require_admin_or_teacher}] do

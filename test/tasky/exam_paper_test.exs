@@ -404,4 +404,27 @@ defmodule Tasky.ExamPaperTest do
       assert content |> ExamPaper.paper_doc(o) |> ExamPaper.extract_layout() == %{"a" => 6}
     end
   end
+
+  describe "worksheet_doc/1" do
+    test "gives every answer box the default lines and clears the ticks" do
+      content =
+        doc([
+          paragraph("Frage"),
+          answer_block("a", [paragraph("Antwort")]),
+          task_item("t", true, "Option"),
+          %{"type" => "solutionHint", "content" => [paragraph("Hinweis")]}
+        ])
+
+      assert %{"type" => "doc", "content" => [_question, block, item]} =
+               ExamPaper.worksheet_doc(content)
+
+      assert block["content"] == List.duplicate(%{"type" => "paragraph"}, 4)
+      assert item["attrs"]["checked"] == false
+      assert item["content"] == [paragraph("Option")]
+    end
+
+    test "nil becomes an empty document" do
+      assert ExamPaper.worksheet_doc(nil) == %{"type" => "doc", "content" => []}
+    end
+  end
 end

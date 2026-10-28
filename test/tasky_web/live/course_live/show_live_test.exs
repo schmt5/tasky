@@ -21,6 +21,26 @@ defmodule TaskyWeb.CourseLive.ShowTest do
   # The unit as it is actually stored, ignoring whatever the LiveView renders.
   defp reload(task), do: Tasky.Repo.get!(Tasky.Tasks.Task, task.id)
 
+  describe "Drucken" do
+    test "each unit links to its worksheet and sample solution PDF", %{
+      conn: conn,
+      course: course,
+      task: task
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/courses/#{course}")
+
+      assert has_element?(
+               lv,
+               ~s|#task-pdf-worksheet-#{task.id}[href="/tasks/#{task.id}/worksheet.pdf"]|
+             )
+
+      assert has_element?(
+               lv,
+               ~s|#task-pdf-solution-#{task.id}[href="/tasks/#{task.id}/solution.pdf"]|
+             )
+    end
+  end
+
   describe "KI-Link" do
     test "the header offers the action", %{conn: conn, course: course} do
       {:ok, lv, html} = live(conn, ~p"/courses/#{course}")

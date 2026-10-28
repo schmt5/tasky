@@ -76,6 +76,18 @@ defmodule Tasky.ExamPaper do
   end
 
   @doc """
+  The printed worksheet of a learning unit (`Tasky.TaskPdf`): `content` with
+  every answer box at #{@default_lines} writing lines and the checkboxes
+  cleared. A learning unit has no points and no teacher sizing, so this is
+  `paper_doc/2` without either.
+  """
+  def worksheet_doc(content) do
+    content
+    |> doc_or_empty()
+    |> apply_layout(%{}, %{})
+  end
+
+  @doc """
   Reads a `%{answer_id => lines}` layout out of a paper document the teacher
   has edited.
 

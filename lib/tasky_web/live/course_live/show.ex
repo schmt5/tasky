@@ -274,6 +274,32 @@ defmodule TaskyWeb.CourseLive.Show do
                     </button>
                   </li>
                   <li class="menu-title px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+                    Drucken
+                  </li>
+                  <li>
+                    <.link
+                      id={"task-pdf-worksheet-#{task.id}"}
+                      href={~p"/tasks/#{task.id}/worksheet.pdf"}
+                      target="_blank"
+                      rel="noopener"
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <.icon name="hero-printer" class="w-4 h-4 text-stone-400" /> Arbeitsblatt (PDF)
+                    </.link>
+                  </li>
+                  <li>
+                    <.link
+                      id={"task-pdf-solution-#{task.id}"}
+                      href={~p"/tasks/#{task.id}/solution.pdf"}
+                      target="_blank"
+                      rel="noopener"
+                      class="flex items-center gap-2 text-sm text-stone-700"
+                    >
+                      <.icon name="hero-academic-cap" class="w-4 h-4 text-stone-400" />
+                      Musterlösung (PDF)
+                    </.link>
+                  </li>
+                  <li class="menu-title px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
                     Status
                   </li>
                   <li :for={{status, icon} <- status_steps()}>

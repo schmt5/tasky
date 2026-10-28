@@ -20,7 +20,7 @@ defmodule Tasky.PDF do
 
   require Logger
 
-  @templates ~w(paper submission)
+  @templates ~w(paper submission task)
 
   # Typst caps its call depth (80), and the templates spend up to five calls
   # per document level. Content nested deeper than this is flattened to its
