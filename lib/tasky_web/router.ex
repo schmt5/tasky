@@ -265,6 +265,9 @@ defmodule TaskyWeb.Router do
            ExamLive.GradingConfig,
            :grading_config
 
+      # After "grading", which would otherwise be taken for a submission id.
+      live "/exams/:id/correction/:submission_id", ExamLive.CorrectionExam, :correction_exam
+
       live "/exams/:id/content", ExamLive.Content, :content
     end
   end

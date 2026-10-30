@@ -2,7 +2,13 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   use TaskyWeb, :live_view
 
   import TaskyWeb.ExamComponents,
-    only: [corrected_badge: 1, corrected_toggle: 1, shortcuts_button: 1, shortcuts_modal: 1]
+    only: [
+      corrected_badge: 1,
+      corrected_toggle: 1,
+      correction_mode_switch: 1,
+      shortcuts_button: 1,
+      shortcuts_modal: 1
+    ]
 
   import TaskyWeb.FileComponents
 
@@ -28,11 +34,18 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
                 %{label: "Prüfungen", navigate: ~p"/exams"},
                 %{label: @exam.name, navigate: ~p"/exams/#{@exam}"},
                 %{label: "Korrektur", navigate: ~p"/exams/#{@exam}/correction"},
-                %{label: "#{@submission.firstname} #{@submission.lastname} – #{@current_part.label}"}
+                %{label: "#{@submission.firstname} #{@submission.lastname}", navigate: @exam_path},
+                %{label: @current_part.label}
               ]} />
             </div>
 
             <div class="flex items-center gap-3 shrink-0">
+              <.correction_mode_switch
+                active={:part}
+                exam_path={@exam_path}
+                part_path={~p"/exams/#{@exam}/correction/#{@submission.id}/parts/#{@current_part.id}"}
+              />
+
               <div class="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-lg pl-2.5 pr-1.5 py-1">
                 <.icon name="hero-user" class="w-4 h-4 text-sky-700" />
                 <span class="text-xs font-semibold text-sky-700 uppercase tracking-wide">
@@ -767,6 +780,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        |> assign(:parts, parts)
        |> assign(:current_part, current_part)
        |> assign(:part_doc_json, part_doc_json)
+       # Back to the whole exam at this part.
+       |> assign(
+         :exam_path,
+         ~p"/exams/#{exam}/correction/#{submission.id}?#{[part: current_part.id]}"
+       )
        |> assign(:is_corrected, current_part.id in (submission.corrected_parts || []))
        |> assign(:points, Map.get(submission.points_per_part || %{}, current_part.id))
        |> assign(:max_points, max_points)
@@ -877,7 +895,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       {["Tab"], "Zur nächsten Zeile."},
       {["⇧", "Tab"], "Zur vorherigen Zeile."},
       {["Enter"], "Manuelle Punkte übernehmen."},
-      {["Esc"], "Manuelle Eingabe abbrechen."}
+      {["Esc"], "Manuelle Eingabe abbrechen."},
+      {["G"], "Zur ganzen Prüfung der Person, an dieser Stelle."}
     ]
   end
 

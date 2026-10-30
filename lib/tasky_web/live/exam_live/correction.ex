@@ -159,9 +159,12 @@ defmodule TaskyWeb.ExamLive.Correction do
               scope="col"
               class="group/participant relative px-2 py-3 min-w-[84px] max-w-[96px]"
             >
-              <div
+              <%!-- Opens the participant's whole exam. --%>
+              <.link
+                navigate={~p"/exams/#{@exam}/correction/#{submission.id}"}
+                id={"correction-participant-link-#{submission.id}"}
                 class={[
-                  "flex flex-col items-center gap-1 tooltip tooltip-bottom tooltip-delayed",
+                  "flex flex-col items-center gap-1 rounded-lg py-1 tooltip tooltip-bottom tooltip-delayed transition-colors duration-150 hover:bg-stone-100",
                   !submission.submitted && "opacity-50"
                 ]}
                 data-tip={participant_tip(submission)}
@@ -170,7 +173,7 @@ defmodule TaskyWeb.ExamLive.Correction do
                 <span class="max-w-[80px] truncate text-[11px] font-semibold text-stone-600 normal-case">
                   {submission.firstname}
                 </span>
-              </div>
+              </.link>
               <div
                 class="absolute top-1 right-1 tooltip tooltip-bottom tooltip-delayed"
                 data-tip="Aus Prüfung entfernen"

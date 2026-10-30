@@ -1035,4 +1035,98 @@ defmodule TaskyWeb.ExamComponents do
     </dialog>
     """
   end
+
+  attr :active, :atom, values: [:exam, :part], required: true
+  attr :exam_path, :string, required: true, doc: "the participant's whole exam"
+  attr :part_path, :string, required: true, doc: "grading one part of it"
+
+  @doc """
+  Switches the correction between reading a participant's whole exam and
+  grading one part of it. `G` does the same from the keyboard, except while
+  typing or with a dialog open. On the whole exam the "Teil" link is pointed
+  at the part in view when it is followed (see `CorrectionExam`).
+  """
+  def correction_mode_switch(assigns) do
+    ~H"""
+    <div
+      id="correction-mode-switch"
+      phx-hook=".CorrectionModeKey"
+      class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-stone-100 border border-stone-200"
+    >
+      <.mode_switch_item
+        id="correction-mode-exam"
+        active={@active == :exam}
+        path={@exam_path}
+        icon="hero-document-duplicate"
+        label="Ganze Prüfung"
+      />
+      <.mode_switch_item
+        id="correction-mode-part"
+        active={@active == :part}
+        path={@part_path}
+        icon="hero-pencil-square"
+        label="Teil"
+      />
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CorrectionModeKey">
+      export default {
+        mounted() {
+          this.onKey = (e) => {
+            if (e.defaultPrevented || e.repeat) return;
+            if (e.key !== "g" && e.key !== "G") return;
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const target = e.target;
+            if (
+              target.isContentEditable ||
+              target.closest?.("input, textarea, select, [contenteditable]")
+            )
+              return;
+            if (document.querySelector("dialog[open]")) return;
+
+            const link = this.el.querySelector("a[data-mode-target]");
+            if (!link) return;
+            e.preventDefault();
+            link.click();
+          };
+          window.addEventListener("keydown", this.onKey);
+        },
+        destroyed() {
+          window.removeEventListener("keydown", this.onKey);
+        },
+      };
+    </script>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :active, :boolean, required: true
+  attr :path, :string, required: true
+  attr :icon, :string, required: true
+  attr :label, :string, required: true
+
+  defp mode_switch_item(assigns) do
+    ~H"""
+    <%= if @active do %>
+      <span
+        id={@id}
+        aria-current="page"
+        class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md bg-white text-sky-700 shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+      >
+        <.icon name={@icon} class="w-4 h-4" /> {@label}
+      </span>
+    <% else %>
+      <.link
+        id={@id}
+        navigate={@path}
+        data-mode-target
+        class="group inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md text-stone-500 transition-all duration-150 hover:bg-white/70 hover:text-stone-800"
+      >
+        <.icon name={@icon} class="w-4 h-4" /> {@label}
+        <kbd class="px-1 rounded font-mono text-[10px] border border-stone-200 bg-white text-stone-500 group-hover:text-stone-700">
+          G
+        </kbd>
+      </.link>
+    <% end %>
+    """
+  end
 end

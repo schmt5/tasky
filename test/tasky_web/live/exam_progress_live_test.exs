@@ -111,9 +111,9 @@ defmodule TaskyWeb.ExamProgressLiveTest do
     anna = exam_submission_fixture(exam, %{"firstname" => "Anna", "email" => "anna@example.com"})
     {:ok, view, _html} = open_progress(conn, teacher, exam)
 
-    assert has_element?(view, "#participant-#{anna.id}[title='Anna Muster']")
+    assert has_element?(view, "#participant-link-#{anna.id}[data-tip='Anna Muster']")
     view |> element("#toggle-anonymize") |> render_click()
-    assert has_element?(view, "#participant-#{anna.id}[title='Lernende 1']")
+    assert has_element?(view, "#participant-link-#{anna.id}[data-tip='Lernende 1']")
   end
 
   test "shows an empty state without participants", %{conn: conn} do

@@ -101,9 +101,14 @@ defmodule TaskyWeb.ExamLive.Progress do
                       id={"participant-#{row.id}"}
                       scope="col"
                       class="px-2 py-4 align-bottom"
-                      title={participant_title(row, index, @anonymized)}
                     >
-                      <div class="flex flex-col items-center gap-1.5 w-[64px] mx-auto">
+                      <%!-- Opens the participant's whole exam in the correction. --%>
+                      <.link
+                        navigate={~p"/exams/#{@exam}/correction/#{row.id}"}
+                        id={"participant-link-#{row.id}"}
+                        class="tooltip tooltip-bottom tooltip-delayed flex flex-col items-center gap-1.5 w-[64px] mx-auto rounded-lg py-1 transition-colors duration-150 hover:bg-stone-100"
+                        data-tip={participant_title(row, index, @anonymized)}
+                      >
                         <div class="relative">
                           <%= if @anonymized do %>
                             <div class="w-8 h-8 rounded-full flex items-center justify-center bg-sky-100 text-sky-700 text-[11px] font-semibold">
@@ -123,7 +128,7 @@ defmodule TaskyWeb.ExamLive.Progress do
                         <span class="block w-full truncate text-center text-[11px] font-medium text-stone-600 normal-case">
                           {short_name(row, index, @anonymized)}
                         </span>
-                      </div>
+                      </.link>
                     </th>
                     <%!-- Takes up the slack, so a short class does not stretch the task column. --%>
                     <th aria-hidden="true" class="w-full"></th>
@@ -156,6 +161,7 @@ defmodule TaskyWeb.ExamLive.Progress do
                         id={"cell-#{row.id}-#{part.id}"}
                         status={Map.get(@cells, {row.id, part.id}, :not_started)}
                         title={"#{short_name(row, index, @anonymized)} · #{part.label}"}
+                        path={~p"/exams/#{@exam}/correction/#{row.id}/parts/#{part.id}"}
                       />
                     </td>
                     <td aria-hidden="true" class="w-full"></td>
@@ -210,23 +216,26 @@ defmodule TaskyWeb.ExamLive.Progress do
   attr :id, :string, required: true
   attr :status, :atom, required: true
   attr :title, :string, required: true
+  attr :path, :string, required: true, doc: "grading this part of this participant"
 
   defp progress_cell(assigns) do
     assigns = assign(assigns, :style, status_style(assigns.status))
 
     ~H"""
     <div class="flex justify-center">
-      <div
-        id={@id}
-        data-status={@status}
-        class={[
-          "w-10 h-10 rounded-[8px] flex items-center justify-center transition-colors duration-300",
-          @style.bg,
-          @status != :not_started && "shadow-sm"
-        ]}
-        title={"#{@title}: #{@style.label}"}
-      >
-        <.icon name={@style.icon} class={["w-5 h-5", @style.fg]} />
+      <div class="tooltip tooltip-delayed" data-tip={"#{@title}: #{@style.label}"}>
+        <.link
+          navigate={@path}
+          id={@id}
+          data-status={@status}
+          class={[
+            "w-10 h-10 rounded-[8px] flex items-center justify-center transition-all duration-300 hover:ring-2 hover:ring-sky-400 hover:ring-offset-1",
+            @style.bg,
+            @status != :not_started && "shadow-sm"
+          ]}
+        >
+          <.icon name={@style.icon} class={["w-5 h-5", @style.fg]} />
+        </.link>
       </div>
     </div>
     """
