@@ -200,6 +200,32 @@ defmodule TaskyWeb.ExamLive.Cockpit do
 
         <.seb_derivation_alert :if={@seb_derivation_error} message={@seb_derivation_error} />
 
+        <%!-- Progress Card --%>
+        <.link
+          :if={@exam.status in ["open", "running", "finished"]}
+          navigate={~p"/exams/#{@exam}/cockpit/progress"}
+          id="progress-card"
+          class="group block bg-white rounded-[14px] border border-stone-100 overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:border-emerald-200"
+        >
+          <div class="p-6 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-500 group-hover:bg-emerald-100 transition-colors duration-150">
+              <.icon name="hero-chart-bar" class="w-6 h-6" />
+            </div>
+            <div class="flex-1">
+              <h2 class="text-base font-semibold text-stone-800 mb-1 group-hover:text-emerald-600 transition-colors duration-150">
+                Fortschritt
+              </h2>
+              <p class="text-sm text-stone-500 leading-relaxed">
+                Stand der Aufgaben pro Lernenden – bei automatisch korrigierten Aufgaben mit richtig und falsch
+              </p>
+            </div>
+            <.icon
+              name="hero-arrow-right"
+              class="w-5 h-5 text-stone-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all duration-150"
+            />
+          </div>
+        </.link>
+
         <%!-- Submissions Card (no overflow-hidden: lets the per-row actions
               dropdown extend past the card edge without being clipped). --%>
         <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">

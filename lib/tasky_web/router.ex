@@ -248,6 +248,7 @@ defmodule TaskyWeb.Router do
       live "/exams/:id/paper", ExamLive.Paper, :paper
       live "/exams/:id/cockpit", ExamLive.Cockpit, :cockpit
       live "/exams/:id/cockpit/config", ExamLive.CockpitConfig, :config
+      live "/exams/:id/cockpit/progress", ExamLive.Progress, :progress
       live "/exams/:id/correction", ExamLive.Correction, :correction
 
       live "/exams/:id/correction/:submission_id/parts/:part_id",

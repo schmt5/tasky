@@ -604,6 +604,40 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  The participants of an exam for the progress grid, without the heavy JSON
+  columns: `id`, names, `email`, `submitted` and `updated_at`. Ordered like
+  `list_exam_submissions/1`. Authorization rides on the exam.
+  """
+  def list_progress_rows(%Exam{} = exam) do
+    ExamSubmission
+    |> where([s], s.exam_id == ^exam.id)
+    |> order_by([s], asc: s.inserted_at)
+    |> select([s], %{
+      id: s.id,
+      firstname: s.firstname,
+      lastname: s.lastname,
+      email: s.email,
+      submitted: s.submitted,
+      updated_at: s.updated_at
+    })
+    |> Repo.all()
+  end
+
+  @doc """
+  `%{submission_id => content}` for the given submissions of the exam — only
+  the answer document, for the progress grid to re-read what changed.
+  """
+  def list_submission_contents(%Exam{}, []), do: %{}
+
+  def list_submission_contents(%Exam{} = exam, ids) when is_list(ids) do
+    ExamSubmission
+    |> where([s], s.exam_id == ^exam.id and s.id in ^ids)
+    |> select([s], {s.id, s.content})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc """
   Gets a single submission of the given exam. Authorization rides on the
   exam: callers fetch it via `get_exam!/2` first. Raises if the submission
   does not exist or belongs to a different exam.
