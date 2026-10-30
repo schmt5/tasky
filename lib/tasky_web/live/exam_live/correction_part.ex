@@ -548,27 +548,29 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   # a green row could be a ticked or an untouched box.
   defp checkbox_answer(assigns) do
     ~H"""
-    <div class="flex items-center gap-3 min-w-0">
-      <%!-- A fixed radius: the theme's --radius-md (10px) turns a 20px box
-           into a circle, which reads as a single-choice radio. --%>
-      <span
-        class={[
-          "inline-flex items-center justify-center w-5 h-5 rounded-[4px] border-2 shrink-0",
-          if(@block.checked,
-            do: "bg-sky-500 border-sky-500 text-white",
-            else: "bg-white border-stone-300"
-          )
-        ]}
-        aria-label={if @block.checked, do: "angekreuzt", else: "nicht angekreuzt"}
-      >
-        <.icon :if={@block.checked} name="hero-check-mini" class="w-3.5 h-3.5" />
-      </span>
-      <span class="text-base text-stone-800 break-words min-w-0">
-        {if @block.text == "", do: "Checkbox", else: @block.text}
-      </span>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
+      <div class="flex items-center gap-3 min-w-0 flex-1 basis-40">
+        <%!-- A fixed radius: the theme's --radius-md (10px) turns a 20px box
+             into a circle, which reads as a single-choice radio. --%>
+        <span
+          class={[
+            "inline-flex items-center justify-center w-5 h-5 rounded-[4px] border-2 shrink-0",
+            if(@block.checked,
+              do: "bg-sky-500 border-sky-500 text-white",
+              else: "bg-white border-stone-300"
+            )
+          ]}
+          aria-label={if @block.checked, do: "angekreuzt", else: "nicht angekreuzt"}
+        >
+          <.icon :if={@block.checked} name="hero-check-mini" class="w-3.5 h-3.5" />
+        </span>
+        <span class="text-base text-stone-800 break-words min-w-0">
+          {if @block.text == "", do: "Checkbox", else: @block.text}
+        </span>
+      </div>
       <%= if is_boolean(@block.expected_checked) do %>
         <span class={[
-          "ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0",
+          "ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
           if(@block.checked == @block.expected_checked,
             do: "bg-green-50 text-green-700",
             else: "bg-red-50 text-red-700"
@@ -584,37 +586,44 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
   attr :block, :map, required: true
 
   # A radio group in the power view: the option the participant chose (or
-  # that they chose none) and the one the sample solution chooses.
+  # that they chose none) and the one the sample solution chooses. A match
+  # only says so — repeating the option text beside itself added nothing and
+  # squeezed the answer into a one-word column in the narrow pane. A miss
+  # names the expected option, on its own line when space runs out.
   defp choice_answer(assigns) do
+    assigns = assign(assigns, :matches?, assigns.block.text == assigns.block.expected_option)
+
     ~H"""
-    <div class="flex items-center gap-3 min-w-0">
-      <span
-        class={[
-          "inline-flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0",
-          if(@block.text != "",
-            do: "border-sky-500",
-            else: "bg-white border-stone-300"
-          )
-        ]}
-        aria-hidden="true"
-      >
-        <span :if={@block.text != ""} class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-      </span>
-      <%= if @block.text == "" do %>
-        <span class="text-sm italic text-stone-400">— keine Auswahl —</span>
-      <% else %>
-        <span class="text-base text-stone-800 break-words min-w-0">{@block.text}</span>
-      <% end %>
-      <%= if @block.expected_option do %>
-        <span class={[
-          "ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0",
-          if(@block.text == @block.expected_option,
-            do: "bg-green-50 text-green-700",
-            else: "bg-red-50 text-red-700"
-          )
-        ]}>
-          Lösung: {@block.expected_option}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
+      <div class="flex items-center gap-3 min-w-0 flex-1 basis-40">
+        <span
+          class={[
+            "inline-flex items-center justify-center w-5 h-5 rounded-full border-2 shrink-0",
+            if(@block.text != "",
+              do: "border-sky-500",
+              else: "bg-white border-stone-300"
+            )
+          ]}
+          aria-hidden="true"
+        >
+          <span :if={@block.text != ""} class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
         </span>
+        <%= if @block.text == "" do %>
+          <span class="text-sm italic text-stone-400">— keine Auswahl —</span>
+        <% else %>
+          <span class="text-base text-stone-800 break-words min-w-0">{@block.text}</span>
+        <% end %>
+      </div>
+      <%= if @block.expected_option do %>
+        <%= if @matches? do %>
+          <span class="ml-auto inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-green-50 text-green-700">
+            <.icon name="hero-check-mini" class="w-3.5 h-3.5" /> Entspricht der Lösung
+          </span>
+        <% else %>
+          <span class="ml-auto max-w-full text-[11px] font-semibold px-2 py-0.5 rounded-lg break-words bg-red-50 text-red-700">
+            Lösung: {@block.expected_option}
+          </span>
+        <% end %>
       <% end %>
     </div>
     """
