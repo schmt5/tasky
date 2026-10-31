@@ -32,6 +32,7 @@ defmodule TaskyWeb.SebGuard do
     * `:enforce` — no valid hash, no exam. Degrades to `:observe` while the
       teacher's kill switch runs, and while the Config Key cannot be derived at
       all (`derivation_error/1`) — a bug of ours must not end a graded exam.
+      Currently switched off app-wide, see `enforcement_available?/0`.
 
   ## Why the logic lives here and not in `call/2`
 
@@ -54,6 +55,18 @@ defmodule TaskyWeb.SebGuard do
   @type outcome :: {:ok, :verified} | {:ok, :unverified} | {:error, :no_header | :mismatch}
 
   @header "x-safeexambrowser-configkeyhash"
+
+  @doc """
+  Whether `"enforce"` may block anyone at all.
+
+  Off for now: every exam runs as `:observe`, whatever its row says, and the
+  config page does not offer the choice. The enforce path stays in place —
+  and under test — so it can be switched on once the Config Key derivation
+  has been confirmed against the SEB builds in the exam rooms.
+  """
+  @spec enforcement_available?() :: boolean()
+  def enforcement_available?,
+    do: Application.get_env(:tasky, :seb_enforcement_available?, false) == true
 
   @doc "The request header SEB sends the Config Key hash in."
   @spec header_name() :: String.t()
@@ -100,7 +113,8 @@ defmodule TaskyWeb.SebGuard do
   # The derivation costs ~75us and only runs for an exam that is actually set to
   # enforce and not already suspended — never on the `observe` path the dry run
   # uses.
-  defp enforceable?(exam), do: not bypassed?(exam) and is_nil(derivation_error(exam))
+  defp enforceable?(exam),
+    do: enforcement_available?() and not bypassed?(exam) and is_nil(derivation_error(exam))
 
   @doc "True while the teacher's kill switch is still running."
   @spec bypassed?(Exam.t()) :: boolean()

@@ -21,6 +21,10 @@ config :tasky, TaskyWeb.Endpoint,
   secret_key_base: "VY2MVwvyNDVI/oSYQ/lf68ugE9ISk3u6yyeDdhrsM7M1krx0CC2RTcVI3g/E9j0x",
   server: false
 
+# SEB enforcement is switched off in the app for now, but its logic stays
+# covered so it can be switched back on — see TaskyWeb.SebGuard.
+config :tasky, seb_enforcement_available?: true
+
 # In test we don't send emails
 config :tasky, Tasky.Mailer, adapter: Swoosh.Adapters.Test
 

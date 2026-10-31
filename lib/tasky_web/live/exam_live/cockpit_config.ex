@@ -142,8 +142,12 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
                         on at all: it reports without ever blocking, so the
                         Config Key derivation can be confirmed against the SEB
                         build in the room before it is allowed to lock anyone
-                        out. --%>
-                  <div class="rounded-xl border border-stone-200 p-4 space-y-3">
+                        out. Hidden while enforcement is switched off
+                        app-wide: every exam runs as "observe" then. --%>
+                  <div
+                    :if={SebGuard.enforcement_available?()}
+                    class="rounded-xl border border-stone-200 p-4 space-y-3"
+                  >
                     <div>
                       <h3 class="text-sm font-semibold text-stone-700">Serverseitige Prüfung</h3>
                       <p class="text-xs text-stone-500 leading-relaxed mt-0.5">
@@ -449,14 +453,12 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
     {:noreply, update(socket, :show_admin_password?, &(not &1))}
   end
 
+  # Refused while enforcement is switched off, or a forged event would store an
+  # "enforce" that silently takes effect the day it is switched back on.
   def handle_event("set_enforcement", %{"mode" => mode}, socket) do
-    case Exams.set_seb_enforcement(socket.assigns.current_scope, socket.assigns.exam, mode) do
-      {:ok, exam} ->
-        {:noreply, socket |> assign(:exam, exam) |> assign_bypass()}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Modus konnte nicht gespeichert werden.")}
-    end
+    if SebGuard.enforcement_available?(),
+      do: set_enforcement(socket, mode),
+      else: {:noreply, socket}
   end
 
   def handle_event("bypass_seb", _params, socket) do
@@ -485,6 +487,16 @@ defmodule TaskyWeb.ExamLive.CockpitConfig do
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Schlüssel konnte nicht akzeptiert werden.")}
+    end
+  end
+
+  defp set_enforcement(socket, mode) do
+    case Exams.set_seb_enforcement(socket.assigns.current_scope, socket.assigns.exam, mode) do
+      {:ok, exam} ->
+        {:noreply, socket |> assign(:exam, exam) |> assign_bypass()}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Modus konnte nicht gespeichert werden.")}
     end
   end
 
