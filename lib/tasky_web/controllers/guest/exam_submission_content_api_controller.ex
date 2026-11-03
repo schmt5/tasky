@@ -29,9 +29,10 @@ defmodule TaskyWeb.Guest.ExamSubmissionContentApiController do
 
   # `TaskyWeb.Plugs.SebGuard` has already loaded this submission when the exam
   # runs with SEB; reuse it rather than hitting the database twice on what is
-  # the hottest write path in the app.
+  # the hottest write path in the app. Otherwise only its ids are loaded — the
+  # write re-reads both rows under lock anyway.
   defp load_submission(conn, token) do
-    conn.assigns[:seb_submission] || Exams.get_exam_submission_by_token!(token)
+    conn.assigns[:seb_submission] || Exams.get_submission_for_write_by_token!(token)
   end
 
   defp render_result(conn, result) do

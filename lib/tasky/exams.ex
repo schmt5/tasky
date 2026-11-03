@@ -1033,6 +1033,25 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Resolves an exam token for one of the learner write functions
+  (`save_exam_submission_answers/2`, `update_exam_submission_content/2`).
+
+  Those lock and re-read the exam and the submission inside their own
+  transaction, so this loads only `id` and `exam_id` — every other field of
+  the returned struct is a default and must not be read. It sits on the
+  autosave path, which every learner hits every few seconds; loading the
+  submission's document and the exam with it there doubled each request's
+  reads. Raises `Ecto.NoResultsError` for an unknown token.
+  """
+  def get_submission_for_write_by_token!(token) when is_binary(token) do
+    Repo.one!(
+      from s in ExamSubmission,
+        where: s.exam_token == ^token,
+        select: struct(s, [:id, :exam_id])
+    )
+  end
+
+  @doc """
   Gets an exam submission by its exam_token, or `nil` if the token is unknown.
   Lets the exam page render a friendly "invalid/expired link" state (e.g. a
   stale resume link to a deleted submission) instead of raising a 404.
