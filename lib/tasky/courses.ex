@@ -67,27 +67,20 @@ defmodule Tasky.Courses do
   end
 
   @doc """
-  Gets a course by id for a student if they are enrolled.
+  Gets a course by id for a student if they are enrolled; raises otherwise.
+
+  Deliberately without preloads: `tasks: [:submissions]` used to load every
+  classmate's answers into the learner's process. The learner's own
+  submissions come from `Tasky.Tasks.list_course_submissions/2`.
   """
   def get_course_for_student!(student_id, course_id) do
-    course =
-      Repo.one(
-        from c in Course,
-          join: e in CourseEnrollment,
-          on: c.id == e.course_id,
-          where: c.id == ^course_id and e.student_id == ^student_id,
-          preload: [:teacher, tasks: [:submissions]]
-      )
-
-    case course do
-      nil -> raise Ecto.NoResultsError, queryable: Course
-      course -> course
-    end
+    get_enrolled_course(student_id, course_id) ||
+      raise Ecto.NoResultsError, queryable: Course
   end
 
   @doc """
-  Wie `get_course_for_student!/2`, aber ohne Preloads und ohne `raise` — `nil`,
-  wenn der Kurs nicht existiert oder die Person nicht eingeschrieben ist.
+  Wie `get_course_for_student!/2`, aber ohne `raise` — `nil`, wenn der Kurs
+  nicht existiert oder die Person nicht eingeschrieben ist.
 
   Für Aufrufer, die den Kurs selbst brauchen (nicht nur das Ja/Nein von
   `enrolled?/2`) und den Fehlerfall als Wert behandeln wollen.
