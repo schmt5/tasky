@@ -144,13 +144,19 @@ defmodule Tasky.Tasks do
 
   """
   def create_task(%Scope{} = scope, attrs) do
-    with {:ok, task = %Task{}} <-
-           %Task{}
-           |> Task.create_changeset(attrs, scope)
-           |> Repo.insert() do
+    with {:ok, task} <- insert_task(scope, attrs) do
       broadcast_task(scope, {:created, task})
       {:ok, task}
     end
+  end
+
+  # Without the broadcast, for the duplication paths: they run inside the
+  # caller's transaction, and a broadcast from there announces a unit that a
+  # rollback can still take back.
+  defp insert_task(%Scope{} = scope, attrs) do
+    %Task{}
+    |> Task.create_changeset(attrs, scope)
+    |> Repo.insert()
   end
 
   @doc """
@@ -184,7 +190,7 @@ defmodule Tasky.Tasks do
   """
   def duplicate_task_into_course(%Scope{} = scope, %Task{} = source, course_id, opts \\ []) do
     with :ok <- authorize_duplicate_source(scope, source, opts),
-         {:ok, task} <- create_task(scope, duplicate_attrs(source, course_id, opts)),
+         {:ok, task} <- insert_task(scope, duplicate_attrs(source, course_id, opts)),
          {:ok, task, image_jobs} <- copy_task_content(task, source),
          {:ok, attachment_jobs} <- copy_task_attachments(scope, task, source),
          {:ok, solution_jobs} <- copy_task_solution_files(scope, task, source),
