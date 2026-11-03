@@ -1036,8 +1036,11 @@ defmodule TaskyWeb.ExamLive.Grading do
     opts = socket.assigns.export_options
     endpoint = socket.endpoint
     # Exam and submissions are reloaded for the PDFs: the assigns can trail a
-    # correction or sample solution saved in another tab.
+    # correction or sample solution saved in another tab — and the list itself
+    # a participant added or removed since this page was opened, which used to
+    # leave them out of the ZIP or fail their PDF.
     exam = Exams.get_exam!(socket.assigns.current_scope, socket.assigns.exam.id)
+    participants = Exams.list_correction_roster(exam)
 
     print_opts =
       Map.take(opts, [
@@ -1059,17 +1062,12 @@ defmodule TaskyWeb.ExamLive.Grading do
       end
     }
 
-    case Tasky.Exams.ExportRunner.start(
-           exam,
-           socket.assigns.submissions,
-           self(),
-           web
-         ) do
+    case Tasky.Exams.ExportRunner.start(exam, participants, self(), web) do
       {:ok, _pid} ->
         {:noreply,
          socket
          |> assign(:show_export_modal, false)
-         |> assign(:export_status, %{done: 0, total: length(socket.assigns.submissions)})}
+         |> assign(:export_status, %{done: 0, total: length(participants)})}
 
       {:error, reason} ->
         {:noreply,
