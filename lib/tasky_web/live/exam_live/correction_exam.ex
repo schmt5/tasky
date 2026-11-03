@@ -480,12 +480,7 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
     exam = Exams.get_exam!(socket.assigns.current_scope, exam_id)
 
     # Same order as the arrows of the part correction.
-    submissions =
-      exam
-      |> Exams.list_exam_submissions()
-      |> Enum.sort_by(fn s ->
-        {String.downcase(s.firstname || ""), String.downcase(s.lastname || "")}
-      end)
+    submissions = Exams.list_correction_roster(exam)
 
     {:ok,
      socket

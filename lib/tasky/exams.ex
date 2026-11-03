@@ -638,6 +638,30 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Who is in the exam, in the order the correction views step through them:
+  `%{id:, firstname:, lastname:}` per submission, sorted with `sort_by_name/1`.
+  For the prev/next arrows, which used to hold every answer document of the
+  exam in memory just to find a neighbour.
+  """
+  def list_correction_roster(%Exam{} = exam) do
+    ExamSubmission
+    |> where([s], s.exam_id == ^exam.id)
+    |> select([s], %{id: s.id, firstname: s.firstname, lastname: s.lastname})
+    |> Repo.all()
+    |> sort_by_name()
+  end
+
+  @doc """
+  The one order of participants in the correction views: first name, then
+  last name, case-insensitive.
+  """
+  def sort_by_name(submissions) do
+    Enum.sort_by(submissions, fn s ->
+      {String.downcase(s.firstname || ""), String.downcase(s.lastname || "")}
+    end)
+  end
+
+  @doc """
   Each submission's `corrected_parts`, for the "how many are done" counts of
   the correction views — `%{id:, corrected_parts:}` per submission, without
   the answer documents `list_exam_submissions/1` carries.

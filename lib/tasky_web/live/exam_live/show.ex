@@ -340,7 +340,7 @@ defmodule TaskyWeb.ExamLive.Show do
 
   defp grading_available?(exam) do
     parts = Exams.split_content_into_parts(exam.content || %{}, exam.answer_mode)
-    submissions = Exams.list_exam_submissions(exam)
+    submissions = Exams.list_corrected_parts(exam)
 
     parts != [] and submissions != [] and
       Enum.all?(submissions, fn s ->

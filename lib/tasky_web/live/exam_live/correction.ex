@@ -760,8 +760,6 @@ defmodule TaskyWeb.ExamLive.Correction do
   defp load_sorted_submissions(exam) do
     exam
     |> Exams.list_exam_submissions()
-    |> Enum.sort_by(fn s ->
-      {String.downcase(s.firstname || ""), String.downcase(s.lastname || "")}
-    end)
+    |> Exams.sort_by_name()
   end
 end
