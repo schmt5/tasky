@@ -141,7 +141,7 @@ defmodule Tasky.Tasks do
   def create_task(%Scope{} = scope, attrs) do
     with {:ok, task = %Task{}} <-
            %Task{}
-           |> Task.changeset(attrs, scope)
+           |> Task.create_changeset(attrs, scope)
            |> Repo.insert() do
       broadcast_task(scope, {:created, task})
       {:ok, task}
@@ -223,7 +223,7 @@ defmodule Tasky.Tasks do
     end
   end
 
-  # Die Musterlösung reist hier mit, weil `Task.changeset/3` die JSON-Spalte
+  # Die Musterlösung reist hier mit, weil `Task.changeset/2` die JSON-Spalte
   # bewusst nicht castet. Die Antwortmap läuft ebenfalls durch
   # `plan_content_image_copies/4`: klebt ein Screenshot in einem Antwortfeld,
   # zeigt seine URL sonst auf das Präfix der Quelleinheit und läuft ins Leere,
@@ -346,7 +346,7 @@ defmodule Tasky.Tasks do
     with :ok <- Policy.authorize(scope, task.user_id),
          {:ok, task = %Task{}} <-
            task
-           |> Task.changeset(attrs, scope)
+           |> Task.changeset(attrs)
            |> Repo.update() do
       broadcast_task(scope, {:updated, task})
       {:ok, task}
@@ -420,7 +420,7 @@ defmodule Tasky.Tasks do
       raise Ecto.NoResultsError, queryable: Task
     end
 
-    Task.changeset(task, attrs, scope)
+    Task.changeset(task, attrs)
   end
 
   @doc """
@@ -436,7 +436,7 @@ defmodule Tasky.Tasks do
 
   """
   def change_new_task(%Scope{} = scope, attrs \\ %{}) do
-    Task.changeset(%Task{}, attrs, scope)
+    Task.create_changeset(%Task{}, attrs, scope)
   end
 
   @doc """

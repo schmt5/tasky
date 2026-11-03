@@ -68,6 +68,27 @@ defmodule Tasky.TasksTest do
       assert {:error, :unauthorized} = Tasks.update_task(other_scope, task, %{})
     end
 
+    test "update_task/3 by an admin keeps the unit with its owner" do
+      scope = user_scope_fixture()
+      task = task_fixture(scope)
+      admin = Tasky.AccountsFixtures.user_fixture(%{role: "admin"})
+
+      assert {:ok, renamed} =
+               Tasks.update_task(Tasky.Accounts.Scope.for_user(admin), task, %{name: "Umbenannt"})
+
+      assert renamed.user_id == scope.user.id
+      assert Tasks.get_task!(scope, task.id).name == "Umbenannt"
+    end
+
+    test "update_task/3 cannot move a unit into another course" do
+      scope = user_scope_fixture()
+      task = task_fixture(scope)
+      foreign_course = Tasky.CoursesFixtures.course_fixture()
+
+      assert {:ok, updated} = Tasks.update_task(scope, task, %{course_id: foreign_course.id})
+      assert updated.course_id == task.course_id
+    end
+
     test "update_task/3 with invalid data returns error changeset" do
       scope = user_scope_fixture()
       task = task_fixture(scope)

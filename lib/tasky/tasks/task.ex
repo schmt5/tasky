@@ -6,7 +6,7 @@ defmodule Tasky.Tasks.Task do
   Musterlösung dazu — nicht als zweites Dokument, sondern als Map
   `answerId => Payload` über dieselben Antwortfelder (siehe
   `Tasky.Correction.AnswerKey`). Beide sind client-kontrolliertes JSON und
-  darum bewusst **nicht** aus `changeset/3` castbar.
+  darum bewusst **nicht** aus `changeset/2` castbar.
 
   `solution_release_mode` steuert, wann Lernende Musterlösung und Korrektur
   sehen (`never` | `manual` | `on_complete`). Er wird beim Erstellen und
@@ -67,14 +67,17 @@ defmodule Tasky.Tasks.Task do
   @doc "Die gültigen Freigabe-Modi der Musterlösung."
   def release_modes, do: @release_modes
 
+  # Owner and course are set once, in create_changeset/3. Writing the owner on
+  # every update handed a unit to whichever admin last renamed it, locking the
+  # teacher out; a castable course_id let an update move a unit into a course
+  # its owner does not manage.
   @doc false
-  def changeset(task, attrs, user_scope) do
+  def changeset(task, attrs) do
     task
     |> cast(attrs, [
       :name,
       :position,
       :status,
-      :course_id,
       :extended,
       :solution_release_mode
     ])
@@ -86,6 +89,13 @@ defmodule Tasky.Tasks.Task do
     # NULL into a `null: false` column and raised a Postgrex error past the
     # caller's `case`.
     |> validate_inclusion(:solution_release_mode, @release_modes)
+  end
+
+  @doc false
+  def create_changeset(task, attrs, user_scope) do
+    task
+    |> changeset(attrs)
+    |> cast(attrs, [:course_id])
     |> put_change(:user_id, user_scope.user.id)
   end
 
