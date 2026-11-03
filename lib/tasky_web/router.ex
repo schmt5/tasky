@@ -325,8 +325,20 @@ defmodule TaskyWeb.Router do
     get "/download", ExportController, :download
   end
 
+  # Log-in and registration pages. The per-IP cap only catches floods — a
+  # whole class logs in at once behind one school NAT — the real limits per IP
+  # and per account sit in UserSessionController and the registration
+  # LiveView. Stashes the IP so the LiveView can bill it over the websocket.
+  pipeline :auth_rate_limit do
+    plug TaskyWeb.Plugs.RateLimit,
+      bucket: :auth,
+      limit: 300,
+      window_ms: 60_000,
+      stash_ip: true
+  end
+
   scope "/", TaskyWeb do
-    pipe_through [:browser]
+    pipe_through [:browser, :auth_rate_limit]
 
     live_session :current_user,
       on_mount: [{TaskyWeb.UserAuth, :mount_current_scope}] do

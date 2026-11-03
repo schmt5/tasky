@@ -3,7 +3,9 @@ defmodule TaskyWeb.Plugs.RateLimit do
   Minimal fixed-window per-IP rate limiter for the guest exam-token routes —
   the tokens are short strings, so unlimited probing would make them
   brute-forceable. The limit is generous enough for a whole class behind one
-  school NAT while making token guessing hopeless.
+  school NAT while making token guessing hopeless. The log-in and registration
+  routes use it too (see `TaskyWeb.UserSessionController` and
+  `TaskyWeb.UserLive.Registration`).
 
   State lives in a public ETS table created by `Tasky.Application`; entries
   from past windows are pruned opportunistically.
@@ -73,11 +75,35 @@ defmodule TaskyWeb.Plugs.RateLimit do
   defp maybe_stash_ip(conn, _ip, false), do: conn
   defp maybe_stash_ip(conn, ip, true), do: put_session(conn, :client_ip, ip)
 
-  defp client_ip(conn) do
+  @doc "The client's IP for an HTTP request, as the per-IP buckets key it."
+  def client_ip(conn) do
     # Fly terminates TLS and sets fly-client-ip; fall back to the peer.
     case get_req_header(conn, "fly-client-ip") do
       [ip | _] -> ip
       [] -> conn.remote_ip |> :inet.ntoa() |> to_string()
+    end
+  end
+
+  @doc """
+  The client's IP inside a LiveView `mount`, for spending the same per-IP
+  budget over the websocket.
+
+  The plug stashes the resolved IP in the session (`stash_ip: true`) on the
+  HTTP request that opened the LiveView. `peer_data` is only a fallback for a
+  socket that somehow never went through the pipeline — behind Fly's proxy it
+  resolves to the proxy, so it buckets every client together and must not be
+  the norm.
+  """
+  def live_client_ip(session, socket) do
+    case session do
+      %{"client_ip" => ip} when is_binary(ip) ->
+        ip
+
+      _ ->
+        case Phoenix.LiveView.get_connect_info(socket, :peer_data) do
+          %{address: address} -> address |> :inet.ntoa() |> to_string()
+          _ -> "unknown"
+        end
     end
   end
 

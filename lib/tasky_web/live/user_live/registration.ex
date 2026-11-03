@@ -5,6 +5,13 @@ defmodule TaskyWeb.UserLive.Registration do
   alias Tasky.Accounts.User
   alias Tasky.Classes
   alias Tasky.Organizations
+  alias TaskyWeb.Plugs.RateLimit
+
+  # Registration needs an invitation, so this only caps account spam and
+  # probing of taken e-mail addresses. Generous for a class registering
+  # together behind one school NAT, with a few retries each.
+  @registration_limit 60
+  @registration_window_ms 10 * 60_000
 
   @impl true
   def render(assigns) do
@@ -203,13 +210,14 @@ defmodule TaskyWeb.UserLive.Registration do
     {:ok, redirect(socket, to: TaskyWeb.UserAuth.signed_in_path(socket))}
   end
 
-  def mount(params, _session, socket) do
+  def mount(params, session, socket) do
     changeset = Accounts.change_user_registration(%User{}, %{}, validate_unique: false)
 
     socket =
       socket
       |> assign_form(changeset)
       |> assign(trigger_submit: false)
+      |> assign(client_ip: RateLimit.live_client_ip(session, socket))
       |> assign_invitation(params)
 
     {:ok, socket, temporary_assigns: [form: nil]}
@@ -223,6 +231,27 @@ defmodule TaskyWeb.UserLive.Registration do
   end
 
   def handle_event("save", %{"user" => user_params}, socket) do
+    case RateLimit.check(
+           :registration,
+           socket.assigns.client_ip,
+           @registration_limit,
+           @registration_window_ms
+         ) do
+      :ok ->
+        register(socket, user_params)
+
+      :rate_limited ->
+        {:noreply,
+         put_flash(socket, :error, "Zu viele Registrierungen. Bitte warte einige Minuten.")}
+    end
+  end
+
+  def handle_event("validate", %{"user" => user_params}, socket) do
+    changeset = Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
+    {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
+  end
+
+  defp register(socket, user_params) do
     case Accounts.register_user(user_params, socket.assigns.invitation) do
       {:ok, _user} ->
         changeset = Accounts.change_user_registration(%User{}, user_params)
