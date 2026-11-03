@@ -10,6 +10,19 @@ export const RETRY_DELAYS_MS = [2000, 4000, 8000, 15000];
 // stop retrying too.
 export const PERMANENT_SAVE_ERRORS = [400, 401, 403, 404, 409, 422];
 
+// The permanent failures after which the changes can never be saved anywhere:
+// the submission was handed in or the exam is no longer running (409), or
+// the target is gone (404). Only these drop the unsaved changes. After any
+// other permanent failure — an expired session, the SEB refusal, a rejected
+// payload — they stay pending: retrying the same request is pointless, but
+// the page keeps warning before it is closed, so the text can still be
+// copied out instead of vanishing with a reload.
+export const DISCARD_SAVE_ERRORS = [404, 409];
+
+// Once its editor is gone, a failing engine keeps retrying for about two
+// minutes (at the last backoff step) and then stops for good.
+export const MAX_RETRIES_AFTER_DESTROY = 8;
+
 export interface ColorOption {
   name: string;
   value: string;

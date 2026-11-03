@@ -107,7 +107,7 @@ defmodule Tasky.MixProject do
       "assets.build": ["compile", "tailwind tasky", "esbuild tasky"],
       "assets.test": [
         "esbuild tasky_test",
-        "cmd node --test _build/assets_test/editorExtensions.test.mjs"
+        "cmd node --test _build/assets_test/editorExtensions.test.mjs _build/assets_test/autosave.test.mjs"
       ],
       "assets.deploy": [
         "tailwind tasky --minify",

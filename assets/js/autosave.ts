@@ -1,13 +1,16 @@
 // The autosave engine, framework-free: debounced scheduling, serialized
-// flushes, retry-with-backoff for transient failures, permanent-failure
-// classification (session expiry, submitted exam), unload-safe keepalive
-// flushes and the imperative flush used by the submit-modal handshake.
+// flushes, retry-with-backoff for transient failures (and at once when the
+// browser comes back online), permanent-failure classification (session
+// expiry, submitted exam), unload-safe keepalive flushes and the imperative
+// flush used by the submit-modal handshake.
 //
 // Two front ends drive it: `useAutosave` (the Tiptap editors) and the
 // `ExamAnswersForm` hook (the learner's native answer fields).
 
 import {
   AUTOSAVE_DELAY_MS,
+  DISCARD_SAVE_ERRORS,
+  MAX_RETRIES_AFTER_DESTROY,
   RETRY_DELAYS_MS,
   PERMANENT_SAVE_ERRORS,
 } from "./react/editor/constants";
@@ -25,7 +28,8 @@ export interface AutosaveEngine<T> {
   /**
    * Removes the page listeners and flushes what is pending. The retry timer
    * is deliberately left alive: its closure still holds unsaved content and
-   * the retried request can still succeed after the editor is gone.
+   * the retried request can still succeed after the editor is gone — but
+   * only for `MAX_RETRIES_AFTER_DESTROY` more attempts, not forever.
    */
   destroy: () => void;
 }
@@ -37,6 +41,8 @@ export function createAutosave<T>(
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryCount = 0;
+  let retriesAfterDestroy = 0;
+  let destroyed = false;
   let pending: T | null = null;
   let inFlight: Promise<unknown> | null = null;
 
@@ -75,12 +81,19 @@ export function createAutosave<T>(
       const err = error as SaveError;
 
       if (err.permanent || PERMANENT_SAVE_ERRORS.includes(err.status ?? 0)) {
-        pending = null;
+        // No retry either way. Only a submission that can never take the
+        // changes again drops them; otherwise they stay pending, so the page
+        // keeps warning before it closes and the next edit tries once more.
+        if (DISCARD_SAVE_ERRORS.includes(err.status ?? 0)) pending = null;
         onStatus("error", err.message || "Speichern nicht mehr möglich");
+      } else if (destroyed && retriesAfterDestroy >= MAX_RETRIES_AFTER_DESTROY) {
+        // Nobody is looking at this editor any more; stop knocking.
+        pending = null;
       } else {
         const delay =
           RETRY_DELAYS_MS[Math.min(retryCount, RETRY_DELAYS_MS.length - 1)];
         retryCount += 1;
+        if (destroyed) retriesAfterDestroy += 1;
         onStatus("error", "Speichern fehlgeschlagen – versuche erneut …");
         retryTimer = setTimeout(() => {
           retryTimer = null;
@@ -116,8 +129,13 @@ export function createAutosave<T>(
       e.returnValue = "";
     }
   };
+  // Back online: retry now instead of sitting out the rest of the backoff.
+  const onOnline = () => {
+    if (retryTimer) flush();
+  };
   document.addEventListener("visibilitychange", onVisibility);
   window.addEventListener("beforeunload", onBeforeUnload);
+  window.addEventListener("online", onOnline);
 
   return {
     schedule,
@@ -131,8 +149,10 @@ export function createAutosave<T>(
       pending = null;
     },
     destroy: () => {
+      destroyed = true;
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("online", onOnline);
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = null;
       if (pending !== null) flush();

@@ -66,7 +66,7 @@ config :esbuild,
   # Editor tests for `mix assets.test`, bundled for Node.
   tasky_test: [
     args:
-      ~w(js/react/editor/editorExtensions.test.js --bundle --platform=node --format=esm --jsx=automatic --outfile=../_build/assets_test/editorExtensions.test.mjs),
+      ~w(js/react/editor/editorExtensions.test.js js/autosave.test.js --bundle --platform=node --format=esm --jsx=automatic --outdir=../_build/assets_test --entry-names=[name] --out-extension:.js=.mjs),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]

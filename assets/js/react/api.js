@@ -3,7 +3,22 @@ function getCSRFToken() {
   return meta ? meta.getAttribute("content") : "";
 }
 
+// Browsers reject a keepalive request whose body exceeds 64 KiB outright (the
+// fetch fails before anything is sent), so the unload-time flush of a long
+// document never left the tab. Above this size it goes out as a plain request
+// instead: that one may still be cut off by a closing tab, but the changes
+// stay pending, and the page warns before it is closed.
+const KEEPALIVE_MAX_BYTES = 60 * 1024;
+
+export function fitsKeepalive(body) {
+  return typeof body !== "string" || new TextEncoder().encode(body).length <= KEEPALIVE_MAX_BYTES;
+}
+
 async function request(url, options = {}) {
+  if (options.keepalive && !fitsKeepalive(options.body)) {
+    options = { ...options, keepalive: false };
+  }
+
   const headers = {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -42,14 +57,17 @@ async function request(url, options = {}) {
 
   // An expired session surfaces as a redirect to the login page (fetch
   // follows it, yielding HTML with status 200) or as a bare 401/403.
-  // Retrying can never succeed — mark the error permanent so autosave
-  // stops and asks the user to reload instead of looping forever.
+  // Retrying can never succeed — mark the error permanent so autosave stops
+  // instead of looping forever. The changes are still in the editor, and a
+  // reload would throw them away, so the message says to save them first.
   if (
     response.redirected ||
     [401, 403].includes(response.status) ||
     (response.ok && !isJson)
   ) {
-    const error = new Error("Sitzung abgelaufen – bitte Seite neu laden.");
+    const error = new Error(
+      "Sitzung abgelaufen – letzte Änderungen nicht gespeichert. Text kopieren, dann Seite neu laden.",
+    );
     error.status = response.status;
     error.permanent = true;
     throw error;
