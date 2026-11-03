@@ -675,9 +675,12 @@ defmodule Tasky.Tasks do
   @doc """
   Updates the status of a task submission.
 
-  Students can only update their own submissions, and only to a status they may
-  reach by working on the unit — `complete_task/2` and `review_submission/4`
-  own all other transitions.
+  Students can only update their own submissions, and only along the step
+  `resume_status/1` names for its current status — opening a new unit, or one
+  that was handed back. `complete_task/2` and `review_submission/4` own all
+  other transitions. Anything else is `{:error, :invalid_transition}`: a
+  replayed or crafted request used to move a completed or approved
+  submission back to "in progress".
 
   ## Examples
 
@@ -687,18 +690,28 @@ defmodule Tasky.Tasks do
   """
   def update_submission_status(%Scope{user: user} = _scope, submission_id, status)
       when user.role == "student" and status in ["in_progress", "in_revision"] do
-    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+    result =
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(TaskSubmission, submission_id)
 
-    if submission.student_id == user.id do
-      with {:ok, updated} <-
-             submission
-             |> TaskSubmission.status_changeset(%{status: status})
-             |> Repo.update() do
-        broadcast_submission_updated(updated, submission.task.course_id)
-        {:ok, updated}
-      end
-    else
-      {:error, :unauthorized}
+        cond do
+          locked.student_id != user.id ->
+            Repo.rollback(:unauthorized)
+
+          resume_status(locked) != status ->
+            Repo.rollback(:invalid_transition)
+
+          true ->
+            case locked |> TaskSubmission.status_changeset(%{status: status}) |> Repo.update() do
+              {:ok, updated} -> Repo.preload(updated, :task)
+              {:error, changeset} -> Repo.rollback(changeset)
+            end
+        end
+      end)
+
+    with {:ok, updated} <- result do
+      broadcast_submission_updated(updated, updated.task.course_id)
+      {:ok, updated}
     end
   end
 
@@ -1468,20 +1481,31 @@ defmodule Tasky.Tasks do
   a denied submission becomes editable for the student again.
 
   Only the teacher owning the learning unit (or an admin) may review, and only
-  a submission the student has actually handed in.
+  a submission the student has actually handed in. The status is checked on
+  the locked row, so a student reopening the unit at the same moment cannot be
+  overwritten by the verdict, nor the verdict by them.
   """
   def review_submission(%Scope{user: user} = scope, submission_id, verdict, attrs \\ %{})
       when verdict in ["review_approved", "review_denied"] do
-    submission = Repo.get!(TaskSubmission, submission_id) |> Repo.preload(:task)
+    result =
+      Repo.transaction(fn ->
+        locked = TaskSubmission |> Repo.lock_one!(submission_id) |> Repo.preload(:task)
 
-    with :ok <- Policy.authorize(scope, submission.task.user_id),
-         :ok <- ensure_reviewable(submission),
-         {:ok, updated} <-
-           submission
-           |> TaskSubmission.feedback_changeset(attrs, user.id)
-           |> Ecto.Changeset.put_change(:status, verdict)
-           |> Repo.update() do
-      broadcast_submission_updated(updated, submission.task.course_id)
+        with :ok <- Policy.authorize(scope, locked.task.user_id),
+             :ok <- ensure_reviewable(locked),
+             {:ok, updated} <-
+               locked
+               |> TaskSubmission.feedback_changeset(attrs, user.id)
+               |> Ecto.Changeset.put_change(:status, verdict)
+               |> Repo.update() do
+          updated
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    with {:ok, updated} <- result do
+      broadcast_submission_updated(updated, updated.task.course_id)
       {:ok, updated}
     end
   end

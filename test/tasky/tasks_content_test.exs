@@ -233,6 +233,37 @@ defmodule Tasky.TasksContentTest do
       assert %{feedback: _} = errors_on(changeset)
     end
 
+    test "a student cannot move a handed-in or approved unit back to work", %{
+      student_scope: scope,
+      teacher_scope: teacher,
+      task: task
+    } do
+      submission = submission(scope, task)
+      {:ok, completed} = Tasks.complete_task(scope, submission.id)
+
+      assert {:error, :invalid_transition} =
+               Tasks.update_submission_status(scope, completed.id, "in_progress")
+
+      {:ok, approved} = Tasks.review_submission(teacher, submission.id, "review_approved")
+
+      for status <- ["in_progress", "in_revision"] do
+        assert {:error, :invalid_transition} =
+                 Tasks.update_submission_status(scope, approved.id, status)
+      end
+
+      assert Tasks.get_submission!(teacher, submission.id).status == "review_approved"
+    end
+
+    test "only the owner moves their own submission", %{student_scope: scope, task: task} do
+      submission = submission(scope, task)
+
+      other =
+        Tasky.Accounts.Scope.for_user(Tasky.AccountsFixtures.user_fixture(%{role: "student"}))
+
+      assert {:error, :unauthorized} =
+               Tasks.update_submission_status(other, submission.id, "in_progress")
+    end
+
     test "denying reopens editing, revision and re-completion", %{
       student_scope: scope,
       teacher_scope: teacher,
