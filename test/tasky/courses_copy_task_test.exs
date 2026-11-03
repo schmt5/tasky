@@ -231,8 +231,8 @@ defmodule Tasky.CoursesCopyTaskTest do
 
       assert {:ok, [copy], []} = Courses.copy_task_into_courses(scope, source_task, [target.id])
 
-      assert Tasks.list_task_submissions(scope, copy.id) == []
-      assert Tasks.list_task_submissions(scope, source_task.id) != []
+      assert Tasks.list_task_submissions(scope, copy) == []
+      assert Tasks.list_task_submissions(scope, source_task) != []
     end
 
     test "copies into several courses in one call, each at its own end", ctx do

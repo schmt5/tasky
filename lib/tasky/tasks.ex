@@ -651,19 +651,20 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Lists all submissions for a specific task.
-  Only teachers and admins can view all submissions.
+  Lists all submissions for a learning unit — for its owning teacher or an
+  admin; `[]` for anyone else. Takes the unit rather than an id, so the
+  ownership check cannot be skipped by a caller that forgot to load it.
 
   ## Examples
 
-      iex> list_task_submissions(scope, task_id)
+      iex> list_task_submissions(scope, task)
       [%TaskSubmission{}, ...]
 
   """
-  def list_task_submissions(%Scope{} = scope, task_id) do
-    if Scope.admin_or_teacher?(scope) do
+  def list_task_submissions(%Scope{} = scope, %Task{} = task) do
+    if Policy.can_manage?(scope, task.user_id) do
       TaskSubmission
-      |> where([s], s.task_id == ^task_id)
+      |> where([s], s.task_id == ^task.id)
       |> preload([:student, :feedback_by])
       |> order_by([s], asc: s.status, desc: s.updated_at)
       |> Repo.all()
@@ -781,7 +782,8 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Gets a single task submission.
+  Gets a single task submission: a student's own, or one of a unit the
+  teacher owns (admins: any). Raises `Ecto.NoResultsError` otherwise.
 
   ## Examples
 
@@ -800,8 +802,8 @@ defmodule Tasky.Tasks do
       user.role == "student" and submission.student_id == user.id ->
         submission
 
-      # Teachers and admins can view any submission
-      Scope.admin_or_teacher?(scope) ->
+      # Teachers only of their own units; admins of every unit.
+      Policy.can_manage?(scope, submission.task.user_id) ->
         submission
 
       true ->

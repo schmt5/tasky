@@ -214,7 +214,7 @@ defmodule Tasky.CoursesDuplicateTest do
       assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
       assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
 
-      assert Tasks.list_task_submissions(scope, copied_task.id) == []
+      assert Tasks.list_task_submissions(scope, copied_task) == []
     end
 
     test "copies attachments under fresh stored filenames", %{scope: scope, course: course} do
@@ -306,7 +306,7 @@ defmodule Tasky.CoursesDuplicateTest do
       assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
 
       assert Courses.list_enrolled_students(copy.id) == []
-      assert Tasks.list_task_submissions(scope, copied_task.id) == []
+      assert Tasks.list_task_submissions(scope, copied_task) == []
     end
 
     test "an image referenced twice produces a single copy", %{scope: scope, course: course} do

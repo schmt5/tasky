@@ -254,6 +254,22 @@ defmodule Tasky.TasksContentTest do
       assert Tasks.get_submission!(teacher, submission.id).status == "review_approved"
     end
 
+    test "another teacher sees none of the unit's submissions", %{
+      student_scope: scope,
+      teacher_scope: teacher,
+      task: task
+    } do
+      submission = submission(scope, task)
+
+      stranger =
+        Tasky.Accounts.Scope.for_user(Tasky.AccountsFixtures.user_fixture(%{role: "teacher"}))
+
+      assert [_] = Tasks.list_task_submissions(teacher, task)
+      assert Tasks.list_task_submissions(stranger, task) == []
+
+      assert_raise Ecto.NoResultsError, fn -> Tasks.get_submission!(stranger, submission.id) end
+    end
+
     test "only the owner moves their own submission", %{student_scope: scope, task: task} do
       submission = submission(scope, task)
 

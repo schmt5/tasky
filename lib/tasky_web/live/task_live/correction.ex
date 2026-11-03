@@ -101,7 +101,7 @@ defmodule TaskyWeb.TaskLive.Correction do
 
     submissions =
       socket.assigns.current_scope
-      |> Tasks.list_task_submissions(task.id)
+      |> Tasks.list_task_submissions(task)
       |> Enum.filter(&(&1.status in reviewable_statuses()))
       |> Enum.sort_by(&student_sort_key/1)
 
