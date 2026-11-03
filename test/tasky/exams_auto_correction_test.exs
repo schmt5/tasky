@@ -17,7 +17,10 @@ defmodule Tasky.ExamsAutoCorrectionTest do
     scope = user_scope_fixture(user_fixture(%{role: "teacher"}))
 
     {:ok, exam} =
-      Exams.create_exam(scope, Map.merge(%{name: "Test Prüfung", content: question_doc()}, attrs))
+      Tasky.ExamsFixtures.create_exam_with_document(
+        scope,
+        Map.merge(%{name: "Test Prüfung", content: question_doc()}, attrs)
+      )
 
     exam
   end

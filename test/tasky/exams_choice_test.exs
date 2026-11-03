@@ -74,7 +74,7 @@ defmodule Tasky.ExamsChoiceTest do
     scope = user_scope_fixture(teacher)
 
     {:ok, exam} =
-      Exams.create_exam(scope, %{
+      Tasky.ExamsFixtures.create_exam_with_document(scope, %{
         name: "Analog / digital",
         content: doc({nil, nil, nil}),
         sample_solution_points: %{"q-1" => 3}

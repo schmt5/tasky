@@ -51,7 +51,7 @@ defmodule Tasky.ExamsFixtures do
         content: %{"type" => "doc", "content" => []}
       })
 
-    {:ok, exam} = Exams.create_exam(scope, attrs)
+    {:ok, exam} = create_exam_with_document(scope, attrs)
     participation_mode = Keyword.get(opts, :participation_mode, "anonymous")
 
     exam =
@@ -80,6 +80,26 @@ defmodule Tasky.ExamsFixtures do
       exam
     else
       exam
+    end
+  end
+
+  @document_fields ~w(content sample_solution sample_solution_points
+                      sample_solution_block_points ai_correction_config grading_max_points)a
+
+  @doc """
+  `Exams.create_exam/2` plus the document and grading columns, which the
+  create form cannot write (see `Tasky.Exams.Exam.document_changeset/2`).
+  Tests use it to start from a prepared document.
+  """
+  def create_exam_with_document(scope, attrs) do
+    attrs = Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
+    document_keys = Enum.map(@document_fields, &to_string/1)
+    {document, form} = Map.split(attrs, document_keys)
+
+    with {:ok, exam} <- Exams.create_exam(scope, form) do
+      exam
+      |> Exams.Exam.document_changeset(document)
+      |> Tasky.Repo.update()
     end
   end
 

@@ -136,19 +136,16 @@ defmodule Tasky.Exams do
       # Castable on create only, so the copy is the one chance to carry it over
       # — a duplicated essay must not come back as an answer-field exam.
       "answer_mode" => source.answer_mode,
-      "sample_solution_points" => source.sample_solution_points || %{},
-      "sample_solution_block_points" => source.sample_solution_block_points || %{},
       "seb_enabled" => source.seb_enabled,
       # Fresh secrets for the copy: a duplicated exam is a separate session, and
       # sharing the passwords would mean one leaked `.seb` file unlocks both.
       "seb_quit_password" => if(source.seb_enabled, do: generate_quit_password(), else: nil),
-      "seb_admin_password" => if(source.seb_enabled, do: generate_admin_password(), else: nil),
-      "ai_correction_config" => source.ai_correction_config || %{}
+      "seb_admin_password" => if(source.seb_enabled, do: generate_admin_password(), else: nil)
       # status defaults to "draft" via schema
       # enrollment_token stays nil
       # teacher_id set from scope via create_changeset
-      # content and sample_solution follow in a second step: the image URLs
-      # they carry can only be rewritten once the copy has an id
+      # the document and grading columns follow in copy_exam_content/2: the
+      # image URLs they carry can only be rewritten once the copy has an id
     }
 
     with {:ok, exam} <- create_exam(scope, attrs),
@@ -195,7 +192,13 @@ defmodule Tasky.Exams do
 
     with {:ok, exam} <-
            exam
-           |> Exam.changeset(%{content: content, sample_solution: sample_solution})
+           |> Exam.document_changeset(%{
+             content: content,
+             sample_solution: sample_solution,
+             sample_solution_points: source.sample_solution_points || %{},
+             sample_solution_block_points: source.sample_solution_block_points || %{},
+             ai_correction_config: source.ai_correction_config || %{}
+           })
            |> Repo.update() do
       {:ok, exam, content_jobs ++ sample_jobs}
     end
@@ -1628,7 +1631,7 @@ defmodule Tasky.Exams do
           )
 
         case locked_exam
-             |> Exam.changeset(%{
+             |> Exam.document_changeset(%{
                content: new_content,
                sample_solution: merged_answers,
                sample_solution_block_points: pruned_block_points,

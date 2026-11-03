@@ -25,7 +25,13 @@ defmodule Tasky.ExamsPaperLayoutTest do
 
   defp create_exam do
     scope = user_scope_fixture(user_fixture(%{role: "teacher"}))
-    {:ok, exam} = Exams.create_exam(scope, %{name: "Test Prüfung", content: content()})
+
+    {:ok, exam} =
+      Tasky.ExamsFixtures.create_exam_with_document(scope, %{
+        name: "Test Prüfung",
+        content: content()
+      })
+
     %{scope: scope, exam: exam}
   end
 

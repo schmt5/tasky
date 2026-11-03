@@ -296,6 +296,23 @@ defmodule Tasky.ExamsTest do
       assert updated.status == "draft"
       assert updated.enrollment_token == nil
     end
+
+    test "the document and grading columns are not mass-assignable" do
+      exam = exam_fixture()
+
+      {:ok, updated} =
+        Exams.update_exam(:system, exam, %{
+          "content" => %{"type" => "doc", "content" => [%{"type" => "paragraph"}]},
+          "sample_solution_points" => %{"q-1" => 99},
+          "grading_max_points" => -5,
+          "ai_correction_config" => %{"q-1" => %{"enabled" => true}}
+        })
+
+      assert updated.content == exam.content
+      assert updated.sample_solution_points == exam.sample_solution_points
+      assert updated.grading_max_points == exam.grading_max_points
+      assert updated.ai_correction_config == exam.ai_correction_config
+    end
   end
 
   describe "ExamUploadField.changeset/2" do

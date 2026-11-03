@@ -90,23 +90,38 @@ defmodule Tasky.Exams.Exam do
   # because that write also re-rounds every stored manual mark of the exam
   # onto the new grid — a plain cast would move the grid and leave the marks
   # behind. :archived_at is only written by Exams.archive_exam/2 and
-  # unarchive_exam/2.
+  # unarchive_exam/2. The document and grading columns are in
+  # document_changeset/2 — see there.
   def changeset(exam, attrs) do
     exam
     |> cast(attrs, [
       :name,
+      :seb_enabled,
+      :seb_quit_password,
+      :seb_admin_password
+    ])
+    |> validate_required([:name])
+    |> validate_length(:name, min: 3, max: 255)
+  end
+
+  @doc """
+  Changeset for the document and grading columns. Internal only: never pass
+  form params here.
+
+  These columns have writers that stamp ids, prune orphans, take the row lock
+  and trigger re-correction (`Exams.save_exam_structure/3`,
+  `update_grading_max_points/3`, `apply_part_options/4`, …). Casting them in
+  `changeset/2` let a crafted config-form event skip all of that.
+  """
+  def document_changeset(exam, attrs) do
+    cast(exam, attrs, [
       :content,
       :sample_solution,
       :sample_solution_points,
       :sample_solution_block_points,
-      :seb_enabled,
-      :seb_quit_password,
-      :seb_admin_password,
       :ai_correction_config,
       :grading_max_points
     ])
-    |> validate_required([:name])
-    |> validate_length(:name, min: 3, max: 255)
   end
 
   @doc """

@@ -3,14 +3,12 @@ defmodule TaskyWeb.ExamPaperControllerTest do
 
   import Tasky.AccountsFixtures
 
-  alias Tasky.Exams
-
   defp create_exam do
     teacher = user_fixture(%{role: "teacher"})
     scope = user_scope_fixture(teacher)
 
     {:ok, exam} =
-      Exams.create_exam(scope, %{
+      Tasky.ExamsFixtures.create_exam_with_document(scope, %{
         name: "Test Prüfung",
         content: %{"type" => "doc", "content" => []}
       })

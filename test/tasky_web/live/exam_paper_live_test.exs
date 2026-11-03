@@ -4,8 +4,6 @@ defmodule TaskyWeb.ExamPaperLiveTest do
   import Phoenix.LiveViewTest
   import Tasky.AccountsFixtures
 
-  alias Tasky.Exams
-
   defp content_with_answer do
     %{
       "type" => "doc",
@@ -29,7 +27,7 @@ defmodule TaskyWeb.ExamPaperLiveTest do
     scope = user_scope_fixture(teacher)
 
     {:ok, exam} =
-      Exams.create_exam(scope, %{
+      Tasky.ExamsFixtures.create_exam_with_document(scope, %{
         name: "Test Prüfung",
         content: Keyword.get(opts, :content, content_with_answer()),
         answer_mode: Keyword.get(opts, :answer_mode, "answer_fields")

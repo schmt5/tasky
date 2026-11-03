@@ -83,7 +83,13 @@ defmodule TaskyWeb.ExamContentLiveTest do
   defp create_exam(content) do
     teacher = user_fixture(%{role: "teacher"})
     scope = user_scope_fixture(teacher)
-    {:ok, exam} = Exams.create_exam(scope, %{name: "Test Prüfung", content: content})
+
+    {:ok, exam} =
+      Tasky.ExamsFixtures.create_exam_with_document(scope, %{
+        name: "Test Prüfung",
+        content: content
+      })
+
     %{teacher: teacher, scope: scope, exam: exam}
   end
 

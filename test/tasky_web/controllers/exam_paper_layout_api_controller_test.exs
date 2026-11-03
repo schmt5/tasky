@@ -28,7 +28,10 @@ defmodule TaskyWeb.ExamPaperLayoutApiControllerTest do
     scope = user_scope_fixture(teacher)
 
     {:ok, exam} =
-      Exams.create_exam(scope, %{name: "Test Prüfung", content: exam_content()})
+      Tasky.ExamsFixtures.create_exam_with_document(scope, %{
+        name: "Test Prüfung",
+        content: exam_content()
+      })
 
     %{teacher: teacher, scope: scope, exam: exam}
   end

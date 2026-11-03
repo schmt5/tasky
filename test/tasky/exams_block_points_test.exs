@@ -11,7 +11,7 @@ defmodule Tasky.ExamsBlockPointsTest do
     scope = user_scope_fixture(teacher)
 
     {:ok, exam} =
-      Exams.create_exam(
+      Tasky.ExamsFixtures.create_exam_with_document(
         scope,
         Map.merge(%{name: "Test Prüfung", content: question_doc()}, attrs)
       )
