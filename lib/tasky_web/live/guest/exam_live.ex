@@ -660,7 +660,11 @@ defmodule TaskyWeb.Guest.ExamLive do
   end
 
   defp mount_submission(submission, socket) do
-    exam = submission.exam
+    # The learner's process holds neither the sample solution nor the SEB
+    # passwords — see `Exams.learner_exam/1`. The preloaded copy on the
+    # submission goes too, or it would keep them in the assigns after all.
+    exam = Exams.learner_exam(submission.exam)
+    submission = Ecto.reset_fields(submission, [:exam])
 
     # Two different questions, deliberately kept apart.
     #
@@ -880,7 +884,7 @@ defmodule TaskyWeb.Guest.ExamLive do
       {:ok, updated_submission} ->
         {:noreply,
          socket
-         |> assign(:submission, updated_submission)
+         |> assign(:submission, Ecto.reset_fields(updated_submission, [:exam]))
          |> assign(:show_submit_modal, false)}
 
       {:error, :exam_not_running} ->
@@ -918,7 +922,7 @@ defmodule TaskyWeb.Guest.ExamLive do
 
   @impl true
   def handle_info({:exam_status_changed, updated_exam}, socket) do
-    {:noreply, assign(socket, :exam, updated_exam)}
+    {:noreply, assign(socket, :exam, Exams.learner_exam(updated_exam))}
   end
 
   # The teacher removed this participant. Their submission no longer exists,

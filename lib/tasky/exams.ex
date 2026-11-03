@@ -954,7 +954,7 @@ defmodule Tasky.Exams do
   Allowed at any point of the session, because the case it exists for — an SEB
   that will not start on one laptop — shows up on exam day. Takes effect at
   once: `TaskyWeb.Plugs.SebGuard` reads the submission fresh on every request,
-  and the broadcast `{:seb_exemption_changed, submission}` on the exam topic
+  and the broadcast `{:seb_exemption_changed, %{id:, seb_exempt:}}` on the exam topic
   lifts (or brings back) the gate in an open participant view.
   """
   def set_seb_exempt(scope, %Exam{} = exam, %ExamSubmission{} = submission, exempt?)
@@ -965,10 +965,13 @@ defmodule Tasky.Exams do
            submission
            |> ExamSubmission.seb_exemption_changeset(exempt?)
            |> Repo.update() do
+      # Ids and the flag only: every open participant view of the exam gets
+      # this message, and the whole struct carried this learner's answers to
+      # all of them.
       Phoenix.PubSub.broadcast(
         Tasky.PubSub,
         "exam:#{exam.id}",
-        {:seb_exemption_changed, updated}
+        {:seb_exemption_changed, %{id: updated.id, seb_exempt: updated.seb_exempt}}
       )
 
       {:ok, updated}
@@ -3569,6 +3572,28 @@ defmodule Tasky.Exams do
   """
   def subscribe_exam(exam_id) do
     Phoenix.PubSub.subscribe(Tasky.PubSub, "exam:#{exam_id}")
+  end
+
+  @doc """
+  The exam as a learner's process may hold it: the sample solution, the
+  correction settings and the SEB passwords blanked out.
+
+  A participant view keeps the exam in its assigns for as long as the exam
+  runs. None of these is rendered there, but holding them meant one careless
+  `{@exam...}` or hook attribute away from handing them to the learner. The
+  Config Key check that needs the passwords runs before, in
+  `TaskyWeb.SebGuardHook`, on its own copy.
+  """
+  def learner_exam(%Exam{} = exam) do
+    %{
+      exam
+      | sample_solution: %{},
+        sample_solution_points: %{},
+        sample_solution_block_points: %{},
+        ai_correction_config: %{},
+        seb_quit_password: nil,
+        seb_admin_password: nil
+    }
   end
 
   @doc """

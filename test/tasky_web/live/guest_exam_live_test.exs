@@ -301,6 +301,27 @@ defmodule TaskyWeb.GuestExamLiveTest do
       Plug.Conn.put_req_header(conn, TaskyWeb.SebGuard.header_name(), hash)
     end
 
+    test "the participant's process holds neither the SEB passwords nor the sample solution",
+         %{conn: conn, exam: exam, submission: submission} do
+      {:ok, exam} =
+        exam
+        |> Ecto.Changeset.change(%{sample_solution: %{"a1" => "geheim"}})
+        |> Tasky.Repo.update()
+
+      {:ok, view, _html} = conn |> with_valid_hash(exam, submission) |> open_exam(submission)
+
+      # Also after a status change arrives with the teacher's full exam.
+      Exams.broadcast_exam_update(exam)
+
+      %{socket: %{assigns: assigns}} = :sys.get_state(view.pid)
+      held = inspect(Map.take(assigns, [:exam, :submission]), limit: :infinity)
+
+      assert held =~ ~s(status: "running")
+      refute held =~ exam.seb_quit_password
+      refute held =~ exam.seb_admin_password
+      refute held =~ "geheim"
+    end
+
     test "an exam that does not require SEB has no gate at all", %{
       conn: conn,
       exam: exam,
