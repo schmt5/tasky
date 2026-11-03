@@ -15,18 +15,20 @@ defmodule Tasky.Courses do
   @doc """
   Returns the list of courses for a given scope.
   Teachers see only their own courses, admins see all courses.
+
+  Comes with `:teacher` preloaded and the virtual `unit_count` filled, but
+  without `:tasks`: a unit's `content` is the whole Tiptap document (up to
+  5 MB), and the list only shows how many there are.
   """
   def list_courses(%Scope{user: user}) do
     case user.role do
       "admin" ->
-        Repo.all(from c in Course, order_by: [desc: c.inserted_at], preload: [:teacher, :tasks])
+        list_courses_with_unit_count(from(c in Course), from(t in Task))
 
       "teacher" ->
-        Repo.all(
-          from c in Course,
-            where: c.teacher_id == ^user.id,
-            order_by: [desc: c.inserted_at],
-            preload: [:teacher, :tasks]
+        list_courses_with_unit_count(
+          from(c in Course, where: c.teacher_id == ^user.id),
+          from(t in Task)
         )
 
       _ ->
@@ -35,20 +37,73 @@ defmodule Tasky.Courses do
   end
 
   @doc """
-  Returns the list of courses a student is enrolled in.
+  Returns the list of courses a student is enrolled in, like `list_courses/1`
+  with `unit_count` — counting only the units the student can see, not the
+  teacher's drafts.
   """
   def list_enrolled_courses(%Scope{user: %{role: "student", id: student_id}}) do
-    Repo.all(
-      from c in Course,
+    visible = Task.student_visible_statuses()
+
+    list_courses_with_unit_count(
+      from(c in Course,
         join: e in CourseEnrollment,
         on: c.id == e.course_id,
-        where: e.student_id == ^student_id,
-        order_by: [desc: c.inserted_at],
-        preload: [:teacher, :tasks]
+        where: e.student_id == ^student_id
+      ),
+      from(t in Task, where: t.status in ^visible)
     )
   end
 
   def list_enrolled_courses(_), do: []
+
+  defp list_courses_with_unit_count(courses, units) do
+    counts =
+      from t in units,
+        group_by: t.course_id,
+        select: %{course_id: t.course_id, count: count(t.id)}
+
+    Repo.all(
+      from c in courses,
+        left_join: n in subquery(counts),
+        on: n.course_id == c.id,
+        order_by: [desc: c.inserted_at],
+        select_merge: %{unit_count: coalesce(n.count, 0)},
+        preload: [:teacher]
+    )
+  end
+
+  @doc """
+  The courses a learning unit can be copied into: the caller's own courses
+  except `exclude`, each with `conflict: true` when it already holds a unit
+  named `task_name`.
+
+  Own courses only, for admins too: a copy into another teacher's course would
+  carry the admin's `user_id`, and that teacher could no longer reach their
+  own unit through `Tasky.Tasks.get_task!/2`.
+  """
+  def list_copy_targets(%Scope{user: user}, %Course{id: exclude_id}, task_name) do
+    named = from t in Task, where: t.name == ^task_name, select: %{course_id: t.course_id}
+
+    Repo.all(
+      from c in Course,
+        left_join: n in subquery(named),
+        on: n.course_id == c.id,
+        left_join: t in Task,
+        on: t.course_id == c.id,
+        where: c.teacher_id == ^user.id and c.id != ^exclude_id,
+        group_by: c.id,
+        order_by: [desc: c.inserted_at],
+        select: %{
+          course: %{c | unit_count: count(t.id, :distinct)},
+          conflict: count(n.course_id) > 0
+        }
+    )
+  end
+
+  @doc "How many learning units the course holds."
+  def count_units(%Course{id: course_id}) do
+    Repo.aggregate(from(t in Task, where: t.course_id == ^course_id), :count)
+  end
 
   @doc """
   Gets a single course.

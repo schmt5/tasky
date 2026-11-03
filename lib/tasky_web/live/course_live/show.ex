@@ -180,12 +180,12 @@ defmodule TaskyWeb.CourseLive.Show do
             <div>
               <h2 class="text-lg font-semibold text-stone-800">Lerneinheiten</h2>
 
-              <p class="text-sm text-stone-500 mt-1">{length(@course.tasks)} Aufgaben insgesamt</p>
+              <p class="text-sm text-stone-500 mt-1">{@task_count} Aufgaben insgesamt</p>
             </div>
 
             <div class="flex items-center gap-2">
               <.link
-                :if={length(@course.tasks) > 1}
+                :if={@task_count > 1}
                 navigate={~p"/courses/#{@course}/reorder"}
                 class="inline-flex items-center gap-2 text-stone-600 text-sm font-semibold px-5 py-2.5 rounded-[10px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300"
               >
@@ -535,7 +535,7 @@ defmodule TaskyWeb.CourseLive.Show do
             <div class="p-6">
               <p class="text-sm text-stone-600 leading-relaxed">
                 <span class="font-semibold text-stone-800">«{@course.name}»</span>
-                mit {length(@course.tasks)} Lerneinheiten für alle Lehrpersonen und Admins freigeben? Sie können den Inhalt lesen und in ihre eigenen Kurse übernehmen.
+                mit {@task_count} Lerneinheiten für alle Lehrpersonen und Admins freigeben? Sie können den Inhalt lesen und in ihre eigenen Kurse übernehmen.
               </p>
               <div class="bg-amber-50 rounded-lg p-3 mt-4 border border-amber-100">
                 <div class="flex items-start gap-2.5">
@@ -638,7 +638,7 @@ defmodule TaskyWeb.CourseLive.Show do
                         {target.course.description}
                       </span>
                       <span class="block text-xs text-stone-400 mt-1">
-                        {length(target.course.tasks)} Lerneinheiten
+                        {target.course.unit_count} Lerneinheiten
                       </span>
                       <span :if={target.conflict} class="block text-xs text-amber-700 mt-1">
                         Enthält bereits «{@copying_task.name}» — es entsteht eine zweite Kopie.
@@ -774,7 +774,10 @@ defmodule TaskyWeb.CourseLive.Show do
     {:ok,
      socket
      |> assign(:page_title, course.name)
-     |> assign(:course, course)
+     # The units live in the stream only. Kept on @course as well, every unit's
+     # whole document stayed in the process for as long as the page was open.
+     |> assign(:course, Ecto.reset_fields(course, [:tasks]))
+     |> assign(:task_count, length(course.tasks))
      |> assign(:has_tasks, course.tasks != [])
      |> assign(:renaming_task, nil)
      |> assign(:rename_form, nil)
@@ -818,7 +821,7 @@ defmodule TaskyWeb.CourseLive.Show do
       {:ok, course} ->
         {:noreply,
          socket
-         |> assign(:course, %{course | tasks: socket.assigns.course.tasks})
+         |> assign(:course, course)
          |> assign(:publishing_course, false)
          |> put_flash(:info, "Kurs ist jetzt im Katalog.")}
 
@@ -845,7 +848,7 @@ defmodule TaskyWeb.CourseLive.Show do
       {:ok, course} ->
         {:noreply,
          socket
-         |> assign(:course, %{course | tasks: socket.assigns.course.tasks})
+         |> assign(:course, course)
          |> put_flash(:info, "Kurs wurde aus dem Katalog entfernt.")}
 
       {:error, _reason} ->
@@ -1001,12 +1004,12 @@ defmodule TaskyWeb.CourseLive.Show do
     task = Tasks.get_task!(socket.assigns.current_scope, id)
     {:ok, _} = Tasks.delete_task(socket.assigns.current_scope, task)
 
-    course = Courses.get_course!(socket.assigns.current_scope, socket.assigns.course.id)
+    task_count = Courses.count_units(socket.assigns.course)
 
     {:noreply,
      socket
-     |> assign(:course, course)
-     |> assign(:has_tasks, course.tasks != [])
+     |> assign(:task_count, task_count)
+     |> assign(:has_tasks, task_count > 0)
      |> stream_delete(:tasks, task)}
   end
 
@@ -1064,23 +1067,11 @@ defmodule TaskyWeb.CourseLive.Show do
     {:noreply, close_rename(socket)}
   end
 
-  # Erst beim Öffnen des Dialogs geladen — die Zielliste kostet eine Query mit
-  # Preloads und wird auf der Kursseite sonst nie gebraucht.
-  #
-  # Nur eigene Kurse: `list_courses/1` gibt Admins *alle* Kurse zurück, und eine
-  # Kopie im Kurs einer anderen Lehrperson würde `user_id` des Admins tragen —
-  # die Lehrperson käme über `Tasks.get_task!/2` nicht mehr an ihre eigene
-  # Einheit heran.
+  # Erst beim Öffnen des Dialogs geladen — die Zielliste wird auf der
+  # Kursseite sonst nie gebraucht. Warum nur eigene Kurse: siehe
+  # `Courses.list_copy_targets/3`.
   defp copy_targets(socket, task) do
-    scope = socket.assigns.current_scope
-
-    scope
-    |> Courses.list_courses()
-    |> Enum.filter(&(&1.teacher_id == scope.user.id))
-    |> Enum.reject(&(&1.id == socket.assigns.course.id))
-    |> Enum.map(fn course ->
-      %{course: course, conflict: Enum.any?(course.tasks, &(&1.name == task.name))}
-    end)
+    Courses.list_copy_targets(socket.assigns.current_scope, socket.assigns.course, task.name)
   end
 
   defp selected_course_names(socket, course_ids) do
