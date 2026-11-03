@@ -329,10 +329,17 @@ defmodule TaskyWeb.AuthorizationTest do
 
     test "a class link offers a student registration", %{conn: conn} do
       class = class_fixture()
-      html = html_response(get(conn, "/users/register?class=#{class.slug}"), 200)
+      html = html_response(get(conn, "/users/register?class=#{class.invite_token}"), 200)
 
       assert html =~ "registration_form"
       assert html =~ class.name
+    end
+
+    test "the guessable class slug is no invitation", %{conn: conn} do
+      class = class_fixture(%{name: "Klasse 5a"})
+      html = html_response(get(conn, "/users/register?class=#{class.slug}"), 200)
+
+      refute html =~ "registration_form"
     end
 
     test "an organization invite token offers a teacher registration", %{conn: conn} do

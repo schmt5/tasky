@@ -46,7 +46,7 @@ defmodule Tasky.OrganizationsFixtures do
   @doc "The shared class inside `default_organization/0`, created on first use."
   def default_class do
     memoize(:default_class, fn ->
-      case Classes.get_class_by_slug(Classes.Class.slugify(@default_class_name)) do
+      case Repo.get_by(Classes.Class, slug: Classes.Class.slugify(@default_class_name)) do
         nil ->
           {:ok, class} =
             Classes.create_class(:system, %{
@@ -82,7 +82,7 @@ defmodule Tasky.OrganizationsFixtures do
         organization -> organization
       end
 
-    if is_nil(Classes.get_class_by_slug(Classes.Class.slugify(@default_class_name))) do
+    if is_nil(Repo.get_by(Classes.Class, slug: Classes.Class.slugify(@default_class_name))) do
       {:ok, _class} =
         Classes.create_class(:system, %{
           name: @default_class_name,

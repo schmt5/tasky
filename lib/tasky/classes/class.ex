@@ -7,6 +7,11 @@ defmodule Tasky.Classes.Class do
   `organization_id` is never cast by `changeset/2`: for a teacher it is taken
   from their own organization, and only an admin may name one explicitly through
   `admin_changeset/2`.
+
+  `invite_token` is the credential of the registration link
+  (`/users/register?class=<token>`) and is never cast either — it is set by
+  `Tasky.Classes` on insert and on rotation. The `slug` is derived from the
+  name and therefore guessable; it is for display only, never for lookups.
   """
 
   use Ecto.Schema
@@ -15,6 +20,7 @@ defmodule Tasky.Classes.Class do
   schema "classes" do
     field :name, :string
     field :slug, :string
+    field :invite_token, :string
 
     belongs_to :organization, Tasky.Organizations.Organization
     has_many :students, Tasky.Accounts.User, foreign_key: :class_id
@@ -31,6 +37,7 @@ defmodule Tasky.Classes.Class do
     |> generate_slug()
     |> validate_required([:slug])
     |> unique_constraint(:slug)
+    |> unique_constraint(:invite_token)
   end
 
   @doc """

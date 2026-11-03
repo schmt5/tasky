@@ -180,12 +180,50 @@ defmodule Tasky.ClassesTest do
     end
   end
 
-  describe "get_class_by_slug/1" do
-    test "is deliberately unscoped — the slug is the registration credential" do
+  describe "get_class_by_invite_token/1" do
+    test "is deliberately unscoped — the token is the registration credential" do
       {organization, _scope} = org_scope()
       class = class_fixture(%{name: "MPA", organization_id: organization.id})
 
-      assert Classes.get_class_by_slug(class.slug).id == class.id
+      assert Classes.get_class_by_invite_token(class.invite_token).id == class.id
+    end
+
+    test "every class gets its own unguessable token" do
+      {organization, _scope} = org_scope()
+      a = class_fixture(%{name: "MPA", organization_id: organization.id})
+      b = class_fixture(%{name: "MPB", organization_id: organization.id})
+
+      assert byte_size(a.invite_token) >= 22
+      assert a.invite_token != b.invite_token
+    end
+
+    test "finds nothing by slug, empty or non-string input" do
+      {organization, _scope} = org_scope()
+      class = class_fixture(%{name: "MPA", organization_id: organization.id})
+
+      assert Classes.get_class_by_invite_token(class.slug) == nil
+      assert Classes.get_class_by_invite_token("") == nil
+      assert Classes.get_class_by_invite_token(nil) == nil
+    end
+  end
+
+  describe "rotate_invite_token/2" do
+    test "replaces the token so the old link stops working" do
+      {organization, scope} = org_scope()
+      class = class_fixture(%{name: "MPA", organization_id: organization.id})
+
+      assert {:ok, rotated} = Classes.rotate_invite_token(scope, class)
+      assert rotated.invite_token != class.invite_token
+      assert Classes.get_class_by_invite_token(class.invite_token) == nil
+      assert Classes.get_class_by_invite_token(rotated.invite_token).id == class.id
+    end
+
+    test "a teacher of another organization cannot rotate it" do
+      {organization, _scope} = org_scope()
+      {_other_org, other_scope} = org_scope()
+      class = class_fixture(%{name: "MPA", organization_id: organization.id})
+
+      assert {:error, :unauthorized} = Classes.rotate_invite_token(other_scope, class)
     end
   end
 

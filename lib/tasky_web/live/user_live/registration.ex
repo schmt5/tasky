@@ -237,22 +237,17 @@ defmodule TaskyWeb.UserLive.Registration do
     end
   end
 
-  def handle_event("validate", %{"user" => user_params}, socket) do
-    changeset = Accounts.change_user_registration(%User{}, user_params, validate_unique: false)
-    {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
-  end
-
   defp assign_form(socket, %Ecto.Changeset{} = changeset) do
     form = to_form(changeset, as: "user")
     assign(socket, form: form)
   end
 
-  # The link decides the role: a class slug makes a student, an organization
-  # invite token makes a teacher. Nothing in the submitted params can influence
-  # it — see `Tasky.Accounts.register_user/2`.
-  defp assign_invitation(socket, %{"class" => slug}) when is_binary(slug) do
-    case Classes.get_class_by_slug(slug) do
-      nil -> reject_invitation(socket, "Die angegebene Klasse wurde nicht gefunden.")
+  # The link decides the role: a class invite token makes a student, an
+  # organization invite token makes a teacher. Nothing in the submitted params
+  # can influence it — see `Tasky.Accounts.register_user/2`.
+  defp assign_invitation(socket, %{"class" => token}) when is_binary(token) do
+    case Classes.get_class_by_invite_token(token) do
+      nil -> reject_invitation(socket, "Dieser Registrierungslink ist nicht mehr gültig.")
       class -> assign(socket, invitation: {:class, class})
     end
   end

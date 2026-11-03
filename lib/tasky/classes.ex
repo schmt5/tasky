@@ -86,25 +86,40 @@ defmodule Tasky.Classes do
   def visible?(_scope, _id), do: false
 
   @doc """
-  Gets a class by slug.
-
-  Returns `nil` if no class exists with the given slug.
+  Gets a class by its invite token, or `nil` if the token is unknown.
 
   Deliberately unscoped: this runs pre-authentication for the registration link
-  `/users/register?class=<slug>`, where the slug itself is the credential —
-  exactly like `Tasky.Courses.get_course_by_share_slug/1`.
+  `/users/register?class=<token>`, where the token itself is the credential —
+  exactly like `Tasky.Organizations.get_organization_by_invite_token/1`. Never
+  look a class up by its slug for this: the slug is derived from the name and
+  can be guessed.
 
   ## Examples
 
-      iex> get_class_by_slug("klasse-5a")
+      iex> get_class_by_invite_token("9xQ…")
       %Class{}
 
-      iex> get_class_by_slug("unknown")
+      iex> get_class_by_invite_token("klasse-5a")
       nil
 
   """
-  def get_class_by_slug(slug) when is_binary(slug) do
-    Repo.get_by(Class, slug: slug)
+  def get_class_by_invite_token(token) when is_binary(token) and token != "" do
+    Repo.get_by(Class, invite_token: token)
+  end
+
+  def get_class_by_invite_token(_token), do: nil
+
+  @doc """
+  Issues a fresh invite token for a class of the scope's organization,
+  invalidating the previous registration link immediately.
+  """
+  def rotate_invite_token(scope, %Class{} = class) do
+    with :ok <- Policy.authorize_organization(scope, class.organization_id) do
+      class
+      |> Ecto.Changeset.change(invite_token: generate_invite_token())
+      |> Ecto.Changeset.unique_constraint(:invite_token)
+      |> Repo.update()
+    end
   end
 
   @doc """
@@ -127,12 +142,12 @@ defmodule Tasky.Classes do
   def create_class(scope, attrs \\ %{}) do
     case Policy.organization_scope(scope) do
       :all ->
-        %Class{}
+        %Class{invite_token: generate_invite_token()}
         |> Class.admin_changeset(attrs)
         |> Repo.insert()
 
       {:org, organization_id} ->
-        %Class{organization_id: organization_id}
+        %Class{organization_id: organization_id, invite_token: generate_invite_token()}
         |> Class.changeset(attrs)
         |> Repo.insert()
 
@@ -219,6 +234,12 @@ defmodule Tasky.Classes do
     |> select([c, u], {c.id, count(u.id)})
     |> Repo.all()
     |> Map.new()
+  end
+
+  # 128 bits, like the organization invite token: a collision is not a
+  # practical concern, the unique index is the backstop.
+  defp generate_invite_token do
+    :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
   end
 
   defp class_changeset(%Class{} = class, scope, attrs) do

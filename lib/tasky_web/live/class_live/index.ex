@@ -65,19 +65,33 @@ defmodule TaskyWeb.ClassLive.Index do
                     <input
                       type="text"
                       readonly
-                      value={registration_url(class.slug)}
+                      value={registration_url(class.invite_token)}
                       class="flex-1 px-2.5 py-1.5 text-[12px] text-stone-600 bg-stone-50 border border-stone-200 rounded-[6px] font-mono"
                       id={"registration-link-#{class.id}"}
                     />
                     <button
                       type="button"
                       phx-click="copy_link"
-                      phx-value-url={registration_url(class.slug)}
+                      phx-value-url={registration_url(class.invite_token)}
                       class="inline-flex items-center gap-1.5 bg-transparent text-stone-500 text-[12px] font-medium px-2.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
                       title="Link kopieren"
                     >
                       <.icon name="hero-clipboard-document" class="w-3.5 h-3.5" /> Kopieren
                     </button>
+                    <div
+                      class="tooltip tooltip-delayed tooltip-top"
+                      data-tip="Neuen Link generieren — der alte wird ungültig"
+                    >
+                      <button
+                        type="button"
+                        id={"rotate-link-#{class.id}"}
+                        phx-click="confirm_rotate"
+                        phx-value-id={class.id}
+                        class="inline-flex items-center gap-1.5 bg-transparent text-stone-500 text-[12px] font-medium px-2.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                      >
+                        <.icon name="hero-arrow-path" class="w-3.5 h-3.5" /> Neu
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -139,6 +153,50 @@ defmodule TaskyWeb.ClassLive.Index do
           </.link>
         </div>
       </div>
+
+      <%= if @rotating_class do %>
+        <dialog
+          id="rotate-link-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_modal"
+          phx-key="escape"
+        >
+          <div class="modal-backdrop bg-stone-900/50" phx-click="close_modal"></div>
+          <div class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200">
+            <div class="p-6 flex gap-4">
+              <div class="w-10 h-10 rounded-[10px] bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                <.icon name="hero-arrow-path" class="w-5 h-5" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-stone-800">
+                  Neuen Registrierungslink für {@rotating_class.name}?
+                </h3>
+                <p class="text-sm text-stone-500 mt-2 leading-[1.6]">
+                  Der bisherige Link funktioniert danach nicht mehr. Bereits registrierte
+                  Lernende sind nicht betroffen.
+                </p>
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 px-6 py-4 border-t border-stone-100 bg-stone-50 rounded-b-[14px]">
+              <button
+                type="button"
+                phx-click="close_modal"
+                class="px-4 py-2 text-sm font-medium text-stone-600 rounded-[8px] transition-colors duration-150 hover:bg-stone-100"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                id="rotate-link-confirm"
+                phx-click="rotate_token"
+                class="px-4 py-2 text-sm font-semibold text-white bg-sky-500 rounded-[8px] shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98]"
+              >
+                Neuen Link generieren
+              </button>
+            </div>
+          </div>
+        </dialog>
+      <% end %>
     </Layouts.app>
     """
   end
@@ -156,6 +214,7 @@ defmodule TaskyWeb.ClassLive.Index do
      |> assign(:has_classes, class_count > 0)
      |> assign(:can_create, Tasky.Policy.organization_scope(scope) != :none)
      |> assign(:student_counts, Classes.count_students_per_class(scope))
+     |> assign(:rotating_class, nil)
      |> stream(:classes, classes)}
   end
 
@@ -166,6 +225,35 @@ defmodule TaskyWeb.ClassLive.Index do
      |> put_flash(:info, "Link wurde in die Zwischenablage kopiert!")
      |> push_event("copy-to-clipboard", %{text: url})}
   end
+
+  def handle_event("confirm_rotate", %{"id" => id}, socket) do
+    # Scoped lookup: the id comes from a phx-value.
+    class = Classes.get_class!(socket.assigns.current_scope, id)
+    {:noreply, assign(socket, :rotating_class, class)}
+  end
+
+  def handle_event("close_modal", _params, socket) do
+    {:noreply, assign(socket, :rotating_class, nil)}
+  end
+
+  def handle_event("rotate_token", _params, %{assigns: %{rotating_class: %{} = class}} = socket) do
+    case Classes.rotate_invite_token(socket.assigns.current_scope, class) do
+      {:ok, class} ->
+        {:noreply,
+         socket
+         |> assign(:rotating_class, nil)
+         |> stream_insert(:classes, class)
+         |> put_flash(:info, "Neuer Registrierungslink generiert. Der bisherige ist ungültig.")}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:rotating_class, nil)
+         |> put_flash(:error, "Der Registrierungslink konnte nicht erneuert werden.")}
+    end
+  end
+
+  def handle_event("rotate_token", _params, socket), do: {:noreply, socket}
 
   def handle_event("delete", %{"id" => id}, socket) do
     scope = socket.assigns.current_scope
@@ -191,7 +279,7 @@ defmodule TaskyWeb.ClassLive.Index do
     end
   end
 
-  defp registration_url(slug) do
-    url(~p"/users/register?class=#{slug}")
+  defp registration_url(invite_token) do
+    url(~p"/users/register?class=#{invite_token}")
   end
 end

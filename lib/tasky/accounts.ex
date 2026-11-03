@@ -78,7 +78,7 @@ defmodule Tasky.Accounts do
   exist, and there is deliberately no third clause — a request without a valid
   invitation cannot produce an account at all.
 
-    * `{:class, %Class{}}` — from `/users/register?class=<slug>`. Creates a
+    * `{:class, %Class{}}` — from `/users/register?class=<invite token>`. Creates a
       **student** in that class. Their organization is derived from the class, so
       `organization_id` stays `nil`.
 
