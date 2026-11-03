@@ -39,6 +39,13 @@
 # Generated on crash by the VM
 erl_crash.dump
 
+# Local-only data under priv/, which the Dockerfile copies wholesale: files
+# uploaded in development, and the Dialyzer PLTs. Both are gitignored, so a CI
+# build never sees them — but a `fly deploy` from a laptop shipped them in the
+# image, dev uploads included.
+/priv/uploads/
+/priv/plts/
+
 # Static artifacts - These should be fetched and built inside the Docker image
 # https://hexdocs.pm/phoenix/Mix.Tasks.Phx.Gen.Release.html#module-docker
 /assets/node_modules/
