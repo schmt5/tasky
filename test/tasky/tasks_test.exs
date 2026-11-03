@@ -244,6 +244,36 @@ defmodule Tasky.TasksTest do
       assert progress.extended_total == 1
       assert progress.percent == 0
     end
+
+    test "the timeline lists visible units in order without writing anything" do
+      scope = user_scope_fixture(user_fixture(%{role: "teacher"}))
+      course = course_fixture(scope: scope)
+
+      for {name, position, status} <- [
+            {"Offen", 0, "open"},
+            {"Bald", 1, "locked"},
+            {"Entwurf", 2, "draft"}
+          ] do
+        task_fixture(scope, %{
+          name: name,
+          position: position,
+          status: status,
+          course_id: course.id
+        })
+      end
+
+      student = user_fixture(%{role: "student"})
+      Tasky.Courses.enroll_student(course.id, student.id)
+
+      timeline = Tasks.list_course_submissions(user_scope_fixture(student), course.id)
+
+      assert Enum.map(timeline, &{&1.task.name, &1.status, &1.id}) == [
+               {"Offen", "not_started", nil},
+               {"Bald", "not_started", nil}
+             ]
+
+      assert Repo.aggregate(Tasky.Tasks.TaskSubmission, :count) == 0
+    end
   end
 
   describe "reorder_tasks/3" do

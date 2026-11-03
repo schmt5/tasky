@@ -28,6 +28,11 @@ defmodule Tasky.Tasks do
   # (Verdikt korrigieren) oder schon einmal reviewt.
   @reviewable_statuses ~w(completed in_revision review_approved review_denied)
 
+  # What the course timeline needs — see list_course_submissions/2.
+  @timeline_task_fields Task.__schema__(:fields) -- [:content, :sample_solution]
+  @timeline_submission_fields TaskSubmission.__schema__(:fields) --
+                                [:content, :corrected_content]
+
   # Statuses that count as "done" for the student's course progress. A unit
   # handed in counts even before the teacher has approved it.
   @completed_statuses ~w(completed review_approved)
@@ -553,63 +558,49 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Lists all submissions for a specific course for a student.
-  Students can only view their own submissions.
-  Automatically creates submissions for open tasks that don't have one yet.
+  The student's submission for every unit of the course they may see, in
+  unit order — the course timeline. A unit they have not opened yet gets an
+  unsaved placeholder (`status: "not_started"`, no `id`); the row itself is
+  created when they open the unit (`get_or_create_submission/2`).
 
-  ## Examples
-
-      iex> list_course_submissions(scope, course_id)
-      [%TaskSubmission{}, ...]
-
+  Read-only and two queries, whatever the size of the course. It used to
+  create the missing rows here, one query per unit on every page view, and to
+  load every unit's document and every answer along with them; the timeline
+  shows names and statuses only, so neither the units' `content` and
+  `sample_solution` nor the submissions' answer documents are loaded — those
+  fields read as their defaults.
   """
-  def list_course_submissions(%Scope{user: user} = scope, course_id)
-      when user.role == "student" do
-    # Every unit students may see: open ones, and locked ones as "Bald verfügbar"
+  def list_course_submissions(%Scope{user: user}, course_id) when user.role == "student" do
     tasks =
       Task
       |> where([t], t.course_id == ^course_id and t.status in ^Task.student_visible_statuses())
       |> order_by([t], asc: t.position)
+      |> select([t], struct(t, ^@timeline_task_fields))
       |> Repo.all()
-
-    # Ensure a submission row exists for every open task
-    Enum.each(tasks, fn task ->
-      unless Task.locked?(task) do
-        get_or_create_submission(scope, task.id)
-      end
-    end)
 
     task_ids = Enum.map(tasks, & &1.id)
 
-    # Fetch existing submissions for non-draft tasks
     submissions_by_task =
       TaskSubmission
       |> where([s], s.student_id == ^user.id and s.task_id in ^task_ids)
-      |> preload(:task)
+      |> select([s], struct(s, ^@timeline_submission_fields))
       |> Repo.all()
       |> Map.new(&{&1.task_id, &1})
 
-    # Return in task position order; locked tasks without a submission get a virtual placeholder
-    tasks
-    |> Enum.map(fn task ->
+    Enum.map(tasks, fn task ->
       case Map.get(submissions_by_task, task.id) do
-        nil when task.status == "locked" ->
-          # Return a virtual submission struct so the UI can render "Bald verfügbar"
+        nil ->
           %TaskSubmission{
             task_id: task.id,
-            task: task,
             status: "not_started",
-            student_id: user.id
+            student_id: user.id,
+            task: task
           }
 
-        nil ->
-          nil
-
         submission ->
-          submission
+          %{submission | task: task}
       end
     end)
-    |> Enum.reject(&is_nil/1)
   end
 
   @doc """
