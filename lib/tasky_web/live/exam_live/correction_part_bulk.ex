@@ -1036,7 +1036,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         next_part_id = if idx + 1 < length(parts), do: Enum.at(parts, idx + 1).id, else: nil
         prev_part_id = if idx > 0, do: Enum.at(parts, idx - 1).id, else: nil
 
-        submissions = Exams.list_exam_submissions(exam)
+        submissions = Exams.list_corrected_parts(exam)
         answer_blocks = Exams.list_part_answer_groups(exam, part_id)
 
         checkbox_scoring = Exams.checkbox_scoring(exam, part_id)
@@ -1057,6 +1057,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
          |> assign(:answer_blocks, answer_blocks)
          |> assign(:answer_order, answer_order(answer_blocks, checkbox_scoring))
          |> assign(:manual_input, nil)
+         |> assign(:refresh_scheduled, false)
          |> assign(:show_keys_modal, false)
          |> assign(:is_multi_input, length(answer_blocks) > 1)
          |> assign(:total_submissions, length(submissions))
@@ -1285,7 +1286,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
       # tallied even when the system's pre-judgement was never clicked. The
       # context persists them and marks every submission in one transaction.
       defaults =
-        Map.new(Exams.list_exam_submissions(exam), fn submission ->
+        Map.new(Exams.list_corrected_parts(exam), fn submission ->
           per_block =
             Enum.reduce(socket.assigns.answer_blocks, %{}, fn block, acc ->
               block.groups
@@ -1307,9 +1308,17 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     {:noreply, refresh_assigns(socket)}
   end
 
+  # One message arrives per changed submission: a bulk verdict on a group of
+  # 25 answers, "Teil korrigiert" for the class, or every single write of an
+  # auto-correction run. Each refresh reloads every answer document, so they
+  # are coalesced into one refresh per burst instead of one per message.
   @impl true
   def handle_info({:submission_corrected_parts_changed, _submission}, socket) do
-    {:noreply, refresh_assigns(socket)}
+    {:noreply, schedule_refresh(socket)}
+  end
+
+  def handle_info(:refresh, socket) do
+    {:noreply, socket |> assign(:refresh_scheduled, false) |> refresh_assigns()}
   end
 
   def handle_info({:bulk_correction_progress, _}, socket), do: {:noreply, socket}
@@ -1345,10 +1354,19 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
     put_flash(socket, :error, "Bewertung konnte nicht gespeichert werden (#{inspect(reason)}).")
   end
 
+  @refresh_delay_ms 200
+
+  defp schedule_refresh(%{assigns: %{refresh_scheduled: true}} = socket), do: socket
+
+  defp schedule_refresh(socket) do
+    Process.send_after(self(), :refresh, @refresh_delay_ms)
+    assign(socket, :refresh_scheduled, true)
+  end
+
   defp refresh_assigns(socket) do
     %{exam: exam, current_part: part, parts: parts} = socket.assigns
     answer_blocks = Exams.list_part_answer_groups(exam, part.id)
-    submissions = Exams.list_exam_submissions(exam)
+    submissions = Exams.list_corrected_parts(exam)
 
     socket
     |> assign(:answer_blocks, answer_blocks)

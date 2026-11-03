@@ -608,6 +608,18 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  Each submission's `corrected_parts`, for the "how many are done" counts of
+  the correction views — `%{id:, corrected_parts:}` per submission, without
+  the answer documents `list_exam_submissions/1` carries.
+  """
+  def list_corrected_parts(%Exam{} = exam) do
+    ExamSubmission
+    |> where([s], s.exam_id == ^exam.id)
+    |> select([s], %{id: s.id, corrected_parts: s.corrected_parts})
+    |> Repo.all()
+  end
+
+  @doc """
   The participants of an exam for the progress grid, without the heavy JSON
   columns: `id`, names, `email`, `submitted` and `updated_at`. Ordered like
   `list_exam_submissions/1`. Authorization rides on the exam.
