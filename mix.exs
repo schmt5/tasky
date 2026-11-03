@@ -117,7 +117,9 @@ defmodule Tasky.MixProject do
       # Must stay identical to .github/workflows/ci.yml — a precommit that runs
       # the *mutating* `format` (instead of `--check-formatted`) or skips
       # dialyzer passes locally while CI is red, which is exactly how the build
-      # gate rotted unnoticed.
+      # gate rotted unnoticed. Hence `coveralls` rather than `test` (CI enforces
+      # the coverage minimum in coveralls.json) and the asset checks of CI's
+      # assets job.
       precommit: [
         "compile --warnings-as-errors",
         "deps.unlock --check-unused",
@@ -125,7 +127,12 @@ defmodule Tasky.MixProject do
         "credo --strict",
         "sobelow --config",
         "dialyzer",
-        "test"
+        "ecto.create --quiet",
+        "ecto.migrate --quiet",
+        "coveralls",
+        "cmd npx --prefix assets tsc --noEmit -p assets/tsconfig.json",
+        "assets.test",
+        "assets.build"
       ]
     ]
   end
