@@ -878,11 +878,12 @@ defmodule TaskyWeb.ExamLive.Cockpit do
       Phoenix.PubSub.subscribe(Tasky.PubSub, "exam_cockpit:#{exam.id}")
     end
 
-    submissions = Exams.list_exam_submissions(exam)
+    submissions = Exams.list_cockpit_rows(exam)
 
     {:ok,
      socket
      |> assign(:page_title, exam.name <> " – Cockpit")
+     |> assign(:refresh_scheduled, false)
      |> assign(:exam, exam)
      |> assign(:assigned_mode?, Exams.assigned_mode?(exam))
      |> assign(:anonymous_mode?, Exams.anonymous_mode?(exam))
@@ -1009,10 +1010,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     end)
   end
 
-  defp never_started?(%{submitted: false, content: content}) when is_map(content),
-    do: map_size(content) == 0
-
-  defp never_started?(_submission), do: false
+  defp never_started?(%{never_started: never_started}), do: never_started == true
 
   # Re-streams every submission. Both the presence dot and the status label are
   # computed inside the stream item, and a stream does not re-render items it has
@@ -1024,11 +1022,20 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   # exam), and the number used to stay at its mount value while the list below it
   # grew.
   defp refresh_submissions(socket) do
-    submissions = Exams.list_exam_submissions(socket.assigns.exam)
+    submissions = Exams.list_cockpit_rows(socket.assigns.exam)
 
     socket
     |> assign(:present, presence_state(socket.assigns.exam.id))
     |> assign_submissions(submissions)
+  end
+
+  @refresh_delay_ms 300
+
+  defp schedule_refresh(%{assigns: %{refresh_scheduled: true}} = socket), do: socket
+
+  defp schedule_refresh(socket) do
+    Process.send_after(self(), :refresh, @refresh_delay_ms)
+    assign(socket, :refresh_scheduled, true)
   end
 
   # The one place the list is (re)streamed, so the status filter and the
@@ -1064,9 +1071,16 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     ]
   end
 
+  # Presence diffs come in bursts — a class joining at the start, every SEB
+  # launch and reconnect a leave plus a join — so they are coalesced into one
+  # refresh per burst rather than one per diff.
   @impl true
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
-    {:noreply, refresh_submissions(socket)}
+    {:noreply, schedule_refresh(socket)}
+  end
+
+  def handle_info(:refresh, socket) do
+    {:noreply, socket |> assign(:refresh_scheduled, false) |> refresh_submissions()}
   end
 
   # Every status change lands here, including the one this cockpit triggered

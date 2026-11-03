@@ -625,6 +625,32 @@ defmodule Tasky.Exams do
   end
 
   @doc """
+  The participant rows of the exam cockpit: who is enrolled, their SEB
+  exemption and hand-in state, and `never_started` (no answer written yet).
+
+  The cockpit refreshes on every presence change, so this deliberately leaves
+  out the answer documents `list_exam_submissions/1` loads — `never_started`
+  is the only thing the cockpit needs from them, and SQL answers it.
+  """
+  def list_cockpit_rows(%Exam{} = exam) do
+    ExamSubmission
+    |> where([s], s.exam_id == ^exam.id)
+    |> order_by([s], asc: s.inserted_at)
+    |> select([s], %{
+      id: s.id,
+      firstname: s.firstname,
+      lastname: s.lastname,
+      exam_token: s.exam_token,
+      seb_exempt: s.seb_exempt,
+      submitted: s.submitted,
+      submitted_at: s.submitted_at,
+      inserted_at: s.inserted_at,
+      never_started: fragment("NOT ? AND ? = '{}'::jsonb", s.submitted, s.content)
+    })
+    |> Repo.all()
+  end
+
+  @doc """
   Each submission's `corrected_parts`, for the "how many are done" counts of
   the correction views — `%{id:, corrected_parts:}` per submission, without
   the answer documents `list_exam_submissions/1` carries.

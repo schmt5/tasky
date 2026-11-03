@@ -266,6 +266,27 @@ defmodule TaskyWeb.ExamCockpitAssignmentLiveTest do
     end
   end
 
+  # `never_started` is computed in SQL from the answer document the cockpit no
+  # longer loads, so both sides of it are pinned here.
+  describe "absent participant label" do
+    test "tells someone who never wrote anything from someone who left", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = setup_exam("assigned", "running")
+      idle = user_fixture(%{role: "student", firstname: "Ida", lastname: "Idle"})
+      gone = user_fixture(%{role: "student", firstname: "Gus", lastname: "Gone"})
+      {:ok, _} = Exams.assign_student(scope, exam, idle.id)
+      {:ok, wrote} = Exams.assign_student(scope, exam, gone.id)
+
+      {:ok, _} =
+        Exams.update_exam_submission_content(wrote, %{"type" => "doc", "content" => []})
+
+      {:ok, view, _html} = open_cockpit(conn, teacher, exam)
+      rows = rows_html(view)
+
+      assert rows =~ ~r/Ida Idle.*?Noch nicht begonnen/s
+      assert rows =~ ~r/Gus Gone.*?Abwesend/s
+    end
+  end
+
   # The participant label is computed inside a LiveView stream item, so it only
   # changes when the stream is re-streamed. Nothing did that on a status change,
   # which left a running exam reading "Im Warteraum" in the cockpit while the
