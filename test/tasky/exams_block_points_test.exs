@@ -161,6 +161,16 @@ defmodule Tasky.ExamsBlockPointsTest do
       assert Enum.all?(updated, &(&1.block_verdicts["11"] == "correct"))
     end
 
+    test "set_block_verdict_bulk refuses a verdict outside the vocabulary" do
+      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
+      sub = submission_fixture(exam)
+
+      assert {:error, :invalid_verdict} =
+               Exams.set_block_verdict_bulk(:system, exam, "q-1", 0, "bogus", [sub.id])
+
+      assert Exams.get_submission!(exam, sub.id).block_verdicts == sub.block_verdicts
+    end
+
     test "numeric verdicts are clamped to the block max and rounded to 0.25" do
       exam =
         exam_fixture(%{

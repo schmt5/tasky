@@ -2403,7 +2403,8 @@ defmodule Tasky.Exams do
   """
   def set_block_verdicts_bulk(scope, %Exam{} = exam, part_id, verdicts_by_index, submission_ids)
       when is_binary(part_id) and is_map(verdicts_by_index) and is_list(submission_ids) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id),
+         :ok <- validate_verdicts(verdicts_by_index) do
       result =
         Repo.transaction(fn ->
           exam = Repo.lock_one!(Exam, exam.id, :share)
@@ -2423,6 +2424,18 @@ defmodule Tasky.Exams do
         {:ok, updated_submissions}
       end
     end
+  end
+
+  # The binding verdict vocabulary — the same one set_block_verdict/5 guards.
+  # normalize_verdict/2 passes anything that is not a number through, so a
+  # value outside it would be stored and silently read back as ungraded.
+  defp validate_verdicts(verdicts_by_index) do
+    if Enum.all?(verdicts_by_index, fn {index, verdict} ->
+         is_integer(index) and
+           (verdict in ["correct", "half", "wrong", nil] or is_number(verdict))
+       end),
+       do: :ok,
+       else: {:error, :invalid_verdict}
   end
 
   defp effective_verdicts_for_part(blocks, explicit_verdicts) do

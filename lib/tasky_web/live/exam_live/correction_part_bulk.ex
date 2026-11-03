@@ -1076,7 +1076,8 @@ defmodule TaskyWeb.ExamLive.CorrectionPartBulk do
         "set_group_verdict",
         %{"index" => idx_str, "text" => text, "verdict" => verdict},
         socket
-      ) do
+      )
+      when verdict in ["correct", "wrong"] do
     idx = TaskyWeb.Params.int(idx_str)
     part_id = socket.assigns.current_part.id
 
