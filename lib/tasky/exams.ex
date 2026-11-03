@@ -413,9 +413,6 @@ defmodule Tasky.Exams do
     end
   end
 
-  @doc "The participation modes a session can run in."
-  def participation_modes, do: Exam.participation_modes()
-
   @doc "True when the exam runs with assigned, logged-in participants."
   def assigned_mode?(%Exam{participation_mode: "assigned"}), do: true
   def assigned_mode?(%Exam{}), do: false
@@ -583,16 +580,6 @@ defmodule Tasky.Exams do
   # --- Guest / Submission functions ---
 
   @doc """
-  Gets an exam by its enrollment token. Used for the guest enrollment page.
-  Raises if not found.
-  """
-  def get_exam_by_enrollment_token!(token) do
-    enrollment_token_query(token)
-    |> Repo.one!()
-    |> Repo.preload([:teacher])
-  end
-
-  @doc """
   Gets an exam by its enrollment token, or `nil` if the token is unknown.
   Lets the enrollment page render a friendly "invalid link" state instead
   of raising a generic 404.
@@ -708,11 +695,6 @@ defmodule Tasky.Exams do
   @doc "Like `get_submission!/2` but returns nil instead of raising."
   def get_submission(%Exam{} = exam, id) do
     Repo.get_by(ExamSubmission, id: id, exam_id: exam.id)
-  end
-
-  @doc "Lists the exam's submissions with the given ids (foreign ids are ignored)."
-  def list_submissions_by_ids(%Exam{} = exam, ids) when is_list(ids) do
-    Repo.all(from s in ExamSubmission, where: s.id in ^ids and s.exam_id == ^exam.id)
   end
 
   # Transaction-only variants of the two functions above: they take a row lock on
@@ -1090,13 +1072,6 @@ defmodule Tasky.Exams do
       nil -> nil
       submission -> Repo.preload(submission, exam: [:teacher])
     end
-  end
-
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking exam_submission changes.
-  """
-  def change_exam_submission(%ExamSubmission{} = exam_submission, attrs \\ %{}) do
-    ExamSubmission.changeset(exam_submission, attrs)
   end
 
   @doc """
@@ -1506,31 +1481,6 @@ defmodule Tasky.Exams do
         {:error, changeset} -> Repo.rollback(changeset)
       end
     end)
-  end
-
-  @doc """
-  Marks a single part of a submission as AI-auto-corrected (idempotent).
-  Broadcasts `{:submission_corrected_parts_changed, submission}`.
-  """
-  def mark_part_auto_corrected(scope, %ExamSubmission{} = submission, part_id)
-      when is_binary(part_id) do
-    with :ok <- authorize_submission(scope, submission) do
-      update_submission_json(submission, fn locked ->
-        %{auto_corrected_parts: Enum.uniq([part_id | locked.auto_corrected_parts || []])}
-      end)
-    end
-  end
-
-  @doc """
-  Removes a part from the submission's AI-auto-corrected list.
-  """
-  def unmark_part_auto_corrected(scope, %ExamSubmission{} = submission, part_id)
-      when is_binary(part_id) do
-    with :ok <- authorize_submission(scope, submission) do
-      update_submission_json(submission, fn locked ->
-        %{auto_corrected_parts: Enum.reject(locked.auto_corrected_parts || [], &(&1 == part_id))}
-      end)
-    end
   end
 
   @doc """
@@ -2948,26 +2898,6 @@ defmodule Tasky.Exams do
     |> Repo.all()
     |> Enum.filter(fn {_id, points} -> is_map_key(points || %{}, part_id) end)
     |> Enum.map(fn {id, _points} -> id end)
-  end
-
-  @doc """
-  Bulk-updates the AI correction configuration for multiple parts at once.
-  `updates` is a map of `%{part_id => %{key => value, ...}, ...}`.
-  Each part's config is merged with the existing config for that part.
-  """
-  def update_ai_correction_config_bulk(scope, %Exam{} = exam, updates) when is_map(updates) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      update_exam_json(exam, fn locked ->
-        merged =
-          Enum.reduce(updates, locked.ai_correction_config || %{}, fn {part_id, new_config},
-                                                                      acc ->
-            existing = Map.get(acc, part_id, %{})
-            Map.put(acc, part_id, Map.merge(existing, new_config))
-          end)
-
-        %{ai_correction_config: merged}
-      end)
-    end
   end
 
   @doc """

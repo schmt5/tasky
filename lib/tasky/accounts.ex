@@ -316,67 +316,6 @@ defmodule Tasky.Accounts do
   ## Role management
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user role.
-
-  ## Examples
-
-      iex> change_user_role(user)
-      %Ecto.Changeset{data: %User{}}
-
-  """
-  def change_user_role(user, attrs \\ %{}) do
-    user
-    |> Ecto.Changeset.cast(attrs, [:role])
-    |> Ecto.Changeset.validate_inclusion(:role, User.valid_roles())
-  end
-
-  @doc """
-  Updates the user role.
-
-  ## Examples
-
-      iex> update_user_role(user, %{role: "teacher"})
-      {:ok, %User{}}
-
-      iex> update_user_role(user, %{role: "invalid"})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def update_user_role(user, attrs) do
-    user
-    |> change_user_role(attrs)
-    |> Repo.update()
-  end
-
-  @doc """
-  Returns all users with a specific role.
-
-  ## Examples
-
-      iex> list_users_by_role("teacher")
-      [%User{}, ...]
-
-  """
-  def list_users_by_role(role) when role in ["admin", "teacher", "student"] do
-    Repo.all(from u in User, where: u.role == ^role, order_by: [asc: u.email])
-  end
-
-  @doc """
-  Returns all users grouped by role.
-
-  ## Examples
-
-      iex> list_all_users_grouped_by_role()
-      %{"admin" => [...], "teacher" => [...], "student" => [...]}
-
-  """
-  def list_all_users_grouped_by_role do
-    User.valid_roles()
-    |> Enum.map(fn role -> {role, list_users_by_role(role)} end)
-    |> Enum.into(%{})
-  end
-
-  @doc """
   Returns users with their class preloaded, ordered by lastname then firstname.
 
   Accepts an optional keyword list of filters:

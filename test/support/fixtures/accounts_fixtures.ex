@@ -83,9 +83,10 @@ defmodule Tasky.AccountsFixtures do
 
   # The invitation only ever produces "student" or "teacher"; an admin is
   # promoted afterwards, mirroring reality — the app has no UI that creates one.
+  # Straight to the Repo: the app has no unscoped "change any user's role"
+  # function, and a fixture must not be the reason it grows one again.
   defp apply_role(user, role) do
-    {:ok, user} = Accounts.update_user_role(user, %{role: role})
-    user
+    user |> Ecto.Changeset.change(role: role) |> Tasky.Repo.update!()
   end
 
   # Straight to the Repo on purpose: an explicit `nil` asks for a user the

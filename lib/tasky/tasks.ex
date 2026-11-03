@@ -812,19 +812,6 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
-  Returns an `%Ecto.Changeset{}` for tracking submission changes.
-
-  ## Examples
-
-      iex> change_submission(submission)
-      %Ecto.Changeset{data: %TaskSubmission{}}
-
-  """
-  def change_submission(%TaskSubmission{} = submission, attrs \\ %{}) do
-    TaskSubmission.status_changeset(submission, attrs)
-  end
-
-  @doc """
   Returns a map of `%{student_id => entry}` for all given students on a single
   task, where each entry carries the submission id, its status, whether there
   is content, the two fields `solution_visible_for_entry?/2` needs, and the
