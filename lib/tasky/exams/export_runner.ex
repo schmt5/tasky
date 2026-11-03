@@ -154,16 +154,42 @@ defmodule Tasky.Exams.ExportRunner do
     zip_filename = "#{sanitize(exam.name)}-Export.zip"
     zip_path = Path.join(dir, "#{export_id}.zip")
 
+    names =
+      pdfs
+      |> Enum.map(fn {sub, _pdf} ->
+        "#{sanitize(sub.firstname)}-#{sanitize(sub.lastname)}-#{sanitize(exam.name)}"
+      end)
+      |> unique_names()
+
     entries =
-      Enum.map(pdfs, fn {sub, pdf_binary} ->
-        name = "#{sanitize(sub.firstname)}-#{sanitize(sub.lastname)}-#{sanitize(exam.name)}.pdf"
-        {String.to_charlist(name), pdf_binary}
+      Enum.zip_with(names, pdfs, fn name, {_sub, pdf_binary} ->
+        {String.to_charlist(name <> ".pdf"), pdf_binary}
       end) ++ failure_manifest(failures)
 
     case :zip.create(String.to_charlist(zip_path), entries) do
       {:ok, _path_charlist} -> {:ok, export_id, zip_filename}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # Two participants with the same name got the same entry name, and unpacking
+  # the archive kept only one of their PDFs. Later ones get "-2", "-3", …,
+  # compared case-insensitively because the teacher's file system may be.
+  defp unique_names(names) do
+    {unique, _seen} =
+      Enum.map_reduce(names, MapSet.new(), fn name, seen ->
+        unique =
+          Stream.iterate(1, &(&1 + 1))
+          |> Stream.map(fn
+            1 -> name
+            n -> "#{name}-#{n}"
+          end)
+          |> Enum.find(&(not MapSet.member?(seen, String.downcase(&1))))
+
+        {unique, MapSet.put(seen, String.downcase(unique))}
+      end)
+
+    unique
   end
 
   defp failure_manifest([]), do: []

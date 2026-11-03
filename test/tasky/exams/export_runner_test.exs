@@ -39,6 +39,25 @@ defmodule Tasky.Exams.ExportRunnerTest do
            }
   end
 
+  test "gives participants with the same name a PDF each" do
+    submissions = [
+      %{id: 1, firstname: "Anna", lastname: "Müller"},
+      %{id: 2, firstname: "Anna", lastname: "Müller"},
+      %{id: 3, firstname: "anna", lastname: "müller"}
+    ]
+
+    {:ok, _pid} =
+      ExportRunner.start(@exam, submissions, self(), web(fn sub -> {:ok, "%PDF-#{sub.id}"} end))
+
+    assert_receive {:export_done, %{download_token: {export_id, _}, failed: 0}}, 5_000
+
+    assert zip_entries(export_id) == %{
+             "Anna-Mueller-Geografie-Pruefung.pdf" => "%PDF-1",
+             "Anna-Mueller-Geografie-Pruefung-2.pdf" => "%PDF-2",
+             "anna-mueller-Geografie-Pruefung-3.pdf" => "%PDF-3"
+           }
+  end
+
   test "lists failed renders in FEHLER.txt and keeps the good PDFs" do
     submissions = [
       %{id: 1, firstname: "Anna", lastname: "Muster"},
