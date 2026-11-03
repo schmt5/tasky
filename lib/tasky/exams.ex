@@ -29,6 +29,11 @@ defmodule Tasky.Exams do
 
   Archived exams are left out unless `archived: true` is given, in which case
   only archived exams are returned, most recently archived first.
+
+  The structs come without the document columns (`@document_fields`) — those
+  read as their empty defaults here, since a teacher's list would otherwise
+  load every exam they ever wrote in full. Every other column is loaded.
+  Refetch with `get_exam!/2` before acting on one.
   """
   def list_exams(%Scope{user: user}, opts \\ []) do
     archived? = Keyword.get(opts, :archived, false)
@@ -40,10 +45,21 @@ defmodule Tasky.Exams do
     end
   end
 
+  @document_fields [
+    :content,
+    :sample_solution,
+    :sample_solution_points,
+    :sample_solution_block_points,
+    :ai_correction_config,
+    :paper_layout
+  ]
+  @list_fields Exam.__schema__(:fields) -- @document_fields
+
   defp exams_query(false) do
     from e in Exam,
       where: is_nil(e.archived_at),
       order_by: [desc: e.inserted_at],
+      select: struct(e, ^@list_fields),
       preload: [:teacher]
   end
 
@@ -51,6 +67,7 @@ defmodule Tasky.Exams do
     from e in Exam,
       where: not is_nil(e.archived_at),
       order_by: [desc: e.archived_at, desc: e.inserted_at],
+      select: struct(e, ^@list_fields),
       preload: [:teacher]
   end
 
