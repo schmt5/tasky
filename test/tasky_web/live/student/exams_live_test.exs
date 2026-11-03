@@ -169,20 +169,22 @@ defmodule TaskyWeb.Student.ExamsLiveTest do
 
   describe "the returned exam" do
     setup %{conn: conn} do
-      %{scope: scope, exam: exam} = assigned_exam("running")
+      teacher = user_fixture(%{role: "teacher"})
+      scope = user_scope_fixture(teacher)
+
+      exam =
+        exam_fixture(
+          scope: scope,
+          status: "running",
+          participation_mode: "assigned",
+          attrs: %{content: answer_doc("")}
+        )
+
       student = user_fixture(%{role: "student"})
       {:ok, submission} = Exams.assign_student(scope, exam, student.id)
 
       {:ok, submission} =
-        Exams.update_exam_submission_content(submission, %{
-          "type" => "doc",
-          "content" => [
-            %{
-              "type" => "paragraph",
-              "content" => [%{"type" => "text", "text" => "Meine Antwort"}]
-            }
-          ]
-        })
+        Exams.save_exam_submission_answers(submission, %{"answers" => %{"a" => "Meine Antwort"}})
 
       {:ok, submission} = Exams.submit_exam_submission(submission)
       exam = finish(scope, exam)

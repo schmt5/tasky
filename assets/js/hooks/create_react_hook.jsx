@@ -105,7 +105,8 @@ export function createReactHook({
   };
 }
 
-// Submit-modal handshake shared by the student editors: force-save everything
+// Submit-modal handshake shared by the learner surfaces (the free-document
+// editor and the ExamAnswersForm answer sheet): force-save everything
 // pending, then report whether the server now holds the full document. The
 // modal blocks typing, so a successful flush means the submit itself needs no
 // content payload.

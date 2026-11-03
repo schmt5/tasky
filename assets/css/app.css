@@ -763,3 +763,417 @@ body:has(.page-wrapper) {
     max-width: 480px;
     line-height: 1.6;
 }
+
+/* ── Answer sheet (learner view, TaskyWeb.ExamDocHTML) ──
+   The exam or learning unit as plain HTML with native answer fields. The
+   typography mirrors the Tiptap editor (assets/js/react/exam_content_editor.css,
+   `.exam-editor__content .ProseMirror`) so teacher preview and learner view
+   read the same — a rule changed there belongs here too. */
+
+.exam-doc-sheet {
+    background: #f5f5f4;
+    padding: 32px 16px 48px;
+    min-height: 320px;
+}
+
+.exam-doc {
+    max-width: 210mm;
+    margin: 0 auto;
+    color: #1c1917;
+    font-size: 15px;
+    line-height: 1.65;
+    background: #fff;
+    border-radius: 10px;
+    padding: 20px 24px;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.07),
+        0 10px 28px rgba(0, 0, 0, 0.06);
+    overflow-wrap: break-word;
+}
+
+.exam-doc > * + * {
+    margin-top: 0.75em;
+}
+
+.exam-doc h1 {
+    font-size: 1.8em;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-top: 1em;
+}
+
+.exam-doc h2 {
+    font-size: 1.4em;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 0.9em;
+}
+
+.exam-doc h3 {
+    font-size: 1.15em;
+    font-weight: 600;
+    margin-top: 0.8em;
+}
+
+.exam-doc > :first-child {
+    margin-top: 0;
+}
+
+.exam-doc ul,
+.exam-doc ol {
+    padding-left: 1.4em;
+}
+
+.exam-doc ul {
+    list-style: disc;
+}
+
+.exam-doc ol {
+    list-style: decimal;
+}
+
+.exam-doc ul ul {
+    list-style: circle;
+}
+
+.exam-doc ul ul ul {
+    list-style: square;
+}
+
+.exam-doc ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+}
+
+/* The whole option text is the checkbox's <label>: clicking it ticks the box.
+   Further paragraphs of the option sit below, aligned with the text. */
+.exam-doc__option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.exam-doc__option > input {
+    flex: 0 0 auto;
+    margin-top: 5px;
+}
+
+.exam-doc__option > span {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.exam-doc__option:has(> input:disabled) {
+    cursor: default;
+}
+
+.exam-doc__option-more {
+    padding-left: 24px;
+}
+
+.exam-doc__option-more > * {
+    margin-top: 0.5em;
+}
+
+.exam-doc blockquote {
+    border-left: 3px solid #d6d3d1;
+    padding-left: 1em;
+    color: #57534e;
+    font-style: italic;
+}
+
+.exam-doc mark {
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+.exam-doc a {
+    color: #0284c7;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.exam-doc a:hover {
+    color: #0369a1;
+}
+
+.exam-doc img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    display: block;
+    margin: 0.5em 0;
+}
+
+.exam-doc code {
+    font-size: 0.9em;
+    background: #f5f5f4;
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+}
+
+.exam-doc pre {
+    background: #f5f5f4;
+    border-radius: 8px;
+    padding: 10px 14px;
+    overflow-x: auto;
+}
+
+.exam-doc pre code {
+    background: none;
+    padding: 0;
+}
+
+.exam-doc hr {
+    border: none;
+    border-top: 1px solid #e7e5e4;
+}
+
+.exam-doc .callout {
+    border: 1px solid #d6d3d1;
+    background: #fafaf9;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0.5em 0;
+}
+
+.exam-doc .callout > * + * {
+    margin-top: 0.5em;
+}
+
+.exam-doc .callout[data-color="red"] {
+    border-color: #f87171;
+    background: #fee2e2;
+}
+
+.exam-doc .callout[data-color="yellow"] {
+    border-color: #facc15;
+    background: #fef9c3;
+}
+
+.exam-doc .callout[data-color="green"] {
+    border-color: #4ade80;
+    background: #dcfce7;
+}
+
+.exam-doc .callout[data-color="blue"] {
+    border-color: #60a5fa;
+    background: #dbeafe;
+}
+
+.exam-doc .callout[data-color="violet"] {
+    border-color: #a78bfa;
+    background: #ede9fe;
+}
+
+.exam-doc .tableWrapper {
+    overflow-x: auto;
+}
+
+.exam-doc table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 0.75em 0;
+}
+
+.exam-doc td,
+.exam-doc th {
+    border: 1px solid #d6d3d1;
+    padding: 6px 10px;
+    vertical-align: top;
+    min-width: 1em;
+}
+
+.exam-doc th {
+    background: #f5f5f4;
+    font-weight: 600;
+    text-align: left;
+}
+
+/* Answer fields share the dashed "fill me in" look of the editor's answer
+   nodes; focus turns them into a white field with a sky ring. */
+.exam-doc__gap,
+.exam-doc__block {
+    font: inherit;
+    color: #1c1917;
+    background: #f5f5f4;
+    border: 1px dashed #a8a29e;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        box-shadow 120ms ease;
+}
+
+.exam-doc__gap {
+    display: inline-block;
+    field-sizing: content;
+    min-inline-size: 6ch;
+    max-inline-size: 100%;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 6px;
+    vertical-align: baseline;
+}
+
+.exam-doc__block {
+    display: block;
+    width: 100%;
+    field-sizing: content;
+    min-height: calc(3lh + 20px);
+    margin: 0.5em 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    resize: vertical;
+}
+
+.exam-doc__gap:hover:not(:disabled),
+.exam-doc__block:hover:not(:disabled) {
+    border-color: #7dd3fc;
+}
+
+.exam-doc__gap:focus,
+.exam-doc__block:focus {
+    outline: none;
+    background: #fff;
+    border-style: solid;
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+.exam-doc__gap:disabled,
+.exam-doc__block:disabled {
+    color: #44403c;
+    cursor: default;
+    resize: none;
+}
+
+/* The radio of the editor (`.choice-radio`), as a real input. */
+.exam-doc__radio {
+    appearance: none;
+    position: relative;
+    display: inline-block;
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    margin: 0 0.45em 0 0.1em;
+    vertical-align: -3px;
+    border: 1.5px solid #78716c;
+    border-radius: 9999px;
+    background: #fff;
+    cursor: pointer;
+    transition:
+        border-color 120ms ease,
+        box-shadow 120ms ease,
+        transform 120ms ease;
+}
+
+.exam-doc__radio::before {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 9999px;
+    background: #0284c7;
+    transform: scale(0);
+    transition: transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+.exam-doc__radio:checked {
+    border-color: #0284c7;
+}
+
+.exam-doc__radio:checked::before {
+    transform: scale(1);
+}
+
+.exam-doc__radio:hover:not(:disabled) {
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.exam-doc__radio:active:not(:disabled) {
+    transform: scale(0.92);
+}
+
+/* Read-back: muted like the browser's own disabled checkbox beside it. */
+.exam-doc__radio:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.exam-doc__radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.35);
+}
+
+.exam-doc input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #0284c7;
+    cursor: pointer;
+}
+
+.exam-doc :disabled {
+    cursor: default;
+}
+
+/* Save state, quietly in the corner; only an error raises its voice. */
+.exam-doc__status {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 30;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #57534e;
+    background: #fff;
+    border: 1px solid #e7e5e4;
+    border-radius: 9999px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    opacity: 0;
+    transform: translateY(4px);
+    transition:
+        opacity 160ms ease,
+        transform 160ms ease;
+    pointer-events: none;
+}
+
+/* `data-state` comes from the ExamAnswersForm hook; idle stays hidden. */
+.exam-doc__status:is([data-state="saving"], [data-state="saved"], [data-state="error"]) {
+    opacity: 1;
+    transform: none;
+}
+
+.exam-doc__status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: #10b981;
+}
+
+.exam-doc__status[data-state="saving"]::before {
+    background: #0ea5e9;
+    animation: exam-doc-pulse 900ms ease-in-out infinite;
+}
+
+.exam-doc__status[data-state="error"] {
+    color: #b91c1c;
+    border-color: #fecaca;
+    background: #fef2f2;
+}
+
+.exam-doc__status[data-state="error"]::before {
+    background: #dc2626;
+}
+
+@keyframes exam-doc-pulse {
+    50% {
+        opacity: 0.3;
+    }
+}

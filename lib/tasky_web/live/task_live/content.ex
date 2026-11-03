@@ -7,6 +7,7 @@ defmodule TaskyWeb.TaskLive.Content do
   """
   use TaskyWeb, :live_view
 
+  import TaskyWeb.AnswerSheetComponents
   import TaskyWeb.FileComponents
 
   import TaskyWeb.ContentComponents,
@@ -56,6 +57,11 @@ defmodule TaskyWeb.TaskLive.Content do
               patch={~p"/tasks/#{@task}/content?tab=inhalt"}
             />
             <.tab_link
+              label="Vorschau"
+              active={@tab == "vorschau"}
+              patch={~p"/tasks/#{@task}/content?tab=vorschau"}
+            />
+            <.tab_link
               label="Musterlösung"
               active={@tab == "musterloesung"}
               patch={~p"/tasks/#{@task}/content?tab=musterloesung"}
@@ -79,6 +85,22 @@ defmodule TaskyWeb.TaskLive.Content do
           data-content={@content_json}
         >
         </div>
+      </div>
+
+      <%!-- Vorschau tab: the learner's answer sheet, fields usable but never
+          saved (no save_url). Lets the teacher see the plain-HTML view the
+          learners get instead of the editor. --%>
+      <div :if={@tab == "vorschau"} class="min-w-0">
+        <div class="bg-stone-100 px-4 pt-6">
+          <p class="max-w-[210mm] mx-auto flex items-center gap-2 text-[13px] text-stone-500">
+            <.icon name="hero-eye" class="w-4 h-4 text-sky-500 shrink-0" />
+            So sehen Lernende die Lerneinheit. Du kannst die Felder ausprobieren, gespeichert wird nichts.
+          </p>
+        </div>
+        <.answer_sheet
+          id={"task-preview-#{@task.id}-#{@preview_rev}"}
+          doc={@task.content || %{}}
+        />
       </div>
 
       <%!-- Musterlösung tab: dieselbe Struktur wie «Inhalt», aber gesperrter
@@ -483,9 +505,12 @@ defmodule TaskyWeb.TaskLive.Content do
   def mount(%{"id" => id}, _session, socket) do
     task = Tasks.get_task_with_course!(socket.assigns.current_scope, id)
 
+    if connected?(socket), do: Tasks.subscribe_tasks(socket.assigns.current_scope)
+
     {:ok,
      socket
      |> assign(:task, task)
+     |> assign(:preview_rev, 0)
      |> assign(:course, task.course)
      |> allow_upload(:attachment,
        accept: Uploads.attachment_accept_exts(),
@@ -503,6 +528,18 @@ defmodule TaskyWeb.TaskLive.Content do
      )}
   end
 
+  # The editor's last autosave lands after the switch to the preview (its
+  # unmount flushes it), so the preview re-renders on every save of this unit.
+  # The answer sheet is phx-update="ignore": only a new id makes it pick up new
+  # content. Every other message on the teacher's task topic is not ours.
+  @impl true
+  def handle_info({:updated, %{id: id}}, %{assigns: %{tab: "vorschau", task: %{id: id}}} = socket) do
+    task = Tasks.get_task!(socket.assigns.current_scope, id)
+    {:noreply, socket |> assign(:task, task) |> update(:preview_rev, &(&1 + 1))}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
+
   @impl true
   def handle_params(params, _uri, socket) do
     task = Tasks.get_task!(socket.assigns.current_scope, socket.assigns.task.id)
@@ -511,6 +548,7 @@ defmodule TaskyWeb.TaskLive.Content do
       case params["tab"] do
         "dateien" -> "dateien"
         "musterloesung" -> "musterloesung"
+        "vorschau" -> "vorschau"
         _ -> "inhalt"
       end
 
@@ -523,6 +561,9 @@ defmodule TaskyWeb.TaskLive.Content do
     case tab do
       "inhalt" ->
         {:noreply, assign(socket, :content_json, Jason.encode!(task.content || %{}))}
+
+      "vorschau" ->
+        {:noreply, socket}
 
       "musterloesung" ->
         {:noreply,
@@ -810,6 +851,7 @@ defmodule TaskyWeb.TaskLive.Content do
   end
 
   defp tab_label("inhalt"), do: "Inhalt"
+  defp tab_label("vorschau"), do: "Vorschau"
   defp tab_label("musterloesung"), do: "Musterlösung"
   defp tab_label("dateien"), do: "Dateien"
 end

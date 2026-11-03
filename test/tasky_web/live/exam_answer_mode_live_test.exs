@@ -114,23 +114,25 @@ defmodule TaskyWeb.ExamAnswerModeLiveTest do
     end
   end
 
-  describe "learner's editor" do
-    test "a free-document exam mounts the freeDocument preset", %{conn: conn} do
+  describe "learner's surface" do
+    test "a free-document exam mounts the editor", %{conn: conn} do
       exam = exam_fixture(answer_mode: "free_document", status: "running")
       submission = exam_submission_fixture(exam)
 
-      {:ok, _view, html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
+      {:ok, view, _html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
 
-      assert html =~ ~s(data-editor-mode="freeDocument")
+      assert has_element?(view, "#exam-submission-editor-#{submission.id}")
+      refute has_element?(view, "#exam-answers-#{submission.id}")
     end
 
-    test "an answer-field exam still mounts the student preset", %{conn: conn} do
+    test "an answer-field exam gets the native answer sheet", %{conn: conn} do
       exam = exam_fixture(status: "running")
       submission = exam_submission_fixture(exam)
 
-      {:ok, _view, html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
+      {:ok, view, _html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
 
-      assert html =~ ~s(data-editor-mode="student")
+      assert has_element?(view, "#exam-answers-#{submission.id}[phx-hook=ExamAnswersForm]")
+      refute has_element?(view, "#exam-submission-editor-#{submission.id}")
     end
   end
 end

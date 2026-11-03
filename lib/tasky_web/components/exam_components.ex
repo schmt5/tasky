@@ -312,9 +312,6 @@ defmodule TaskyWeb.ExamComponents do
   """
   def author_editor_mode(exam), do: if(free_document?(exam), do: "freeDocument", else: "author")
 
-  @doc "Der Editor-Preset für die Schreibfläche der lernenden Person."
-  def student_editor_mode(exam), do: if(free_document?(exam), do: "freeDocument", else: "student")
-
   @doc """
   Die Optionen einer Submission-Ansicht — was ein PDF-Export bzw. eine Rückgabe
   an die Teilnehmenden zeigt. Eine Quelle für beide Modals.

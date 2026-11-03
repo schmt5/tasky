@@ -11,6 +11,7 @@ defmodule Tasky.Exams do
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.PlainAnswers
   alias Tasky.Correction.SolutionHints
   alias Tasky.Correction.StringComparator
   alias Tasky.Exams.Exam
@@ -1022,23 +1023,86 @@ defmodule Tasky.Exams do
   Updates the content (TipTap doc JSON) of a non-submitted exam submission.
   Only allowed when the associated exam is still running and the submission
   has not been submitted yet.
+
+  In a free-document exam the doc *is* the answer and is stored as sent. In an
+  answer-field exam only the answers are taken from it and set into the
+  server's own skeleton (see `merge_submission_answers/3`) — the question text
+  cannot be changed from the client. That path is what a learner still on the
+  Tiptap editor sends; the native fields use `save_exam_submission_answers/2`.
   """
   def update_exam_submission_content(%ExamSubmission{} = submission, content)
       when is_map(content) do
-    # Gate and write run in one transaction against locked rows: an autosave
-    # already in flight when the student hits submit must not land content on a
-    # submission that is by then handed in (TOCTOU). This is the hottest write
-    # path in the app — one keystroke debounce per student — so the transaction
-    # holds nothing but the two locks, the check and the update.
+    write_submission_content(submission, fn exam, locked ->
+      if free_document?(exam) do
+        {:ok, content}
+      else
+        {_blanked, answers} = AnswerKey.split(content)
+        {:ok, merge_submission_answers(exam, locked, answers)}
+      end
+    end)
+  end
+
+  @doc """
+  Saves the answers of the native answer fields (`TaskyWeb.ExamDocComponents`)
+  of a non-submitted exam submission: `%{"answers" => ..., "choices" => ...}`,
+  see `Tasky.Correction.PlainAnswers.from_params/2`. Same gate as
+  `update_exam_submission_content/2`. A free-document exam has no answer
+  fields and refuses with `:free_document`.
+  """
+  def save_exam_submission_answers(%ExamSubmission{} = submission, params)
+      when is_map(params) do
+    write_submission_content(submission, fn exam, locked ->
+      if free_document?(exam) do
+        {:error, :free_document}
+      else
+        with {:ok, answers} <-
+               PlainAnswers.from_params(submission_answer_base(exam, locked), params) do
+          {:ok, merge_submission_answers(exam, locked, answers)}
+        end
+      end
+    end)
+  end
+
+  # Gate and write run in one transaction against locked rows: an autosave
+  # already in flight when the student hits submit must not land content on a
+  # submission that is by then handed in (TOCTOU). This is the hottest write
+  # path in the app — one keystroke debounce per student — so the transaction
+  # holds nothing but the two locks, the check, the merge and the update.
+  defp write_submission_content(submission, build_content) do
     Repo.transaction(fn ->
       {exam, locked} = lock_submission_for_write!(submission)
       ensure_submission_writable!(exam, locked)
 
-      case locked |> ExamSubmission.content_changeset(%{content: content}) |> Repo.update() do
-        {:ok, updated} -> updated
-        {:error, changeset} -> Repo.rollback(changeset)
+      with {:ok, content} <- build_content.(exam, locked),
+           {:ok, updated} <-
+             locked |> ExamSubmission.content_changeset(%{content: content}) |> Repo.update() do
+        updated
+      else
+        {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  # The document the answers go into: the learner's own copy once there is one,
+  # else the exam. Not always the exam's current content — the teacher may
+  # edit it during the exam, and an answer field removed there must not wipe
+  # the learner's answer from their submission.
+  defp submission_answer_base(exam, submission) do
+    case submission.content do
+      content when is_map(content) and map_size(content) > 0 -> content
+      _ -> exam.content || %{}
+    end
+  end
+
+  # Fields the payload leaves out keep their previous answer.
+  defp merge_submission_answers(exam, submission, answers) do
+    {skeleton, previous} =
+      exam
+      |> submission_answer_base(submission)
+      |> Map.put_new("type", "doc")
+      |> AnswerKey.split()
+
+    AnswerKey.merge(skeleton, Map.merge(previous, answers))
   end
 
   @doc """
@@ -1495,6 +1559,7 @@ defmodule Tasky.Exams do
 
       with {:ok, updated} <- result do
         broadcast_exam_event({:exam_answers_changed, updated})
+        Phoenix.PubSub.broadcast(Tasky.PubSub, "exam_content:#{updated.id}", :exam_content_saved)
         {:ok, updated}
       end
     end
@@ -3394,6 +3459,17 @@ defmodule Tasky.Exams do
   """
   def broadcast_bulk_correction(exam_id, message) do
     Phoenix.PubSub.broadcast(Tasky.PubSub, "exam_correction:#{exam_id}", message)
+  end
+
+  # --- PubSub for exam content ---
+
+  @doc """
+  Subscribes to saves of an exam's content: `:exam_content_saved` after each
+  `save_exam_structure/3`. The teacher's preview follows it — the editor's
+  last autosave lands only after the switch to the preview tab.
+  """
+  def subscribe_exam_content(exam_id) do
+    Phoenix.PubSub.subscribe(Tasky.PubSub, "exam_content:#{exam_id}")
   end
 
   # --- PubSub for exam status ---

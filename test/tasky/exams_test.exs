@@ -13,14 +13,25 @@ defmodule Tasky.ExamsTest do
     Tasky.Accounts.Scope.for_user(Tasky.Accounts.get_user!(exam.teacher_id))
   end
 
-  defp sample_doc(text) do
+  # A question and one answer field; `text` is the learner's answer. `""` is
+  # the blank field of the exam's own content.
+  defp sample_doc(text, question \\ "Frage 1") do
+    answer =
+      if text == "",
+        do: %{"type" => "paragraph"},
+        else: %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}
+
     %{
       "type" => "doc",
       "content" => [
-        %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}
+        %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => question}]},
+        %{"type" => "answerBlock", "attrs" => %{"answerId" => "a"}, "content" => [answer]}
       ]
     }
   end
+
+  defp running_exam_with_field,
+    do: exam_fixture(status: "running", attrs: %{content: sample_doc("")})
 
   describe "create_exam_submission/2" do
     test "enrolls when the exam is open" do
@@ -49,10 +60,29 @@ defmodule Tasky.ExamsTest do
 
   describe "update_exam_submission_content/2" do
     test "saves content while the exam is running" do
-      exam = exam_fixture(status: "running")
+      exam = running_exam_with_field()
       {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
 
       doc = sample_doc("Meine Antwort")
+      assert {:ok, updated} = Exams.update_exam_submission_content(submission, doc)
+      assert updated.content == doc
+    end
+
+    test "takes only the answers — the question text stays the server's" do
+      exam = running_exam_with_field()
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      tampered = sample_doc("Meine Antwort", "Gelöste Frage")
+
+      assert {:ok, updated} = Exams.update_exam_submission_content(submission, tampered)
+      assert updated.content == sample_doc("Meine Antwort")
+    end
+
+    test "stores a free-document exam's doc as sent" do
+      exam = exam_fixture(status: "running", answer_mode: "free_document")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      doc = sample_doc("Alles meins", "Mein Titel")
       assert {:ok, updated} = Exams.update_exam_submission_content(submission, doc)
       assert updated.content == doc
     end
@@ -73,6 +103,74 @@ defmodule Tasky.ExamsTest do
 
       assert {:error, :already_submitted} =
                Exams.update_exam_submission_content(submitted, sample_doc("nachträglich"))
+    end
+  end
+
+  describe "save_exam_submission_answers/2" do
+    test "sets the plain answers into the exam's skeleton" do
+      exam = running_exam_with_field()
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      assert {:ok, updated} =
+               Exams.save_exam_submission_answers(submission, %{
+                 "answers" => %{"a" => "Meine Antwort"}
+               })
+
+      assert updated.content == sample_doc("Meine Antwort")
+    end
+
+    test "ignores ids the document has no field for" do
+      exam = running_exam_with_field()
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      assert {:ok, updated} =
+               Exams.save_exam_submission_answers(submission, %{
+                 "answers" => %{"a" => "Antwort", "fremd" => "eingeschleust"}
+               })
+
+      assert updated.content == sample_doc("Antwort")
+    end
+
+    test "keeps the learner's copy when the teacher edits the exam meanwhile" do
+      exam = running_exam_with_field()
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      {:ok, submission} =
+        Exams.save_exam_submission_answers(submission, %{"answers" => %{"a" => "Erste"}})
+
+      {:ok, _exam} =
+        Exams.save_exam_structure(teacher_scope(exam), exam, sample_doc("", "Neue Frage"))
+
+      assert {:ok, updated} =
+               Exams.save_exam_submission_answers(submission, %{"answers" => %{"a" => "Zweite"}})
+
+      assert updated.content == sample_doc("Zweite")
+    end
+
+    test "refuses an answer over the length limit" do
+      exam = running_exam_with_field()
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      too_long = String.duplicate("x", Tasky.Correction.PlainAnswers.max_block_chars() + 1)
+
+      assert {:error, :too_long} =
+               Exams.save_exam_submission_answers(submission, %{"answers" => %{"a" => too_long}})
+    end
+
+    test "refuses a free-document exam" do
+      exam = exam_fixture(status: "running", answer_mode: "free_document")
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      assert {:error, :free_document} =
+               Exams.save_exam_submission_answers(submission, %{"answers" => %{}})
+    end
+
+    test "is gated like the doc save" do
+      exam = running_exam_with_field()
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+      {:ok, _exam} = Exams.update_exam_status(:system, exam, "finished")
+
+      assert {:error, :exam_not_running} =
+               Exams.save_exam_submission_answers(submission, %{"answers" => %{"a" => "x"}})
     end
   end
 
@@ -171,7 +269,7 @@ defmodule Tasky.ExamsTest do
     end
 
     test "reopening lets a participant write again" do
-      exam = exam_fixture(status: "running")
+      exam = running_exam_with_field()
       {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
       {:ok, exam} = Exams.update_exam_status(:system, exam, "finished")
 

@@ -226,17 +226,17 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       {:ok, _} =
         Tasky.Tasks.save_correction_content(teacher_scope, task, submission.id, corrected)
 
-      {:ok, _lv, html} = live(conn, ~p"/student/tasks/#{task.id}?preview=true")
+      {:ok, lv, html} = live(conn, ~p"/student/tasks/#{task.id}?preview=true")
       refute html =~ "ANMERKUNG-LP"
-      assert html =~ "task-answers-editor-#{submission.id}"
+      assert has_element?(lv, "#task-answers-#{submission.id}-read")
 
       {:ok, _} = Tasky.Tasks.release_solution(teacher_scope, task, submission.id)
 
-      {:ok, _lv, html} = live(conn, ~p"/student/tasks/#{task.id}?preview=true")
+      {:ok, lv, html} = live(conn, ~p"/student/tasks/#{task.id}?preview=true")
       assert html =~ "ANMERKUNG-LP"
       assert html =~ "Mit den Anmerkungen deiner Lehrperson"
       # Die Korrektur ersetzt die Rücklese-Ansicht der eigenen Antworten.
-      refute html =~ "task-answers-editor-#{submission.id}"
+      refute has_element?(lv, "#task-answers-#{submission.id}-read")
     end
 
     test "füttert die Korrektur nie in den editierbaren Editor", %{
@@ -266,18 +266,17 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       {:ok, _} = Tasky.Tasks.release_solution(teacher_scope, task, submission.id)
       {:ok, _} = Tasky.Tasks.review_submission(teacher_scope, submission.id, "review_denied", %{})
 
-      {:ok, _lv, html} = live(conn, ~p"/student/tasks/#{task.id}")
+      {:ok, lv, html} = live(conn, ~p"/student/tasks/#{task.id}")
 
-      # Beim Überarbeiten steht die Korrektur über dem Editor …
+      # Beim Überarbeiten steht die Korrektur über dem Antwortblatt …
       assert html =~ "Mit den Anmerkungen deiner Lehrperson"
       assert html =~ "task-correction-viewer-#{submission.id}"
 
-      # … aber der editierbare Editor bekommt weiterhin nur die eigenen
+      # … aber das editierbare Antwortblatt bekommt weiterhin nur die eigenen
       # Antworten. Sonst würde der nächste Autosave die Anmerkungen der
       # Lehrperson als eigene Antwort zurückschreiben.
-      assert html =~ ~s(id="task-answers-editor-#{submission.id}")
-      [_before, editor_tag | _] = String.split(html, ~s(id="task-answers-editor-))
-      refute editor_tag |> String.slice(0, 600) =~ "ANMERKUNG-LP"
+      sheet = element(lv, "#task-answers-#{submission.id}-edit")
+      refute render(sheet) =~ "ANMERKUNG-LP"
     end
 
     test "wird live sichtbar, wenn die Lehrperson während der Sitzung freigibt", %{

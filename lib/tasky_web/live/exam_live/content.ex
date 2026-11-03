@@ -1,6 +1,7 @@
 defmodule TaskyWeb.ExamLive.Content do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.AnswerSheetComponents
   import TaskyWeb.FileComponents
 
   import TaskyWeb.ContentComponents,
@@ -56,6 +57,12 @@ defmodule TaskyWeb.ExamLive.Content do
               patch={~p"/exams/#{@exam}/content?tab=inhalt"}
             />
             <.tab_link
+              :if={not @free_document}
+              label="Vorschau"
+              active={@tab == "vorschau"}
+              patch={~p"/exams/#{@exam}/content?tab=vorschau"}
+            />
+            <.tab_link
               label={solution_tab_label(@free_document)}
               active={@tab == "musterloesung"}
               patch={~p"/exams/#{@exam}/content?tab=musterloesung"}
@@ -80,6 +87,22 @@ defmodule TaskyWeb.ExamLive.Content do
           data-content={@content_json}
         >
         </div>
+      </div>
+
+      <%!-- Vorschau tab: the learner's answer sheet, fields usable but never
+          saved (no save_url). Lets the teacher see the plain-HTML view the
+          learners get instead of the editor. --%>
+      <div :if={@tab == "vorschau"} class="min-w-0">
+        <div class="bg-stone-100 px-4 pt-6">
+          <p class="max-w-[210mm] mx-auto flex items-center gap-2 text-[13px] text-stone-500">
+            <.icon name="hero-eye" class="w-4 h-4 text-sky-500 shrink-0" />
+            So sehen Lernende die Prüfung. Du kannst die Felder ausprobieren, gespeichert wird nichts.
+          </p>
+        </div>
+        <.answer_sheet
+          id={"exam-preview-#{@exam.id}-#{@preview_rev}"}
+          doc={@exam.content || %{}}
+        />
       </div>
 
       <%!-- Musterlösung tab --%>
@@ -798,9 +821,12 @@ defmodule TaskyWeb.ExamLive.Content do
   def mount(%{"id" => id}, _session, socket) do
     exam = Exams.get_exam!(socket.assigns.current_scope, id)
 
+    if connected?(socket), do: Exams.subscribe_exam_content(exam.id)
+
     {:ok,
      socket
      |> assign(:exam, exam)
+     |> assign(:preview_rev, 0)
      # Assigned here rather than in the "musterloesung" branch of
      # handle_params/3 so the flag is defined on every tab.
      |> assign(:show_alternatives_help, false)
@@ -816,6 +842,17 @@ defmodule TaskyWeb.ExamLive.Content do
      )}
   end
 
+  # The editor's last autosave lands after the switch to the preview (its
+  # unmount flushes it), so the preview re-renders on every save. The answer
+  # sheet is phx-update="ignore": only a new id makes it pick up new content.
+  @impl true
+  def handle_info(:exam_content_saved, %{assigns: %{tab: "vorschau"}} = socket) do
+    exam = Exams.get_exam!(socket.assigns.current_scope, socket.assigns.exam.id)
+    {:noreply, socket |> assign(:exam, exam) |> update(:preview_rev, &(&1 + 1))}
+  end
+
+  def handle_info(:exam_content_saved, socket), do: {:noreply, socket}
+
   @impl true
   def handle_params(params, _uri, socket) do
     # Reload exam each time params change so structure edits made in the
@@ -823,10 +860,13 @@ defmodule TaskyWeb.ExamLive.Content do
     exam = Exams.get_exam!(socket.assigns.current_scope, socket.assigns.exam.id)
     free_document? = ExamComponents.free_document?(exam)
 
+    # A free-document exam has no answer fields: its learners write in the
+    # editor itself, so there is nothing to preview.
     tab =
       case params["tab"] do
         "musterloesung" -> "musterloesung"
         "dateien" -> "dateien"
+        "vorschau" when not free_document? -> "vorschau"
         _ -> "inhalt"
       end
 
@@ -840,6 +880,9 @@ defmodule TaskyWeb.ExamLive.Content do
     case tab do
       "inhalt" ->
         {:noreply, assign(socket, :content_json, Jason.encode!(exam.content || %{}))}
+
+      "vorschau" ->
+        {:noreply, socket}
 
       "musterloesung" ->
         {:noreply, assign(socket, :part_views, build_part_views(exam))}
@@ -1686,6 +1729,7 @@ defmodule TaskyWeb.ExamLive.Content do
   end
 
   defp tab_label("inhalt", _free_document?), do: "Inhalt"
+  defp tab_label("vorschau", _free_document?), do: "Vorschau"
   defp tab_label("musterloesung", free?), do: solution_tab_label(free?)
   defp tab_label("dateien", _free_document?), do: "Dateien"
 

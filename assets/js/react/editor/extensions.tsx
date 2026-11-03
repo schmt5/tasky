@@ -402,7 +402,7 @@ export const TaskItemWithId = TaskItem.extend({
 // split it off or join it to the previous group from the toolbar.
 
 type ChoiceOptions = {
-  /** Clicking a radio chooses it (student, sample solution). */
+  /** Clicking a radio chooses it (sample solution). */
   interactive: boolean;
   /** Authoring aids: group highlight, Enter adds a radio of the same group. */
   authoring: boolean;
@@ -1096,7 +1096,7 @@ export const PreventNodeDeletion = Extension.create({
 // `deleteRange`: the node being inserted is an *empty* paragraph, and
 // `insertContentAt` normalises that away and reports failure.
 //
-// Loaded only in `paper` mode; the student and Musterlösung editors keep
+// Loaded only in `paper` mode; the Musterlösung editors keep
 // Tiptap's default Enter, where lifting out of a box is the right behaviour.
 export const PaperAnswerLines = Extension.create({
   name: "paperAnswerLines",

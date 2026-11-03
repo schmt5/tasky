@@ -1,6 +1,7 @@
 defmodule TaskyWeb.Guest.ExamLive do
   use TaskyWeb, :live_view
 
+  import TaskyWeb.AnswerSheetComponents
   import TaskyWeb.ExamComponents, only: [seb_gate: 1]
   import TaskyWeb.FileComponents
   import TaskyWeb.StudentComponents
@@ -8,7 +9,6 @@ defmodule TaskyWeb.Guest.ExamLive do
   alias Tasky.Accounts.Scope
   alias Tasky.Exams
   alias Tasky.Uploads
-  alias TaskyWeb.ExamComponents
   alias TaskyWeb.Params
   alias TaskyWeb.SebGuard
 
@@ -177,16 +177,25 @@ defmodule TaskyWeb.Guest.ExamLive do
               <%!-- Prüfung tab: hidden via CSS (never unmounted) so the
                   phx-update="ignore" editor keeps its DOM and state. --%>
               <div class={@student_tab != "pruefung" && "hidden"}>
-                <%!-- Exam Content --%>
-                <div
-                  id={"exam-submission-editor-#{@submission.id}"}
-                  phx-hook="ExamSubmissionEditor"
-                  phx-update="ignore"
-                  data-exam-token={@submission.exam_token}
-                  data-editor-mode={ExamComponents.student_editor_mode(@exam)}
-                  data-content={@content_json}
-                >
-                </div>
+                <%!-- Exam Content. Answer fields are native inputs; a
+                    free-document exam is one whole document to write in, so
+                    it keeps the Tiptap editor. --%>
+                <%= if Exams.free_document?(@exam) do %>
+                  <div
+                    id={"exam-submission-editor-#{@submission.id}"}
+                    phx-hook="ExamSubmissionEditor"
+                    phx-update="ignore"
+                    data-exam-token={@submission.exam_token}
+                    data-content={Jason.encode!(@answer_doc)}
+                  >
+                  </div>
+                <% else %>
+                  <.answer_sheet
+                    id={"exam-answers-#{@submission.id}"}
+                    doc={@answer_doc}
+                    save_url={~p"/api/guest/exam/#{@submission.exam_token}/content"}
+                  />
+                <% end %>
               </div>
 
               <%!-- Dateien tab: also CSS-hidden so in-flight uploads survive
@@ -701,13 +710,11 @@ defmodule TaskyWeb.Guest.ExamLive do
       end
     end
 
-    initial_content =
+    answer_doc =
       case submission.content do
         content when is_map(content) and map_size(content) > 0 -> content
         _ -> exam.content || %{}
       end
-
-    content_json = Jason.encode!(initial_content)
 
     attachments = Exams.list_exam_attachments(exam)
     upload_fields = Exams.list_upload_fields(exam)
@@ -719,7 +726,7 @@ defmodule TaskyWeb.Guest.ExamLive do
       |> assign(:page_title, exam.name)
       |> assign(:exam, exam)
       |> assign(:submission, submission)
-      |> assign(:content_json, content_json)
+      |> assign(:answer_doc, answer_doc)
       |> assign(:show_submit_modal, false)
       |> assign(:submit_check, :checking)
       |> assign(:in_seb, in_seb)

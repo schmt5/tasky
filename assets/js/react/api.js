@@ -119,18 +119,21 @@ export function saveTaskCorrection(taskId, submissionId, content, opts = {}) {
   });
 }
 
-export function saveTaskAnswers(taskId, content, opts = {}) {
-  return request(`/api/student/tasks/${taskId}/answers`, {
+export function saveExamSubmissionContent(token, content, opts = {}) {
+  return request(`/api/guest/exam/${token}/content`, {
     method: "PUT",
     body: JSON.stringify({ content }),
     ...opts,
   });
 }
 
-export function saveExamSubmissionContent(token, content, opts = {}) {
-  return request(`/api/guest/exam/${token}/content`, {
+// The learner's native answer fields (ExamAnswersForm hook): only the values,
+// `{answers, choices}` — the server sets them into its own skeleton. `url` is
+// the page's own endpoint (exam token or task), rendered by the server.
+export function saveAnswerFields(url, payload, opts = {}) {
+  return request(url, {
     method: "PUT",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(payload),
     ...opts,
   });
 }

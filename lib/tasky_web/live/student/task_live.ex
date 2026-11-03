@@ -1,12 +1,13 @@
 defmodule TaskyWeb.Student.TaskLive do
   @moduledoc """
-  Student view of a learning unit (task): the Tiptap doc with the teacher's
-  content locked and only answer fields editable, teacher attachments to
+  Student view of a learning unit (task): the unit as plain HTML with native
+  answer fields (`TaskyWeb.AnswerSheetComponents`), teacher attachments to
   download, upload slots for file answers, and the "mark as complete" flow
   with teacher review states (approved / sent back).
   """
   use TaskyWeb, :live_view
 
+  import TaskyWeb.AnswerSheetComponents
   import TaskyWeb.FileComponents
   import TaskyWeb.StudentComponents
 
@@ -154,16 +155,17 @@ defmodule TaskyWeb.Student.TaskLive do
             </div>
           </div>
 
+          <%!-- The id carries the editable state: when a teacher sends the
+              unit back, the read-back sheet is replaced by an editable one
+              (the container is phx-update="ignore" and would keep its
+              disabled fields otherwise). --%>
           <div :if={@editable or not @showing_correction}>
-            <div
-              id={"task-answers-editor-#{@submission.id}"}
-              phx-hook="TaskAnswersEditor"
-              phx-update="ignore"
-              data-task-id={@task.id}
-              data-content={@content_json}
-              data-editable={to_string(@editable)}
-            >
-            </div>
+            <.answer_sheet
+              id={"task-answers-#{@submission.id}-#{if @editable, do: "edit", else: "read"}"}
+              doc={answer_doc(@task, @submission)}
+              save_url={if @editable, do: ~p"/api/student/tasks/#{@task}/answers"}
+              disabled={not @editable}
+            />
           </div>
         </div>
 
@@ -803,7 +805,6 @@ defmodule TaskyWeb.Student.TaskLive do
         |> assign(:submit_check, :checking)
         |> assign(:missing_uploads, [])
         |> assign_submission(submission)
-        |> assign(:content_json, content_json(task, submission))
 
       socket =
         Enum.reduce(upload_fields, socket, fn field, sock ->
@@ -876,14 +877,11 @@ defmodule TaskyWeb.Student.TaskLive do
     end
   end
 
-  defp content_json(task, submission) do
-    initial_content =
-      case submission.content do
-        content when is_map(content) and map_size(content) > 0 -> content
-        _ -> task.content || %{}
-      end
-
-    Jason.encode!(initial_content)
+  defp answer_doc(task, submission) do
+    case submission.content do
+      content when is_map(content) and map_size(content) > 0 -> content
+      _ -> task.content || %{}
+    end
   end
 
   defp submission_files_by_field(submission) do

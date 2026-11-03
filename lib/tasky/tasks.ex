@@ -10,6 +10,7 @@ defmodule Tasky.Tasks do
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.PlainAnswers
   alias Tasky.Policy
   alias Tasky.Tasks.SelfCheck
   alias Tasky.Tasks.Task
@@ -1380,9 +1381,36 @@ defmodule Tasky.Tasks do
   Saves the student's answer doc for their own submission. Rejected once the
   submission is completed or approved; allowed again after a teacher sends it
   back (`review_denied`).
+
+  Only the answers are taken from `doc` and set into the server's own skeleton
+  (see `merge_student_answers/2`) — the unit's text cannot be changed from the
+  client. That path is what a student still on the Tiptap editor sends; the
+  native fields use `save_student_answer_fields/3`.
   """
-  def save_student_answers(%Scope{user: user} = _scope, %TaskSubmission{} = submission, doc)
+  def save_student_answers(%Scope{user: user} = scope, %TaskSubmission{} = submission, doc)
       when user.role == "student" and is_map(doc) do
+    write_student_answers(scope, submission, fn _base ->
+      {_blanked, answers} = AnswerKey.split(doc)
+      {:ok, answers}
+    end)
+  end
+
+  @doc """
+  Saves the answers of the native answer fields (`TaskyWeb.ExamDocComponents`):
+  `%{"answers" => ..., "choices" => ...}`, see
+  `Tasky.Correction.PlainAnswers.from_params/2`. Same gate as
+  `save_student_answers/3`.
+  """
+  def save_student_answer_fields(
+        %Scope{user: user} = scope,
+        %TaskSubmission{} = submission,
+        params
+      )
+      when user.role == "student" and is_map(params) do
+    write_student_answers(scope, submission, &PlainAnswers.from_params(&1, params))
+  end
+
+  defp write_student_answers(%Scope{user: user}, submission, build_answers) do
     # Gate and write run in one transaction against the locked row, exactly as
     # `Exams.update_exam_submission_content/2` does on the other surface.
     # Checking `status` on the caller's struct (read unlocked by the controller)
@@ -1403,12 +1431,35 @@ defmodule Tasky.Tasks do
           Repo.rollback(:not_editable)
 
         true ->
-          case locked |> TaskSubmission.answers_changeset(doc) |> Repo.update() do
-            {:ok, updated} -> updated
-            {:error, changeset} -> Repo.rollback(changeset)
+          base = student_answer_base(locked)
+
+          with {:ok, answers} <- build_answers.(base),
+               content = merge_student_answers(base, answers),
+               {:ok, updated} <-
+                 locked |> TaskSubmission.answers_changeset(content) |> Repo.update() do
+            updated
+          else
+            {:error, reason} -> Repo.rollback(reason)
           end
       end
     end)
+  end
+
+  # The document the answers go into: the student's own copy once there is
+  # one, else the unit. Not the unit's current content — the teacher may edit
+  # it while students work, and an answer field removed there must not wipe a
+  # student's answer from their submission.
+  defp student_answer_base(%TaskSubmission{content: content})
+       when is_map(content) and map_size(content) > 0,
+       do: content
+
+  defp student_answer_base(%TaskSubmission{task_id: task_id}),
+    do: Repo.get!(Task, task_id).content || %{}
+
+  # Fields the payload leaves out keep their previous answer.
+  defp merge_student_answers(base, answers) do
+    {skeleton, previous} = base |> Map.put_new("type", "doc") |> AnswerKey.split()
+    AnswerKey.merge(skeleton, Map.merge(previous, answers))
   end
 
   @doc """
@@ -1468,9 +1519,10 @@ defmodule Tasky.Tasks do
   freigegeben ist — sonst `{:own, doc}`.
 
   Achtung: das korrigierte Dokument darf ausschliesslich in den
-  Read-only-Viewer. Der editierbare `TaskAnswersEditor` schreibt das ganze
-  Dokument nach `submission.content` zurück, eine zurückgegebene Einheit würde
-  also die Anmerkungen der Lehrperson als eigene Antwort speichern.
+  Read-only-Viewer, nie ins Antwortblatt (`TaskyWeb.AnswerSheetComponents`).
+  Das speichert seine Felder nach `submission.content` zurück, eine
+  zurückgegebene Einheit würde also die Anmerkungen der Lehrperson als eigene
+  Antwort speichern.
   """
   def answer_doc_for_student(%Task{} = task, %TaskSubmission{} = submission) do
     if solution_visible?(task, submission) and has_correction?(submission),
