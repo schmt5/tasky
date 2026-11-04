@@ -56,6 +56,11 @@ export function buildEditorExtensions({
       heading: false,
       blockquote: false,
       link: { defaultProtocol: "https" },
+      // It appends a paragraph whenever the document ends in anything else —
+      // in a locked editor (sample solution, paper) a change to the text the
+      // lock vetoes, so every keystroke in an answer field that ends a part
+      // flashed the lock hint.
+      ...(lockContent ? { trailingNode: false as const } : {}),
     }),
     HeadingWithPartId,
     ...(lockContent ? [] : [PartIdStamper]),
