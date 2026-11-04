@@ -12,6 +12,7 @@ defmodule Tasky.Tasks do
   alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.PlainAnswers
   alias Tasky.Policy
+  alias Tasky.Positioned
   alias Tasky.Tasks.SelfCheck
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskAttachment
@@ -1594,11 +1595,7 @@ defmodule Tasky.Tasks do
 
   @doc "Lists a task's attachments in display order."
   def list_task_attachments(%Task{} = task) do
-    Repo.all(
-      from a in TaskAttachment,
-        where: a.task_id == ^task.id,
-        order_by: [asc: a.position, asc: a.id]
-    )
+    Positioned.list(TaskAttachment, :task_id, task.id)
   end
 
   @doc "Gets an attachment of the given task, or nil."
@@ -1617,12 +1614,7 @@ defmodule Tasky.Tasks do
   """
   def create_task_attachment(scope, %Task{} = task, attrs) do
     with :ok <- Policy.authorize(scope, task.user_id) do
-      position =
-        Repo.one(
-          from a in TaskAttachment,
-            where: a.task_id == ^task.id,
-            select: coalesce(max(a.position), -1)
-        ) + 1
+      position = Positioned.next_position(TaskAttachment, :task_id, task.id)
 
       %TaskAttachment{task_id: task.id}
       |> TaskAttachment.changeset(Map.put(attrs, :position, position))
@@ -1643,11 +1635,7 @@ defmodule Tasky.Tasks do
 
   @doc "Lists a task's solution files in display order."
   def list_task_solution_files(%Task{} = task) do
-    Repo.all(
-      from f in TaskSolutionFile,
-        where: f.task_id == ^task.id,
-        order_by: [asc: f.position, asc: f.id]
-    )
+    Positioned.list(TaskSolutionFile, :task_id, task.id)
   end
 
   @doc "Gets a solution file of the given task, or nil."
@@ -1658,12 +1646,7 @@ defmodule Tasky.Tasks do
   @doc "Creates a solution file record, appending it to the list."
   def create_task_solution_file(scope, %Task{} = task, attrs) do
     with :ok <- Policy.authorize(scope, task.user_id) do
-      position =
-        Repo.one(
-          from f in TaskSolutionFile,
-            where: f.task_id == ^task.id,
-            select: coalesce(max(f.position), -1)
-        ) + 1
+      position = Positioned.next_position(TaskSolutionFile, :task_id, task.id)
 
       %TaskSolutionFile{task_id: task.id}
       |> TaskSolutionFile.changeset(Map.put(attrs, :position, position))
@@ -1720,11 +1703,7 @@ defmodule Tasky.Tasks do
   def list_task_upload_fields(%Task{} = task), do: list_upload_fields_by_task_id(task.id)
 
   defp list_upload_fields_by_task_id(task_id) do
-    Repo.all(
-      from f in TaskUploadField,
-        where: f.task_id == ^task_id,
-        order_by: [asc: f.position, asc: f.id]
-    )
+    Positioned.list(TaskUploadField, :task_id, task_id)
   end
 
   @doc "Gets an upload field of the given task, or nil."
@@ -1735,12 +1714,7 @@ defmodule Tasky.Tasks do
   @doc "Creates an upload field, appended at the end."
   def create_task_upload_field(scope, %Task{} = task, attrs) do
     with :ok <- Policy.authorize(scope, task.user_id) do
-      position =
-        Repo.one(
-          from f in TaskUploadField,
-            where: f.task_id == ^task.id,
-            select: coalesce(max(f.position), -1)
-        ) + 1
+      position = Positioned.next_position(TaskUploadField, :task_id, task.id)
 
       %TaskUploadField{task_id: task.id}
       |> TaskUploadField.changeset(Map.put(attrs, "position", position))

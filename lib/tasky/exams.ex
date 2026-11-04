@@ -22,6 +22,7 @@ defmodule Tasky.Exams do
   alias Tasky.Grading
   alias Tasky.Organizations
   alias Tasky.Policy
+  alias Tasky.Positioned
 
   @doc """
   Returns the list of exams for a given scope.
@@ -3475,11 +3476,7 @@ defmodule Tasky.Exams do
 
   @doc "Lists an exam's attachments in display order."
   def list_exam_attachments(%Exam{} = exam) do
-    Repo.all(
-      from a in ExamAttachment,
-        where: a.exam_id == ^exam.id,
-        order_by: [asc: a.position, asc: a.id]
-    )
+    Positioned.list(ExamAttachment, :exam_id, exam.id)
   end
 
   @doc "Gets an attachment of the given exam, or nil."
@@ -3498,12 +3495,7 @@ defmodule Tasky.Exams do
   """
   def create_exam_attachment(scope, %Exam{} = exam, attrs) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      position =
-        Repo.one(
-          from a in ExamAttachment,
-            where: a.exam_id == ^exam.id,
-            select: coalesce(max(a.position), -1)
-        ) + 1
+      position = Positioned.next_position(ExamAttachment, :exam_id, exam.id)
 
       %ExamAttachment{exam_id: exam.id}
       |> ExamAttachment.changeset(Map.put(attrs, :position, position))
@@ -3526,11 +3518,7 @@ defmodule Tasky.Exams do
   def list_upload_fields(%Exam{} = exam), do: list_upload_fields_by_exam_id(exam.id)
 
   defp list_upload_fields_by_exam_id(exam_id) do
-    Repo.all(
-      from f in ExamUploadField,
-        where: f.exam_id == ^exam_id,
-        order_by: [asc: f.position, asc: f.id]
-    )
+    Positioned.list(ExamUploadField, :exam_id, exam_id)
   end
 
   @doc "Gets an upload field of the given exam, or nil."
@@ -3541,12 +3529,7 @@ defmodule Tasky.Exams do
   @doc "Creates an upload field, appended at the end."
   def create_upload_field(scope, %Exam{} = exam, attrs) do
     with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      position =
-        Repo.one(
-          from f in ExamUploadField,
-            where: f.exam_id == ^exam.id,
-            select: coalesce(max(f.position), -1)
-        ) + 1
+      position = Positioned.next_position(ExamUploadField, :exam_id, exam.id)
 
       %ExamUploadField{exam_id: exam.id}
       |> ExamUploadField.changeset(Map.put(attrs, "position", position))
