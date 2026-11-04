@@ -225,41 +225,32 @@ defmodule Tasky.ExamsBlockPointsTest do
     end
   end
 
-  describe "custom block point setters" do
-    test "enable_custom_block_points seeds equal shares and keeps the total" do
+  describe "custom distribution through apply_part_options/4" do
+    test "a custom distribution sets the part total to its sum" do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
 
-      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
+      {:ok, exam} =
+        Exams.apply_part_options(:system, exam, "q-1", %{
+          block_points: %{"11" => 1.5, "22" => 1.5, "33" => 0.5, "44" => 0.5}
+        })
 
-      assert exam.sample_solution_block_points["q-1"] ==
-               %{"11" => 1, "22" => 1, "33" => 1, "44" => 1}
-
-      assert exam.sample_solution_points["q-1"] == 4
       assert Exams.custom_block_points?(exam, "q-1")
-    end
-
-    test "set_sample_solution_block_point keeps the part total in sync as the sum" do
-      exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
-      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
-
-      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "11", 1.5)
-      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "22", 1.5)
-      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "33", 0.5)
-      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "44", 0.5)
-
       assert exam.sample_solution_points["q-1"] == 4
       assert exam.sample_solution_block_points["q-1"]["33"] == 0.5
     end
 
-    test "clear_custom_block_points falls back to equal split, total preserved" do
+    test "going back to the equal split keeps the total the dialog sends" do
       exam = exam_fixture(%{sample_solution_points: %{"q-1" => 4}})
-      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
-      {:ok, exam} = Exams.set_sample_solution_block_point(:system, exam, "q-1", "11", 3)
 
-      {:ok, exam} = Exams.clear_custom_block_points(:system, exam, "q-1")
+      {:ok, exam} =
+        Exams.apply_part_options(:system, exam, "q-1", %{
+          block_points: %{"11" => 3, "22" => 1, "33" => 1, "44" => 1}
+        })
+
+      {:ok, exam} =
+        Exams.apply_part_options(:system, exam, "q-1", %{block_points: nil, max_points: 6})
 
       refute Exams.custom_block_points?(exam, "q-1")
-      # last sum stays as the part total
       assert exam.sample_solution_points["q-1"] == 6
     end
   end
@@ -325,41 +316,40 @@ defmodule Tasky.ExamsBlockPointsTest do
     end
   end
 
-  describe "enable/clear custom block points round trip" do
-    test "enabling then clearing leaves the part total untouched" do
+  describe "equal split round trip" do
+    test "starting a custom distribution and going back leaves the part total untouched" do
       # Rounding each equal share independently (2 / 3 → 3 × 0.75 = 2.25) and
-      # then setting the total to that sum let a no-op UI round trip ratchet the
-      # exam's max points up by 0.25 every time.
+      # then setting the total to that sum let a no-op round trip in the dialog
+      # ratchet the exam's max points up by 0.25 every time.
       exam =
         exam_fixture(%{
           content: question_doc([11, 22, 33]),
           sample_solution_points: %{"q-1" => 2}
         })
 
-      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
-      assert exam.sample_solution_points["q-1"] == 2
+      exam =
+        Enum.reduce(1..2, exam, fn _, exam ->
+          shares = Exams.equal_shares(["11", "22", "33"], exam.sample_solution_points["q-1"])
 
-      {:ok, exam} = Exams.clear_custom_block_points(:system, exam, "q-1")
-      assert exam.sample_solution_points["q-1"] == 2
+          {:ok, exam} = Exams.apply_part_options(:system, exam, "q-1", %{block_points: shares})
+          assert exam.sample_solution_points["q-1"] == 2
 
-      # And again, to prove it does not creep across repeated toggles.
-      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
-      {:ok, exam} = Exams.clear_custom_block_points(:system, exam, "q-1")
+          {:ok, exam} =
+            Exams.apply_part_options(:system, exam, "q-1", %{
+              block_points: nil,
+              max_points: exam.sample_solution_points["q-1"]
+            })
+
+          exam
+        end)
+
       assert exam.sample_solution_points["q-1"] == 2
     end
 
-    test "seeded shares sum to exactly the part total" do
-      exam =
-        exam_fixture(%{
-          content: question_doc([11, 22, 33]),
-          sample_solution_points: %{"q-1" => 2}
-        })
+    test "equal shares sum to exactly the part total, on the 0.25 grid" do
+      shares = Exams.equal_shares(["11", "22", "33"], 2)
 
-      {:ok, exam} = Exams.enable_custom_block_points(:system, exam, "q-1")
-
-      shares = exam.sample_solution_block_points["q-1"]
       assert shares |> Map.values() |> Enum.sum() == 2
-      # Every share stays on the 0.25 grid.
       assert Enum.all?(Map.values(shares), &(&1 * 4 == trunc(&1 * 4)))
     end
   end

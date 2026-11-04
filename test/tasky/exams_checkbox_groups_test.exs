@@ -286,8 +286,8 @@ defmodule Tasky.ExamsCheckboxGroupsTest do
       cara = submit(exam, "cara", [false, true, false])
 
       {:ok, _} =
-        Exams.update_ai_correction_config(scope, exam, "q-1", %{
-          "checkbox_scoring" => "all_or_nothing"
+        Exams.apply_part_options(scope, exam, "q-1", %{
+          config: %{"checkbox_scoring" => "all_or_nothing"}
         })
 
       {:ok, view, _html} = open_bulk(conn, teacher, exam)

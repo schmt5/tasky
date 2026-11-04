@@ -1818,54 +1818,6 @@ defmodule Tasky.Exams do
   defp block_points_value(_), do: 0
 
   @doc """
-  Sets the points for a single answer block of a part (custom distribution).
-  The part's total in `sample_solution_points` is kept in sync as the sum of
-  all block values.
-  """
-  def set_sample_solution_block_point(scope, %Exam{} = exam, part_id, answer_id, points)
-      when is_binary(part_id) and is_binary(answer_id) and is_number(points) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      do_set_sample_solution_block_point(exam, part_id, answer_id, points)
-    end
-  end
-
-  defp do_set_sample_solution_block_point(exam, part_id, answer_id, points) do
-    update_exam_json(exam, fn locked ->
-      part_map =
-        (locked.sample_solution_block_points || %{})
-        |> Map.get(part_id, %{})
-        |> Map.put(answer_id, normalize_block_points(points))
-
-      custom_block_points_changes(locked, part_id, part_map)
-    end)
-  end
-
-  @doc """
-  Enables custom per-block point distribution for a part by seeding every
-  answer block with an equal share (rounded to 0.25) of the part's current
-  max points. The part total becomes the sum of the seeded shares.
-  """
-  def enable_custom_block_points(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      do_enable_custom_block_points(exam, part_id)
-    end
-  end
-
-  defp do_enable_custom_block_points(exam, part_id) do
-    update_exam_json(exam, fn locked ->
-      blocks = locked |> exam_part_blocks(part_id) |> Enum.filter(& &1.answer_id)
-      max_points = Map.get(locked.sample_solution_points || %{}, part_id)
-
-      part_map =
-        blocks
-        |> Enum.map(& &1.answer_id)
-        |> equal_block_shares(max_points)
-
-      custom_block_points_changes(locked, part_id, part_map)
-    end)
-  end
-
-  @doc """
   Splits `max_points` over `keys` (answer ids or block indices) on the 0.25
   grid, the shares summing to exactly `max_points` — what the equal split and
   the start of a custom distribution both use.
@@ -1894,21 +1846,6 @@ defmodule Tasky.Exams do
 
   defp equal_block_shares(answer_ids, _max_points), do: Map.new(answer_ids, &{&1, 0})
 
-  @doc """
-  Disables custom distribution for a part. The part keeps its current total
-  in `sample_solution_points` and falls back to the equal split.
-  """
-  def clear_custom_block_points(scope, %Exam{} = exam, part_id) when is_binary(part_id) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      update_exam_json(exam, fn locked ->
-        %{
-          sample_solution_block_points:
-            Map.delete(locked.sample_solution_block_points || %{}, part_id)
-        }
-      end)
-    end
-  end
-
   # Changes that put a part's custom distribution in place. The part's total in
   # `sample_solution_points` is always the sum of its per-block values, so the
   # two columns only ever move together. Pure — the caller supplies the locked
@@ -1926,16 +1863,6 @@ defmodule Tasky.Exams do
   defp normalize_block_points(n) when is_number(n) do
     rounded = Grading.round_quarter(max(n, 0))
     if rounded == trunc(rounded), do: trunc(rounded), else: rounded
-  end
-
-  defp exam_part_blocks(%Exam{} = exam, part_id) do
-    (exam.content || %{})
-    |> split_content_into_parts(exam.answer_mode)
-    |> Enum.find(&(&1.id == part_id))
-    |> case do
-      nil -> []
-      part -> NodePatcher.list_answer_blocks(part.nodes)
-    end
   end
 
   @doc """
@@ -2754,19 +2681,6 @@ defmodule Tasky.Exams do
     do: {:ok, Grading.normalize_mark(mark, step) / 1}
 
   defp normalize_submission_mark(_, _step), do: {:error, :invalid_mark}
-
-  @doc """
-  Updates the AI correction configuration for a single part of an exam.
-  The config is stored as a map keyed by part_id.
-  """
-  def update_ai_correction_config(scope, %Exam{} = exam, part_id, config)
-      when is_binary(part_id) and is_map(config) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      update_exam_json(exam, fn locked ->
-        %{ai_correction_config: Map.put(locked.ai_correction_config || %{}, part_id, config)}
-      end)
-    end
-  end
 
   @part_option_flags ~w(auto_correct ignore_case ignore_spelling ignore_punctuation)
 
