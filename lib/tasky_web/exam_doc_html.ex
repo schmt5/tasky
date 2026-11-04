@@ -146,15 +146,9 @@ defmodule TaskyWeb.ExamDocHTML do
   end
 
   defp node(%{"type" => "image"} = n, ctx) do
-    case attrs(n)["src"] do
-      "/" <> _ = src ->
-        {["<img", attributes_escape(src: src, alt: attrs(n)["alt"] || ""), ">"], ctx}
-
-      "https://" <> _ = src ->
-        {["<img", attributes_escape(src: src, alt: attrs(n)["alt"] || ""), ">"], ctx}
-
-      _ ->
-        {"", ctx}
+    case safe_src(attrs(n)["src"]) do
+      nil -> {"", ctx}
+      src -> {["<img", attributes_escape(src: src, alt: attrs(n)["alt"] || ""), ">"], ctx}
     end
   end
 
@@ -224,6 +218,12 @@ defmodule TaskyWeb.ExamDocHTML do
   end
 
   defp mark(_mark, html), do: html
+
+  # `//host/…` is another site, not a path on this one.
+  defp safe_src("//" <> _), do: nil
+  defp safe_src("/" <> _ = src), do: src
+  defp safe_src("https://" <> _ = src), do: src
+  defp safe_src(_src), do: nil
 
   defp safe_href?(href), do: String.match?(href, ~r/\A(https?:|mailto:)/i)
 

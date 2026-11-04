@@ -225,8 +225,10 @@ defmodule TaskyWeb.ExamDocHTMLTest do
     end
 
     test "drops images from foreign or unsafe sources" do
-      doc = render_doc([%{"type" => "image", "attrs" => %{"src" => "javascript:x"}}])
-      assert doc |> LazyHTML.query("img") |> Enum.count() == 0
+      for src <- ["javascript:x", "//evil.example/a.png"] do
+        doc = render_doc([%{"type" => "image", "attrs" => %{"src" => src}}])
+        assert doc |> LazyHTML.query("img") |> Enum.count() == 0
+      end
     end
 
     test "walks through an unknown node instead of failing" do
