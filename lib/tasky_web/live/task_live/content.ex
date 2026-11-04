@@ -57,14 +57,14 @@ defmodule TaskyWeb.TaskLive.Content do
               patch={~p"/tasks/#{@task}/content?tab=inhalt"}
             />
             <.tab_link
-              label="Vorschau"
-              active={@tab == "vorschau"}
-              patch={~p"/tasks/#{@task}/content?tab=vorschau"}
-            />
-            <.tab_link
               label="Musterlösung"
               active={@tab == "musterloesung"}
               patch={~p"/tasks/#{@task}/content?tab=musterloesung"}
+            />
+            <.tab_link
+              label="Vorschau"
+              active={@tab == "vorschau"}
+              patch={~p"/tasks/#{@task}/content?tab=vorschau"}
             />
             <.tab_link
               label="Dateien"

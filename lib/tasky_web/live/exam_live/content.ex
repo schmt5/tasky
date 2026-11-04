@@ -57,15 +57,15 @@ defmodule TaskyWeb.ExamLive.Content do
               patch={~p"/exams/#{@exam}/content?tab=inhalt"}
             />
             <.tab_link
+              label={solution_tab_label(@free_document)}
+              active={@tab == "musterloesung"}
+              patch={~p"/exams/#{@exam}/content?tab=musterloesung"}
+            />
+            <.tab_link
               :if={not @free_document}
               label="Vorschau"
               active={@tab == "vorschau"}
               patch={~p"/exams/#{@exam}/content?tab=vorschau"}
-            />
-            <.tab_link
-              label={solution_tab_label(@free_document)}
-              active={@tab == "musterloesung"}
-              patch={~p"/exams/#{@exam}/content?tab=musterloesung"}
             />
             <.tab_link
               label="Dateien"
