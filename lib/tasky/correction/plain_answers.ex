@@ -1,7 +1,7 @@
 defmodule Tasky.Correction.PlainAnswers do
   @moduledoc """
   Antworten als Klartext — die Brücke zwischen den nativen Eingabefeldern der
-  Lernendenansicht (`TaskyWeb.ExamDocComponents`) und dem Tiptap-Dokument,
+  Lernendenansicht (`TaskyWeb.ExamDocHTML`) und dem Tiptap-Dokument,
   das in `submission.content` liegt.
 
   Lernende schreiben in `<input>` und `<textarea>`, nicht mehr in Tiptap. Das
@@ -16,7 +16,9 @@ defmodule Tasky.Correction.PlainAnswers do
       zu „a | b“. Das trifft nur Antworten, die noch im Tiptap-Editor
       geschrieben wurden.
     * `from_params/2` — Feldwerte → `AnswerKey`-Antworten. Jede Zeile eines
-      Antwortblocks wird ein Absatz, eine Lücke ein Text-Node.
+      Antwortblocks wird ein Absatz, eine Lücke ein Text-Node. Ein
+      Aufsatzfeld (`answerBlock` mit `rich: true`) schickt Tiptap-JSON statt
+      Text; das prüft `Tasky.Correction.RichAnswer`.
 
   Das Gerüst, in das eingesetzt wird, ist immer das des Servers. Werte für
   Felder, die es dort nicht gibt, fallen weg — der Fragetext ist von aussen
@@ -24,6 +26,7 @@ defmodule Tasky.Correction.PlainAnswers do
   """
 
   alias Tasky.Correction.Choice
+  alias Tasky.Correction.RichAnswer
 
   # Technische Obergrenzen gegen Missbrauch. Lernende erreichen sie nie; die
   # Felder tragen dieselben Werte als `maxlength`.
@@ -38,8 +41,9 @@ defmodule Tasky.Correction.PlainAnswers do
   `AnswerKey.split/1`, gegen das Gerüst `skeleton` geprüft.
 
   `params` ist `%{"answers" => %{answer_id => wert}, "choices" => %{group_id
-  => option_id}}`. Ein Text gehört zu einer Lücke oder einem Antwortblock, ein
-  Boolean zu einer Multiple-Choice-Option; eine `option_id` muss zur Gruppe
+  => option_id}}`. Ein Text gehört zu einer Lücke oder einem Antwortblock,
+  eine Liste von Tiptap-Knoten zu einem Aufsatzfeld, ein Boolean zu einer
+  Multiple-Choice-Option; eine `option_id` muss zur Gruppe
   gehören, `nil` heisst „nichts gewählt“. Alles, was nicht passt, wird
   ignoriert.
 
@@ -97,6 +101,12 @@ defmodule Tasky.Correction.PlainAnswers do
       do: {:error, :too_long},
       else: {:ok, gap_nodes(text)}
   end
+
+  defp answer("richAnswerBlock", nodes) when is_list(nodes), do: RichAnswer.sanitize(nodes)
+
+  # Ein Aufsatzfeld, dessen Editor nicht startete, schickt nichts; Klartext
+  # (ein älterer Client) wird wie beim Antwortblock zu Absätzen.
+  defp answer("richAnswerBlock", text) when is_binary(text), do: answer("answerBlock", text)
 
   defp answer("taskItem", checked) when is_boolean(checked), do: {:ok, checked}
   defp answer(_type, _value), do: :ignore
@@ -200,7 +210,8 @@ defmodule Tasky.Correction.PlainAnswers do
 
   @doc """
   Die Antwortfelder eines Dokuments: `%{answers: %{answer_id => typ},
-  choices: %{group_id => MapSet von option_ids}}`.
+  choices: %{group_id => MapSet von option_ids}}`. Ein Aufsatzfeld hat hier
+  den Typ `"richAnswerBlock"`, obwohl es im Dokument ein `answerBlock` ist.
   """
   def fields(%{"content" => content}) when is_list(content) do
     collect(content, %{answers: %{}, choices: %{}})
@@ -224,7 +235,7 @@ defmodule Tasky.Correction.PlainAnswers do
       %{"type" => type} = node, acc when type in ["answerBlock", "lueckentext", "taskItem"] ->
         case node |> attrs() |> Map.get("answerId") do
           nil -> acc
-          id -> put_in(acc, [:answers, to_string(id)], type)
+          id -> put_in(acc, [:answers, to_string(id)], field_type(type, node))
         end
 
       %{"content" => content}, acc when is_list(content) ->
@@ -234,6 +245,15 @@ defmodule Tasky.Correction.PlainAnswers do
         acc
     end)
   end
+
+  defp field_type("answerBlock", node),
+    do: if(rich?(node), do: "richAnswerBlock", else: "answerBlock")
+
+  defp field_type(type, _node), do: type
+
+  @doc "True für ein Aufsatzfeld: einen `answerBlock` mit `rich: true`."
+  def rich?(%{"type" => "answerBlock"} = node), do: attrs(node)["rich"] == true
+  def rich?(_node), do: false
 
   defp as_map(map) when is_map(map), do: map
   defp as_map(_value), do: %{}

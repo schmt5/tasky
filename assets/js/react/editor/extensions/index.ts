@@ -9,7 +9,7 @@ import type { CalloutColor } from "../constants";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     lueckentext: { setLueckentext: () => ReturnType };
-    answerBlock: { setAnswerBlock: () => ReturnType };
+    answerBlock: { setAnswerBlock: (options?: { rich?: boolean }) => ReturnType };
     teacherComment: { toggleTeacherComment: () => ReturnType };
     choice: {
       toggleSingleChoice: () => ReturnType;

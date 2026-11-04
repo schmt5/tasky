@@ -81,6 +81,56 @@ defmodule Tasky.Correction.PlainAnswersTest do
     end
   end
 
+  describe "from_params/2 with an essay field" do
+    @essay_skeleton %{
+      "type" => "doc",
+      "content" => [
+        %{
+          "type" => "answerBlock",
+          "attrs" => %{"answerId" => "e", "rich" => true},
+          "content" => [%{"type" => "paragraph"}]
+        }
+      ]
+    }
+
+    test "takes Tiptap nodes and keeps only the allowed formatting" do
+      nodes = [
+        %{
+          "type" => "paragraph",
+          "content" => [
+            %{"type" => "text", "text" => "fett", "marks" => [%{"type" => "bold"}]},
+            %{"type" => "text", "text" => "rot", "marks" => [%{"type" => "textStyle"}]}
+          ]
+        }
+      ]
+
+      assert {:ok, %{"e" => answer}} =
+               PlainAnswers.from_params(@essay_skeleton, %{"answers" => %{"e" => nodes}})
+
+      assert answer == [
+               %{
+                 "type" => "paragraph",
+                 "content" => [
+                   %{"type" => "text", "text" => "fett", "marks" => [%{"type" => "bold"}]},
+                   %{"type" => "text", "text" => "rot"}
+                 ]
+               }
+             ]
+    end
+
+    test "takes plain text like an answer block" do
+      assert PlainAnswers.from_params(@essay_skeleton, %{"answers" => %{"e" => "eins"}}) ==
+               {:ok, %{"e" => [p("eins")]}}
+    end
+
+    test "a plain answer block ignores nodes" do
+      assert {:ok, answers} =
+               PlainAnswers.from_params(@skeleton, %{"answers" => %{"1" => [p("x")]}})
+
+      assert answers == %{}
+    end
+  end
+
   describe "block_nodes/1 and gap_nodes/1" do
     test "keeps empty lines as empty paragraphs" do
       assert PlainAnswers.block_nodes("a\r\n\nb") == [p("a"), %{"type" => "paragraph"}, p("b")]

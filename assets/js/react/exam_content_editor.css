@@ -745,6 +745,28 @@
     margin-top: 0.5em;
 }
 
+/* Essay field ("Aufsatzfeld"): taller, starts at the top, and labelled so
+   the teacher tells it apart from a plain answer field at a glance. */
+.exam-editor__content .ProseMirror .answer-block[data-rich="true"] {
+    position: relative;
+    min-height: 140px;
+    justify-content: flex-start;
+    padding-top: 30px;
+}
+
+.exam-editor__content .ProseMirror .answer-block[data-rich="true"]::before {
+    content: "Aufsatz";
+    position: absolute;
+    top: 8px;
+    left: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #78716c;
+    pointer-events: none;
+}
+
 /* Callout ("Hinweisbox"): the colour token lives in `data-color`, so the
    palette is one rule per token instead of inline styles in the doc JSON.
    The text colour is deliberately left untouched. `print-color-adjust` asks

@@ -130,6 +130,40 @@ defmodule TaskyWeb.ExamDocHTMLTest do
       assert doc |> LazyHTML.text() =~ "Bern"
     end
 
+    test "an essay field becomes an editor container carrying its answer as JSON" do
+      answer = [
+        %{"type" => "heading", "attrs" => %{"level" => 4}, "content" => [text("Einleitung")]},
+        p([text("eins", [%{"type" => "bold"}])])
+      ]
+
+      doc =
+        render_doc([
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "e", "rich" => true},
+            "content" => answer
+          }
+        ])
+
+      assert doc |> LazyHTML.query("textarea") |> Enum.count() == 0
+      assert attr(doc, ".exam-doc__rich", "data-answer-id") == ["e"]
+      assert [json] = attr(doc, ".exam-doc__rich", "data-value")
+      assert Jason.decode!(json) == answer
+      # Shown as formatted text until the editor runs.
+      assert doc |> LazyHTML.query(".exam-doc__rich h4") |> LazyHTML.text() == "Einleitung"
+      assert doc |> LazyHTML.query(".exam-doc__rich strong") |> LazyHTML.text() == "eins"
+    end
+
+    test "a disabled essay field is marked for the editor to stay read-only" do
+      doc =
+        render_doc(
+          [%{"type" => "answerBlock", "attrs" => %{"answerId" => 1, "rich" => true}}],
+          disabled: true
+        )
+
+      assert attr(doc, ".exam-doc__rich", "data-disabled") == [""]
+    end
+
     test "disabled locks every field" do
       doc =
         render_doc(

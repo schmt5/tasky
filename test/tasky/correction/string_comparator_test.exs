@@ -88,4 +88,21 @@ defmodule Tasky.Correction.StringComparatorTest do
                StringComparator.correct_part(student.("Ja gern"), sample, 1, %{})
     end
   end
+
+  test "correct_part/4 leaves an essay field to the teacher" do
+    essay = fn text ->
+      %{
+        "type" => "answerBlock",
+        "attrs" => %{"answerId" => "e", "rich" => true, "__ai_id" => "1"},
+        "content" => [
+          %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}
+        ]
+      }
+    end
+
+    assert {:ok, %{verdicts: verdicts}} =
+             StringComparator.correct_part([essay.("Mein Text")], [essay.("Erwartung")], 4)
+
+    assert verdicts == %{}
+  end
 end

@@ -140,6 +140,10 @@ export const Lueckentext = Node.create({
   },
 });
 
+// An answer block with `rich: true` is an essay field ("Aufsatzfeld"): the
+// learner gets a small formatting editor instead of a plain textarea
+// (TaskyWeb.ExamDocHTML, assets/js/rich_answer_field.js). Everything else —
+// sample solution, points, correction, PDF — treats it as an answer block.
 export const AnswerBlock = Node.create({
   name: "answerBlock",
   group: "block",
@@ -147,7 +151,16 @@ export const AnswerBlock = Node.create({
   defining: true,
 
   addAttributes() {
-    return { ...answerIdAttribute, ...verdictAttribute };
+    return {
+      ...answerIdAttribute,
+      ...verdictAttribute,
+      rich: {
+        default: false,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-rich") === "true",
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.rich ? { "data-rich": "true" } : {},
+      },
+    };
   },
 
   parseHTML() {
@@ -164,13 +177,13 @@ export const AnswerBlock = Node.create({
   addCommands() {
     return {
       setAnswerBlock:
-        () =>
+        ({ rich = false }: { rich?: boolean } = {}) =>
         ({ chain }: { chain: any }) => {
           const answerId = generateAnswerId();
           return chain()
             .insertContent({
               type: this.name,
-              attrs: { answerId },
+              attrs: rich ? { answerId, rich: true } : { answerId },
               content: [{ type: "paragraph" }],
             })
             .run();

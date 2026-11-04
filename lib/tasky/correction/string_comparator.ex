@@ -15,6 +15,8 @@ defmodule Tasky.Correction.StringComparator do
   * `answerBlock`  — text comparison; sample text may list alternative
                      accepted answers separated by `;`. Trimmed.
   * `lueckentext`  — same as `answerBlock`.
+  * essay field    — an `answerBlock` with `rich: true` gets no verdict: an
+                     essay is graded by hand, never against the sample text.
 
   Per-part options (`opts`):
 
@@ -83,6 +85,8 @@ defmodule Tasky.Correction.StringComparator do
   defp verdict_for(%{type: "taskItem", checked: s}, %{type: "taskItem", checked: t}, _opts) do
     if s == t, do: "correct", else: "wrong"
   end
+
+  defp verdict_for(%{rich: true}, _sample, _opts), do: nil
 
   defp verdict_for(%{type: type, text: student}, %{type: type, text: sample_text}, opts)
        when type in ["answerBlock", "lueckentext"] do
@@ -237,7 +241,8 @@ defmodule Tasky.Correction.StringComparator do
     %{
       type: type,
       id: get_in(node, ["attrs", "__ai_id"]),
-      text: extract_plain_text(Map.get(node, "content", []))
+      text: extract_plain_text(Map.get(node, "content", [])),
+      rich: get_in(node, ["attrs", "rich"]) == true
     }
   end
 

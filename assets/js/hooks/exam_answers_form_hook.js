@@ -36,6 +36,14 @@ export const ExamAnswersForm = {
       this.el.querySelectorAll(".exam-doc__block, .exam-doc__gap").forEach(fitField);
     }
 
+    // Essay fields are fields of their own make, from a chunk loaded only
+    // where there is one. Until it runs, the server's HTML shows the answer
+    // and the snapshot leaves the field out — the server keeps what it has.
+    this.customFields = new Map();
+    this.mountCustom("[data-rich-answer]", () =>
+      import("../rich_answer_field").then((m) => m.mountRichAnswerField),
+    );
+
     this.onInput = (event) => {
       const field = event.target;
       if (!NATIVE_SIZING && field.matches?.(".exam-doc__block, .exam-doc__gap")) {
@@ -69,6 +77,11 @@ export const ExamAnswersForm = {
     const choices = {};
 
     this.el.querySelectorAll("[data-answer-id]").forEach((field) => {
+      if ("richAnswer" in field.dataset) {
+        const custom = this.customFields.get(field);
+        if (custom) answers[field.dataset.answerId] = custom.value();
+        return;
+      }
       answers[field.dataset.answerId] =
         field.type === "checkbox" ? field.checked : field.value;
     });
@@ -82,7 +95,18 @@ export const ExamAnswersForm = {
     return { answers, choices };
   },
 
+  mountCustom(selector, load) {
+    const els = this.el.querySelectorAll(selector);
+    if (els.length === 0) return;
+    load().then((mount) => {
+      if (this.destroyedAt) return;
+      els.forEach((el) => this.customFields.set(el, mount(el)));
+    });
+  },
+
   destroyed() {
+    this.destroyedAt = Date.now();
+    this.customFields.forEach((field) => field.destroy());
     this.el.removeEventListener("input", this.onInput);
     this.el.removeEventListener("change", this.onInput);
     if (this.engine) this.engine.destroy();

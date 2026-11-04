@@ -271,4 +271,16 @@ defmodule Tasky.TasksSelfCheckTest do
                SelfCheck.evaluate(task, doc([answer_block("a", "docx")]))
     end
   end
+
+  test "an essay field is never checked against the sample" do
+    essay = %{
+      "type" => "answerBlock",
+      "attrs" => %{"answerId" => "e", "rich" => true},
+      "content" => [text_paragraph("Mein Aufsatz")]
+    }
+
+    task = task(%{"e" => [text_paragraph("Erwartungshorizont")]})
+    assert %{verdicts: verdicts, total: 0} = SelfCheck.evaluate(task, doc([essay]))
+    assert verdicts == %{}
+  end
 end

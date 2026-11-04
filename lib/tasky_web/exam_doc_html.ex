@@ -8,8 +8,11 @@ defmodule TaskyWeb.ExamDocHTML do
     * `lueckentext` → `<input type="text">`
     * `answerBlock` → `<textarea>` (Klartext, siehe
       `Tasky.Correction.PlainAnswers`)
-    * `taskItem` → `<input type="checkbox">`
-    * `choice` → `<input type="radio">`, gruppiert über die `groupId`
+    * Aufsatzfeld (`answerBlock` mit `rich: true`) → ein Container, in dem
+      der Hook einen kleinen Tiptap-Editor startet
+      (`assets/js/rich_answer_field.js`). Der Server rendert den Inhalt
+      vorab als HTML: Das ist die Ansicht, bis der Editor läuft, und die
+      ganze Ansicht, wenn die Felder gesperrt sind.
 
   Die Felder tragen `data-answer-id` bzw. `data-group-id`; der Hook
   `ExamAnswersForm` liest sie aus und speichert. Ein `name` haben nur die
@@ -240,27 +243,59 @@ defmodule TaskyWeb.ExamDocHTML do
         nodes(children(n), ctx)
 
       id ->
-        attrs =
-          [
-            id: field_id(ctx, id),
-            class: "exam-doc__block",
-            rows: 3,
-            maxlength: PlainAnswers.max_block_chars(),
-            "data-answer-id": id,
-            "aria-label": label("Antwort", ctx)
-          ] ++ field_flags(ctx)
-
-        # Ein führender Zeilenumbruch im Inhalt eines <textarea> wird vom
-        # Parser verschluckt; der zusätzliche hält eine Antwort, die mit einer
-        # Leerzeile beginnt, intakt.
-        {[
-           "<textarea",
-           attributes_escape(attrs),
-           ">\n",
-           escape(PlainAnswers.block_text(children(n))),
-           "</textarea>"
-         ], ctx}
+        if PlainAnswers.rich?(n), do: rich_block(n, id, ctx), else: plain_block(n, id, ctx)
     end
+  end
+
+  defp plain_block(n, id, ctx) do
+    attrs =
+      [
+        id: field_id(ctx, id),
+        class: "exam-doc__block",
+        rows: 3,
+        maxlength: PlainAnswers.max_block_chars(),
+        "data-answer-id": id,
+        "aria-label": label("Antwort", ctx)
+      ] ++ field_flags(ctx)
+
+    # Ein führender Zeilenumbruch im Inhalt eines <textarea> wird vom
+    # Parser verschluckt; der zusätzliche hält eine Antwort, die mit einer
+    # Leerzeile beginnt, intakt.
+    {[
+       "<textarea",
+       attributes_escape(attrs),
+       ">\n",
+       escape(PlainAnswers.block_text(children(n))),
+       "</textarea>"
+     ], ctx}
+  end
+
+  # Der Editor bekommt den Inhalt als JSON in `data-value`; das HTML daneben
+  # ersetzt er beim Start. Rechtschreibhilfe aus wie bei allen Feldern — der
+  # Editor übernimmt die Flags vom Container.
+  defp rich_block(n, id, ctx) do
+    {inner, ctx} = nodes(children(n), %{ctx | in_answer: true})
+    ctx = %{ctx | in_answer: false}
+
+    attrs = [
+      id: field_id(ctx, id),
+      class: "exam-doc__rich",
+      role: "group",
+      "data-answer-id": id,
+      "data-rich-answer": true,
+      "data-value": Jason.encode!(children(n)),
+      "data-max-chars": Tasky.Correction.RichAnswer.max_chars(),
+      "data-disabled": ctx.disabled,
+      "aria-label": label("Aufsatz", ctx)
+    ]
+
+    {[
+       "<div",
+       attributes_escape(attrs),
+       ~s(><div class="exam-doc__rich-body">),
+       inner,
+       "</div></div>"
+     ], ctx}
   end
 
   defp gap(n, ctx) do

@@ -116,6 +116,10 @@ defmodule Tasky.Tasks.SelfCheck do
     if checked?(node) == payload, do: "correct", else: "wrong"
   end
 
+  # An essay field is read by the teacher, never compared with the sample.
+  defp verdict_for(%{"type" => "answerBlock", "attrs" => %{"rich" => true}}, _payload, _off?),
+    do: nil
+
   defp verdict_for(%{"type" => type} = node, payload, _off?)
        when type in @text_types and is_list(payload) do
     case accepted_answers(payload) do

@@ -156,6 +156,40 @@ defmodule Tasky.ExamsTest do
                Exams.save_exam_submission_answers(submission, %{"answers" => %{"a" => too_long}})
     end
 
+    test "sets an essay field's formatted answer, cut back to what learners may use" do
+      essay = %{
+        "type" => "doc",
+        "content" => [
+          %{
+            "type" => "answerBlock",
+            "attrs" => %{"answerId" => "e", "rich" => true},
+            "content" => [%{"type" => "paragraph"}]
+          }
+        ]
+      }
+
+      exam = exam_fixture(status: "running", attrs: %{content: essay})
+      {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
+
+      answer = [
+        %{
+          "type" => "heading",
+          "attrs" => %{"level" => 3},
+          "content" => [%{"type" => "text", "text" => "Neuer Teil?"}]
+        },
+        %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Text"}]}
+      ]
+
+      assert {:ok, updated} =
+               Exams.save_exam_submission_answers(submission, %{"answers" => %{"e" => answer}})
+
+      assert [%{"type" => "answerBlock", "attrs" => %{"rich" => true}, "content" => content}] =
+               updated.content["content"]
+
+      assert [%{"type" => "heading", "attrs" => %{"level" => 4}}, %{"type" => "paragraph"}] =
+               content
+    end
+
     test "refuses a free-document exam" do
       exam = exam_fixture(status: "running", answer_mode: "free_document")
       {:ok, submission} = Exams.create_exam_submission(exam, enrollment_attrs())
