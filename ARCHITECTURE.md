@@ -38,12 +38,16 @@ system after the refactoring tracked in `docs/ROBUSTNESS_PLAN.md`.
 
 ## Document & grading model
 
-The exam document is **Tiptap JSON**, stored as-is. In the browser it is
-rendered client-side everywhere (editors, read-only viewers) by the React
-editor — there is no server-side JSON→HTML rendering. The one server-side
-renderer is the PDF: `priv/typst/tiptap.typ` walks the same JSON in Typst.
-**A new editor node or mark needs a branch there too**; until it has one, it
-renders its children (unknown marks: plain text), so a PDF never fails on it.
+The exam document is **Tiptap JSON**, stored as-is. Teachers' surfaces
+(editors, read-only viewers) render it client-side with the React editor.
+Learners answer on an HTML answer sheet the server renders from the same JSON
+(`TaskyWeb.ExamDocHTML`), with native fields that the `ExamAnswersForm` hook
+saves; the essay field and the pin image are the two fields it mounts a small
+script for (`assets/js/rich_answer_field.js`, `assets/js/image_pin_field.js`).
+The PDF is rendered server-side too: `priv/typst/tiptap.typ` walks the same
+JSON in Typst. **A new editor node or mark needs a branch in both**; until it
+has one, both render its children (unknown marks: plain text), so neither
+fails on it.
 
 - **The paper version never touches `content`.** How tall each answer box is
   on paper lives in its own column (`exams.paper_layout`, `%{answer_id =>
@@ -63,7 +67,10 @@ renders its children (unknown marks: plain text), so a PDF never fails on it.
   `Exam.new_changeset/2` only** — chosen once on the create form and never
   again, because part ids, answer ids, verdicts and the sample solution all
   hang off it and a switch would strand them rather than convert them.
-  `duplicate_exam/3` therefore has to carry it over explicitly.
+  `duplicate_exam/3` therefore has to carry it over explicitly. New exams are
+  always `"answer_fields"`: the create form's "Aufsatz" is an answer-field
+  exam that starts with an essay field (`Exams.essay_template/0`), and
+  `"free_document"` lives on only for the exams that already have it.
 - **A free document is one part.** `ExamDoc.split_content_into_parts/2`
   returns a single synthetic part (`ExamDoc.free_document_part_id/0`,
   `"document"`) spanning the whole doc, and the preamble is empty. That one
@@ -77,9 +84,22 @@ renders its children (unknown marks: plain text), so a PDF never fails on it.
   call site that forgot it would silently report "no parts" for every essay.
 
 - **Answer ids**: every answer-bearing node (`answerBlock`, `lueckentext`,
-  `taskItem`) carries a stable `attrs.answerId` (client-generated
+  `taskItem`, `imagePin`) carries a stable `attrs.answerId` (client-generated
   `crypto.randomUUID()`, server fallback in `AnswerKey.ensure_ids/1`). Paste
   deduplication regenerates colliding ids.
+- **Essay field** = an `answerBlock` with `attrs.rich: true`. Everything but
+  the learner's input treats it as an answer block; what a learner may send
+  is cut back to paragraphs, h4, lists, bold/italic/underline by
+  `Correction.RichAnswer` (an h3 from a learner would re-split the parts).
+- **Pin image** (`imagePin`): `attrs.pins` holds positions and zones in the
+  sample solution, only the pin ids in `content` (learners must know how many
+  pins to set, never where — `Exams.learner_exam/1` blanks the sample), and
+  positions in a submission. The sample solution decides how many pins there
+  are: `ImagePin.sync_public_pins/2` re-derives `content`'s ids on every
+  structure save. One image is one block; partly right is a numeric verdict
+  (`ImagePin.verdict/2`). Correction views get the zones hung on as
+  `attrs.solution` (`ImagePin.with_solution/2`), which is stripped again
+  before any corrected content is stored or returned.
 - **Part ids**: every question heading (h3) carries a stable `attrs.partId`
   (client-stamped, server fallback in `ExamDoc.ensure_part_ids/1`). All
   part-keyed data (sample-solution points, AI config, corrected parts,
