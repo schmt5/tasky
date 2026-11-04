@@ -6,7 +6,10 @@
 //
 // The node view has three faces, chosen by the editor's flags:
 //   * "author"   — the "Inhalt" tab: the image, and where the pins are set.
-//   * "solution" — the "Musterlösung": add, place, drag and size pins.
+//   * "solution" — the "Musterlösung": place and drag pins on the image.
+//                  Adding, picking, sizing and removing them is the "Pins"
+//                  section of the question's card (react/PinPanel.jsx);
+//                  both share the picked pin through ../pinSelection.
 //   * "view"     — correction, read-only and paper: the pins and, where the
 //                  document carries them, the zones of the sample solution
 //                  (`attrs.solution`, see Tasky.Correction.SolutionHints).
@@ -17,14 +20,15 @@ import { Node } from "@tiptap/core";
 import { generateAnswerId } from "../ids";
 import { verdictAttribute } from "./answers";
 // @ts-ignore — plain JS module shared with the learner's answer sheet.
-import { pinColor, zoneBox, placed, MAX_PINS } from "../../../image_pin_colors";
+import { pinColor, zoneBox, placed } from "../../../image_pin_colors";
+import * as pinSelection from "../pinSelection";
 
-type Zone = { shape: "circle"; r: number } | { shape: "rect"; w: number; h: number };
-type Pin = { pinId: string; x?: number | null; y?: number | null; zone?: Zone };
+export type Zone = { shape: "circle"; r: number } | { shape: "rect"; w: number; h: number };
+export type Pin = { pinId: string; x?: number | null; y?: number | null; zone?: Zone };
 
 export type ImagePinMode = "author" | "solution" | "view";
 
-const DEFAULT_ZONE: Zone = { shape: "circle", r: 0.05 };
+export const DEFAULT_ZONE: Zone = { shape: "circle", r: 0.05 };
 
 function jsonAttribute(name: string, fallback: unknown) {
   return {
@@ -129,11 +133,42 @@ export function measureAspect(src: string): Promise<number> {
   });
 }
 
-function newPinId(): string {
+export function newPinId(): string {
   return "p_" + generateAnswerId().replace(/-/g, "").slice(0, 8);
 }
 
-const round = (n: number) => Math.round(Math.min(1, Math.max(0, n)) * 10000) / 10000;
+export const round = (n: number) => Math.round(Math.min(1, Math.max(0, n)) * 10000) / 10000;
+
+export type PinImage = { answerId: string; pos: number; pins: Pin[]; aspect: number };
+
+/** Every pin image of a document, in order. */
+export function listPinImages(doc: any): PinImage[] {
+  const images: PinImage[] = [];
+  doc.descendants((node: any, pos: number) => {
+    if (node.type.name === "imagePin" && node.attrs.answerId) {
+      images.push({
+        answerId: String(node.attrs.answerId),
+        pos,
+        pins: Array.isArray(node.attrs.pins) ? node.attrs.pins : [],
+        aspect: Number(node.attrs.aspect) || 1,
+      });
+    }
+    return true;
+  });
+  return images;
+}
+
+/** Writes the pins of one pin image — from its node view or from the card. */
+export function setImagePins(editor: any, answerId: string, pins: Pin[]) {
+  const image = listPinImages(editor.state.doc).find((i) => i.answerId === answerId);
+  if (!image) return;
+  const node = editor.state.doc.nodeAt(image.pos);
+  // A placed pin always says how far off still counts.
+  pins = pins.map((p) => (placed(p) && !p.zone ? { ...p, zone: DEFAULT_ZONE } : p));
+  editor.view.dispatch(
+    editor.state.tr.setNodeMarkup(image.pos, undefined, { ...node.attrs, pins }),
+  );
+}
 
 class ImagePinView {
   dom: HTMLElement;
@@ -141,8 +176,8 @@ class ImagePinView {
   getPos: () => number | undefined;
   editor: any;
   mode: ImagePinMode;
-  selected = 0;
   stage!: HTMLElement;
+  unsubscribe: (() => void) | null = null;
   // The click that ends a drag lands on the image; it must not move a pin.
   dragging = false;
 
@@ -154,7 +189,25 @@ class ImagePinView {
     this.dom = document.createElement("div");
     this.dom.className = `image-pin image-pin--${mode}`;
     this.dom.contentEditable = "false";
+    // Not mid-drag: rebuilding would drop the marker under the pointer.
+    if (mode === "solution")
+      this.unsubscribe = pinSelection.subscribe(() => {
+        if (!this.dragging) this.render();
+      });
     this.render();
+  }
+
+  get answerId(): string {
+    return String(this.node.attrs.answerId ?? "");
+  }
+
+  // The picked pin lives in the shared selection: the card picks it too.
+  get selected(): number {
+    return pinSelection.selectedIndex(this.editor, this.answerId);
+  }
+
+  set selected(index: number) {
+    pinSelection.select(this.editor, this.answerId, index);
   }
 
   get pins(): Pin[] {
@@ -166,12 +219,7 @@ class ImagePinView {
   }
 
   setPins(pins: Pin[]) {
-    const pos = this.getPos();
-    if (typeof pos !== "number") return;
-    // A placed pin always says how far off still counts.
-    pins = pins.map((p) => (placed(p) && !p.zone ? { ...p, zone: DEFAULT_ZONE } : p));
-    const tr = this.editor.state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, pins });
-    this.editor.view.dispatch(tr);
+    setImagePins(this.editor, this.answerId, pins);
   }
 
   render() {
@@ -216,7 +264,12 @@ class ImagePinView {
     if (this.mode === "solution") {
       this.stage.classList.add("image-pin__stage--placing");
       this.stage.addEventListener("click", (e) => this.placeSelected(e));
-      this.renderControls();
+      if (this.pins.length === 0) {
+        const note = document.createElement("p");
+        note.className = "image-pin__note";
+        note.textContent = "Füge rechts unter «Pins» einen Pin hinzu und klicke dann aufs Bild.";
+        this.dom.appendChild(note);
+      }
     }
   }
 
@@ -258,136 +311,6 @@ class ImagePinView {
     return el;
   }
 
-  renderControls() {
-    const bar = document.createElement("div");
-    bar.className = "image-pin__controls";
-
-    const chips = document.createElement("div");
-    chips.className = "image-pin__chips";
-    this.pins.forEach((pin, i) => {
-      const { bg, fg } = pinColor(i);
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "image-pin__chip";
-      if (i === this.selected) chip.classList.add("is-selected");
-      chip.style.background = bg;
-      chip.style.color = fg;
-      chip.textContent = String(i + 1);
-      chip.setAttribute("aria-label", `Pin ${i + 1} auswählen`);
-      chip.setAttribute("aria-pressed", i === this.selected ? "true" : "false");
-      chip.addEventListener("click", () => {
-        this.selected = i;
-        this.render();
-      });
-      chips.appendChild(chip);
-    });
-
-    if (this.pins.length < MAX_PINS) {
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "image-pin__add";
-      add.textContent = "+ Pin";
-      add.addEventListener("click", () => {
-        this.selected = this.pins.length;
-        this.setPins([...this.pins, { pinId: newPinId(), x: 0.5, y: 0.5, zone: DEFAULT_ZONE }]);
-      });
-      chips.appendChild(add);
-    }
-    bar.appendChild(chips);
-
-    const pin = this.pins[this.selected];
-    if (pin) bar.appendChild(this.pinSettings(pin));
-    else {
-      const hint = document.createElement("p");
-      hint.className = "image-pin__note";
-      hint.textContent = "Füge einen Pin hinzu und klicke aufs Bild, wo er hingehört.";
-      bar.appendChild(hint);
-    }
-
-    this.dom.appendChild(bar);
-  }
-
-  pinSettings(pin: Pin) {
-    const zone = pin.zone || DEFAULT_ZONE;
-    const wrap = document.createElement("div");
-    wrap.className = "image-pin__settings";
-
-    const shape = document.createElement("div");
-    shape.className = "image-pin__segmented";
-    shape.setAttribute("role", "radiogroup");
-    shape.setAttribute("aria-label", "Form des Zielbereichs");
-    for (const [value, label] of [
-      ["circle", "Kreis"],
-      ["rect", "Rechteck"],
-    ] as const) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      b.setAttribute("role", "radio");
-      b.setAttribute("aria-checked", zone.shape === value ? "true" : "false");
-      b.addEventListener("click", () => {
-        if (zone.shape === value) return;
-        const size = zone.shape === "circle" ? zone.r * 2 : (zone.w + zone.h) / 2;
-        const next: Zone =
-          value === "circle"
-            ? { shape: "circle", r: round(size / 2) }
-            : { shape: "rect", w: round(size), h: round(size * this.aspect) };
-        this.updatePin({ ...pin, zone: next });
-      });
-      shape.appendChild(b);
-    }
-    wrap.appendChild(shape);
-
-    if (zone.shape === "circle") {
-      wrap.appendChild(
-        this.slider("Radius", zone.r, 0.01, 0.3, (r) =>
-          this.updatePin({ ...pin, zone: { shape: "circle", r } }),
-        ),
-      );
-    } else {
-      wrap.appendChild(
-        this.slider("Breite", zone.w, 0.02, 0.8, (w) =>
-          this.updatePin({ ...pin, zone: { ...zone, w } }),
-        ),
-      );
-      wrap.appendChild(
-        this.slider("Höhe", zone.h, 0.02, 0.8, (h) =>
-          this.updatePin({ ...pin, zone: { ...zone, h } }),
-        ),
-      );
-    }
-
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "image-pin__remove";
-    remove.textContent = "Pin entfernen";
-    remove.addEventListener("click", () => {
-      const pins = this.pins.filter((p) => p.pinId !== pin.pinId);
-      this.selected = Math.max(0, Math.min(this.selected, pins.length - 1));
-      this.setPins(pins);
-    });
-    wrap.appendChild(remove);
-
-    return wrap;
-  }
-
-  slider(label: string, value: number, min: number, max: number, onChange: (v: number) => void) {
-    const wrap = document.createElement("label");
-    wrap.className = "image-pin__slider";
-    const text = document.createElement("span");
-    text.textContent = label;
-    const input = document.createElement("input");
-    input.type = "range";
-    input.min = String(min);
-    input.max = String(max);
-    input.step = "0.005";
-    input.value = String(value);
-    // Applied on release: one document change per gesture, not one per pixel.
-    input.addEventListener("change", () => onChange(round(Number(input.value))));
-    wrap.append(text, input);
-    return wrap;
-  }
-
   updatePin(pin: Pin) {
     this.setPins(this.pins.map((p) => (p.pinId === pin.pinId ? pin : p)));
   }
@@ -402,7 +325,10 @@ class ImagePinView {
 
   placeSelected(e: MouseEvent) {
     if (this.dragging) return;
-    const pin = this.pins[this.selected];
+    const index = this.selected;
+    // A click on this image also hands the card to it.
+    this.selected = index;
+    const pin = this.pins[index];
     if (!pin) return;
     this.updatePin({ ...pin, ...this.relative(e) });
   }
@@ -410,10 +336,11 @@ class ImagePinView {
   startDrag(e: PointerEvent, index: number) {
     e.preventDefault();
     e.stopPropagation();
-    this.selected = index;
     const marker = e.currentTarget as HTMLElement;
     marker.setPointerCapture(e.pointerId);
     this.dragging = true;
+    this.selected = index;
+    marker.classList.add("is-selected");
     let last = { x: this.pins[index].x as number, y: this.pins[index].y as number };
 
     const move = (ev: PointerEvent) => {
@@ -471,5 +398,9 @@ class ImagePinView {
 
   ignoreMutation() {
     return true;
+  }
+
+  destroy() {
+    this.unsubscribe?.();
   }
 }

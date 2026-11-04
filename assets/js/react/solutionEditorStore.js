@@ -93,3 +93,10 @@ export function setStatus(partId, status, errorMsg = null) {
   statusByPart[partId] = { status, errorMsg };
   if (partId === activePartId) notify();
 }
+
+// The editor of one part, for islands bound to a part rather than to focus
+// (the "Pins" section of the part's card, react/PinPanel.jsx). Read it from
+// the snapshot's subscription: part editors mount lazily.
+export function getEditor(partId) {
+  return editorsByPart.get(partId) || null;
+}

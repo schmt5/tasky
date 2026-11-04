@@ -119,6 +119,24 @@ defmodule TaskyWeb.ExamContentLiveTest do
       refute html =~ "Nächster Teil"
     end
 
+    test "puts the pins section only in the card of a question with a pin image", %{
+      conn: conn
+    } do
+      content =
+        update_in(two_part_content(), ["content"], fn nodes ->
+          List.insert_at(nodes, 2, %{
+            "type" => "imagePin",
+            "attrs" => %{"answerId" => "pin-a", "src" => "/uploads/x.png", "pins" => []}
+          })
+        end)
+
+      %{teacher: teacher, exam: exam} = create_exam(content)
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      assert has_element?(view, "#pin-panel-#{exam.id}-q-1[phx-hook=PinPanel]")
+      refute has_element?(view, "#pin-panel-#{exam.id}-q-2")
+    end
+
     test "shows the empty state when the exam has no questions", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam(%{"type" => "doc", "content" => []})
       {:ok, _view, html} = open_musterloesung(conn, teacher, exam)

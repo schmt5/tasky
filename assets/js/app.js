@@ -32,6 +32,7 @@ import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
 import { ExamAnswersForm } from "./hooks/exam_answers_form_hook";
 import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
 import { SolutionToolbar } from "./hooks/solution_toolbar_hook";
+import { PinPanel } from "./hooks/pin_panel_hook";
 import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
 import { ExamPaperEditor } from "./hooks/exam_paper_editor_hook";
 import {
@@ -59,6 +60,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ExamAnswersForm,
     ExamSampleSolutionPartEditor,
     SolutionToolbar,
+    PinPanel,
     ExamCorrectionEditor,
     ExamPaperEditor,
     ExamReadOnlyViewer,

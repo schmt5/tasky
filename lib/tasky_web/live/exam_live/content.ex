@@ -278,6 +278,18 @@ defmodule TaskyWeb.ExamLive.Content do
                     </li>
                   </ul>
                 </div>
+
+                <%!-- Pins of the question's pin image: a React island bound to
+                     the part editor beside it (assets/js/react/PinPanel.jsx). --%>
+                <div
+                  :if={pv.has_pin_image}
+                  id={"pin-panel-#{@exam.id}-#{pv.id}"}
+                  phx-hook="PinPanel"
+                  phx-update="ignore"
+                  data-part-id={pv.id}
+                  class="p-5 border-t border-stone-100"
+                >
+                </div>
               </div>
             </aside>
           </div>
@@ -935,7 +947,8 @@ defmodule TaskyWeb.ExamLive.Content do
           label: part.label,
           doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
           has_text_answers: Enum.any?(blocks, &(&1.type in ["answerBlock", "lueckentext"])),
-          has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem"))
+          has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem")),
+          has_pin_image: Enum.any?(blocks, &(&1.type == "imagePin"))
         },
         option_fields(exam, part.id, blocks)
       )
