@@ -1,5 +1,5 @@
 defmodule TaskyWeb.CatalogLive.ShowTest do
-  use TaskyWeb.ConnCase, async: false
+  use TaskyWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
   import Tasky.AccountsFixtures
@@ -10,15 +10,6 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
   alias Tasky.Tasks
 
   setup %{conn: conn} do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     author = user_scope_fixture(user_fixture(%{role: "teacher"}))
     viewer = user_fixture(%{role: "teacher"})
     viewer_scope = user_scope_fixture(viewer)

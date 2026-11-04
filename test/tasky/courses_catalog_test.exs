@@ -1,4 +1,6 @@
 defmodule Tasky.CoursesCatalogTest do
+  # Not async: Tasky.ProbeStorage swaps the storage adapter for the whole VM,
+  # and its failure modes would hit every test that stores files meanwhile.
   use Tasky.DataCase, async: false
 
   alias Tasky.Courses
@@ -12,15 +14,6 @@ defmodule Tasky.CoursesCatalogTest do
   @png_bytes <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, "fake-image-data">>
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     author = user_scope_fixture(user_fixture(%{role: "teacher"}))
     importer = user_scope_fixture(user_fixture(%{role: "teacher"}))
 

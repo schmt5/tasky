@@ -1,5 +1,5 @@
 defmodule Tasky.CoursesCopyTaskTest do
-  use Tasky.DataCase, async: false
+  use Tasky.DataCase, async: true
 
   alias Tasky.Courses
   alias Tasky.Tasks
@@ -11,15 +11,6 @@ defmodule Tasky.CoursesCopyTaskTest do
   @png_bytes <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, "fake-image-data">>
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     teacher = user_fixture(%{role: "teacher"})
     scope = user_scope_fixture(teacher)
     source_course = course_fixture(scope: scope, attrs: %{name: "Klasse 2a"})

@@ -6,7 +6,7 @@ defmodule TaskyWeb.TaskSolutionFileControllerTest do
   Der wichtige Teil ist der 404: dass es zu einer Lerneinheit überhaupt eine
   Lösungsdatei gibt, darf ohne Freigabe nicht sichtbar werden.
   """
-  use TaskyWeb.ConnCase, async: false
+  use TaskyWeb.ConnCase, async: true
 
   import Tasky.AccountsFixtures
   import Tasky.CoursesFixtures
@@ -17,15 +17,6 @@ defmodule TaskyWeb.TaskSolutionFileControllerTest do
   alias Tasky.Tasks
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     teacher = user_fixture(%{role: "teacher"})
     teacher_scope = Scope.for_user(teacher)
     course = course_fixture(scope: teacher_scope)

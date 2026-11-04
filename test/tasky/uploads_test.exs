@@ -4,15 +4,6 @@ defmodule Tasky.UploadsTest do
   alias Tasky.Uploads
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     :ok
   end
 

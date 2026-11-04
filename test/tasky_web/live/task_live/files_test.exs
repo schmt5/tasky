@@ -7,7 +7,7 @@ defmodule TaskyWeb.TaskLive.FilesTest do
   bleiben (sonst sieht eine leere Zelle wie ein Anzeigefehler aus), und die
   Seite darf keiner fremden Lehrperson Dateien zeigen.
   """
-  use TaskyWeb.ConnCase, async: false
+  use TaskyWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
   import Tasky.AccountsFixtures
@@ -19,15 +19,6 @@ defmodule TaskyWeb.TaskLive.FilesTest do
   alias Tasky.Uploads
 
   setup %{conn: conn} do
-    dir = Path.join(System.tmp_dir!(), "tasky_files_live_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     teacher = user_fixture(%{role: "teacher"})
     teacher_scope = Scope.for_user(teacher)
 

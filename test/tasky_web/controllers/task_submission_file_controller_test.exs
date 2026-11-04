@@ -7,7 +7,7 @@ defmodule TaskyWeb.TaskSubmissionFileControllerTest do
   PDF-Inhaltstypen tun und muss die Antwort so härten, dass daraus im
   Browser nichts ausgeführt werden kann.
   """
-  use TaskyWeb.ConnCase, async: false
+  use TaskyWeb.ConnCase, async: true
 
   import Tasky.AccountsFixtures
   import Tasky.TasksFixtures
@@ -18,15 +18,6 @@ defmodule TaskyWeb.TaskSubmissionFileControllerTest do
   alias Tasky.Uploads
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_subfile_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     teacher = user_fixture(%{role: "teacher"})
     teacher_scope = Scope.for_user(teacher)
     student = user_fixture(%{role: "student"})

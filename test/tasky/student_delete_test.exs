@@ -7,7 +7,7 @@ defmodule Tasky.StudentDeleteTest do
   The driving scenario is a learner who registered twice: one of the two
   accounts has to go, and nothing of the *other* one may move.
   """
-  use Tasky.DataCase, async: false
+  use Tasky.DataCase, async: true
 
   alias Tasky.Accounts
   alias Tasky.Accounts.Scope
@@ -25,14 +25,9 @@ defmodule Tasky.StudentDeleteTest do
   import Tasky.TasksFixtures
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
+    # Shared with every other test: each stored key carries a record id, so
+    # nothing collides, and overriding the dir per test forced async: false.
+    dir = Tasky.Uploads.dir()
 
     org = organization_fixture()
     class = class_fixture(%{organization_id: org.id})

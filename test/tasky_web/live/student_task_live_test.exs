@@ -1,5 +1,5 @@
 defmodule TaskyWeb.Student.TaskLiveTest do
-  use TaskyWeb.ConnCase, async: false
+  use TaskyWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
   import Tasky.AccountsFixtures
@@ -166,17 +166,6 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       teacher_scope: teacher_scope,
       student: student
     } do
-      dir =
-        Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-
-      prev = Application.get_env(:tasky, :uploads_dir)
-      Application.put_env(:tasky, :uploads_dir, dir)
-
-      on_exit(fn ->
-        File.rm_rf(dir)
-        if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-      end)
-
       src = Path.join(System.tmp_dir!(), "sol_#{System.unique_integer([:positive])}")
       File.write!(src, "bytes")
       {:ok, meta} = Tasky.Uploads.save_task_solution_file(task.id, src, "loesung.docx")

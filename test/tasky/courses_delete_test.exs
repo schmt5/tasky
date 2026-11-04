@@ -1,4 +1,6 @@
 defmodule Tasky.CoursesDeleteTest do
+  # Not async: Tasky.ProbeStorage swaps the storage adapter for the whole VM,
+  # and its failure modes would hit every test that stores files meanwhile.
   use Tasky.DataCase, async: false
 
   alias Tasky.Courses
@@ -12,14 +14,9 @@ defmodule Tasky.CoursesDeleteTest do
   @png_bytes <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, "fake-image-data">>
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
+    # Shared with every other test: each stored key carries a record id, so
+    # nothing collides, and overriding the dir per test forced async: false.
+    dir = Tasky.Uploads.dir()
 
     teacher = user_fixture(%{role: "teacher"})
     scope = user_scope_fixture(teacher)

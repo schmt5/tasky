@@ -1,5 +1,5 @@
 defmodule Tasky.TasksContentTest do
-  use Tasky.DataCase, async: false
+  use Tasky.DataCase, async: true
 
   alias Tasky.Tasks
   alias Tasky.Tasks.TaskSubmission
@@ -8,15 +8,6 @@ defmodule Tasky.TasksContentTest do
   import Tasky.TasksFixtures
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "tasky_uploads_test_#{System.unique_integer([:positive])}")
-    prev = Application.get_env(:tasky, :uploads_dir)
-    Application.put_env(:tasky, :uploads_dir, dir)
-
-    on_exit(fn ->
-      File.rm_rf(dir)
-      if prev, do: Application.put_env(:tasky, :uploads_dir, prev)
-    end)
-
     teacher = user_fixture(%{role: "teacher"})
     student = user_fixture(%{role: "student"})
     teacher_scope = user_scope_fixture(teacher)
