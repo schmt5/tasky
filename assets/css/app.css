@@ -1139,6 +1139,118 @@ body:has(.page-wrapper) {
     text-align: right;
 }
 
+/* Pin image ("Pin auf Bild", assets/js/image_pin_field.js): the picture with
+   numbered pins on it and a tray of the pins still to set below. */
+.exam-doc__pin {
+    margin: 0.75em 0;
+    padding: 10px;
+    border: 1px dashed #a8a29e;
+    border-radius: 10px;
+    background: #f5f5f4;
+}
+
+.exam-doc__pin-stage {
+    position: relative;
+    line-height: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.exam-doc .exam-doc__pin-stage img {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    border-radius: 6px;
+}
+
+.exam-doc__pin-stage--active {
+    cursor: crosshair;
+    touch-action: manipulation;
+}
+
+.exam-doc__pin-marker {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(28, 25, 23, 0.5);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    transition:
+        transform 120ms ease,
+        box-shadow 120ms ease;
+}
+
+button.exam-doc__pin-marker {
+    cursor: grab;
+    touch-action: none;
+}
+
+button.exam-doc__pin-marker:active {
+    cursor: grabbing;
+    transform: translate(-50%, -50%) scale(1.15);
+}
+
+button.exam-doc__pin-marker:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(2, 132, 199, 0.6),
+        0 1px 4px rgba(28, 25, 23, 0.5);
+}
+
+.exam-doc__pin-tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.exam-doc__pin-chip {
+    width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #d6d3d1;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        box-shadow 120ms ease,
+        opacity 120ms ease,
+        transform 120ms ease;
+}
+
+.exam-doc__pin-chip:hover {
+    transform: translateY(-1px);
+}
+
+/* A set pin stays in the tray, faded: it can be picked to move it. */
+.exam-doc__pin-chip[data-placed="true"] {
+    opacity: 0.45;
+}
+
+.exam-doc__pin-chip[aria-pressed="true"] {
+    opacity: 1;
+    box-shadow: 0 0 0 3px #0ea5e9;
+}
+
+.exam-doc__pin-chip:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.6);
+}
+
+.exam-doc__pin-status {
+    margin: 6px 2px 0;
+    font-size: 12px;
+    color: #78716c;
+}
+
 /* The radio of the editor (`.choice-radio`), as a real input. */
 .exam-doc__radio {
     appearance: none;

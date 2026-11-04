@@ -26,6 +26,7 @@ defmodule Tasky.Correction.PlainAnswers do
   """
 
   alias Tasky.Correction.Choice
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.RichAnswer
 
   # Technische Obergrenzen gegen Missbrauch. Lernende erreichen sie nie; die
@@ -42,7 +43,8 @@ defmodule Tasky.Correction.PlainAnswers do
 
   `params` ist `%{"answers" => %{answer_id => wert}, "choices" => %{group_id
   => option_id}}`. Ein Text gehört zu einer Lücke oder einem Antwortblock,
-  eine Liste von Tiptap-Knoten zu einem Aufsatzfeld, ein Boolean zu einer
+  eine Liste von Tiptap-Knoten zu einem Aufsatzfeld, eine Liste von
+  `%{"pinId", "x", "y"}` zu einem Pin-Bild, ein Boolean zu einer
   Multiple-Choice-Option; eine `option_id` muss zur Gruppe
   gehören, `nil` heisst „nichts gewählt“. Alles, was nicht passt, wird
   ignoriert.
@@ -107,6 +109,13 @@ defmodule Tasky.Correction.PlainAnswers do
   # Ein Aufsatzfeld, dessen Editor nicht startete, schickt nichts; Klartext
   # (ein älterer Client) wird wie beim Antwortblock zu Absätzen.
   defp answer("richAnswerBlock", text) when is_binary(text), do: answer("answerBlock", text)
+
+  defp answer({"imagePin", pin_ids}, pins) do
+    case ImagePin.learner_pins(pin_ids, pins) do
+      :ignore -> :ignore
+      pins -> {:ok, pins}
+    end
+  end
 
   defp answer("taskItem", checked) when is_boolean(checked), do: {:ok, checked}
   defp answer(_type, _value), do: :ignore
@@ -211,7 +220,8 @@ defmodule Tasky.Correction.PlainAnswers do
   @doc """
   Die Antwortfelder eines Dokuments: `%{answers: %{answer_id => typ},
   choices: %{group_id => MapSet von option_ids}}`. Ein Aufsatzfeld hat hier
-  den Typ `"richAnswerBlock"`, obwohl es im Dokument ein `answerBlock` ist.
+  den Typ `"richAnswerBlock"`, obwohl es im Dokument ein `answerBlock` ist,
+  ein Pin-Bild `{"imagePin", pin_ids}` — die Pins, die es geben darf.
   """
   def fields(%{"content" => content}) when is_list(content) do
     collect(content, %{answers: %{}, choices: %{}})
@@ -232,7 +242,8 @@ defmodule Tasky.Correction.PlainAnswers do
 
       # Antwortknoten sind Blätter, wie in `AnswerKey`: was darin steckt, setzt
       # `merge/2` nie ein, also ist es auch kein Feld.
-      %{"type" => type} = node, acc when type in ["answerBlock", "lueckentext", "taskItem"] ->
+      %{"type" => type} = node, acc
+      when type in ["answerBlock", "lueckentext", "taskItem", "imagePin"] ->
         case node |> attrs() |> Map.get("answerId") do
           nil -> acc
           id -> put_in(acc, [:answers, to_string(id)], field_type(type, node))
@@ -248,6 +259,9 @@ defmodule Tasky.Correction.PlainAnswers do
 
   defp field_type("answerBlock", node),
     do: if(rich?(node), do: "richAnswerBlock", else: "answerBlock")
+
+  defp field_type("imagePin", node),
+    do: {"imagePin", node |> ImagePin.pins() |> Enum.map(&ImagePin.pin_id/1)}
 
   defp field_type(type, _node), do: type
 

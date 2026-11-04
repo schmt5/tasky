@@ -14,6 +14,7 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
 
   import TaskyWeb.ExamComponents, only: [correction_mode_switch: 1]
 
+  alias Tasky.Correction.ImagePin
   alias Tasky.Exams
   alias Tasky.Grading
 
@@ -550,7 +551,11 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
       %{
         id: part.id,
         label: part.label,
-        doc_json: Jason.encode!(%{"type" => "doc", "content" => part.nodes}),
+        doc_json:
+          Jason.encode!(%{
+            "type" => "doc",
+            "content" => ImagePin.with_solution(part.nodes, exam.sample_solution)
+          }),
         points: Map.get(points, part.id),
         max_points: Map.get(max_points, part.id),
         status: part_status_of(submission, part.id),

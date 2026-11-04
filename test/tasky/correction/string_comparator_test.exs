@@ -105,4 +105,38 @@ defmodule Tasky.Correction.StringComparatorTest do
 
     assert verdicts == %{}
   end
+
+  describe "correct_part/4 with a pin image" do
+    defp pin_image(pins) do
+      %{
+        "type" => "imagePin",
+        "attrs" => %{"answerId" => "img", "aspect" => 1.0, "pins" => pins, "__ai_id" => "1"}
+      }
+    end
+
+    @sample [
+      %{"pinId" => "a", "x" => 0.2, "y" => 0.2, "zone" => %{"shape" => "circle", "r" => 0.05}},
+      %{"pinId" => "b", "x" => 0.8, "y" => 0.8, "zone" => %{"shape" => "circle", "r" => 0.05}}
+    ]
+
+    test "all pins in their zones is right, some is that share of the points" do
+      both = [
+        %{"pinId" => "a", "x" => 0.21, "y" => 0.2},
+        %{"pinId" => "b", "x" => 0.8, "y" => 0.79}
+      ]
+
+      one = [
+        %{"pinId" => "a", "x" => 0.21, "y" => 0.2},
+        %{"pinId" => "b", "x" => nil, "y" => nil}
+      ]
+
+      opts = %{block_points: %{0 => 2}}
+
+      assert {:ok, %{verdicts: %{"1" => "correct"}, points: 2.0}} =
+               StringComparator.correct_part([pin_image(both)], [pin_image(@sample)], 2, opts)
+
+      assert {:ok, %{verdicts: %{"1" => 1.0}, points: 1.0}} =
+               StringComparator.correct_part([pin_image(one)], [pin_image(@sample)], 2, opts)
+    end
+  end
 end

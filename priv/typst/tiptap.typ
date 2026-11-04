@@ -398,6 +398,93 @@
   }
 }
 
+// Pin image ("Pin auf Bild", `Tasky.Correction.ImagePin`): numbered pins on
+// a picture, x/y relative to it. On paper the learner draws the pins by hand,
+// so only the image and the pins to draw are shown; in review the learner's
+// pins, and the zones of the sample solution where the document carries them
+// (`attrs.solution`). Same colours as the browser (`image_pin_colors.js`).
+#let pin-colors = (
+  (rgb("#E69F00"), rgb("#1C1917")),
+  (rgb("#56B4E9"), rgb("#1C1917")),
+  (rgb("#009E73"), white),
+  (rgb("#F0E442"), rgb("#1C1917")),
+  (rgb("#0072B2"), white),
+  (rgb("#D55E00"), white),
+  (rgb("#CC79A7"), rgb("#1C1917")),
+  (rgb("#1C1917"), white),
+)
+
+#let pin-chip(i) = {
+  let (bg, fg) = pin-colors.at(calc.rem(i, pin-colors.len()))
+  box(
+    width: 14pt,
+    height: 14pt,
+    baseline: 3pt,
+    circle(radius: 7pt, fill: bg, stroke: 1pt + white, align(center + horizon, text(size: 7.5pt, weight: "bold", fill: fg, str(i + 1)))),
+  )
+}
+
+#let placed(pin) = type(pin) == dictionary and type(pin.at("x", default: none)) in (int, float) and type(pin.at("y", default: none)) in (int, float)
+
+#let image-pin(node, ctx) = {
+  let attrs = attrs-of(node)
+  let src = attrs.at("src", default: none)
+  let aspect = attrs.at("aspect", default: 1)
+  let aspect = if type(aspect) in (int, float) and aspect > 0 { aspect } else { 1 }
+  let pins = attrs.at("pins", default: ())
+  let pins = if type(pins) == array { pins } else { () }
+  let solution = attrs.at("solution", default: none)
+  let zones = if type(solution) == array { solution } else { pins.filter(p => type(p) == dictionary and "zone" in p) }
+  let paper = ctx.mode == "paper"
+  let verdict = if paper { none } else { verdict-of(node) }
+
+  block(breakable: false, above: 0.8em, below: 0.8em, width: 100%, {
+    if type(src) != str {
+      image-placeholder()
+    } else {
+      layout(size => {
+        let w = calc.min(size.width, 14cm)
+        let h = w / aspect
+        box(width: w, height: h, {
+          image(src, width: w, height: h, fit: "stretch")
+          if not paper {
+            for (i, pin) in zones.enumerate() {
+              if placed(pin) {
+                let (bg, _) = pin-colors.at(calc.rem(i, pin-colors.len()))
+                let zone = pin.at("zone", default: (shape: "circle", r: 0.05))
+                let stroke = (paint: bg, thickness: 1.2pt, dash: "dashed")
+                let fill = bg.transparentize(80%)
+                if zone.at("shape", default: "circle") == "rect" {
+                  let zw = zone.at("w", default: 0.1) * w
+                  let zh = zone.at("h", default: 0.1) * h
+                  place(top + left, dx: pin.x * w - zw / 2, dy: pin.y * h - zh / 2, rect(width: zw, height: zh, stroke: stroke, fill: fill))
+                } else {
+                  let rx = zone.at("r", default: 0.05) * w
+                  place(top + left, dx: pin.x * w - rx, dy: pin.y * h - rx, ellipse(width: 2 * rx, height: 2 * rx, stroke: stroke, fill: fill))
+                }
+              }
+            }
+            for (i, pin) in pins.enumerate() {
+              if placed(pin) {
+                place(top + left, dx: pin.x * w - 7pt, dy: pin.y * h - 7pt, pin-chip(i))
+              }
+            }
+          }
+        })
+      })
+    }
+    if paper and pins.len() > 0 {
+      v(0.4em)
+      text(size: 0.9em, fill: stone.s600, [Zeichne ein: ])
+      for i in range(pins.len()) { pin-chip(i); h(4pt) }
+    }
+    if verdict != none {
+      v(0.3em)
+      verdict-mark(node, verdict)
+    }
+  })
+}
+
 #let render-node(node, ctx, self, inline: false) = {
   let kind = node.at("type", default: none)
   let kids = children-of(node)
@@ -430,6 +517,8 @@
     table-block(node, ctx, self)
   } else if kind == "answerBlock" {
     answer-block(node, ctx, self)
+  } else if kind == "imagePin" {
+    image-pin(node, ctx)
   } else if kind == "callout" {
     let color = attrs-of(node).at("color", default: "yellow")
     let c = callout-colors.at(if type(color) == str and color in callout-colors { color } else { "yellow" })

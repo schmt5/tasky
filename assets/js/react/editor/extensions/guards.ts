@@ -133,7 +133,7 @@ export const PreventNodeDeletion = Extension.create({
   },
 
   addProseMirrorPlugins() {
-    const protectedTypes = ["lueckentext", "answerBlock", "choice"];
+    const protectedTypes = ["lueckentext", "answerBlock", "choice", "imagePin"];
     return [
       new Plugin({
         key: new PluginKey("preventNodeDeletion"),

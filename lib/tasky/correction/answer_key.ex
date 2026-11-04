@@ -19,11 +19,15 @@ defmodule Tasky.Correction.AnswerKey do
     * `choice` — keyed by the radio's `groupId`, not an `answerId`: the
       `optionId` of the checked radio of the group, or `nil` when none is
       (see `Tasky.Correction.Choice`).
+    * `imagePin` — the `pins` list with positions (and, in the sample
+      solution, zones); the blanked node keeps only the pin ids, so learners
+      know how many pins to set (see `Tasky.Correction.ImagePin`).
   """
 
   alias Tasky.Correction.Choice
+  alias Tasky.Correction.ImagePin
 
-  @answer_types ["answerBlock", "lueckentext", "taskItem", "choice"]
+  @answer_types ["answerBlock", "lueckentext", "taskItem", "choice", "imagePin"]
 
   @doc """
   The answer-bearing node types. The single list every module that walks
@@ -188,6 +192,12 @@ defmodule Tasky.Correction.AnswerKey do
     {Map.get(node, "content", []), Map.delete(node, "content")}
   end
 
+  defp extract_answer("imagePin", node) do
+    pins = ImagePin.pins(node)
+    attrs = node |> Map.get("attrs", %{}) |> Map.put("pins", ImagePin.public_pins(pins))
+    {pins, Map.put(node, "attrs", attrs)}
+  end
+
   defp extract_answer("taskItem", node) do
     attrs = Map.get(node, "attrs", %{})
     checked = Map.get(attrs, "checked", false)
@@ -226,6 +236,11 @@ defmodule Tasky.Correction.AnswerKey do
 
   defp apply_answer("taskItem", node, checked) when is_boolean(checked) do
     attrs = node |> Map.get("attrs", %{}) |> Map.put("checked", checked)
+    Map.put(node, "attrs", attrs)
+  end
+
+  defp apply_answer("imagePin", node, pins) when is_list(pins) do
+    attrs = node |> Map.get("attrs", %{}) |> Map.put("pins", pins)
     Map.put(node, "attrs", attrs)
   end
 

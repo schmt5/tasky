@@ -16,6 +16,9 @@ declare module "@tiptap/core" {
       choiceNewGroup: () => ReturnType;
       choiceJoinPrevious: () => ReturnType;
     };
+    imagePin: {
+      insertImagePin: (options: { src: string; aspect: number; alt?: string }) => ReturnType;
+    };
     callout: {
       setCallout: (color: CalloutColor) => ReturnType;
       unsetCallout: () => ReturnType;
@@ -28,6 +31,7 @@ export { Callout } from "./callout";
 export { BlockquoteGuarded } from "./blockquote";
 export { isSingleChoiceActive, Choice, ChoiceIdStamper } from "./choice";
 export { SolutionHint, TeacherComment } from "./annotations";
+export { ImagePin, measureAspect, type ImagePinMode } from "./imagePin";
 export { PreventNodeDeletion } from "./guards";
 export { PaperAnswerLines } from "./paper";
 export { unwrapAnswerSlice, withFreshAnswerIds, LockExamContent } from "./lock";

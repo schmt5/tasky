@@ -187,6 +187,59 @@ defmodule Tasky.PDFTest do
       assert {:ok, "%PDF" <> _} = PDF.render("paper", data)
     end
 
+    test "renders a pin image: the pins to draw on paper, pins and zones in review" do
+      png = png()
+      read = fn _src -> {:ok, {png, ".png"}} end
+
+      pin_image = fn pins, extra ->
+        %{
+          "type" => "imagePin",
+          "attrs" =>
+            Map.merge(
+              %{
+                "answerId" => "pin",
+                "src" => "/uploads/exams/1/a.png",
+                "aspect" => 1.5,
+                "pins" => pins
+              },
+              extra
+            )
+        }
+      end
+
+      blank = [%{"pinId" => "p1"}, %{"pinId" => "p2"}]
+
+      assert {:ok, "%PDF" <> _} =
+               PDF.render("paper", paper_data(doc([pin_image.(blank, %{})])), read_image: read)
+
+      answer = [
+        %{"pinId" => "p1", "x" => 0.2, "y" => 0.3},
+        %{"pinId" => "p2", "x" => nil, "y" => nil}
+      ]
+
+      solution = [
+        %{
+          "pinId" => "p1",
+          "x" => 0.21,
+          "y" => 0.3,
+          "zone" => %{"shape" => "circle", "r" => 0.05}
+        },
+        %{
+          "pinId" => "p2",
+          "x" => 0.7,
+          "y" => 0.6,
+          "zone" => %{"shape" => "rect", "w" => 0.2, "h" => 0.1}
+        }
+      ]
+
+      reviewed =
+        pin_image.(answer, %{"solution" => solution, "verdict" => "half", "points" => "1"})
+
+      data = submission_data([%{"key" => "content", "heading" => nil, "doc" => doc([reviewed])}])
+
+      assert {:ok, "%PDF" <> _} = PDF.render("submission", data, read_image: read)
+    end
+
     test "embeds images, and renders a placeholder for one that is gone" do
       png = png()
 

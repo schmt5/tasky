@@ -8,6 +8,7 @@ defmodule Tasky.Exams.AnswerGroups do
 
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.StringComparator
   alias Tasky.ExamDoc
   alias Tasky.Exams
@@ -105,6 +106,26 @@ defmodule Tasky.Exams.AnswerGroups do
     |> put_groups(context, &checkbox_state_text(&1.checked), %{})
   end
 
+  # A pin image is grouped by how many pins hit. Grouping by text would put
+  # the whole class in one group — a pin image has none.
+  defp block_groups(%{type: "imagePin", index: index} = block, context) do
+    sample = Map.get(context.sample_block_by_index, index, %{})
+    sample_pins = Map.get(sample, :pins, [])
+    aspect = Map.get(sample, :aspect, 1.0)
+    total = length(sample_pins)
+
+    block
+    |> group_base(context, Map.get(context.labels_by_index, index), [pin_hits_text(total, total)])
+    |> put_groups(
+      context,
+      fn answer ->
+        {hits, total} = ImagePin.score(answer[:pins], sample_pins, aspect)
+        pin_hits_text(hits, total)
+      end,
+      %{}
+    )
+  end
+
   defp block_groups(%{index: index} = block, context) do
     sample_text = context.sample_block_by_index |> Map.get(index, %{}) |> Map.get(:text)
 
@@ -140,6 +161,8 @@ defmodule Tasky.Exams.AnswerGroups do
 
     Map.put(entry, :groups, groups)
   end
+
+  defp pin_hits_text(hits, total), do: "#{hits} von #{total} Pins im Zielbereich"
 
   # The group text of a checkbox answer — also what the teacher sees.
   defp checkbox_state_text(true), do: "angekreuzt"

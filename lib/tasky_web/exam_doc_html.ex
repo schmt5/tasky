@@ -13,6 +13,11 @@ defmodule TaskyWeb.ExamDocHTML do
       (`assets/js/rich_answer_field.js`). Der Server rendert den Inhalt
       vorab als HTML: Das ist die Ansicht, bis der Editor läuft, und die
       ganze Ansicht, wenn die Felder gesperrt sind.
+    * `imagePin` → das Bild mit den gesetzten Pins; der Hook macht daraus
+      die Pin-Ablage (`assets/js/image_pin_field.js`). Ins HTML kommen nur
+      Pin-ids und Positionen — nie Zonen.
+    * `taskItem` → `<input type="checkbox">`
+    * `choice` → `<input type="radio">`, gruppiert über die `groupId`
 
   Die Felder tragen `data-answer-id` bzw. `data-group-id`; der Hook
   `ExamAnswersForm` liest sie aus und speichert. Ein `name` haben nur die
@@ -31,6 +36,7 @@ defmodule TaskyWeb.ExamDocHTML do
   import Phoenix.HTML, only: [html_escape: 1]
 
   alias Tasky.Correction.Choice
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.PlainAnswers
 
   @doc """
@@ -160,6 +166,8 @@ defmodule TaskyWeb.ExamDocHTML do
        do: nodes(children(n), ctx)
 
   defp node(%{"type" => "answerBlock"} = n, ctx), do: answer_block(n, ctx)
+
+  defp node(%{"type" => "imagePin"} = n, ctx), do: image_pin(n, ctx)
 
   # Nur für die Rückgabe gedacht — die Lernendenansicht zeigt sie nie.
   defp node(%{"type" => "solutionHint"}, ctx), do: {"", ctx}
@@ -296,6 +304,62 @@ defmodule TaskyWeb.ExamDocHTML do
        inner,
        "</div></div>"
      ], ctx}
+  end
+
+  defp image_pin(n, ctx) do
+    with id when is_binary(id) <- answer_id(n),
+         src when is_binary(src) <- safe_src(attrs(n)["src"]) do
+      pins =
+        n
+        |> ImagePin.pins()
+        |> Enum.map(&Map.take(&1, ["pinId", "x", "y"]))
+
+      attrs = [
+        id: field_id(ctx, id),
+        class: "exam-doc__pin",
+        role: "group",
+        "data-answer-id": id,
+        "data-image-pin": true,
+        "data-value": Jason.encode!(pins),
+        "data-aspect": ImagePin.aspect(n),
+        "data-disabled": ctx.disabled,
+        "aria-label": label("Pin-Bild", ctx)
+      ]
+
+      markers =
+        pins
+        |> Enum.with_index()
+        |> Enum.flat_map(fn
+          {%{"x" => x, "y" => y}, i} when is_number(x) and is_number(y) ->
+            {bg, fg} = ImagePin.color(i)
+
+            [
+              "<span",
+              attributes_escape(
+                class: "exam-doc__pin-marker",
+                style: "left: #{x * 100}%; top: #{y * 100}%; background: #{bg}; color: #{fg}"
+              ),
+              ">",
+              Integer.to_string(i + 1),
+              "</span>"
+            ]
+
+          _ ->
+            []
+        end)
+
+      {[
+         "<div",
+         attributes_escape(attrs),
+         ~s(><div class="exam-doc__pin-stage"><img),
+         attributes_escape(src: src, alt: attrs(n)["alt"] || "", draggable: "false"),
+         ">",
+         markers,
+         "</div></div>"
+       ], ctx}
+    else
+      _ -> {"", ctx}
+    end
   end
 
   defp gap(n, ctx) do

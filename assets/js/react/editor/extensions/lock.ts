@@ -30,6 +30,10 @@ function stripAnswers(json: JsonNode): JsonNode {
     const { content, ...skeleton } = json;
     return skeleton;
   }
+  // Where the pins go is the answer (a sample solution also says how many).
+  if (json.type === "imagePin") {
+    return { ...json, attrs: { ...json.attrs, pins: null } };
+  }
   // Choosing a radio is an answer; which radios exist is not.
   if (json.type === "choice") {
     return { ...json, attrs: { ...json.attrs, checked: null } };

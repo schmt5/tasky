@@ -32,6 +32,7 @@ defmodule Tasky.Tasks.SelfCheck do
 
   alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.Choice
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.SolutionHints
   alias Tasky.Correction.StringComparator
   alias Tasky.Tasks.Task
@@ -129,6 +130,16 @@ defmodule Tasky.Tasks.SelfCheck do
 
       accepted ->
         text_verdict(plain_text(node), accepted)
+    end
+  end
+
+  # A pin image: right when every pin is in its zone. A learning unit has no
+  # points to share, so partly right is wrong.
+  defp verdict_for(%{"type" => "imagePin"} = node, [_ | _] = payload, _off?) do
+    case ImagePin.score(ImagePin.pins(node), payload, ImagePin.aspect(node)) do
+      {_hits, 0} -> nil
+      {total, total} -> "correct"
+      _partly -> "wrong"
     end
   end
 

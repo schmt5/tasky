@@ -25,6 +25,7 @@ import {
   PreventNodeDeletion,
   LockExamContent,
   PaperAnswerLines,
+  ImagePin,
 } from "./extensions";
 
 export interface EditorExtensionFlags {
@@ -79,6 +80,17 @@ export function buildEditorExtensions({
       authoring: editable && !lockContent && !correctionMode,
     }),
     ...(lockContent ? [] : [ChoiceIdStamper]),
+    // Pins are placed where answers are given (the sample solution: locked,
+    // editable) and only shown everywhere else; learners answer in the
+    // native sheet instead (assets/js/image_pin_field.js).
+    ImagePin.configure({
+      mode:
+        editable && lockContent && !paperMode
+          ? "solution"
+          : editable && !lockContent && !correctionMode
+            ? "author"
+            : "view",
+    }),
     TableKit.configure({ table: { resizable: true } }),
     Highlight.configure({ multicolor: true }),
     TextStyle,

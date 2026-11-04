@@ -90,6 +90,21 @@ defmodule Tasky.Correction.SolutionHints do
 
   defp expand_node(%{"type" => "choice"} = node, ctx), do: [annotate_choice(node, ctx)]
 
+  # Die Zonen der Musterlösung gehen an den Knoten selbst: der Viewer zeichnet
+  # sie über das Bild, neben die Pins der lernenden Person.
+  defp expand_node(%{"type" => "imagePin"} = node, ctx) do
+    node = put_verdict(node, ctx)
+
+    case sample_for(node, ctx) do
+      [_ | _] = pins ->
+        attrs = node |> Map.get("attrs", %{}) |> Map.put("solution", pins)
+        [Map.put(node, "attrs", attrs)]
+
+      _ ->
+        [node]
+    end
+  end
+
   defp expand_node(%{"type" => type} = node, ctx) when type in @answer_types do
     [put_verdict(node, ctx)]
   end

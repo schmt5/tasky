@@ -11,6 +11,7 @@ defmodule Tasky.Exams do
   alias Tasky.Accounts.User
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.PlainAnswers
   alias Tasky.Correction.StringComparator
   alias Tasky.Exams.Exam
@@ -1486,6 +1487,9 @@ defmodule Tasky.Exams do
           raise ArgumentError, "unknown part_id: #{inspect(part_id)}"
         end
 
+        # The zones the correction view drew are the exam's, not the answer's.
+        part_nodes = ImagePin.without_solution(part_nodes)
+
         new_parts =
           Enum.map(parts, fn p ->
             if p.id == part_id, do: %{p | nodes: part_nodes}, else: p
@@ -1547,6 +1551,10 @@ defmodule Tasky.Exams do
       # and this write then resurrected the stale map — losing a model answer.
       result =
         update_exam_json(exam, fn locked ->
+          # How many pins a pin image has is the sample solution's to say —
+          # this tab never sets them (`ImagePin.sync_public_pins/2`).
+          new_content = ImagePin.sync_public_pins(new_content, locked.sample_solution)
+
           {pruned_block_points, synced_points} =
             prune_orphan_block_points(
               new_content,
@@ -1904,6 +1912,7 @@ defmodule Tasky.Exams do
           |> Map.put(:verdict, verdict)
           |> Map.put(:expected_checked, expected_checked(sample))
           |> Map.put(:expected_option, expected_option(sample))
+          |> put_pin_hits(sample)
         end)
     end
   end
@@ -1920,6 +1929,15 @@ defmodule Tasky.Exams do
       part -> part.nodes |> NodePatcher.list_answer_blocks() |> Map.new(&{&1.index, &1})
     end
   end
+
+  # A pin image has no text to show beside its verdict buttons; how many pins
+  # hit is what the teacher needs there.
+  defp put_pin_hits(%{type: "imagePin"} = entry, %{type: "imagePin"} = sample) do
+    {hits, total} = ImagePin.score(entry.pins, sample.pins, sample.aspect)
+    Map.put(entry, :text, "#{hits} von #{total} Pins im Zielbereich")
+  end
+
+  defp put_pin_hits(entry, _sample), do: entry
 
   defp expected_checked(%{type: "taskItem", checked: checked}), do: checked
   defp expected_checked(_sample), do: nil
@@ -2805,10 +2823,11 @@ defmodule Tasky.Exams do
 
   @doc """
   The ids of the parts the auto-correction grades: those whose config has
-  `"auto_correct" => true`, plus every part made only of checkboxes and radios.
+  `"auto_correct" => true`, plus every part made only of checkboxes, radios
+  and pin images.
 
-  A tick compares exactly against the sample solution, so there is nothing to
-  switch off there — such a part is always auto-corrected, whatever its stored
+  A tick or a pin compares exactly against the sample solution, so there is
+  nothing to switch off there — such a part is always auto-corrected, whatever its stored
   flag says. The flag stays untouched, so a part that later gains a text field
   falls back to it.
   """
@@ -2824,8 +2843,9 @@ defmodule Tasky.Exams do
   end
 
   @doc """
-  The ids of the parts whose answer fields are all checkboxes (`taskItem`) or
-  radios (`choice`) — at least one, and no text field.
+  The ids of the parts whose answer fields are all checkboxes (`taskItem`),
+  radios (`choice`) or pin images (`imagePin`) — at least one, and no text
+  field.
   """
   def choice_only_part_ids(%Exam{} = exam) do
     for part <-
@@ -2837,10 +2857,10 @@ defmodule Tasky.Exams do
 
   @doc """
   Whether `blocks` (from `Tasky.AI.NodePatcher.list_answer_blocks/1`) are all
-  checkboxes or radios, and there is at least one.
+  checkboxes, radios or pin images, and there is at least one.
   """
   def choice_only_blocks?([_ | _] = blocks),
-    do: Enum.all?(blocks, &(&1.type in ["taskItem", "choice"]))
+    do: Enum.all?(blocks, &(&1.type in ["taskItem", "choice", "imagePin"]))
 
   def choice_only_blocks?(_blocks), do: false
 

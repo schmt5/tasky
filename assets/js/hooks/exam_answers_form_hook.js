@@ -36,12 +36,16 @@ export const ExamAnswersForm = {
       this.el.querySelectorAll(".exam-doc__block, .exam-doc__gap").forEach(fitField);
     }
 
-    // Essay fields are fields of their own make, from a chunk loaded only
-    // where there is one. Until it runs, the server's HTML shows the answer
-    // and the snapshot leaves the field out — the server keeps what it has.
+    // Essay fields and pin images are fields of their own make, each from a
+    // chunk loaded only where there is one. Until it runs, the server's HTML
+    // shows the answer and the snapshot leaves the field out — the server
+    // keeps what it has.
     this.customFields = new Map();
     this.mountCustom("[data-rich-answer]", () =>
       import("../rich_answer_field").then((m) => m.mountRichAnswerField),
+    );
+    this.mountCustom("[data-image-pin]", () =>
+      import("../image_pin_field").then((m) => m.mountImagePinField),
     );
 
     this.onInput = (event) => {
@@ -77,7 +81,7 @@ export const ExamAnswersForm = {
     const choices = {};
 
     this.el.querySelectorAll("[data-answer-id]").forEach((field) => {
-      if ("richAnswer" in field.dataset) {
+      if ("richAnswer" in field.dataset || "imagePin" in field.dataset) {
         const custom = this.customFields.get(field);
         if (custom) answers[field.dataset.answerId] = custom.value();
         return;

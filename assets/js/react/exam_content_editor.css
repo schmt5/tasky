@@ -1255,3 +1255,180 @@
     height: 9mm;
     border-bottom: 1px solid #a8a29e;
 }
+
+/* Pin image ("Pin auf Bild", extensions/imagePin.ts). Markers sit centred on
+   their point; zones are tinted outlines in the pin's colour. */
+.exam-editor__content .ProseMirror .image-pin {
+    margin: 0.75em 0;
+    border: 1px dashed #a8a29e;
+    border-radius: 10px;
+    background: #f5f5f4;
+    padding: 10px;
+}
+
+.exam-editor__content .ProseMirror .image-pin.ProseMirror-selectednode {
+    outline: 2px solid #0ea5e9;
+    outline-offset: 2px;
+}
+
+.image-pin__stage {
+    position: relative;
+    line-height: 0;
+    user-select: none;
+}
+
+.image-pin__stage img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 0;
+}
+
+.image-pin__stage--placing {
+    cursor: crosshair;
+}
+
+.image-pin__zone {
+    position: absolute;
+    border: 2px dashed var(--pin-color);
+    background: color-mix(in srgb, var(--pin-color) 18%, transparent);
+    pointer-events: none;
+}
+
+.image-pin__zone--circle {
+    border-radius: 9999px;
+}
+
+.image-pin__zone--rect {
+    border-radius: 4px;
+}
+
+.image-pin__marker {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.45);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    transition:
+        transform 120ms ease,
+        box-shadow 120ms ease;
+}
+
+button.image-pin__marker {
+    cursor: grab;
+    touch-action: none;
+}
+
+button.image-pin__marker:active {
+    cursor: grabbing;
+}
+
+.image-pin__marker.is-selected,
+button.image-pin__marker:focus-visible {
+    outline: none;
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow:
+        0 0 0 3px rgba(14, 165, 233, 0.6),
+        0 1px 3px rgba(28, 25, 23, 0.45);
+}
+
+.image-pin__note {
+    margin: 8px 2px 0;
+    font-size: 13px;
+    color: #78716c;
+}
+
+.image-pin__controls {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.image-pin__chips,
+.image-pin__settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.image-pin__chip {
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #d6d3d1;
+    transition: box-shadow 120ms ease;
+}
+
+.image-pin__chip.is-selected {
+    box-shadow: 0 0 0 3px #0ea5e9;
+}
+
+.image-pin__add,
+.image-pin__remove,
+.image-pin__segmented button {
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #44403c;
+    background: #fff;
+    border: 1px solid #d6d3d1;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease;
+}
+
+.image-pin__add:hover,
+.image-pin__remove:hover,
+.image-pin__segmented button:hover {
+    border-color: #7dd3fc;
+}
+
+.image-pin__segmented {
+    display: inline-flex;
+}
+
+.image-pin__segmented button {
+    border-radius: 0;
+}
+
+.image-pin__segmented button:first-child {
+    border-radius: 6px 0 0 6px;
+}
+
+.image-pin__segmented button:last-child {
+    border-radius: 0 6px 6px 0;
+    margin-left: -1px;
+}
+
+.image-pin__segmented button[aria-checked="true"] {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+    color: #0369a1;
+}
+
+.image-pin__slider {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #57534e;
+}
+
+.image-pin__slider input {
+    width: 110px;
+    accent-color: #0284c7;
+}

@@ -164,6 +164,48 @@ defmodule TaskyWeb.ExamDocHTMLTest do
       assert attr(doc, ".exam-doc__rich", "data-disabled") == [""]
     end
 
+    test "a pin image carries its pins' ids and positions, never a zone" do
+      pins = [
+        %{"pinId" => "a", "x" => 0.25, "y" => 0.5, "zone" => %{"shape" => "circle", "r" => 0.1}},
+        %{"pinId" => "b"}
+      ]
+
+      doc =
+        render_doc([
+          %{
+            "type" => "imagePin",
+            "attrs" => %{
+              "answerId" => "img",
+              "src" => "/uploads/a.png",
+              "aspect" => 2,
+              "pins" => pins
+            }
+          }
+        ])
+
+      assert [json] = attr(doc, ".exam-doc__pin", "data-value")
+
+      assert Jason.decode!(json) == [
+               %{"pinId" => "a", "x" => 0.25, "y" => 0.5},
+               %{"pinId" => "b"}
+             ]
+
+      assert attr(doc, ".exam-doc__pin img", "src") == ["/uploads/a.png"]
+      assert doc |> LazyHTML.query(".exam-doc__pin-marker") |> LazyHTML.text() == "1"
+    end
+
+    test "a pin image from another site is left out" do
+      doc =
+        render_doc([
+          %{
+            "type" => "imagePin",
+            "attrs" => %{"answerId" => "img", "src" => "//evil.example/a.png"}
+          }
+        ])
+
+      assert doc |> LazyHTML.query(".exam-doc__pin") |> Enum.count() == 0
+    end
+
     test "disabled locks every field" do
       doc =
         render_doc(

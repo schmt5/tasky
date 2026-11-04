@@ -131,6 +131,38 @@ defmodule Tasky.Correction.PlainAnswersTest do
     end
   end
 
+  describe "from_params/2 with a pin image" do
+    test "takes positions only for the pins the document has" do
+      skeleton = %{
+        "type" => "doc",
+        "content" => [
+          %{
+            "type" => "imagePin",
+            "attrs" => %{"answerId" => "img", "pins" => [%{"pinId" => "a"}, %{"pinId" => "b"}]}
+          }
+        ]
+      }
+
+      params = %{
+        "answers" => %{
+          "img" => [
+            %{"pinId" => "a", "x" => 0.25, "y" => 0.5},
+            %{"pinId" => "x", "x" => 0, "y" => 0}
+          ]
+        }
+      }
+
+      assert PlainAnswers.from_params(skeleton, params) ==
+               {:ok,
+                %{
+                  "img" => [
+                    %{"pinId" => "a", "x" => 0.25, "y" => 0.5},
+                    %{"pinId" => "b", "x" => nil, "y" => nil}
+                  ]
+                }}
+    end
+  end
+
   describe "block_nodes/1 and gap_nodes/1" do
     test "keeps empty lines as empty paragraphs" do
       assert PlainAnswers.block_nodes("a\r\n\nb") == [p("a"), %{"type" => "paragraph"}, p("b")]

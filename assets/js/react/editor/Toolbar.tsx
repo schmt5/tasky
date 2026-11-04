@@ -25,6 +25,7 @@ import {
   ChatBubbleLeftEllipsisIcon,
   InformationCircleIcon,
   PhotoIcon,
+  MapPinIcon,
   TableCellsIcon,
   PaintBrushIcon,
   ArrowUturnLeftIcon,
@@ -60,7 +61,7 @@ import {
   HeaderRowIcon,
   RemoveTableIcon,
 } from "./icons";
-import { isSingleChoiceActive } from "./extensions";
+import { isSingleChoiceActive, measureAspect } from "./extensions";
 
 export interface ToolbarProps {
   editor: Editor;
@@ -72,6 +73,7 @@ export interface ToolbarProps {
   hideQuestion?: boolean;
   compactToolbar?: boolean;
   uploadImage?: ((file: File) => Promise<{ url: string }>) | null;
+  pinImages?: boolean;
   lockHintVisible?: boolean;
   lockHintEnabled?: boolean;
   lockHintText?: string;
@@ -87,6 +89,7 @@ export function Toolbar({
   hideQuestion = false,
   compactToolbar = false,
   uploadImage = null,
+  pinImages = false,
   lockHintVisible = false,
   lockHintEnabled = false,
   lockHintText = "Der Aufgabentext kann nicht bearbeitet werden – schreibe deine Antwort in ein Antwortfeld.",
@@ -430,6 +433,16 @@ export function Toolbar({
             editor={editor}
             uploadImage={uploadImage}
           />,
+          ...(hideAnswers || !pinImages
+            ? []
+            : [
+                <ImageButton
+                  key="image-pin"
+                  editor={editor}
+                  uploadImage={uploadImage}
+                  pin
+                />,
+              ]),
         ])}
     </>
   );
@@ -640,7 +653,17 @@ function formatShortcut(combo: string | undefined) {
     .join(IS_MAC ? "" : "+");
 }
 
-function ImageButton({ editor, uploadImage }: { editor: Editor; uploadImage: (file: File) => Promise<{ url: string }> }) {
+// `pin`: a pin image ("Pin auf Bild", an answer field) instead of a plain
+// picture. Its pins are set in the sample solution.
+function ImageButton({
+  editor,
+  uploadImage,
+  pin = false,
+}: {
+  editor: Editor;
+  uploadImage: (file: File) => Promise<{ url: string }>;
+  pin?: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -651,7 +674,12 @@ function ImageButton({ editor, uploadImage }: { editor: Editor; uploadImage: (fi
     setUploading(true);
     try {
       const { url } = await uploadImage(file);
-      editor.chain().focus().setImage({ src: url }).run();
+      if (pin) {
+        const aspect = await measureAspect(url);
+        editor.chain().focus().insertImagePin({ src: url, aspect }).run();
+      } else {
+        editor.chain().focus().setImage({ src: url }).run();
+      }
     } catch (err) {
       console.error("Bild-Upload fehlgeschlagen", err);
       window.alert((err as Error).message || "Bild-Upload fehlgeschlagen");
@@ -662,16 +690,20 @@ function ImageButton({ editor, uploadImage }: { editor: Editor; uploadImage: (fi
 
   return (
     <>
-      <Tip label="Bild einfügen">
+      <Tip label={pin ? "Pin-Bild einfügen" : "Bild einfügen"}>
         <button
           type="button"
-          aria-label="Bild einfügen"
+          aria-label={pin ? "Pin-Bild einfügen" : "Bild einfügen"}
           className="exam-editor__btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
         >
-          <PhotoIcon className="exam-editor__icon" />
+          {pin ? (
+            <MapPinIcon className="exam-editor__icon" />
+          ) : (
+            <PhotoIcon className="exam-editor__icon" />
+          )}
         </button>
       </Tip>
       <input

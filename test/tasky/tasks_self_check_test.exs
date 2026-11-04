@@ -283,4 +283,34 @@ defmodule Tasky.TasksSelfCheckTest do
     assert %{verdicts: verdicts, total: 0} = SelfCheck.evaluate(task, doc([essay]))
     assert verdicts == %{}
   end
+
+  describe "a pin image" do
+    @zones [
+      %{"pinId" => "a", "x" => 0.2, "y" => 0.2, "zone" => %{"shape" => "circle", "r" => 0.05}},
+      %{"pinId" => "b", "x" => 0.8, "y" => 0.8, "zone" => %{"shape" => "circle", "r" => 0.05}}
+    ]
+
+    defp pin_image(pins),
+      do: %{
+        "type" => "imagePin",
+        "attrs" => %{"answerId" => "img", "aspect" => 1.0, "pins" => pins}
+      }
+
+    test "is right with every pin in its zone, wrong with any outside" do
+      task = task(%{"img" => @zones})
+
+      both = [
+        %{"pinId" => "a", "x" => 0.2, "y" => 0.21},
+        %{"pinId" => "b", "x" => 0.8, "y" => 0.8}
+      ]
+
+      one = [
+        %{"pinId" => "a", "x" => 0.2, "y" => 0.21},
+        %{"pinId" => "b", "x" => nil, "y" => nil}
+      ]
+
+      assert %{verdicts: %{"img" => "correct"}} = SelfCheck.evaluate(task, doc([pin_image(both)]))
+      assert %{verdicts: %{"img" => "wrong"}} = SelfCheck.evaluate(task, doc([pin_image(one)]))
+    end
+  end
 end

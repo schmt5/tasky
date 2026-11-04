@@ -17,6 +17,9 @@ defmodule Tasky.Correction.StringComparator do
   * `lueckentext`  — same as `answerBlock`.
   * essay field    — an `answerBlock` with `rich: true` gets no verdict: an
                      essay is graded by hand, never against the sample text.
+  * `imagePin`     — each pin in its zone (`Tasky.Correction.ImagePin`): all
+                     → right, none → wrong, some → that share of the
+                     block's points as a numeric verdict.
 
   Per-part options (`opts`):
 
@@ -38,13 +41,15 @@ defmodule Tasky.Correction.StringComparator do
 
   alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.Choice
+  alias Tasky.Correction.ImagePin
 
   @answer_types Tasky.Correction.AnswerKey.answer_types()
   @fuzzy_threshold 0.85
   @fuzzy_min_length 4
 
   @doc """
-  Returns `{:ok, %{verdicts: %{"id" => "correct" | "wrong"}, points: number}}`.
+  Returns `{:ok, %{verdicts: %{"id" => "correct" | "wrong" | number}, points: number}}`
+  — a number only for a partly right `imagePin`.
 
   `annotated_submission_nodes` must have already been annotated by
   `Tasky.AI.NodePatcher.annotate/1` (each answer node carries
@@ -60,7 +65,7 @@ defmodule Tasky.Correction.StringComparator do
       |> Enum.with_index()
       |> Enum.reduce(%{}, fn {sub, idx}, acc ->
         sample = Enum.at(sample_answers, idx)
-        verdict = verdict_for(sub, sample, opts)
+        verdict = verdict_for(sub, sample, Map.put(opts, :index, idx))
 
         case {sub.id, verdict} do
           {nil, _} -> acc
@@ -101,6 +106,11 @@ defmodule Tasky.Correction.StringComparator do
         do: "correct",
         else: "wrong"
     end
+  end
+
+  defp verdict_for(%{type: "imagePin", pins: pins}, %{type: "imagePin"} = sample, opts) do
+    block_max = opts |> Map.get(:block_points, %{}) |> Map.get(opts.index)
+    pins |> ImagePin.score(sample.pins, sample.aspect) |> ImagePin.verdict(block_max)
   end
 
   defp verdict_for(_sub, _sample, _opts), do: "wrong"
@@ -168,6 +178,7 @@ defmodule Tasky.Correction.StringComparator do
     raw =
       Enum.reduce(verdicts, 0.0, fn
         {id, "correct"}, acc -> acc + (Map.get(bp, String.to_integer(id) - 1) || 0)
+        {_id, points}, acc when is_number(points) -> acc + points
         _, acc -> acc
       end)
 
@@ -234,6 +245,15 @@ defmodule Tasky.Correction.StringComparator do
       type: "taskItem",
       id: get_in(node, ["attrs", "__ai_id"]),
       checked: get_in(node, ["attrs", "checked"]) == true
+    }
+  end
+
+  defp build_entry(%{"type" => "imagePin"} = node) do
+    %{
+      type: "imagePin",
+      id: get_in(node, ["attrs", "__ai_id"]),
+      pins: ImagePin.pins(node),
+      aspect: ImagePin.aspect(node)
     }
   end
 

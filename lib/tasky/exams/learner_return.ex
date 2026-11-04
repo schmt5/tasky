@@ -8,6 +8,7 @@ defmodule Tasky.Exams.LearnerReturn do
 
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.SolutionHints
   alias Tasky.ExamDoc
   alias Tasky.Exams
@@ -170,9 +171,17 @@ defmodule Tasky.Exams.LearnerReturn do
 
     base_doc
     |> strip_markers(verdicts)
+    |> without_pin_solutions()
     |> SolutionHints.annotate(sample, verdicts, Keyword.get(opts, :points, %{}))
     |> put_part_points(exam.answer_mode, Keyword.get(opts, :part_points, %{}))
   end
+
+  # Zones only come from the released sample solution (`SolutionHints`), never
+  # from what a stored document happens to carry.
+  defp without_pin_solutions(%{"content" => content} = doc) when is_list(content),
+    do: Map.put(doc, "content", ImagePin.without_solution(content))
+
+  defp without_pin_solutions(doc), do: doc
 
   defp put_part_points(doc, _mode, part_points) when map_size(part_points) == 0, do: doc
 

@@ -12,6 +12,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
   import TaskyWeb.FileComponents
 
+  alias Tasky.Correction.ImagePin
   alias Tasky.Exams
   alias Tasky.Grading
   alias Tasky.Uploads
@@ -754,7 +755,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
        |> put_flash(:error, "Teil nicht gefunden.")
        |> push_navigate(to: ~p"/exams/#{exam}/correction")}
     else
-      part_doc = %{"type" => "doc", "content" => current_part.nodes}
+      part_doc = %{
+        "type" => "doc",
+        "content" => ImagePin.with_solution(current_part.nodes, exam.sample_solution)
+      }
+
       part_doc_json = Jason.encode!(part_doc)
 
       part_index = Enum.find_index(parts, &(&1.id == current_part.id))
@@ -1110,7 +1115,11 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
 
       p ->
         push_event(socket, "reload-content", %{
-          content: Jason.encode!(%{"type" => "doc", "content" => p.nodes})
+          content:
+            Jason.encode!(%{
+              "type" => "doc",
+              "content" => ImagePin.with_solution(p.nodes, exam.sample_solution)
+            })
         })
     end
   end

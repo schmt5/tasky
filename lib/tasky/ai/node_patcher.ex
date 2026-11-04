@@ -103,15 +103,17 @@ defmodule Tasky.AI.NodePatcher do
         do: {get_in(node, ["attrs", "checked"]) == true, group},
         else: {nil, nil}
 
-    entry = %{
-      index: counter,
-      answer_id: answer_id,
-      type: type,
-      text: text,
-      inferred_verdict: inferred,
-      checked: checked,
-      group: group
-    }
+    entry =
+      %{
+        index: counter,
+        answer_id: answer_id,
+        type: type,
+        text: text,
+        inferred_verdict: inferred,
+        checked: checked,
+        group: group
+      }
+      |> put_pins(node)
 
     collect_blocks(rest, [entry | acc], counter + 1, group, choices)
   end
@@ -124,6 +126,16 @@ defmodule Tasky.AI.NodePatcher do
 
   defp collect_blocks([_ | rest], acc, counter, group, choices),
     do: collect_blocks(rest, acc, counter, group, choices)
+
+  # A pin image has no text to group or compare: its pins are the answer.
+  defp put_pins(entry, %{"type" => "imagePin"} = node) do
+    Map.merge(entry, %{
+      pins: Tasky.Correction.ImagePin.pins(node),
+      aspect: Tasky.Correction.ImagePin.aspect(node)
+    })
+  end
+
+  defp put_pins(entry, _node), do: entry
 
   defp extract_plain_text(content) when is_list(content) do
     Enum.map_join(content, "", fn

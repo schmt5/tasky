@@ -62,7 +62,7 @@ defmodule Tasky.PDF do
   end
 
   @doc """
-  Prepares data for the templates: every `image` node's `src` is replaced by
+  Prepares data for the templates: every `image` (and `imagePin`) node's `src` is replaced by
   a virtual asset path (`/img/<n><ext>`), and the image bytes are returned as
   assets. An image that cannot be loaded — an external URL, a deleted file —
   gets `src: nil`, which the template renders as a placeholder. Colours that
@@ -83,7 +83,8 @@ defmodule Tasky.PDF do
     {data, Enum.reverse(assets)}
   end
 
-  defp walk(%{"type" => "image", "attrs" => %{} = attrs} = node, acc) do
+  defp walk(%{"type" => type, "attrs" => %{} = attrs} = node, acc)
+       when type in ["image", "imagePin"] do
     {path, acc} = image_path(Map.get(attrs, "src"), acc)
     {%{node | "attrs" => Map.put(attrs, "src", path)}, acc}
   end
