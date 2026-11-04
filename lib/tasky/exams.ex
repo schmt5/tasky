@@ -4,25 +4,21 @@ defmodule Tasky.Exams do
   """
 
   import Ecto.Query, warn: false
+  import Tasky.Exams.Access
   alias Tasky.Repo
 
   alias Tasky.Accounts.Scope
   alias Tasky.Accounts.User
   alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerKey
-  alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.PlainAnswers
-  alias Tasky.Correction.SolutionHints
   alias Tasky.Correction.StringComparator
   alias Tasky.Exams.Exam
-  alias Tasky.Exams.ExamAttachment
   alias Tasky.Exams.ExamSubmission
   alias Tasky.Exams.ExamSubmissionFile
-  alias Tasky.Exams.ExamUploadField
   alias Tasky.Grading
   alias Tasky.Organizations
   alias Tasky.Policy
-  alias Tasky.Positioned
 
   @doc """
   Returns the list of exams for a given scope.
@@ -1240,37 +1236,6 @@ defmodule Tasky.Exams do
     end
   end
 
-  # Locks the rows every student-facing write to a submission needs: the exam
-  # FOR SHARE (its status is only read, as a guard) and the submission FOR
-  # UPDATE. Same order and modes as `submit_exam_submission/1` above, so none of
-  # these writes can deadlock against a submit.
-  #
-  # For file changes the submission lock does double duty: the submit gate
-  # counts this submission's files, and a row lock on the submission does *not*
-  # pin rows in exam_submission_files — so without taking the same lock here, a
-  # required file could be replaced or deleted between that count and the submit
-  # write.
-  defp lock_submission_for_write!(%ExamSubmission{} = submission) do
-    exam = Repo.lock_one!(Exam, submission.exam_id, :share)
-    {exam, Repo.lock_one!(ExamSubmission, submission.id)}
-  end
-
-  # Rolls the surrounding transaction back unless the student may still write to
-  # this submission: only while the exam runs and nothing is handed in. The one
-  # gate behind the answer doc *and* the answer files.
-  #
-  # It is checked here, against the freshly locked rows, rather than in the
-  # LiveView, because a LiveView holds the submission it loaded at mount: a
-  # stale socket, a late autosave or a replayed event would otherwise still
-  # mutate a handed-in submission.
-  defp ensure_submission_writable!(%Exam{} = exam, %ExamSubmission{} = submission) do
-    cond do
-      submission.submitted -> Repo.rollback(:already_submitted)
-      exam.status != "running" -> Repo.rollback(:exam_not_running)
-      true -> :ok
-    end
-  end
-
   # Domain events on the "exam_events" topic — consumed by the correction
   # orchestrator (Tasky.AI.CorrectionOrchestrator), never by this module, so
   # the Exams ↔ BulkCorrectionRunner dependency stays one-way.
@@ -1380,20 +1345,6 @@ defmodule Tasky.Exams do
       _ -> submission.content || %{}
     end
   end
-
-  # Writes to anything hanging off an exam go through the exam owner (or an
-  # admin / the :system scope of a trusted background job). One indexed lookup
-  # resolves the owning teacher from the child's exam_id; an exam that is gone
-  # is not an authorization pass.
-  defp authorize_exam_id(scope, exam_id) do
-    case Repo.one(from e in Exam, where: e.id == ^exam_id, select: e.teacher_id) do
-      nil -> {:error, :unauthorized}
-      teacher_id -> Policy.authorize(scope, teacher_id)
-    end
-  end
-
-  defp authorize_submission(scope, %ExamSubmission{} = submission),
-    do: authorize_exam_id(scope, submission.exam_id)
 
   @doc ~S"""
   Marks a single part of a submission as corrected (idempotent).
@@ -2952,266 +2903,9 @@ defmodule Tasky.Exams do
     end
   end
 
-  @doc """
-  Groups the answers given by every submission to a single part, one group per
-  unique answer text, paired with the system's pre-judged verdict against the
-  sample solution and the teacher's current verdict (if any).
+  # --- AnswerGroups: see Tasky.Exams.AnswerGroups ---
 
-  Returns a list of `%{index, type, group, label, max_points, sample_answers,
-  groups}` — one entry per answer-bearing block in the part, in document
-  order. `max_points` is the block's share resolved via
-  `resolve_block_points/3` (`nil` when the part has no points configured).
-
-  A checkbox (`type: "taskItem"`) is grouped by its tick, not by its text:
-  the group texts are `"angekreuzt"` and `"nicht angekreuzt"`, `label` is the
-  checkbox's own label, and `group` names the checkbox list it belongs to
-  (see `Tasky.AI.NodePatcher.list_answer_blocks/1`). Within `groups`:
-
-      %{
-        text: "fliegen" | nil,            # nil = "no answer"
-        count: 18,
-        students: [%{submission_id, firstname, lastname, verdict}, ...],
-        default_verdict: "correct" | "wrong",
-        current_verdict: "correct" | "half" | "wrong" | number | nil | :mixed,
-        diff: [{:eq | :ins | :del, string}, ...],
-        nearest_sample: "fliegen" | nil
-      }
-
-  `current_verdict` is `nil` when no submission in the group has an explicit
-  teacher verdict, `:mixed` when submissions disagree, otherwise the shared
-  value. `default_verdict` honors the part's text comparison options
-  (`ignore_case`, `ignore_spelling`, `ignore_punctuation`), using the same matcher (`Tasky.Correction.StringComparator.text_match?/3`)
-  as auto-correction.
-  """
-  def list_part_answer_groups(%Exam{} = exam, part_id) when is_binary(part_id) do
-    part_cfg = Map.get(exam.ai_correction_config || %{}, part_id, %{})
-    opts = StringComparator.match_opts(part_cfg)
-
-    sample_part =
-      exam
-      |> sample_solution_doc()
-      |> split_content_into_parts(exam.answer_mode)
-      |> Enum.find(&(&1.id == part_id))
-
-    sample_blocks =
-      case sample_part do
-        nil -> []
-        p -> NodePatcher.list_answer_blocks(p.nodes)
-      end
-
-    sample_text_by_index =
-      Enum.into(sample_blocks, %{}, fn b -> {b.index, b.text} end)
-
-    exam_part =
-      (exam.content || %{})
-      |> split_content_into_parts(exam.answer_mode)
-      |> Enum.find(&(&1.id == part_id))
-
-    labels_by_index =
-      case exam_part do
-        nil -> %{}
-        p -> Tasky.ExamDoc.answer_block_labels(p.nodes)
-      end
-
-    exam_blocks =
-      case exam_part do
-        nil -> sample_blocks
-        p -> NodePatcher.list_answer_blocks(p.nodes)
-      end
-
-    points_by_index = resolve_block_points(exam, part_id, exam_blocks)
-    sample_block_by_index = Map.new(sample_blocks, &{&1.index, &1})
-
-    submissions = list_exam_submissions(exam)
-
-    per_submission_blocks =
-      Enum.map(submissions, fn sub ->
-        blocks =
-          sub
-          |> correction_content()
-          |> split_content_into_parts(exam.answer_mode)
-          |> Enum.find(&(&1.id == part_id))
-          |> case do
-            nil -> []
-            p -> NodePatcher.list_answer_blocks(p.nodes)
-          end
-
-        {sub, blocks}
-      end)
-
-    Enum.map(exam_blocks, fn %{index: index} = exam_block ->
-      base = %{
-        index: index,
-        type: exam_block.type,
-        group: exam_block[:group],
-        max_points: points_by_index && Map.get(points_by_index, index)
-      }
-
-      cond do
-        exam_block.type == "choice" ->
-          # A radio group is grouped by the chosen option's label, compared
-          # exactly: an option is picked, not typed, so no text options and
-          # no `;` alternatives (a `;` in a label must not split it).
-          sample_answers =
-            case Map.get(sample_block_by_index, index) do
-              %{text: label} when label != "" -> [label]
-              _ -> []
-            end
-
-          Map.merge(base, %{
-            label: Map.get(labels_by_index, index),
-            sample_answers: sample_answers,
-            groups:
-              build_answer_groups(
-                per_submission_blocks,
-                index,
-                &normalize_group_text(&1.text),
-                sample_answers,
-                %{}
-              )
-          })
-
-        exam_block.type == "taskItem" ->
-          # A checkbox's label is the same for everyone; what differs is the
-          # tick. Grouping by the label put the whole class in one "correct"
-          # group, ticked or not.
-          expected =
-            case Map.get(sample_block_by_index, index) do
-              %{checked: checked} -> checkbox_state_text(checked)
-              nil -> nil
-            end
-
-          sample_answers = if expected, do: [expected], else: []
-
-          Map.merge(base, %{
-            label: exam_block.text,
-            sample_answers: sample_answers,
-            groups:
-              build_answer_groups(
-                per_submission_blocks,
-                index,
-                &checkbox_state_text(&1.checked),
-                sample_answers,
-                %{}
-              )
-          })
-
-        true ->
-          sample_answers = AnswerVariants.split(Map.get(sample_text_by_index, index))
-
-          Map.merge(base, %{
-            label: Map.get(labels_by_index, index),
-            sample_answers: sample_answers,
-            groups:
-              build_answer_groups(
-                per_submission_blocks,
-                index,
-                &normalize_group_text(&1.text),
-                sample_answers,
-                opts
-              )
-          })
-      end
-    end)
-  end
-
-  # The group text of a checkbox answer — also what the teacher sees.
-  defp checkbox_state_text(true), do: "angekreuzt"
-  defp checkbox_state_text(_unchecked), do: "nicht angekreuzt"
-
-  defp build_answer_groups(per_submission_blocks, index, key_fun, sample_answers, opts) do
-    entries =
-      Enum.map(per_submission_blocks, fn {sub, blocks} ->
-        case Enum.find(blocks, &(&1.index == index)) do
-          nil -> {sub, nil, nil}
-          %{answer_id: id} = block -> {sub, key_fun.(block), id}
-        end
-      end)
-
-    entries
-    |> Enum.group_by(fn {_sub, text, _id} -> text end)
-    |> Enum.map(fn {text, members} ->
-      subs_with_ids = Enum.map(members, fn {sub, _text, id} -> {sub, id} end)
-      build_one_group(text, subs_with_ids, sample_answers, opts)
-    end)
-    |> Enum.sort_by(fn g -> -g.count end)
-  end
-
-  defp build_one_group(text, subs_with_ids, sample_answers, opts) do
-    subs = Enum.map(subs_with_ids, fn {sub, _id} -> sub end)
-
-    # Verdicts are keyed by each submission's own block answerId.
-    verdicts =
-      Enum.map(subs_with_ids, fn {s, answer_id} ->
-        answer_id && Map.get(s.block_verdicts || %{}, answer_id)
-      end)
-
-    current_verdict =
-      case Enum.uniq(verdicts) do
-        [v] -> v
-        _ -> :mixed
-      end
-
-    default_verdict = default_group_verdict(text, sample_answers, opts)
-    nearest = nearest_sample(text, sample_answers)
-    diff = diff_against(text, nearest)
-
-    # `verdict` is this student's own explicit verdict for the block (nil =
-    # none). The checkbox patterns regroup students across blocks and need it
-    # per person, not just the group's shared value.
-    students =
-      Enum.zip_with(subs, verdicts, fn s, verdict ->
-        %{submission_id: s.id, firstname: s.firstname, lastname: s.lastname, verdict: verdict}
-      end)
-
-    %{
-      text: text,
-      count: length(subs),
-      students: students,
-      default_verdict: default_verdict,
-      current_verdict: current_verdict,
-      diff: diff,
-      nearest_sample: nearest
-    }
-  end
-
-  defp normalize_group_text(nil), do: nil
-
-  defp normalize_group_text(text) when is_binary(text) do
-    case String.trim(text) do
-      "" -> nil
-      t -> t
-    end
-  end
-
-  defp default_group_verdict(nil, _samples, _opts), do: "wrong"
-  defp default_group_verdict(_text, [], _opts), do: "wrong"
-
-  defp default_group_verdict(text, samples, opts) do
-    trimmed = String.trim(text)
-
-    if trimmed != "" and
-         Enum.any?(samples, &StringComparator.text_match?(trimmed, &1, opts)),
-       do: "correct",
-       else: "wrong"
-  end
-
-  defp nearest_sample(nil, _), do: nil
-  defp nearest_sample(_text, []), do: nil
-
-  defp nearest_sample(_text, [single]), do: single
-
-  defp nearest_sample(text, samples) do
-    lower = String.downcase(text)
-
-    Enum.max_by(samples, fn s ->
-      String.jaro_distance(lower, String.downcase(s))
-    end)
-  end
-
-  defp diff_against(nil, _), do: []
-  defp diff_against(text, nil), do: [{:eq, text}]
-  defp diff_against(text, sample), do: String.myers_difference(text, sample)
+  defdelegate list_part_answer_groups(exam, part_id), to: Tasky.Exams.AnswerGroups
 
   @doc """
   Reconstructs the answer-filled "sample solution" document by merging the
@@ -3222,188 +2916,15 @@ defmodule Tasky.Exams do
     AnswerKey.merge(exam.content || %{}, exam.sample_solution || %{})
   end
 
-  @doc """
-  Dieselbe Musterlösung, aber für Teilnehmende statt für die Korrektur.
+  # --- LearnerReturn: see Tasky.Exams.LearnerReturn ---
 
-  Der einzige Unterschied ist das `;`: mehrere gültige Antworten werden zu
-  `"pdf, .pdf"` aufgelöst (siehe `Tasky.Correction.AnswerVariants`). Das
-  darf **nicht** in `sample_solution_doc/1` selbst passieren — daran hängen die
-  Autokorrektur und die Editoren der Lehrperson, und beide brauchen das rohe
-  Trennzeichen.
-  """
-  def sample_solution_doc_for_learner(%Exam{} = exam),
-    do: exam |> sample_solution_doc() |> AnswerVariants.humanize_doc()
+  defdelegate sample_solution_doc_for_learner(exam), to: Tasky.Exams.LearnerReturn
+  defdelegate learner_verdicts(exam, submission), to: Tasky.Exams.LearnerReturn
+  defdelegate learner_points(exam, submission), to: Tasky.Exams.LearnerReturn
+  defdelegate learner_part_points(exam, sub), to: Tasky.Exams.LearnerReturn
 
-  @doc """
-  Die Verdikte einer Abgabe, keyed by `answerId`, für die Anzeige bei Lernenden.
-
-  `"correct"`, `"half"` oder `"wrong"` — dasselbe Vokabular, das
-  `Tasky.Correction.SolutionHints` an den Antwortknoten schreibt. Manuell
-  vergebene Teilpunkte werden dafür über `Grading.marker_verdict/2` aufgelöst,
-  mit dem Blockmaximum aus `resolve_block_points/3`: derselbe Pfad, den auch
-  `set_block_verdict/5` beim Setzen der ✅/🟡/❌ nimmt.
-
-  `block_verdicts` ist die verbindliche Quelle. Der Textmarker im korrigierten
-  Dokument dient nur als Rückfall für Blöcke, die noch aus einer Bulk-Korrektur
-  stammen und deren Verdikt nie einzeln gespeichert wurde.
-  """
-  @spec learner_verdicts(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
-  def learner_verdicts(%Exam{} = exam, %ExamSubmission{} = submission) do
-    exam
-    |> judged_answers(submission)
-    |> Map.new(fn {answer_id, verdict, block_max} ->
-      {answer_id, Grading.marker_verdict(verdict, block_max)}
-    end)
-  end
-
-  @doc """
-  Die erreichten Punkte einer Abgabe pro Antwortfeld, keyed by `answerId`, als
-  Anzeigetext — für Lernende, die am Feld die Punktzahl statt ✅/🟡/❌ sehen.
-  Mit bekanntem Blockmaximum steht es dabei: `"1 / 2"`, sonst nur `"1.5"`.
-
-  Ein 🟡 allein liest sich wie „ein halber Punkt", auch bei 1.5 von 2 Punkten;
-  die Zahl sagt, was wirklich vergeben wurde. Gerechnet wird mit
-  `Grading.awarded_points/2`, demselben Pfad wie die Gesamtpunktzahl.
-
-  Ohne Blockmaximum (keine Punkte konfiguriert, oder ein Block mit 0 Punkten)
-  gibt es für ein Wort-Verdikt keine Zahl: das Feld fehlt in der Map und behält
-  sein Zeichen. Manuell vergebene Punkte sind selbst die Zahl.
-  """
-  @spec learner_points(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
-  def learner_points(%Exam{} = exam, %ExamSubmission{} = submission) do
-    exam
-    |> judged_answers(submission)
-    |> Enum.reduce(%{}, fn {answer_id, verdict, block_max}, acc ->
-      awarded = Grading.format_points(Grading.awarded_points(verdict, block_max))
-
-      cond do
-        is_number(block_max) and block_max > 0 ->
-          Map.put(acc, answer_id, awarded <> " / " <> Grading.format_points(block_max))
-
-        is_number(verdict) ->
-          Map.put(acc, answer_id, awarded)
-
-        true ->
-          acc
-      end
-    end)
-  end
-
-  @doc """
-  Die erreichten Punkte pro Frage, keyed by part id, als Anzeigetext `"2/4"` —
-  für die Frage-Überschrift der zurückgegebenen Prüfung.
-
-  Nur Fragen mit mehr als einem Antwortfeld: Bei einem einzigen Feld steht
-  dieselbe Zahl schon am Feld. Gezählt wird, was in `points_per_part`
-  gespeichert ist, also dieselbe Zahl, die in die Gesamtpunktzahl eingeht.
-  Ohne Punkte der Frage oder ohne gespeicherte Punkte fehlt die Frage.
-  """
-  @spec learner_part_points(Exam.t(), ExamSubmission.t()) :: %{String.t() => String.t()}
-  def learner_part_points(%Exam{answer_mode: "answer_fields"} = exam, %ExamSubmission{} = sub) do
-    max_by_part = exam.sample_solution_points || %{}
-    points_by_part = sub.points_per_part || %{}
-
-    sub
-    |> correction_content()
-    |> split_content_into_parts(exam.answer_mode)
-    |> Enum.reduce(%{}, fn part, acc ->
-      max = Map.get(max_by_part, part.id)
-      points = Map.get(points_by_part, part.id)
-      fields = length(NodePatcher.list_answer_blocks(part.nodes))
-
-      if fields > 1 and is_number(max) and max > 0 and is_number(points) do
-        Map.put(acc, part.id, Grading.format_points(points) <> "/" <> Grading.format_points(max))
-      else
-        acc
-      end
-    end)
-  end
-
-  def learner_part_points(%Exam{}, %ExamSubmission{}), do: %{}
-
-  # `{answerId, verdict, block_max}` für jedes bewertete Antwortfeld, mit der
-  # Quellen-Rangfolge aus `learner_verdicts/2`.
-  defp judged_answers(exam, submission) do
-    explicit = submission.block_verdicts || %{}
-
-    submission
-    |> correction_content()
-    |> split_content_into_parts(exam.answer_mode)
-    |> Enum.flat_map(fn part ->
-      blocks = NodePatcher.list_answer_blocks(part.nodes)
-      points = resolve_block_points(exam, part.id, blocks)
-
-      Enum.flat_map(blocks, fn entry ->
-        verdict =
-          (entry.answer_id && Map.get(explicit, entry.answer_id)) || entry.inferred_verdict
-
-        if is_binary(entry.answer_id) and not is_nil(verdict),
-          do: [{entry.answer_id, verdict, points && Map.get(points, entry.index)}],
-          else: []
-      end)
-    end)
-  end
-
-  @doc """
-  Das zurückgegebene Dokument mit Verdikten und Musterlösung an den
-  Antwortfeldern.
-
-  `base_doc` ist, was die/der Lernende ohnehin zu sehen bekäme — die Korrektur
-  der Lehrperson oder die eigenen Antworten. `verdicts` ist `learner_verdicts/2`
-  oder `%{}`, wenn die Korrektur nicht freigegeben ist.
-
-  Sobald Verdikte mitkommen, fallen die Textmarker ✅/🟡/❌ weg: das Verdikt hängt
-  dann als Attribut am Knoten und wird vom Stylesheet gezeichnet. Stünden beide
-  da, hätte jedes korrigierte Feld zwei Marker. Ohne Verdikte wird der Text
-  nicht angefasst — dort gibt es keine Korrektur, und was die/der Lernende
-  geschrieben hat, bleibt stehen.
-
-  Optionen:
-
-    * `:points` — `learner_points/2`; das Feld zeigt dann die Punktzahl statt
-      des Zeichens. Default `%{}`.
-    * `:part_points` — `learner_part_points/2`; die Frage-Überschrift bekommt
-      sie als `points`-Attribut und zeigt sie darunter. Default `%{}`.
-    * `:sample_solution` — `false`, wenn die Musterlösung nicht freigegeben ist:
-      Verdikte und Punkte kommen trotzdem ans Feld, nur ohne Vorgabe darunter.
-      Default `true`.
-  """
-  @spec return_doc_for_learner(Exam.t(), map() | nil, map(), keyword()) :: map()
-  def return_doc_for_learner(%Exam{} = exam, base_doc, verdicts, opts \\ [])
-      when is_map(verdicts) do
-    base_doc = base_doc || %{}
-    sample = if Keyword.get(opts, :sample_solution, true), do: exam.sample_solution
-
-    base_doc
-    |> strip_markers(verdicts)
-    |> SolutionHints.annotate(sample, verdicts, Keyword.get(opts, :points, %{}))
-    |> put_part_points(exam.answer_mode, Keyword.get(opts, :part_points, %{}))
-  end
-
-  defp put_part_points(doc, _mode, part_points) when map_size(part_points) == 0, do: doc
-
-  defp put_part_points(doc, mode, part_points) do
-    parts =
-      doc
-      |> split_content_into_parts(mode)
-      |> Enum.map(fn
-        %{id: id, nodes: [heading | rest]} = part when is_map_key(part_points, id) ->
-          attrs = Map.put(heading["attrs"] || %{}, "points", part_points[id])
-          %{part | nodes: [Map.put(heading, "attrs", attrs) | rest]}
-
-        part ->
-          part
-      end)
-
-    Map.merge(doc, assemble_parts_into_content(content_preamble(doc, mode), parts))
-  end
-
-  defp strip_markers(doc, verdicts) when map_size(verdicts) == 0, do: doc
-
-  defp strip_markers(doc, _verdicts) do
-    nodes = Map.get(doc, "content", []) || []
-    Map.put(doc, "content", NodePatcher.rewrite_markers(nodes, %{}))
-  end
+  defdelegate return_doc_for_learner(exam, base_doc, verdicts, opts \\ []),
+    to: Tasky.Exams.LearnerReturn
 
   @doc """
   Subscribes to correction-grid events for a given exam ID.
@@ -3472,222 +2993,27 @@ defmodule Tasky.Exams do
     Phoenix.PubSub.broadcast(Tasky.PubSub, "exam:#{exam.id}", {:exam_status_changed, exam})
   end
 
-  # --- Attachments (Anhänge) ---
+  # --- Files: see Tasky.Exams.Files ---
 
-  @doc "Lists an exam's attachments in display order."
-  def list_exam_attachments(%Exam{} = exam) do
-    Positioned.list(ExamAttachment, :exam_id, exam.id)
-  end
+  defdelegate list_exam_attachments(exam), to: Tasky.Exams.Files
+  defdelegate get_exam_attachment(exam, id), to: Tasky.Exams.Files
 
-  @doc "Gets an attachment of the given exam, or nil."
-  def get_exam_attachment(%Exam{} = exam, id) do
-    Repo.get_child(ExamAttachment, id, exam_id: exam.id)
-  end
+  defdelegate get_exam_attachment_by_stored_filename(exam_id, stored_filename),
+    to: Tasky.Exams.Files
 
-  @doc "Gets an attachment by its stored (UUID) filename, or nil."
-  def get_exam_attachment_by_stored_filename(exam_id, stored_filename) do
-    Repo.get_by(ExamAttachment, exam_id: exam_id, stored_filename: stored_filename)
-  end
-
-  @doc """
-  Creates an attachment record for a file already stored on disk (see
-  `Tasky.Uploads.save_exam_attachment/3`).
-  """
-  def create_exam_attachment(scope, %Exam{} = exam, attrs) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      position = Positioned.next_position(ExamAttachment, :exam_id, exam.id)
-
-      %ExamAttachment{exam_id: exam.id}
-      |> ExamAttachment.changeset(Map.put(attrs, :position, position))
-      |> Repo.insert()
-    end
-  end
-
-  @doc "Deletes an attachment record and its file on disk."
-  def delete_exam_attachment(scope, %ExamAttachment{} = attachment) do
-    with :ok <- authorize_exam_id(scope, attachment.exam_id),
-         {:ok, deleted} <- Repo.delete(attachment) do
-      Tasky.Uploads.delete_exam_attachment_file(deleted.exam_id, deleted.stored_filename)
-      {:ok, deleted}
-    end
-  end
-
-  # --- Upload fields (Datei-Abgaben) ---
-
-  @doc "Lists an exam's upload fields in display order."
-  def list_upload_fields(%Exam{} = exam), do: list_upload_fields_by_exam_id(exam.id)
-
-  defp list_upload_fields_by_exam_id(exam_id) do
-    Positioned.list(ExamUploadField, :exam_id, exam_id)
-  end
-
-  @doc "Gets an upload field of the given exam, or nil."
-  def get_upload_field(%Exam{} = exam, id) do
-    Repo.get_child(ExamUploadField, id, exam_id: exam.id)
-  end
-
-  @doc "Creates an upload field, appended at the end."
-  def create_upload_field(scope, %Exam{} = exam, attrs) do
-    with :ok <- Policy.authorize(scope, exam.teacher_id) do
-      position = Positioned.next_position(ExamUploadField, :exam_id, exam.id)
-
-      %ExamUploadField{exam_id: exam.id}
-      |> ExamUploadField.changeset(Map.put(attrs, "position", position))
-      |> Repo.insert()
-    end
-  end
-
-  @doc "Updates an upload field."
-  def update_upload_field(scope, %ExamUploadField{} = field, attrs) do
-    with :ok <- authorize_exam_id(scope, field.exam_id) do
-      field
-      |> ExamUploadField.changeset(attrs)
-      |> Repo.update()
-    end
-  end
-
-  @doc """
-  Deletes an upload field including all student files uploaded into it
-  (records via FK cascade, bytes on disk explicitly).
-  """
-  def delete_upload_field(scope, %ExamUploadField{} = field) do
-    files =
-      Repo.all(
-        from sf in ExamSubmissionFile,
-          where: sf.upload_field_id == ^field.id,
-          join: s in assoc(sf, :exam_submission),
-          select: {s.exam_id, sf.exam_submission_id, sf.stored_filename}
-      )
-
-    with :ok <- authorize_exam_id(scope, field.exam_id),
-         {:ok, deleted} <- Repo.delete(field) do
-      Enum.each(files, fn {exam_id, submission_id, stored} ->
-        Tasky.Uploads.delete_submission_file_from_disk(exam_id, submission_id, stored)
-      end)
-
-      {:ok, deleted}
-    end
-  end
-
-  @doc "True when the exam has attachments or upload fields (student tab visibility)."
-  def exam_has_files?(%Exam{} = exam) do
-    Repo.exists?(from a in ExamAttachment, where: a.exam_id == ^exam.id) or
-      Repo.exists?(from f in ExamUploadField, where: f.exam_id == ^exam.id)
-  end
-
-  # --- Student answer files ---
-
-  @doc """
-  Lists all answer files uploaded for an exam (upload field preloaded),
-  for the teacher's correction overview.
-  """
-  def list_exam_submission_files(%Exam{} = exam) do
-    Repo.all(
-      from sf in ExamSubmissionFile,
-        join: s in assoc(sf, :exam_submission),
-        where: s.exam_id == ^exam.id,
-        join: f in assoc(sf, :upload_field),
-        order_by: [asc: f.position, asc: f.id],
-        preload: [upload_field: f]
-    )
-  end
-
-  @doc "Lists a submission's uploaded files."
-  def list_submission_files(%ExamSubmission{} = submission) do
-    Repo.all(from sf in ExamSubmissionFile, where: sf.exam_submission_id == ^submission.id)
-  end
-
-  @doc "Gets a submission's file for one upload field, or nil."
-  def get_submission_file(%ExamSubmission{} = submission, field_id) do
-    Repo.get_by(ExamSubmissionFile,
-      exam_submission_id: submission.id,
-      upload_field_id: field_id
-    )
-  end
-
-  @doc "Gets a file of the given submission by its id, or nil."
-  def get_submission_file_by_id(%ExamSubmission{} = submission, file_id) do
-    Repo.get_child(ExamSubmissionFile, file_id, exam_submission_id: submission.id)
-  end
-
-  @doc """
-  Stores/replaces the answer file of one upload field for a submission whose
-  bytes are already on disk. A previously uploaded file for the same field is
-  replaced and its bytes removed.
-  """
-  def put_submission_file(%ExamSubmission{} = submission, %ExamUploadField{} = field, attrs) do
-    result =
-      Repo.transaction(fn ->
-        {exam, locked} = lock_submission_for_write!(submission)
-        ensure_submission_writable!(exam, locked)
-
-        old = get_submission_file(submission, field.id)
-
-        changeset =
-          case old do
-            nil ->
-              %ExamSubmissionFile{exam_submission_id: submission.id, upload_field_id: field.id}
-              |> ExamSubmissionFile.changeset(attrs)
-
-            existing ->
-              ExamSubmissionFile.changeset(existing, attrs)
-          end
-
-        case Repo.insert_or_update(changeset) do
-          {:ok, file} -> {file, old}
-          {:error, changeset} -> Repo.rollback(changeset)
-        end
-      end)
-
-    # Bytes are removed only once the record change has committed, so a rolled
-    # back transaction can't leave the DB pointing at a file that is gone.
-    with {:ok, {file, old}} <- result do
-      if old, do: delete_submission_file_bytes(submission, old.stored_filename)
-      {:ok, file}
-    end
-  end
-
-  @doc "Deletes a submission's answer file (record + bytes)."
-  def delete_submission_file(%ExamSubmission{} = submission, %ExamSubmissionFile{} = file) do
-    result =
-      Repo.transaction(fn ->
-        {exam, locked} = lock_submission_for_write!(submission)
-        ensure_submission_writable!(exam, locked)
-
-        case Repo.delete(file) do
-          {:ok, deleted} -> deleted
-          {:error, changeset} -> Repo.rollback(changeset)
-        end
-      end)
-
-    with {:ok, deleted} <- result do
-      delete_submission_file_bytes(submission, deleted.stored_filename)
-      {:ok, deleted}
-    end
-  end
-
-  defp delete_submission_file_bytes(submission, stored_filename) do
-    Tasky.Uploads.delete_submission_file_from_disk(
-      submission.exam_id,
-      submission.id,
-      stored_filename
-    )
-  end
-
-  @doc """
-  Required upload fields of the submission's exam that have no file yet.
-  Used to gate the exam submit.
-  """
-  def missing_required_uploads(%ExamSubmission{} = submission) do
-    uploaded_ids =
-      Repo.all(
-        from sf in ExamSubmissionFile,
-          where: sf.exam_submission_id == ^submission.id,
-          select: sf.upload_field_id
-      )
-
-    submission.exam_id
-    |> list_upload_fields_by_exam_id()
-    |> Enum.filter(&(&1.required and &1.id not in uploaded_ids))
-  end
+  defdelegate create_exam_attachment(scope, exam, attrs), to: Tasky.Exams.Files
+  defdelegate delete_exam_attachment(scope, attachment), to: Tasky.Exams.Files
+  defdelegate list_upload_fields(exam), to: Tasky.Exams.Files
+  defdelegate get_upload_field(exam, id), to: Tasky.Exams.Files
+  defdelegate create_upload_field(scope, exam, attrs), to: Tasky.Exams.Files
+  defdelegate update_upload_field(scope, field, attrs), to: Tasky.Exams.Files
+  defdelegate delete_upload_field(scope, field), to: Tasky.Exams.Files
+  defdelegate exam_has_files?(exam), to: Tasky.Exams.Files
+  defdelegate list_exam_submission_files(exam), to: Tasky.Exams.Files
+  defdelegate list_submission_files(submission), to: Tasky.Exams.Files
+  defdelegate get_submission_file(submission, field_id), to: Tasky.Exams.Files
+  defdelegate get_submission_file_by_id(submission, file_id), to: Tasky.Exams.Files
+  defdelegate put_submission_file(submission, field, attrs), to: Tasky.Exams.Files
+  defdelegate delete_submission_file(submission, file), to: Tasky.Exams.Files
+  defdelegate missing_required_uploads(submission), to: Tasky.Exams.Files
 end
