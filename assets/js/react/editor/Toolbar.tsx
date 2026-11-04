@@ -391,16 +391,16 @@ export function Toolbar({
       {!hideAnswers &&
         group("Antworten", [
           btn(
-            "Antwortfeld",
-            <FreitextAbcIcon className={iconCls} />,
-            () => editor.chain().focus().setAnswerBlock().run(),
-            active.answerBlock,
-          ),
-          btn(
             "Aufsatzfeld",
             <FreitextIcon className={iconCls} />,
             () => editor.chain().focus().setAnswerBlock({ rich: true }).run(),
             active.richAnswerBlock,
+          ),
+          btn(
+            "Antwortfeld",
+            <FreitextAbcIcon className={iconCls} />,
+            () => editor.chain().focus().setAnswerBlock().run(),
+            active.answerBlock,
           ),
           btn(
             "Lückentextfeld",
@@ -420,6 +420,16 @@ export function Toolbar({
             () => editor.chain().focus().toggleSingleChoice().run(),
             active.singleChoice,
           ),
+          ...(uploadImage && pinImages
+            ? [
+                <ImageButton
+                  key="image-pin"
+                  editor={editor}
+                  uploadImage={uploadImage}
+                  pin
+                />,
+              ]
+            : []),
         ])}
       {!hideAnswers &&
         active.choice &&
@@ -444,16 +454,6 @@ export function Toolbar({
             editor={editor}
             uploadImage={uploadImage}
           />,
-          ...(hideAnswers || !pinImages
-            ? []
-            : [
-                <ImageButton
-                  key="image-pin"
-                  editor={editor}
-                  uploadImage={uploadImage}
-                  pin
-                />,
-              ]),
         ])}
     </>
   );

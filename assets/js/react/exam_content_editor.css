@@ -1453,3 +1453,52 @@ button.image-pin__marker:focus-visible {
     width: 110px;
     accent-color: #0284c7;
 }
+
+/* Sample solution: the image with its pins on the left, everything to add,
+   pick and size a pin in a panel on the right. */
+.exam-editor__content .ProseMirror .image-pin--solution {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
+    align-items: start;
+    gap: 12px;
+}
+
+.image-pin--solution .image-pin__controls {
+    margin-top: 0;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e7e5e4;
+}
+
+.image-pin--solution .image-pin__settings {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid #e7e5e4;
+}
+
+.image-pin--solution .image-pin__segmented button {
+    flex: 1;
+}
+
+.image-pin--solution .image-pin__slider {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+}
+
+.image-pin--solution .image-pin__slider input {
+    width: 100%;
+}
+
+.image-pin--solution .image-pin__remove {
+    align-self: flex-start;
+}
+
+.image-pin--solution .image-pin__controls .image-pin__note {
+    margin: 0;
+}
