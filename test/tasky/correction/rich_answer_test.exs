@@ -43,12 +43,35 @@ defmodule Tasky.Correction.RichAnswerTest do
 
   test "unknown nodes give their text, unknown leaves and marks disappear" do
     nodes = [
-      %{"type" => "blockquote", "content" => [p([text("zitiert", [%{"type" => "link"}])])]},
+      %{"type" => "callout", "content" => [p([text("zitiert", [%{"type" => "link"}])])]},
       %{"type" => "image", "attrs" => %{"src" => "/x.png"}},
       %{"type" => "answerBlock", "attrs" => %{"answerId" => 9}, "content" => [p([text("innen")])]}
     ]
 
     assert RichAnswer.sanitize(nodes) == {:ok, [p([clean("zitiert")]), p([clean("innen")])]}
+  end
+
+  test "keeps a blockquote with its blocks, and a highlight without its colour" do
+    nodes = [
+      %{
+        "type" => "blockquote",
+        "attrs" => %{"class" => "x"},
+        "content" => [
+          p([text("zitiert", [%{"type" => "highlight", "attrs" => %{"color" => "red"}}])]),
+          %{
+            "type" => "bulletList",
+            "content" => [%{"type" => "listItem", "content" => [p([text("b")])]}]
+          }
+        ]
+      },
+      %{"type" => "blockquote", "content" => []}
+    ]
+
+    assert {:ok, [%{"type" => "blockquote", "content" => [quoted, %{"type" => "bulletList"}]}]} =
+             RichAnswer.sanitize(nodes)
+
+    assert quoted ==
+             p([%{"type" => "text", "text" => "zitiert", "marks" => [%{"type" => "highlight"}]}])
   end
 
   test "loose inline content is gathered into a paragraph" do

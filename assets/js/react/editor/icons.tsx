@@ -1,5 +1,7 @@
 // The custom SVG icons of the editor toolbar (everything the heroicons set
-// doesn't cover: answer-field types and table operations).
+// doesn't cover: answer-field types, lists and table operations).
+
+import { EDITOR_ICONS } from "../../editor_icons";
 
 interface IconProps {
   className?: string;
@@ -24,21 +26,7 @@ export function TextColorIcon({ className }: IconProps) {
 }
 
 export function BlockquoteIcon({ className }: IconProps) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 5v14" />
-      <path d="M9 8h11M9 12h11M9 16h7" />
-    </svg>
-  );
+  return <SharedIcon name="blockquote" className={className} />;
 }
 
 export function FreitextIcon({ className }: IconProps) {
@@ -373,3 +361,31 @@ export function RemoveTableIcon({ className }: IconProps) {
   );
 }
 
+
+// Drawn from the data the learners' essay field shares (editor_icons.js).
+function SharedIcon({ name, className }: IconProps & { name: keyof typeof EDITOR_ICONS }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {EDITOR_ICONS[name].map(({ tag: Tag, ...attrs }, i) => (
+        <Tag key={i} {...(attrs as Record<string, unknown>)} />
+      ))}
+    </svg>
+  );
+}
+
+export function BulletListIcon({ className }: IconProps) {
+  return <SharedIcon name="bulletList" className={className} />;
+}
+
+export function OrderedListIcon({ className }: IconProps) {
+  return <SharedIcon name="orderedList" className={className} />;
+}

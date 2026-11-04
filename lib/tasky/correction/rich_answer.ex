@@ -10,9 +10,10 @@ defmodule Tasky.Correction.RichAnswer do
 
     * Blöcke: `paragraph`, `heading` (immer Stufe 4 — eine h3 würde die
       Prüfung in Teile schneiden, siehe `Tasky.ExamDoc`), `bulletList`,
-      `orderedList`, `listItem`
+      `orderedList`, `listItem`, `blockquote`
     * Inline: `text`, `hardBreak`
-    * Marks: `bold`, `italic`, `underline`
+    * Marks: `bold`, `italic`, `underline`, `highlight` (ohne Farbe: das
+      Aufsatzfeld markiert nur gelb)
 
   Unbekanntes wird nicht abgelehnt, sondern verworfen: Ein unbekannter Knoten
   gibt seine Kinder weiter, damit kein getippter Text verloren geht. Attribute
@@ -72,6 +73,17 @@ defmodule Tasky.Correction.RichAnswer do
       case items do
         [] -> []
         items -> [Map.merge(%{"type" => type, "content" => items}, list_attrs(type, node))]
+      end
+    end
+  end
+
+  defp block(%{"type" => "blockquote"} = node, depth) do
+    if depth >= @max_depth do
+      blocks(children(node), depth)
+    else
+      case blocks(children(node), depth + 1) do
+        [] -> []
+        content -> [%{"type" => "blockquote", "content" => content}]
       end
     end
   end
@@ -151,8 +163,11 @@ defmodule Tasky.Correction.RichAnswer do
     |> Map.get("marks")
     |> List.wrap()
     |> Enum.flat_map(fn
-      %{"type" => type} when type in ["bold", "italic", "underline"] -> [%{"type" => type}]
-      _ -> []
+      %{"type" => type} when type in ["bold", "italic", "underline", "highlight"] ->
+        [%{"type" => type}]
+
+      _ ->
+        []
     end)
     |> Enum.uniq()
   end

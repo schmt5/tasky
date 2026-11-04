@@ -19,9 +19,7 @@ import {
   UnderlineIcon,
   H1Icon,
   H2Icon,
-  ListBulletIcon,
   QuestionMarkCircleIcon,
-  NumberedListIcon,
   ChatBubbleLeftEllipsisIcon,
   InformationCircleIcon,
   PhotoIcon,
@@ -47,6 +45,8 @@ import {
 } from "./constants";
 import {
   BlockquoteIcon,
+  BulletListIcon,
+  OrderedListIcon,
   TextColorIcon,
   FreitextAbcIcon,
   FreitextIcon,
@@ -348,13 +348,13 @@ export function Toolbar({
       {group("Listen", [
         btn(
           "Aufzählung",
-          <ListBulletIcon className={iconCls} />,
+          <BulletListIcon className={iconCls} />,
           () => editor.chain().focus().toggleBulletList().run(),
           active.bulletList,
         ),
         btn(
           "Nummerierte Liste",
-          <NumberedListIcon className={iconCls} />,
+          <OrderedListIcon className={iconCls} />,
           () => editor.chain().focus().toggleOrderedList().run(),
           active.orderedList,
         ),
