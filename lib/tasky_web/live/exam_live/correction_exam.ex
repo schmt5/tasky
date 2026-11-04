@@ -3,7 +3,7 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
   The whole exam of one participant, to read: every part one below the
   other, with its points and status beside it. Grading stays per part in
   `CorrectionPart`: a part's header here opens it, the list beside glides
-  to it, and `G` switches back and forth.
+  to it, and the switch in the header goes back and forth.
 
   Each part is its own read-only editor, mounted only near the viewport, so a
   long exam neither builds all its editors nor loads all its images at once.
@@ -198,7 +198,7 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".CorrectionExamNav">
         // Which part is in view: highlighted in the panel, counted in the
-        // header, and where "Teil" (or G) and the participant arrows go.
+        // header, and where "Teil" and the participant arrows go.
         // Links get the place only when followed, as LiveView re-renders
         // them with the server's href.
         const USER_INPUT = ["wheel", "touchstart", "keydown", "mousedown"];

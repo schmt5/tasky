@@ -1081,15 +1081,13 @@ defmodule TaskyWeb.ExamComponents do
 
   @doc """
   Switches the correction between reading a participant's whole exam and
-  grading one part of it. `G` does the same from the keyboard, except while
-  typing or with a dialog open. On the whole exam the "Teil" link is pointed
-  at the part in view when it is followed (see `CorrectionExam`).
+  grading one part of it. On the whole exam the "Teil" link is pointed at
+  the part in view when it is followed (see `CorrectionExam`).
   """
   def correction_mode_switch(assigns) do
     ~H"""
     <div
       id="correction-mode-switch"
-      phx-hook=".CorrectionModeKey"
       class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-stone-100 border border-stone-200"
     >
       <.mode_switch_item
@@ -1107,33 +1105,6 @@ defmodule TaskyWeb.ExamComponents do
         label="Teil"
       />
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".CorrectionModeKey">
-      export default {
-        mounted() {
-          this.onKey = (e) => {
-            if (e.defaultPrevented || e.repeat) return;
-            if (e.key !== "g" && e.key !== "G") return;
-            if (e.metaKey || e.ctrlKey || e.altKey) return;
-            const target = e.target;
-            if (
-              target.isContentEditable ||
-              target.closest?.("input, textarea, select, [contenteditable]")
-            )
-              return;
-            if (document.querySelector("dialog[open]")) return;
-
-            const link = this.el.querySelector("a[data-mode-target]");
-            if (!link) return;
-            e.preventDefault();
-            link.click();
-          };
-          window.addEventListener("keydown", this.onKey);
-        },
-        destroyed() {
-          window.removeEventListener("keydown", this.onKey);
-        },
-      };
-    </script>
     """
   end
 
@@ -1157,13 +1128,9 @@ defmodule TaskyWeb.ExamComponents do
       <.link
         id={@id}
         navigate={@path}
-        data-mode-target
-        class="group inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md text-stone-500 transition-all duration-150 hover:bg-white/70 hover:text-stone-800"
+        class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md text-stone-500 transition-all duration-150 hover:bg-white/70 hover:text-stone-800"
       >
         <.mode_icon mode={@mode} class="w-4 h-4 shrink-0" /> {@label}
-        <kbd class="px-1 rounded font-mono text-[10px] border border-stone-200 bg-white text-stone-500 group-hover:text-stone-700">
-          G
-        </kbd>
       </.link>
     <% end %>
     """

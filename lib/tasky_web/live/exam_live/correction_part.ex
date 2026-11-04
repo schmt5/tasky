@@ -895,8 +895,7 @@ defmodule TaskyWeb.ExamLive.CorrectionPart do
       {["Tab"], "Zur nächsten Zeile."},
       {["⇧", "Tab"], "Zur vorherigen Zeile."},
       {["Enter"], "Manuelle Punkte übernehmen."},
-      {["Esc"], "Manuelle Eingabe abbrechen."},
-      {["G"], "Zur ganzen Prüfung der Person, an dieser Stelle."}
+      {["Esc"], "Manuelle Eingabe abbrechen."}
     ]
   end
 
