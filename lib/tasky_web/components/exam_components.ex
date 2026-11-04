@@ -183,8 +183,9 @@ defmodule TaskyWeb.ExamComponents do
   end
 
   @doc """
-  Die beiden Prüfungsarten, in der Reihenfolge, in der sie im Erstellen-Formular
-  stehen. `answer_fields` ist die Vorauswahl und bleibt der Normalfall.
+  Die beiden Prüfungsarten, die eine Prüfung haben kann. Neu erstellt wird nur
+  noch `answer_fields` (siehe `exam_kind_options/0`); `free_document` bleibt
+  für bestehende Prüfungen.
 
   Die Titel benennen, **wohin** die lernende Person schreiben darf — das ist der
   eine Unterschied, aus dem alle anderen folgen (Werkzeugleiste, Sperre des
@@ -239,6 +240,36 @@ defmodule TaskyWeb.ExamComponents do
   end
 
   @doc """
+  Was das Erstellen-Formular anbietet: Antwortfelder, oder ein Aufsatz — eine
+  Prüfung mit Antwortfeldern, die mit einer Aufgabe und einem Aufsatzfeld
+  beginnt (`Tasky.Exams.create_exam/2`).
+
+  Das freie Dokument steht hier nicht mehr: das Aufsatzfeld löst es ab, und es
+  hat alles, was eine Prüfung mit Antwortfeldern hat — Musterlösung, Punkte,
+  Korrektur pro Feld. Bestehende Prüfungen im freien Modus laufen weiter;
+  darum bleibt `answer_mode_options/0`.
+  """
+  def exam_kind_options do
+    [
+      answer_mode_option("answer_fields"),
+      %{
+        value: Tasky.Exams.essay_kind(),
+        label: "Aufsatz",
+        sublabel: "Eine Aufgabe, Lernende schreiben einen formatierten Text",
+        state_label: "Aufsatz",
+        icon: "hero-document-text",
+        summary:
+          "Du stellst eine Aufgabe, Lernende schreiben ihren Text in ein Aufsatzfeld — mit Zwischentiteln, Listen und Hervorhebungen. Die Prüfung beginnt mit Aufgabe und Aufsatzfeld; du kannst weitere Fragen und Felder ergänzen.",
+        points: [
+          "Für Aufsätze, Berichte, Protokolle oder Rechnungswege",
+          "Erwartungshorizont als Musterlösung möglich",
+          "Bewertet und kommentiert wird wie jedes Antwortfeld"
+        ]
+      }
+    ]
+  end
+
+  @doc """
   Single-Choice-Auswahl der Prüfungsart, im selben Aufbau wie
   `participation_mode_picker/1`: links die Optionskarten, rechts die
   Beschreibung der gewählten Option.
@@ -255,8 +286,19 @@ defmodule TaskyWeb.ExamComponents do
   attr :field, Phoenix.HTML.FormField, required: true
   attr :legend, :string, default: nil
 
+  attr :value, :string,
+    default: nil,
+    doc: "die gewählte Art, wenn sie vom Feldwert abweicht (ein Aufsatz ist `answer_fields`)"
+
   def answer_mode_picker(assigns) do
-    assigns = assign(assigns, :selected, answer_mode_option(assigns.field.value))
+    value = assigns.value || to_string(assigns.field.value)
+    options = exam_kind_options()
+
+    assigns =
+      assigns
+      |> assign(:value, value)
+      |> assign(:options, options)
+      |> assign(:selected, Enum.find(options, hd(options), &(&1.value == value)))
 
     ~H"""
     <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
@@ -264,7 +306,7 @@ defmodule TaskyWeb.ExamComponents do
         <legend :if={@legend} class="text-sm font-medium text-stone-700 mb-2">{@legend}</legend>
         <div class="space-y-2.5">
           <label
-            :for={option <- answer_mode_options()}
+            :for={option <- @options}
             class="flex items-start gap-3 cursor-pointer rounded-lg border border-stone-200 px-3.5 py-3 transition-colors duration-150 hover:bg-stone-50/60 has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/60"
           >
             <input
@@ -272,7 +314,7 @@ defmodule TaskyWeb.ExamComponents do
               id={"#{@field.id}-#{option.value}"}
               name={@field.name}
               value={option.value}
-              checked={to_string(@field.value) == option.value}
+              checked={@value == option.value}
               class="mt-0.5 w-[18px] h-[18px] border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer shrink-0"
             />
             <span class="min-w-0">

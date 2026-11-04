@@ -46,6 +46,7 @@ defmodule TaskyWeb.ExamLive.Form do
 
               <ExamComponents.answer_mode_picker
                 field={@form[:answer_mode]}
+                value={@kind}
                 legend="Wie schreiben Lernende?"
               />
 
@@ -79,6 +80,7 @@ defmodule TaskyWeb.ExamLive.Form do
      socket
      |> assign(:page_title, "Neue Prüfung")
      |> assign(:exam, exam)
+     |> assign(:kind, nil)
      |> assign(:form, to_form(Exams.change_new_exam(exam), as: :exam))}
   end
 
@@ -87,7 +89,13 @@ defmodule TaskyWeb.ExamLive.Form do
   @impl true
   def handle_event("validate", %{"exam" => exam_params}, socket) do
     changeset = Exams.change_new_exam(socket.assigns.exam, exam_params)
-    {:noreply, assign(socket, form: to_form(changeset, action: :validate, as: :exam))}
+
+    # "Aufsatz" is stored as answer fields, so the changeset cannot tell the
+    # picker which card is chosen.
+    {:noreply,
+     socket
+     |> assign(:kind, exam_params["answer_mode"])
+     |> assign(form: to_form(changeset, action: :validate, as: :exam))}
   end
 
   def handle_event("save", %{"exam" => exam_params}, socket) do
@@ -99,7 +107,10 @@ defmodule TaskyWeb.ExamLive.Form do
          |> push_navigate(to: ~p"/exams/#{exam}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset, as: :exam))}
+        {:noreply,
+         socket
+         |> assign(:kind, exam_params["answer_mode"])
+         |> assign(form: to_form(changeset, as: :exam))}
     end
   end
 end

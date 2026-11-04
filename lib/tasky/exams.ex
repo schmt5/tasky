@@ -102,9 +102,55 @@ defmodule Tasky.Exams do
   Creates an exam.
   """
   def create_exam(scope, attrs \\ %{}) do
-    %Exam{}
+    {exam, attrs} =
+      if essay_kind?(attrs),
+        do: {%Exam{content: essay_template()}, as_answer_fields(attrs)},
+        else: {%Exam{}, attrs}
+
+    exam
     |> Exam.create_changeset(attrs, scope)
     |> Repo.insert()
+  end
+
+  @essay_kind "essay"
+
+  @doc """
+  The create form's "Aufsatz": not a mode of its own but an answer-field exam
+  that starts with a task and an essay field (`essay_template/0`). It replaces
+  the free document for new exams — an essay field has a sample solution,
+  points and per-field correction, which a free document lacks.
+  """
+  def essay_kind, do: @essay_kind
+
+  @doc "The start of an essay exam: a question, room for the task, an essay field."
+  def essay_template do
+    %{
+      "type" => "doc",
+      "content" => [
+        %{
+          "type" => "heading",
+          "attrs" => %{"level" => 3},
+          "content" => [%{"type" => "text", "text" => "Aufsatz"}]
+        },
+        %{"type" => "paragraph"},
+        %{
+          "type" => "answerBlock",
+          "attrs" => %{"rich" => true},
+          "content" => [%{"type" => "paragraph"}]
+        },
+        %{"type" => "paragraph"}
+      ]
+    }
+    |> AnswerKey.ensure_ids()
+    |> Tasky.ExamDoc.ensure_part_ids()
+  end
+
+  defp essay_kind?(attrs),
+    do: (Map.get(attrs, "answer_mode") || Map.get(attrs, :answer_mode)) == @essay_kind
+
+  defp as_answer_fields(attrs) do
+    key = if Map.has_key?(attrs, :answer_mode), do: :answer_mode, else: "answer_mode"
+    Map.put(attrs, key, "answer_fields")
   end
 
   @doc """
@@ -572,6 +618,7 @@ defmodule Tasky.Exams do
   `:answer_mode`, which is only ever chosen here — see `Exam.new_changeset/2`.
   """
   def change_new_exam(%Exam{} = exam, attrs \\ %{}) do
+    attrs = if essay_kind?(attrs), do: as_answer_fields(attrs), else: attrs
     Exam.new_changeset(exam, attrs)
   end
 

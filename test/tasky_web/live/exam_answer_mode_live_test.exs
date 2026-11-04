@@ -21,47 +21,54 @@ defmodule TaskyWeb.ExamAnswerModeLiveTest do
   end
 
   describe "create form" do
-    test "offers both modes", %{conn: conn} do
+    test "offers answer fields and an essay, no longer the free document", %{conn: conn} do
       {conn, _scope} = teacher_conn(conn)
       {:ok, view, html} = live(conn, ~p"/exams/new")
 
       assert has_element?(view, "#exam-form")
       assert has_element?(view, "#exam_answer_mode-answer_fields")
-      assert has_element?(view, "#exam_answer_mode-free_document")
+      assert has_element?(view, "#exam_answer_mode-essay")
+      refute has_element?(view, "#exam_answer_mode-free_document")
       assert html =~ "Antwortfelder"
-      assert html =~ "Freies Dokument"
+      assert html =~ "Aufsatz"
     end
 
-    test "the panel explains the mode that is currently selected", %{conn: conn} do
+    test "the panel explains the kind that is currently selected", %{conn: conn} do
       {conn, _scope} = teacher_conn(conn)
       {:ok, view, html} = live(conn, ~p"/exams/new")
 
       assert html =~ "Musterlösung pro Antwortfeld möglich"
-      refute html =~ "Bewertet wird das Dokument als Ganzes"
+      refute html =~ "Erwartungshorizont als Musterlösung möglich"
 
-      # Der Picker braucht kein eigenes Event: `phx-change` baut den Changeset
-      # neu, und `@field.value` trägt die Auswahl zurück ins Panel.
       changed =
         view
-        |> form("#exam-form", exam: %{answer_mode: "free_document"})
+        |> form("#exam-form", exam: %{answer_mode: "essay"})
         |> render_change()
 
-      assert changed =~ "Bewertet wird das Dokument als Ganzes"
+      assert changed =~ "Erwartungshorizont als Musterlösung möglich"
       refute changed =~ "Musterlösung pro Antwortfeld möglich"
+      assert has_element?(view, "#exam_answer_mode-essay[checked]")
     end
 
-    test "creating with free_document persists the mode", %{conn: conn} do
+    test "an essay is an answer-field exam that starts with an essay field", %{conn: conn} do
       {conn, scope} = teacher_conn(conn)
       {:ok, view, _html} = live(conn, ~p"/exams/new")
 
       {:ok, _view, _html} =
         view
-        |> form("#exam-form", exam: %{name: "Mein Aufsatz", answer_mode: "free_document"})
+        |> form("#exam-form", exam: %{name: "Mein Aufsatz", answer_mode: "essay"})
         |> render_submit()
         |> follow_redirect(conn)
 
       assert [exam] = Exams.list_exams(scope)
-      assert exam.answer_mode == "free_document"
+      exam = Exams.get_exam!(scope, exam.id)
+      assert exam.answer_mode == "answer_fields"
+
+      assert [%{"type" => "heading"}, _task, %{"type" => "answerBlock", "attrs" => attrs}, _] =
+               exam.content["content"]
+
+      assert attrs["rich"] == true
+      assert attrs["answerId"]
     end
 
     test "defaults to answer_fields when the radio is left alone", %{conn: conn} do
