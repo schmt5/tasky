@@ -1054,14 +1054,14 @@ defmodule TaskyWeb.ExamComponents do
         id="correction-mode-exam"
         active={@active == :exam}
         path={@exam_path}
-        icon="hero-document-duplicate"
+        mode={:exam}
         label="Ganze Prüfung"
       />
       <.mode_switch_item
         id="correction-mode-part"
         active={@active == :part}
         path={@part_path}
-        icon="hero-pencil-square"
+        mode={:part}
         label="Teil"
       />
     </div>
@@ -1098,7 +1098,7 @@ defmodule TaskyWeb.ExamComponents do
   attr :id, :string, required: true
   attr :active, :boolean, required: true
   attr :path, :string, required: true
-  attr :icon, :string, required: true
+  attr :mode, :atom, values: [:exam, :part], required: true
   attr :label, :string, required: true
 
   defp mode_switch_item(assigns) do
@@ -1109,7 +1109,7 @@ defmodule TaskyWeb.ExamComponents do
         aria-current="page"
         class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md bg-white text-sky-700 shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
       >
-        <.icon name={@icon} class="w-4 h-4" /> {@label}
+        <.mode_icon mode={@mode} class="w-4 h-4 shrink-0" /> {@label}
       </span>
     <% else %>
       <.link
@@ -1118,12 +1118,46 @@ defmodule TaskyWeb.ExamComponents do
         data-mode-target
         class="group inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md text-stone-500 transition-all duration-150 hover:bg-white/70 hover:text-stone-800"
       >
-        <.icon name={@icon} class="w-4 h-4" /> {@label}
+        <.mode_icon mode={@mode} class="w-4 h-4 shrink-0" /> {@label}
         <kbd class="px-1 rounded font-mono text-[10px] border border-stone-200 bg-white text-stone-500 group-hover:text-stone-700">
           G
         </kbd>
       </.link>
     <% end %>
+    """
+  end
+
+  attr :mode, :atom, values: [:exam, :part], required: true
+  attr :class, :string, default: nil
+
+  # Drawn on the Heroicons outline grid (24, stroke 1.5) to sit beside them.
+  # The whole exam is a page of parts one below the other; one part is a
+  # single row of it, taken out to be graded, its neighbours only hinted.
+  defp mode_icon(assigns) do
+    ~H"""
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      class={@class}
+    >
+      <%= if @mode == :exam do %>
+        <rect x="4.5" y="3" width="15" height="18" rx="2.25" />
+        <circle cx="8.25" cy="7.5" r="0.75" fill="currentColor" stroke="none" />
+        <circle cx="8.25" cy="12" r="0.75" fill="currentColor" stroke="none" />
+        <circle cx="8.25" cy="16.5" r="0.75" fill="currentColor" stroke="none" />
+        <path d="M11.25 7.5h4.5M11.25 12h4.5M11.25 16.5h4.5" />
+      <% else %>
+        <path d="M7.5 3.75h9M7.5 20.25h9" opacity="0.45" />
+        <rect x="3" y="7.5" width="18" height="9" rx="2.25" />
+        <path d="M6.75 12l1.5 1.5 2.25-3M12.75 12h4.5" />
+      <% end %>
+    </svg>
     """
   end
 end

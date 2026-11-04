@@ -60,7 +60,7 @@ defmodule TaskyWeb.ExamCorrectionExamLiveTest do
     |> live(path)
   end
 
-  test "shows every part to read, each opening its grading", %{conn: conn} = ctx do
+  test "lists every part to jump to, each opening its grading", %{conn: conn} = ctx do
     submission = participant(ctx.exam, "Anna")
 
     {:ok, view, _html} =
@@ -74,7 +74,8 @@ defmodule TaskyWeb.ExamCorrectionExamLiveTest do
 
       grade_path = ~p"/exams/#{ctx.exam}/correction/#{submission}/parts/#{part}"
       assert has_element?(view, "#exam-part-grade-#{part}[href='#{grade_path}']")
-      assert has_element?(view, "#exam-part-link-#{part}[href='#{grade_path}']")
+      exam_path = ~p"/exams/#{ctx.exam}/correction/#{submission}?part=#{part}"
+      assert has_element?(view, "#exam-part-link-#{part}[href='#{exam_path}']")
     end
 
     assert has_element?(view, "#correction-mode-exam[aria-current='page']")

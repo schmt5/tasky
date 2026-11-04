@@ -2,7 +2,8 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
   @moduledoc """
   The whole exam of one participant, to read: every part one below the
   other, with its points and status beside it. Grading stays per part in
-  `CorrectionPart`; a part here opens it, and `G` switches back and forth.
+  `CorrectionPart`: a part's header here opens it, the list beside glides
+  to it, and `G` switches back and forth.
 
   Each part is its own read-only editor, mounted only near the viewport, so a
   long exam neither builds all its editors nor loads all its images at once.
@@ -163,9 +164,10 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
                     id="correction-exam-parts"
                     class="p-2 max-h-[calc(100vh-16rem)] overflow-y-auto"
                   >
-                    <.link
+                    <%!-- The hook glides to the part; the href is for a new tab. --%>
+                    <a
                       :for={{part, index} <- Enum.with_index(@parts)}
-                      navigate={part.grade_path}
+                      href={~p"/exams/#{@exam}/correction/#{@submission.id}?part=#{part.id}"}
                       id={"exam-part-link-#{part.id}"}
                       data-part-link={part.id}
                       class="group flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent transition-all duration-150 hover:bg-stone-50 hover:border-stone-200 data-current:bg-sky-50 data-current:border-sky-200"
@@ -180,11 +182,11 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
                         {points_label(part)}
                       </span>
                       <.part_status_icon part={part} />
-                    </.link>
+                    </a>
                   </nav>
 
                   <p class="px-5 py-3 border-t border-stone-100 text-xs text-stone-500">
-                    Ein Klick auf einen Teil öffnet das Bewerten.
+                    Ein Klick auf einen Teil springt zu ihm, «Bewerten» öffnet das Bewerten.
                   </p>
                 </div>
               </aside>
@@ -201,6 +203,8 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
         const USER_INPUT = ["wheel", "touchstart", "keydown", "mousedown"];
         const ALIGN_MS = 1500;
         const WAIT_MS = 5000;
+        // Frames without scrolling after which a glide counts as ended.
+        const REST_FRAMES = 6;
         // Matches the lazy editors' own margin (create_react_hook.jsx).
         const NEAR_PX = 700;
 
@@ -228,6 +232,18 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
               }
 
               const link = e.target.closest("a[href]");
+              if (link?.hasAttribute("data-part-link")) {
+                // A new tab or window opens the page at the part instead.
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                const target = this.sections().find(
+                  (s) => s.dataset.partId === link.dataset.partLink,
+                );
+                if (!target) return;
+                e.preventDefault();
+                this.align(target, true);
+                return;
+              }
+
               const section = this.sections()[this.current];
               if (!link || !section) return;
 
@@ -338,30 +354,44 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
             });
           },
 
-          // The editors up to the part mount lazily and change their height
-          // when they do, so the part is held in place until they are all
-          // there, and a moment longer for their images.
           restore(patched) {
             const part = new URL(window.location.href).searchParams.get("part");
-            const sections = this.sections();
-            const index = sections.findIndex((s) => s.dataset.partId === part);
+            const section = this.sections().find((s) => s.dataset.partId === part);
 
-            if (index < 0) {
+            if (!section) {
               if (patched) window.scrollTo({ top: 0, behavior: "instant" });
               this.sync();
               return;
             }
 
-            const section = sections[index];
-            const above = sections.slice(0, index + 1);
+            this.align(section, false);
+          },
+
+          // The editors up to the part mount lazily and change their height
+          // when they do, so the part is held in place until they are all
+          // there, and a moment longer for their images. Gliding, a new
+          // glide starts only once the last one has come to rest, and goes
+          // the rest of the way the mounted editors added.
+          align(section, smooth) {
+            const sections = this.sections();
+            const above = sections.slice(0, sections.indexOf(section) + 1);
             const token = (this.token = {});
             const giveUp = performance.now() + WAIT_MS;
+            const behavior = smooth ? "smooth" : "instant";
             let settled = null;
+            let lastY = window.scrollY;
+            let still = REST_FRAMES;
 
             const step = () => {
               if (this.token !== token) return;
+              still = window.scrollY === lastY ? still + 1 : 0;
+              lastY = window.scrollY;
+
               const delta = section.getBoundingClientRect().top - this.landing();
-              if (Math.abs(delta) >= 1) window.scrollBy({ top: delta, behavior: "instant" });
+              if (Math.abs(delta) >= 1 && (!smooth || still >= REST_FRAMES)) {
+                window.scrollBy({ top: delta, behavior });
+                still = 0;
+              }
               this.sync();
 
               const now = performance.now();
