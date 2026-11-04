@@ -1214,6 +1214,419 @@ body:has(.page-wrapper) {
     text-align: right;
 }
 
+/* Audio block (assets/js/audio_player.js): one player on the answer sheet
+   and in the editors' node view; the editor adds the block's settings. */
+.exam-doc__audio {
+    margin: 0.75em 0;
+    padding: 12px 14px;
+    border: 1px solid #e7e5e4;
+    border-radius: 12px;
+    background: #fafaf9;
+    line-height: 1.4;
+}
+
+.exam-doc__audio-title {
+    margin: 0;
+    font-size: 14px;
+    color: #57534e;
+}
+
+.audio-player {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.audio-player__play {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 9999px;
+    background: #0ea5e9;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
+    cursor: pointer;
+    transition:
+        background-color 150ms ease,
+        transform 150ms ease,
+        opacity 150ms ease;
+}
+
+.audio-player__play:hover:not(:disabled) {
+    background: #0284c7;
+}
+
+.audio-player__play:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.audio-player__play:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.45);
+}
+
+.audio-player__play:disabled {
+    background: #d6d3d1;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.audio-player__icon {
+    width: 18px;
+    height: 18px;
+}
+
+.audio-player__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.audio-player__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #292524;
+}
+
+.audio-player__head .audio-player__icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: #78716c;
+}
+
+.audio-player__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.audio-player__bar {
+    height: 6px;
+    margin: 8px 0 6px;
+    border-radius: 9999px;
+    background: #e7e5e4;
+    overflow: hidden;
+}
+
+.audio-player__fill {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: #0ea5e9;
+    transition: width 250ms linear;
+}
+
+.audio-player__seek {
+    display: block;
+    width: 100%;
+    height: 14px;
+    margin: 4px 0 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.audio-player__seek::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: #e7e5e4;
+}
+
+.audio-player__seek::-moz-range-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: #e7e5e4;
+}
+
+.audio-player__seek::-webkit-slider-thumb {
+    width: 14px;
+    height: 14px;
+    margin-top: -4px;
+    border: 2px solid #fff;
+    border-radius: 9999px;
+    background: #0ea5e9;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.3);
+    appearance: none;
+    -webkit-appearance: none;
+    transition: transform 120ms ease;
+}
+
+.audio-player__seek::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #fff;
+    border-radius: 9999px;
+    background: #0ea5e9;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.3);
+}
+
+.audio-player__seek:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
+}
+
+.audio-player__seek:focus-visible {
+    outline: none;
+}
+
+.audio-player__seek:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.45);
+}
+
+.audio-player__meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    color: #78716c;
+    font-variant-numeric: tabular-nums;
+}
+
+.audio-player__plays {
+    font-weight: 600;
+    color: #0369a1;
+}
+
+.audio-player--exhausted .audio-player__plays {
+    color: #78716c;
+}
+
+.audio-player__confirm {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    background: #f0f9ff;
+    animation: audio-confirm-in 150ms ease;
+}
+
+.audio-player__confirm[hidden] {
+    display: none;
+}
+
+@keyframes audio-confirm-in {
+    from {
+        opacity: 0;
+        transform: translateY(-2px);
+    }
+}
+
+.audio-player__confirm-text {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #075985;
+}
+
+.audio-player__confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.audio-player__confirm-go,
+.audio-player__confirm-cancel {
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background-color 150ms ease,
+        color 150ms ease;
+}
+
+.audio-player__confirm-go {
+    background: #0ea5e9;
+    color: #fff;
+}
+
+.audio-player__confirm-go:hover {
+    background: #0284c7;
+}
+
+.audio-player__confirm-cancel {
+    color: #57534e;
+}
+
+.audio-player__confirm-cancel:hover {
+    background: #e0f2fe;
+}
+
+.audio-player__error {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #b91c1c;
+}
+
+.audio-player__error:empty {
+    display: none;
+}
+
+.exam-editor__audio {
+    cursor: default;
+}
+
+.exam-editor__audio.ProseMirror-selectednode {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 2px;
+}
+
+/* Authoring: the limit as a pill in the block's corner, the settings in a
+   small menu hanging off it (assets/js/react/editor/extensions/audio.ts). */
+.exam-editor__audio--authoring {
+    position: relative;
+}
+
+.exam-editor__audio--authoring .audio-player__head {
+    padding-right: 150px;
+}
+
+/* The pill says it already. */
+.exam-editor__audio--authoring .audio-player__plays {
+    display: none;
+}
+
+.exam-editor__audio-pill {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid #e7e5e4;
+    border-radius: 9999px;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0369a1;
+    cursor: pointer;
+    transition:
+        border-color 150ms ease,
+        background-color 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.exam-editor__audio-pill:hover,
+.exam-editor__audio-pill[aria-expanded="true"] {
+    border-color: #7dd3fc;
+    background: #f0f9ff;
+}
+
+.exam-editor__audio-pill:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.35);
+}
+
+.exam-editor__audio-pill-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.exam-editor__audio-menu {
+    position: absolute;
+    top: 42px;
+    right: 12px;
+    z-index: 40;
+    width: 15rem;
+    padding: 12px;
+    border: 1px solid #e7e5e4;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow:
+        0 10px 25px -5px rgba(28, 25, 23, 0.15),
+        0 4px 8px -4px rgba(28, 25, 23, 0.1);
+    animation: audio-menu-in 120ms ease;
+}
+
+.exam-editor__audio-menu[hidden] {
+    display: none;
+}
+
+@keyframes audio-menu-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+}
+
+.exam-editor__audio-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #57534e;
+}
+
+.exam-editor__audio-field input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid #d6d3d1;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 400;
+    color: #292524;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.exam-editor__audio-field input:focus {
+    outline: none;
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+
+.exam-editor__audio-plays {
+    margin: 12px 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.exam-editor__audio-plays legend {
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #57534e;
+}
+
+.exam-editor__audio-choice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #292524;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+}
+
+.exam-editor__audio-choice:hover {
+    background: #f5f5f4;
+}
+
+.exam-editor__audio-choice input {
+    accent-color: #0284c7;
+}
+
+.exam-editor__audio-hint {
+    margin: 10px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid #f5f5f4;
+    font-size: 12px;
+    color: #78716c;
+}
+
 /* Pin image ("Pin auf Bild", assets/js/image_pin_field.js): the picture with
    numbered pins on it and a tray of the pins still to set below. */
 .exam-doc__pin {

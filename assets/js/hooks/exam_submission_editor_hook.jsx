@@ -19,5 +19,10 @@ export const ExamSubmissionEditor = createReactHook({
       api.saveExamSubmissionContent(dataset.examToken, doc, opts),
     mode: "freeDocument",
     apiRef: hook.editorApi,
+    audioLearner: {
+      api: dataset.audioApi,
+      file: dataset.audioFile,
+      plays: JSON.parse(dataset.audioPlays || "{}"),
+    },
   }),
 });

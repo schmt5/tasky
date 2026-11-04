@@ -181,6 +181,25 @@
   }
 }
 
+// An audio block cannot play on paper: a labelled box says it is there.
+#let audio-block(node) = {
+  let title = attrs-of(node).at("title", default: none)
+  let max = attrs-of(node).at("maxPlays", default: none)
+  block(
+    breakable: false,
+    above: 0.6em,
+    below: 0.6em,
+    stroke: (paint: stone.s400, dash: "dashed"),
+    inset: (x: 8pt, y: 6pt),
+    radius: 4pt,
+    text(size: 0.9em, fill: stone.s600, {
+      [Audio: ]
+      if type(title) == str and title != "" { title } else { [ohne Titel] }
+      if type(max) == int { [ (höchstens #max× abspielbar)] }
+    }),
+  )
+}
+
 // The helpers below and `render-node` are mutually recursive. Typst only lets
 // a function call what is defined above it, so `render-node` passes itself
 // down as `render-node` / `self`.
@@ -519,6 +538,8 @@
     answer-block(node, ctx, self)
   } else if kind == "imagePin" {
     image-pin(node, ctx)
+  } else if kind == "audio" {
+    audio-block(node)
   } else if kind == "callout" {
     let color = attrs-of(node).at("color", default: "yellow")
     let c = callout-colors.at(if type(color) == str and color in callout-colors { color } else { "yellow" })

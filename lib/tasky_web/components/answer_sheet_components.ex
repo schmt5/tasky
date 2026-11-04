@@ -24,6 +24,15 @@ defmodule TaskyWeb.AnswerSheetComponents do
   attr :save_url, :string, default: nil
   attr :disabled, :boolean, default: false
 
+  attr :audio, :map,
+    default: nil,
+    doc: """
+    Audio-Blöcke der Lernenden: `%{api: url, file: url, plays: audio_plays}`.
+    Unter `api/<audioId>/start|progress|finish` zählt der Server die
+    Durchgänge, unter `file/<audioId>` liefert er die Datei. Ohne (Vorschau)
+    spielt der Player die Datei der Lehrperson ohne Limite.
+    """
+
   def answer_sheet(assigns) do
     ~H"""
     <div
@@ -32,9 +41,16 @@ defmodule TaskyWeb.AnswerSheetComponents do
       phx-hook="ExamAnswersForm"
       phx-update="ignore"
       data-save-url={@save_url}
+      data-audio-api={@audio && @audio.api}
+      data-audio-file={@audio && @audio.file}
     >
       <div class="exam-doc">
-        {ExamDocHTML.render(@doc, id: @id, disabled: @disabled)}
+        {ExamDocHTML.render(@doc,
+          id: @id,
+          disabled: @disabled,
+          audio_plays: @audio && @audio.plays,
+          teacher_audio: is_nil(@audio)
+        )}
       </div>
       <div
         :if={@save_url}

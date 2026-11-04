@@ -20,6 +20,41 @@ defmodule Tasky.UploadsTest do
   @png_bytes <<0x89, "PNG", 0x0D, 0x0A, 0x1A, 0x0A, "fake-image-data">>
   @jpg_bytes <<0xFF, 0xD8, 0xFF, 0xE0, "fake-image-data">>
 
+  describe "audio" do
+    defp audio_upload(content, filename),
+      do: %Plug.Upload{path: tmp_file(content), content_type: "audio/mpeg", filename: filename}
+
+    test "stores MP3 and M4A by their signature and resolves them below their owner only" do
+      {:ok, src} = Uploads.save_exam_audio("42", audio_upload("ID3" <> "frames", "a.mp3"))
+      assert {:ok, {_, "audio/mpeg"}} = Uploads.fetch_audio(src, :exams, "42")
+      assert {:error, :not_found} = Uploads.fetch_audio(src, :exams, "43")
+      assert {:error, :not_found} = Uploads.fetch_audio(src, :tasks, "42")
+
+      m4a = <<0, 0, 0, 32>> <> "ftypM4A " <> "rest"
+
+      assert {:ok, "/uploads/tasks/9/" <> _} =
+               Uploads.save_task_audio("9", audio_upload(m4a, "b.m4a"))
+
+      assert {:ok, _} =
+               Uploads.save_exam_audio("42", audio_upload(<<0xFF, 0xFB, 0x90, 0x64>>, "c.MP3"))
+    end
+
+    test "refuses other formats and files that are not what they claim" do
+      assert {:error, :unsupported_type} =
+               Uploads.save_exam_audio("42", audio_upload("RIFF....WAVE", "a.wav"))
+
+      assert {:error, :invalid_audio} =
+               Uploads.save_exam_audio("42", audio_upload("<script>", "a.mp3"))
+    end
+
+    test "the public image route never serves audio" do
+      {:ok, "/uploads/exams/42/" <> filename} =
+        Uploads.save_exam_audio("42", audio_upload("ID3" <> "frames", "a.mp3"))
+
+      assert {:error, :not_found} = Uploads.fetch_exam_image("42", filename)
+    end
+  end
+
   describe "read_content_image/1" do
     test "reads a stored exam image back from its public src" do
       {:ok, src} = Uploads.save_exam_image("42", upload(@png_bytes, "image/png"))

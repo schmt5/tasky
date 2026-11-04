@@ -108,6 +108,13 @@ defmodule Tasky.TiptapMarkdown do
 
   defp block(%{"type" => "image"} = node, ctx), do: image(node, ctx)
 
+  defp block(%{"type" => "audio"} = node, _ctx) do
+    case node |> attrs() |> Map.get("title") do
+      title when is_binary(title) and title != "" -> "[Audio: " <> title <> "]"
+      _ -> "[Audio]"
+    end
+  end
+
   defp block(%{"type" => "table"} = node, ctx), do: table(children(node), ctx)
 
   defp block(%{"type" => "horizontalRule"}, _ctx), do: "---"

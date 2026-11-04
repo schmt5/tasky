@@ -23,6 +23,7 @@ import {
   ChatBubbleLeftEllipsisIcon,
   InformationCircleIcon,
   PhotoIcon,
+  SpeakerWaveIcon,
   MapPinIcon,
   TableCellsIcon,
   PaintBrushIcon,
@@ -74,6 +75,7 @@ export interface ToolbarProps {
   hideQuestion?: boolean;
   compactToolbar?: boolean;
   uploadImage?: ((file: File) => Promise<{ url: string }>) | null;
+  uploadAudio?: ((file: File) => Promise<{ url: string }>) | null;
   pinImages?: boolean;
   lockHintVisible?: boolean;
   lockHintEnabled?: boolean;
@@ -90,6 +92,7 @@ export function Toolbar({
   hideQuestion = false,
   compactToolbar = false,
   uploadImage = null,
+  uploadAudio = null,
   pinImages = false,
   lockHintVisible = false,
   lockHintEnabled = false,
@@ -447,13 +450,14 @@ export function Toolbar({
             !active.canJoinChoice,
           ),
         ])}
-      {uploadImage &&
+      {(uploadImage || uploadAudio) &&
         group("Einfügen", [
-          <ImageButton
-            key="image"
-            editor={editor}
-            uploadImage={uploadImage}
-          />,
+          ...(uploadImage
+            ? [<ImageButton key="image" editor={editor} uploadImage={uploadImage} />]
+            : []),
+          ...(uploadAudio
+            ? [<AudioButton key="audio" editor={editor} uploadAudio={uploadAudio} />]
+            : []),
         ])}
     </>
   );
@@ -721,6 +725,60 @@ function ImageButton({
         ref={inputRef}
         type="file"
         accept="image/png,image/jpeg,image/gif,image/webp"
+        style={{ display: "none" }}
+        onChange={onPick}
+      />
+    </>
+  );
+}
+
+// An audio block: the file goes up, the block comes in without a limit; the
+// limit is set on the block itself.
+function AudioButton({
+  editor,
+  uploadAudio,
+}: {
+  editor: Editor;
+  uploadAudio: (file: File) => Promise<{ url: string }>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { url } = await uploadAudio(file);
+      const title = file.name.replace(/\.[^.]+$/, "");
+      editor.chain().focus().insertAudio({ src: url, title }).run();
+    } catch (err) {
+      console.error("Audio-Upload fehlgeschlagen", err);
+      window.alert((err as Error).message || "Audio-Upload fehlgeschlagen");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tip label="Audio einfügen">
+        <button
+          type="button"
+          aria-label="Audio einfügen"
+          className="exam-editor__btn"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+        >
+          <SpeakerWaveIcon className="exam-editor__icon" />
+        </button>
+      </Tip>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a"
         style={{ display: "none" }}
         onChange={onPick}
       />

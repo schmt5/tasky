@@ -38,6 +38,12 @@ defmodule TaskyWeb.ContentSecurityPolicyTest do
              "img-src 'self' data: blob: https://acct123.r2.cloudflarestorage.com"
   end
 
+  test "lets audio follow the same redirect as images" do
+    Application.put_env(:tasky, :storage_adapter, Tasky.Storage.Local)
+
+    assert "media-src 'self'" in String.split(ContentSecurityPolicy.page(), "; ")
+  end
+
   test "carries the non-storage directives unchanged" do
     policy = ContentSecurityPolicy.page()
 

@@ -7,7 +7,8 @@ defmodule TaskyWeb.ContentSecurityPolicy do
   presigned-URL origin. CSP re-checks the redirect target against the source
   list, so that origin has to be in `img-src` or the browser blocks every
   content image — the request reaches the app and returns a healthy 302, and
-  the image still renders as a broken icon.
+  the image still renders as a broken icon. The same goes for `media-src` and
+  the files of audio blocks.
   """
 
   @directives [
@@ -28,7 +29,12 @@ defmodule TaskyWeb.ContentSecurityPolicy do
 
   @doc "Header value for the `:browser` pipeline."
   def page do
-    [{"img-src", @img_src ++ storage_origins()} | @directives]
+    [
+      {"img-src", @img_src ++ storage_origins()},
+      # Audio blocks: same 302 onto the bucket as the images.
+      {"media-src", ["'self'" | storage_origins()]}
+      | @directives
+    ]
     |> Enum.map_join("; ", fn {directive, sources} ->
       Enum.join([directive | sources], " ")
     end)

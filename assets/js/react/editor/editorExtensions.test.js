@@ -72,3 +72,20 @@ test("a horizontal rule is readable", () => {
   assert.equal(findUnreadableContent(readonly, ruled), null);
   assert.equal(findUnreadableContent(buildEditorExtensions({ lockContent: true }), ruled), null);
 });
+
+// An audio block must read in every editor that shows the content, or the
+// whole document opens empty.
+test("an audio block is readable", () => {
+  const withAudio = {
+    type: "doc",
+    content: [
+      {
+        type: "audio",
+        attrs: { audioId: "a1", src: "/uploads/exams/1/a.mp3", title: "Hörtext", maxPlays: 2 },
+      },
+    ],
+  };
+
+  assert.equal(findUnreadableContent(readonly, withAudio), null);
+  assert.equal(findUnreadableContent(buildEditorExtensions({ lockContent: true }), withAudio), null);
+});

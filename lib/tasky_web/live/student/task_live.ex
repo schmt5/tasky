@@ -165,6 +165,13 @@ defmodule TaskyWeb.Student.TaskLive do
               doc={answer_doc(@task, @submission)}
               save_url={if @editable, do: ~p"/api/student/tasks/#{@task}/answers"}
               disabled={not @editable}
+              audio={
+                %{
+                  api: "/api/student/tasks/#{@task.id}/audio",
+                  file: "/student/tasks/#{@task.id}/audio",
+                  plays: @submission.audio_plays
+                }
+              }
             />
           </div>
         </div>

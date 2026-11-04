@@ -36,7 +36,7 @@ export const ExamAnswersForm = {
       this.el.querySelectorAll(".exam-doc__block, .exam-doc__gap").forEach(fitField);
     }
 
-    // Essay fields and pin images are fields of their own make, each from a
+    // Essay fields, pin images and audio blocks are of their own make, each from a
     // chunk loaded only where there is one. Until it runs, the server's HTML
     // shows the answer and the snapshot leaves the field out — the server
     // keeps what it has.
@@ -46,6 +46,11 @@ export const ExamAnswersForm = {
     );
     this.mountCustom("[data-image-pin]", () =>
       import("../image_pin_field").then((m) => m.mountImagePinField),
+    );
+    // Not a field: an audio block saves nothing here — its plays are the
+    // server's (assets/js/audio_player.js).
+    this.mountCustom("[data-audio]", () =>
+      import("../audio_player").then((m) => m.mountAudioField),
     );
 
     this.onInput = (event) => {

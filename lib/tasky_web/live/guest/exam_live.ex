@@ -187,6 +187,9 @@ defmodule TaskyWeb.Guest.ExamLive do
                     phx-update="ignore"
                     data-exam-token={@submission.exam_token}
                     data-content={Jason.encode!(@answer_doc)}
+                    data-audio-api={"/api/guest/exam/#{@submission.exam_token}/audio"}
+                    data-audio-file={"/guest/exam/#{@submission.exam_token}/audio"}
+                    data-audio-plays={Jason.encode!(@submission.audio_plays)}
                   >
                   </div>
                 <% else %>
@@ -194,6 +197,13 @@ defmodule TaskyWeb.Guest.ExamLive do
                     id={"exam-answers-#{@submission.id}"}
                     doc={@answer_doc}
                     save_url={~p"/api/guest/exam/#{@submission.exam_token}/content"}
+                    audio={
+                      %{
+                        api: "/api/guest/exam/#{@submission.exam_token}/audio",
+                        file: "/guest/exam/#{@submission.exam_token}/audio",
+                        plays: @submission.audio_plays
+                      }
+                    }
                   />
                 <% end %>
               </div>

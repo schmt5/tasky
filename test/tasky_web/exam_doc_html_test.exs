@@ -312,4 +312,40 @@ defmodule TaskyWeb.ExamDocHTMLTest do
       assert doc |> LazyHTML.text() == "drin"
     end
   end
+
+  describe "audio" do
+    @audio %{
+      "type" => "audio",
+      "attrs" => %{
+        "audioId" => "hoer-1",
+        "src" => "/uploads/exams/7/a.mp3",
+        "title" => "Hörtext",
+        "maxPlays" => 2
+      }
+    }
+
+    test "a placeholder with the plays and the limit, but no file" do
+      doc =
+        render_doc([@audio],
+          audio_plays: %{"hoer-1" => %{"started" => 1, "active" => true, "position" => 3.5}}
+        )
+
+      assert attr(doc, "[data-audio]", "data-audio-id") == ["hoer-1"]
+      assert attr(doc, "[data-audio]", "data-max-plays") == ["2"]
+      assert attr(doc, "[data-audio]", "data-src") == []
+
+      assert [state] = attr(doc, "[data-audio]", "data-state")
+      assert %{"started" => 1, "active" => true} = Jason.decode!(state)
+    end
+
+    test "the teacher's preview carries their own route" do
+      doc = render_doc([@audio], teacher_audio: true)
+      assert attr(doc, "[data-audio]", "data-src") == ["/exams/7/audio/a.mp3"]
+    end
+
+    test "a block without an id renders nothing" do
+      doc = render_doc([%{"type" => "audio", "attrs" => %{"src" => "/uploads/exams/7/a.mp3"}}])
+      assert attr(doc, "[data-audio]", "data-audio-id") == []
+    end
+  end
 end

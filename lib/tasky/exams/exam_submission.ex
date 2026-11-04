@@ -26,6 +26,9 @@ defmodule Tasky.Exams.ExamSubmission do
     # Released by the teacher from the exam's SEB requirement. Never cast from
     # participant input — see seb_exemption_changeset/2.
     field :seb_exempt, :boolean, default: false
+    # Plays per audio block, see `Tasky.AudioPlays`. Only ever written by the
+    # server — never cast from participant input.
+    field :audio_plays, :map, default: %{}
 
     belongs_to :exam, Tasky.Exams.Exam
     # Set for assigned participants, nil for anonymous ones. Also nil again
@@ -71,6 +74,11 @@ defmodule Tasky.Exams.ExamSubmission do
     exam_submission
     |> change()
     |> force_change(:seb_exempt, exempt?)
+  end
+
+  @doc "Changeset for the server-kept audio play state (`Tasky.AudioPlays`)."
+  def audio_plays_changeset(exam_submission, plays) when is_map(plays) do
+    exam_submission |> change() |> force_change(:audio_plays, plays)
   end
 
   @doc false

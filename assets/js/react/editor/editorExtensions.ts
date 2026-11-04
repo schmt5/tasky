@@ -26,6 +26,8 @@ import {
   LockExamContent,
   PaperAnswerLines,
   ImagePin,
+  Audio,
+  type AudioLearner,
 } from "./extensions";
 
 export interface EditorExtensionFlags {
@@ -36,6 +38,7 @@ export interface EditorExtensionFlags {
   paperMode?: boolean;
   placeholder?: string;
   onLockBlocked?: () => void;
+  audioLearner?: AudioLearner | null;
 }
 
 export function buildEditorExtensions({
@@ -46,6 +49,7 @@ export function buildEditorExtensions({
   paperMode = false,
   placeholder = "",
   onLockBlocked,
+  audioLearner = null,
 }: EditorExtensionFlags = {}): AnyExtension[] {
   return [
     // StarterKit bringt die Link-Extension mit (autolink, linkOnPaste,
@@ -89,6 +93,14 @@ export function buildEditorExtensions({
           : editable && !lockContent && !correctionMode
             ? "author"
             : "view",
+    }),
+    // Settings only while authoring; `audioLearner` makes the player count
+    // a learner's plays (a free-document exam).
+    Audio.configure({
+      // Never for a learner: the free document is editable, and the limit
+      // must not be theirs to change.
+      authoring: editable && !lockContent && !correctionMode && !audioLearner,
+      learner: audioLearner,
     }),
     TableKit.configure({ table: { resizable: true } }),
     Highlight.configure({ multicolor: true }),

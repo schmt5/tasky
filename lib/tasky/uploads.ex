@@ -159,6 +159,81 @@ defmodule Tasky.Uploads do
 
   defp image_ext(filename), do: filename |> Path.extname() |> String.downcase()
 
+  ## Audio blocks
+
+  # Same 10 MB as images: the multipart parser caps every request at 12 MB
+  # (`TaskyWeb.Endpoint`), and ten minutes of MP3 at 128 kbit/s fit.
+  @audio_exts ~w(.mp3 .m4a)
+
+  @doc """
+  Saves the audio file of an audio block and returns `{:ok, src}`.
+
+  It sits directly under the owner's prefix like a content image, so
+  duplicating and deleting the owner take it along, but `/uploads/...` never
+  serves it: the public routes resolve image extensions only. Teachers get it
+  through `TaskyWeb.AudioController`, learners only while a play is running.
+  """
+  def save_exam_audio(exam_id, %Plug.Upload{} = upload),
+    do: save_audio("exams", exam_id, upload)
+
+  def save_task_audio(task_id, %Plug.Upload{} = upload),
+    do: save_audio("tasks", task_id, upload)
+
+  defp save_audio(kind, owner_id, upload) do
+    ext = upload.filename |> to_string() |> Path.extname() |> String.downcase()
+
+    with :ok <- if(ext in @audio_exts, do: :ok, else: {:error, :unsupported_type}),
+         :ok <- validate_size(upload.path),
+         :ok <- validate_audio_signature(upload.path, ext),
+         filename = Ecto.UUID.generate() <> ext,
+         :ok <-
+           store_bytes(storage_key([kind, to_string(owner_id)], filename), upload.path,
+             content_type: content_type_for_ext(ext),
+             disposition: "inline"
+           ) do
+      {:ok, "/uploads/#{kind}/#{owner_id}/#{filename}"}
+    end
+  end
+
+  @doc """
+  Resolves the `src` of an audio node to `{:ok, {source, content_type}}`, but
+  only below the given owner — a document cannot point the server at another
+  exam's or unit's files.
+  """
+  def fetch_audio(src, kind, owner_id) when kind in [:exams, :tasks] and is_binary(src) do
+    prefix = "/uploads/#{kind}/#{owner_id}/"
+
+    with true <- String.starts_with?(src, prefix),
+         filename = String.replace_prefix(src, prefix, ""),
+         ext = filename |> Path.extname() |> String.downcase(),
+         true <- ext in @audio_exts,
+         {:ok, source} <- fetch_stored([Atom.to_string(kind), to_string(owner_id)], filename) do
+      {:ok, {source, content_type_for_ext(ext)}}
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  def fetch_audio(_src, _kind, _owner_id), do: {:error, :not_found}
+
+  defp validate_audio_signature(path, ext) do
+    with {:ok, file} <- File.open(path, [:read, :binary]),
+         head when is_binary(head) <- IO.binread(file, 12),
+         :ok <- File.close(file),
+         true <- audio_signature_matches?(ext, head) do
+      :ok
+    else
+      _ -> {:error, :invalid_audio}
+    end
+  end
+
+  # ID3 tag, or straight into an MPEG audio frame (11 sync bits).
+  defp audio_signature_matches?(".mp3", <<"ID3", _::binary>>), do: true
+  defp audio_signature_matches?(".mp3", <<0xFF, 0b111::3, _::5, _::binary>>), do: true
+  defp audio_signature_matches?(".m4a", <<_::binary-size(4), "ftyp", _::binary>>), do: true
+  defp audio_signature_matches?(_ext, _head), do: false
+
   ## File-type registry (attachments + answer uploads)
 
   @doc "Ordered type keys selectable for student answer upload fields."

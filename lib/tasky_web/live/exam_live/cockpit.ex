@@ -4,6 +4,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
   import TaskyWeb.ExamComponents,
     only: [seb_derivation_alert: 1, remove_participant_modal: 1, participant_name: 1]
 
+  alias Tasky.AudioPlays
   alias Tasky.Exams
   alias TaskyWeb.Params
   alias TaskyWeb.SebGuard
@@ -348,6 +349,21 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                       {submission.firstname} {submission.lastname}
                     </p>
                     <span
+                      :for={audio <- @limited_audios}
+                      id={"audio-plays-#{submission.id}-#{audio.id}"}
+                      class={[
+                        "shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                        if(audio_state(submission, audio)["active"],
+                          do: "bg-sky-50 text-sky-700",
+                          else: "bg-stone-100 text-stone-500"
+                        )
+                      ]}
+                    >
+                      <.icon name="hero-speaker-wave-mini" class="w-3 h-3" />
+                      <span class="max-w-[8rem] truncate">{audio.title}</span>
+                      {audio_state(submission, audio)["started"]}/{audio.max}
+                    </span>
+                    <span
                       :if={@exam.seb_enabled and submission.seb_exempt}
                       id={"seb-exempt-badge-#{submission.id}"}
                       class="shrink-0 inline-flex items-center gap-1 bg-sky-50 text-sky-700 text-[11px] font-semibold px-2 py-0.5 rounded-full"
@@ -419,6 +435,22 @@ defmodule TaskyWeb.ExamLive.Cockpit do
                           <.icon name="hero-shield-exclamation" class="w-4 h-4 text-stone-400" />
                           <span>Ohne SEB zulassen</span>
                         <% end %>
+                      </button>
+                    </li>
+                    <li
+                      :for={audio <- @limited_audios}
+                      :if={audio_state(submission, audio)["started"] > 0 and not submission.submitted}
+                    >
+                      <button
+                        id={"grant-audio-play-#{submission.id}-#{audio.id}"}
+                        type="button"
+                        phx-click="grant_audio_play"
+                        phx-value-submission_id={submission.id}
+                        phx-value-audio_id={audio.id}
+                        class="flex items-center gap-2 text-sm text-stone-700"
+                      >
+                        <.icon name="hero-speaker-wave" class="w-4 h-4 text-stone-400" />
+                        <span class="truncate">Durchgang zurückgeben: {audio.title}</span>
                       </button>
                     </li>
                     <li>
@@ -885,6 +917,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
      |> assign(:page_title, exam.name <> " – Cockpit")
      |> assign(:refresh_scheduled, false)
      |> assign(:exam, exam)
+     |> assign(:limited_audios, limited_audios(exam))
      |> assign(:assigned_mode?, Exams.assigned_mode?(exam))
      |> assign(:anonymous_mode?, Exams.anonymous_mode?(exam))
      |> assign(:status_filter, "all")
@@ -1094,6 +1127,7 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     {:noreply,
      socket
      |> assign(:exam, exam)
+     |> assign(:limited_audios, limited_audios(exam))
      |> assign_assignable()
      |> refresh_submissions()}
   end
@@ -1245,6 +1279,34 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     end
   end
 
+  # A play given back after a technical problem. One click, like the SEB
+  # exemption: it only ever gives the participant more, never takes away.
+  def handle_event(
+        "grant_audio_play",
+        %{"submission_id" => raw, "audio_id" => audio_id},
+        socket
+      ) do
+    exam = socket.assigns.exam
+
+    with id when not is_nil(id) <- Params.int(raw),
+         audio when not is_nil(audio) <-
+           Enum.find(socket.assigns.limited_audios, &(&1.id == audio_id)),
+         submission when not is_nil(submission) <- Exams.get_submission(exam, id),
+         {:ok, updated} <-
+           Exams.grant_audio_play(socket.assigns.current_scope, submission, audio.id) do
+      {:noreply,
+       socket
+       |> refresh_submissions()
+       |> put_flash(
+         :info,
+         "#{participant_name(updated)} hat bei «#{audio.title}» einen Durchgang zurück."
+       )}
+    else
+      _ ->
+        {:noreply, put_flash(socket, :error, "Der Durchgang konnte nicht zurückgegeben werden.")}
+    end
+  end
+
   def handle_event("show_confirm", %{"action" => action}, socket) do
     # Explicit whitelist: client params must never mint or crash on atoms.
     confirm_action =
@@ -1331,4 +1393,21 @@ defmodule TaskyWeb.ExamLive.Cockpit do
     do: "Diese Person ist der Prüfung bereits zugewiesen."
 
   defp assign_error_message(_), do: "Zuweisung fehlgeschlagen."
+
+  # Audio blocks with a limit: the only ones whose plays the cockpit shows.
+  defp limited_audios(exam) do
+    for node <- AudioPlays.list(exam.content || %{}),
+        max = AudioPlays.max_plays(node),
+        max != nil do
+      title =
+        case node["attrs"]["title"] do
+          title when is_binary(title) and title != "" -> title
+          _ -> "Audio"
+        end
+
+      %{id: node["attrs"]["audioId"], title: title, max: max}
+    end
+  end
+
+  defp audio_state(submission, audio), do: AudioPlays.state(submission.audio_plays, audio.id)
 end

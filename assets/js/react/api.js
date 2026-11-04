@@ -185,9 +185,29 @@ export async function uploadTaskImage(taskId, file) {
   return uploadImage(`/api/tasks/${taskId}/images`, file);
 }
 
-async function uploadImage(url, file) {
+// The file of an audio block; resolves to `{ url }` like the image upload
+// (the node's `src`, which only TaskyWeb.AudioController plays).
+export async function uploadExamAudio(examId, file) {
+  return uploadImage(`/api/exams/${examId}/audio`, file, "audio");
+}
+
+export async function uploadTaskAudio(taskId, file) {
+  return uploadImage(`/api/tasks/${taskId}/audio`, file, "audio");
+}
+
+// A learner's play of an audio block: `action` is start, progress or finish
+// (see TaskyWeb.Guest.AudioController). Resolves to the server's state.
+export function audioPlay(apiBase, audioId, action, body = {}, opts = {}) {
+  return request(`${apiBase}/${encodeURIComponent(audioId)}/${action}`, {
+    method: action === "progress" ? "PUT" : "POST",
+    body: JSON.stringify(body),
+    ...opts,
+  });
+}
+
+async function uploadImage(url, file, field = "image") {
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append(field, file);
 
   const response = await fetch(url, {
     method: "POST",
@@ -203,7 +223,7 @@ async function uploadImage(url, file) {
     } catch {
       message = response.statusText;
     }
-    throw new Error(message || "Bild-Upload fehlgeschlagen");
+    throw new Error(message || "Upload fehlgeschlagen");
   }
 
   return response.json();

@@ -19,6 +19,9 @@ declare module "@tiptap/core" {
     imagePin: {
       insertImagePin: (options: { src: string; aspect: number; alt?: string }) => ReturnType;
     };
+    audio: {
+      insertAudio: (options: { src: string; title?: string }) => ReturnType;
+    };
     callout: {
       setCallout: (color: CalloutColor) => ReturnType;
       unsetCallout: () => ReturnType;
@@ -32,6 +35,7 @@ export { BlockquoteGuarded } from "./blockquote";
 export { isSingleChoiceActive, Choice, ChoiceIdStamper } from "./choice";
 export { SolutionHint, TeacherComment } from "./annotations";
 export { ImagePin, measureAspect, type ImagePinMode } from "./imagePin";
+export { Audio, type AudioLearner } from "./audio";
 export { PreventNodeDeletion } from "./guards";
 export { PaperAnswerLines } from "./paper";
 export { unwrapAnswerSlice, withFreshAnswerIds, LockExamContent } from "./lock";

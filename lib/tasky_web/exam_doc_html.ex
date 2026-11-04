@@ -16,6 +16,9 @@ defmodule TaskyWeb.ExamDocHTML do
     * `imagePin` → das Bild mit den gesetzten Pins; der Hook macht daraus
       die Pin-Ablage (`assets/js/image_pin_field.js`). Ins HTML kommen nur
       Pin-ids und Positionen — nie Zonen.
+    * `audio` → ein Platzhalter, aus dem der Hook den Player macht
+      (`assets/js/audio_player.js`); er trägt den Stand der Durchgänge
+      (`Tasky.AudioPlays`) und die Limite, aber nie eine abspielbare URL.
     * `taskItem` → `<input type="checkbox">`
     * `choice` → `<input type="radio">`, gruppiert über die `groupId`
 
@@ -35,6 +38,7 @@ defmodule TaskyWeb.ExamDocHTML do
 
   import Phoenix.HTML, only: [html_escape: 1]
 
+  alias Tasky.AudioPlays
   alias Tasky.Correction.Choice
   alias Tasky.Correction.ImagePin
   alias Tasky.Correction.PlainAnswers
@@ -47,6 +51,10 @@ defmodule TaskyWeb.ExamDocHTML do
     * `:id` — Präfix für Element-ids und Radio-Namen (Pflicht, eindeutig pro
       Seite).
     * `:disabled` — alle Felder gesperrt (Rücklese-Ansicht).
+    * `:audio_plays` — die Durchgänge der Lernenden pro Audio-Block
+      (`audio_plays` der Abgabe).
+    * `:teacher_audio` — Vorschau der Lehrperson: die Audio-Blöcke tragen
+      die URL, unter der sie die Datei ohne Limite hört.
   """
   def render(doc, opts) do
     id = Keyword.fetch!(opts, :id)
@@ -55,6 +63,8 @@ defmodule TaskyWeb.ExamDocHTML do
     ctx = %{
       id: id,
       disabled: Keyword.get(opts, :disabled, false),
+      audio_plays: Keyword.get(opts, :audio_plays) || %{},
+      teacher_audio: Keyword.get(opts, :teacher_audio, false),
       choice_labels: choice_labels(nodes),
       question: nil,
       gap: 0,
@@ -168,6 +178,8 @@ defmodule TaskyWeb.ExamDocHTML do
   defp node(%{"type" => "answerBlock"} = n, ctx), do: answer_block(n, ctx)
 
   defp node(%{"type" => "imagePin"} = n, ctx), do: image_pin(n, ctx)
+
+  defp node(%{"type" => "audio"} = n, ctx), do: audio(n, ctx)
 
   # Nur für die Rückgabe gedacht — die Lernendenansicht zeigt sie nie.
   defp node(%{"type" => "solutionHint"}, ctx), do: {"", ctx}
@@ -359,6 +371,42 @@ defmodule TaskyWeb.ExamDocHTML do
        ], ctx}
     else
       _ -> {"", ctx}
+    end
+  end
+
+  defp audio(n, ctx) do
+    case attrs(n)["audioId"] do
+      id when is_binary(id) and id != "" ->
+        title =
+          case attrs(n)["title"] do
+            title when is_binary(title) and title != "" -> title
+            _ -> "Audio"
+          end
+
+        attrs = [
+          id: field_id(ctx, "audio-" <> id),
+          class: "exam-doc__audio",
+          role: "group",
+          "data-audio": true,
+          "data-audio-id": id,
+          "data-title": title,
+          "data-max-plays": AudioPlays.max_plays(n),
+          "data-state": Jason.encode!(AudioPlays.state(ctx.audio_plays, id)),
+          "data-disabled": ctx.disabled,
+          "data-src": ctx.teacher_audio && AudioPlays.teacher_url(n),
+          "aria-label": label("Audio: " <> title, ctx)
+        ]
+
+        {[
+           "<div",
+           attributes_escape(attrs),
+           ~s(><p class="exam-doc__audio-title">),
+           escape(title),
+           "</p></div>"
+         ], ctx}
+
+      _ ->
+        {"", ctx}
     end
   end
 

@@ -137,6 +137,27 @@ defmodule TaskyWeb.ExamContentLiveTest do
       refute has_element?(view, "#pin-panel-#{exam.id}-q-2")
     end
 
+    test "names a question's audio blocks and their limit in its card", %{conn: conn} do
+      content =
+        update_in(two_part_content(), ["content"], fn nodes ->
+          List.insert_at(nodes, 2, %{
+            "type" => "audio",
+            "attrs" => %{
+              "audioId" => "hoer-1",
+              "src" => "/uploads/exams/1/a.mp3",
+              "title" => "Hörtext",
+              "maxPlays" => 3
+            }
+          })
+        end)
+
+      %{teacher: teacher, exam: exam} = create_exam(content)
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      assert has_element?(view, "#audio-summary-q-1", "höchstens 3× abspielbar")
+      refute has_element?(view, "#audio-summary-q-2")
+    end
+
     test "shows the empty state when the exam has no questions", %{conn: conn} do
       %{teacher: teacher, exam: exam} = create_exam(%{"type" => "doc", "content" => []})
       {:ok, _view, html} = open_musterloesung(conn, teacher, exam)

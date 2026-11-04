@@ -35,6 +35,10 @@ export default function ExamContentEditor({
   solutionMode = false,
   placeholder = "",
   uploadImage = null,
+  // Offer "Audio einfügen" (assets/js/react/editor/extensions/audio.ts).
+  uploadAudio = null,
+  // A learner's routes for audio blocks with a limit (free-document exam).
+  audioLearner = null,
   // Offer "Pin-Bild einfügen". Exams only: a learning unit saves its sample
   // solution without its content, so the pin ids would never reach learners.
   pinImages = false,
@@ -105,6 +109,7 @@ export default function ExamContentEditor({
       paperMode,
       placeholder,
       onLockBlocked: showLockHint,
+      audioLearner,
     }),
   );
 
@@ -238,6 +243,7 @@ export default function ExamContentEditor({
           hideQuestion={hideQuestion}
           compactToolbar={compactToolbar}
           uploadImage={uploadImage}
+          uploadAudio={uploadAudio}
           pinImages={pinImages}
           lockHintVisible={lockContent && lockHintVisible}
           lockHintEnabled={lockContent}

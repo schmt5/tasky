@@ -155,6 +155,16 @@ defmodule Tasky.TiptapFixtures do
         %{"type" => "blockquote", "content" => [paragraph([text("Zitat")])]},
         %{"type" => "codeBlock", "content" => [text("IO.puts(\"#hi\")")]},
         %{"type" => "image", "attrs" => %{"src" => "https://example.com/extern.png"}},
+        %{
+          "type" => "audio",
+          "attrs" => %{
+            "audioId" => "a1",
+            "src" => "/uploads/exams/1/a.mp3",
+            "title" => "Hörtext # $ *",
+            "maxPlays" => 2
+          }
+        },
+        %{"type" => "audio", "attrs" => %{"audioId" => "a2", "title" => nil, "maxPlays" => nil}},
         %{"type" => "someFutureNode", "content" => [paragraph([text("unbekannt")])]}
       ]
     }

@@ -8,6 +8,7 @@ defmodule Tasky.Tasks do
 
   alias Tasky.Accounts.Scope
   alias Tasky.AI.NodePatcher
+  alias Tasky.AudioPlays
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.PlainAnswers
@@ -1479,6 +1480,134 @@ defmodule Tasky.Tasks do
   defp merge_student_answers(base, answers) do
     {skeleton, previous} = base |> Map.put_new("type", "doc") |> AnswerKey.split()
     AnswerKey.merge(skeleton, Map.merge(previous, answers))
+  end
+
+  ## Audio blocks (see Tasky.AudioPlays)
+
+  @doc """
+  Starts a play of an audio block, or resumes the running one, while the
+  student can still work on the unit. Returns `{:ok, view}` or
+  `{:error, :exhausted | :not_found | :not_editable | :unauthorized}`. The
+  limit comes from the unit's own content, never from the client.
+  """
+  def start_audio_play(%Scope{} = scope, %TaskSubmission{} = submission, audio_id),
+    do: update_audio_play(scope, submission, audio_id, &AudioPlays.start/2, check_file: true)
+
+  @doc "Records how far the running play of an audio block has got."
+  def record_audio_progress(%Scope{} = scope, %TaskSubmission{} = submission, audio_id, position),
+    do:
+      update_audio_play(scope, submission, audio_id, fn state, _max ->
+        {:ok, AudioPlays.progress(state, position)}
+      end)
+
+  @doc "Closes the running play of an audio block."
+  def finish_audio_play(%Scope{} = scope, %TaskSubmission{} = submission, audio_id),
+    do:
+      update_audio_play(scope, submission, audio_id, fn state, _max ->
+        {:ok, AudioPlays.finish(state)}
+      end)
+
+  # `check_file`: a play must not be spent on a file that cannot load.
+  defp update_audio_play(%Scope{user: user}, submission, audio_id, fun, opts \\ []) do
+    Repo.transaction(fn ->
+      locked = Repo.lock_one!(TaskSubmission, submission.id)
+      task = Repo.get!(Task, locked.task_id)
+
+      with :ok <- audio_writable(locked, user),
+           %{} = node <- AudioPlays.find(task.content, audio_id) || {:error, :not_found},
+           :ok <- audio_file_check(opts, node, task.id),
+           max = AudioPlays.max_plays(node),
+           state = AudioPlays.state(locked.audio_plays, audio_id),
+           {:ok, new_state} <- fun.(state, max),
+           {:ok, _} <- write_audio_state(locked, audio_id, state, new_state) do
+        AudioPlays.view(new_state, max)
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp audio_file_check(opts, node, task_id) do
+    with true <- Keyword.get(opts, :check_file, false),
+         {:error, _} <- Tasky.Uploads.fetch_audio(AudioPlays.src(node), :tasks, task_id) do
+      {:error, :file_missing}
+    else
+      _ -> :ok
+    end
+  end
+
+  defp audio_writable(%TaskSubmission{student_id: id, status: status}, %{id: id})
+       when status in @editable_statuses,
+       do: :ok
+
+  defp audio_writable(%TaskSubmission{student_id: id}, %{id: id}), do: {:error, :not_editable}
+  defp audio_writable(_submission, _user), do: {:error, :unauthorized}
+
+  # A progress report that changes nothing must not cost an UPDATE.
+  defp write_audio_state(submission, _audio_id, state, state), do: {:ok, submission}
+
+  defp write_audio_state(submission, audio_id, _state, new_state) do
+    submission
+    |> TaskSubmission.audio_plays_changeset(
+      AudioPlays.put(submission.audio_plays, audio_id, new_state)
+    )
+    |> Repo.update()
+  end
+
+  @doc """
+  The stored audio file a student may load right now:
+  `{:ok, {source, content_type}}` or `{:error, :not_found | :not_playable}`.
+  A block without a limit always plays; one with a limit only during one of
+  the student's plays, while the unit is still open to them.
+  """
+  def learner_audio_source(%Scope{user: user} = scope, task_id, audio_id) do
+    with %Task{status: "open"} = task <- get_task_for_student(scope, task_id),
+         %{} = node <- AudioPlays.find(task.content, audio_id),
+         :ok <- student_may_play(task, user, node, audio_id) do
+      Tasky.Uploads.fetch_audio(AudioPlays.src(node), :tasks, task.id)
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp student_may_play(task, user, node, audio_id) do
+    case AudioPlays.max_plays(node) do
+      nil ->
+        :ok
+
+      max ->
+        with %TaskSubmission{} = submission <- get_submission_for_student(task.id, user.id),
+             :ok <- audio_writable(submission, user),
+             true <-
+               AudioPlays.playable?(AudioPlays.state(submission.audio_plays, audio_id), max) do
+          :ok
+        else
+          _ -> {:error, :not_playable}
+        end
+    end
+  end
+
+  @doc """
+  Gives a student one play of an audio block back (after a technical
+  problem). Only the unit's owner (or an admin).
+  """
+  def grant_audio_play(%Scope{} = scope, submission_id, audio_id) when is_binary(audio_id) do
+    # Authorized before the lock: no row of another teacher's unit is locked.
+    with %TaskSubmission{} = submission <-
+           TaskSubmission |> Repo.get(submission_id) |> Repo.preload(:task) ||
+             {:error, :not_found},
+         :ok <- Policy.authorize(scope, submission.task.user_id) do
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(TaskSubmission, submission.id)
+        state = AudioPlays.state(locked.audio_plays, audio_id)
+
+        case write_audio_state(locked, audio_id, state, AudioPlays.grant(state)) do
+          {:ok, updated} -> updated
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    end
   end
 
   @doc """

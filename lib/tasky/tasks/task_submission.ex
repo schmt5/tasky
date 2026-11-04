@@ -42,6 +42,9 @@ defmodule Tasky.Tasks.TaskSubmission do
     field :content, :map
     field :corrected_content, :map, default: %{}
     field :solution_released_at, :utc_datetime
+    # Plays per audio block, see `Tasky.AudioPlays`. Only ever written by the
+    # server — never cast from student input.
+    field :audio_plays, :map, default: %{}
 
     belongs_to :task, Tasky.Tasks.Task
     belongs_to :student, Tasky.Accounts.User
@@ -125,6 +128,11 @@ defmodule Tasky.Tasks.TaskSubmission do
         do: [content: "Inhalt ist zu gross"],
         else: []
     end)
+  end
+
+  @doc "Changeset for the server-kept audio play state (`Tasky.AudioPlays`)."
+  def audio_plays_changeset(submission, plays) when is_map(plays) do
+    submission |> change() |> force_change(:audio_plays, plays)
   end
 
   @doc """

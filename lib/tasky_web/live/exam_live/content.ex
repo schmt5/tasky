@@ -279,6 +279,35 @@ defmodule TaskyWeb.ExamLive.Content do
                   </ul>
                 </div>
 
+                <%!-- Audio blocks of the question: what learners get, set in
+                     «Inhalt» (the sample solution cannot change the text). --%>
+                <div
+                  :if={pv.audios != []}
+                  id={"audio-summary-#{pv.id}"}
+                  class="p-5 border-t border-stone-100"
+                >
+                  <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+                    Audio
+                  </h3>
+                  <ul class="space-y-1.5">
+                    <li
+                      :for={audio <- pv.audios}
+                      class="flex items-start gap-2 text-xs text-stone-600"
+                    >
+                      <.icon name="hero-speaker-wave" class="w-4 h-4 text-stone-400 shrink-0" />
+                      <span class="min-w-0">
+                        <span class="font-medium text-stone-700">{audio.title}</span> · {audio.limit}
+                      </span>
+                    </li>
+                  </ul>
+                  <.link
+                    patch={~p"/exams/#{@exam}/content?tab=inhalt"}
+                    class="inline-block mt-2 text-xs font-medium text-sky-700 hover:text-sky-800 hover:underline underline-offset-2 transition-colors duration-150"
+                  >
+                    Im Inhalt ändern
+                  </.link>
+                </div>
+
                 <%!-- Pins of the question's pin image: a React island bound to
                      the part editor beside it (assets/js/react/PinPanel.jsx). --%>
                 <div
@@ -948,11 +977,32 @@ defmodule TaskyWeb.ExamLive.Content do
           doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
           has_text_answers: Enum.any?(blocks, &(&1.type in ["answerBlock", "lueckentext"])),
           has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem")),
-          has_pin_image: Enum.any?(blocks, &(&1.type == "imagePin"))
+          has_pin_image: Enum.any?(blocks, &(&1.type == "imagePin")),
+          audios: audio_summaries(part.nodes)
         },
         option_fields(exam, part.id, blocks)
       )
     end)
+  end
+
+  # The audio blocks of a part, as the card names them. Read from the exam's
+  # content: title and limit are set there, the sample solution only shows them.
+  defp audio_summaries(nodes) do
+    for node <- Tasky.AudioPlays.list(%{"content" => nodes}) do
+      title =
+        case node["attrs"]["title"] do
+          title when is_binary(title) and title != "" -> title
+          _ -> "Audio"
+        end
+
+      limit =
+        case Tasky.AudioPlays.max_plays(node) do
+          nil -> "beliebig oft abspielbar"
+          max -> "höchstens #{max}× abspielbar"
+        end
+
+      %{id: node["attrs"]["audioId"], title: title, limit: limit}
+    end
   end
 
   # The part view's points and correction options, as stored on the exam.

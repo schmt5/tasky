@@ -91,6 +91,16 @@ defmodule TaskyWeb.Router do
     get "/exam/:exam_token/seb-required", SebController, :required
   end
 
+  # The audio file of an audio block. Not rate-limited: an <audio> element
+  # fetches in byte ranges, many requests per play and a whole class behind
+  # one NAT. Whether it may load is the participant's play count, checked in
+  # the controller.
+  scope "/guest", TaskyWeb.Guest do
+    pipe_through [:browser, :seb_guard_html]
+
+    get "/exam/:exam_token/audio/:audio_id", AudioController, :show
+  end
+
   scope "/guest", TaskyWeb.Guest do
     pipe_through [:browser, :guest_rate_limit, :seb_guard_html]
 
@@ -125,10 +135,12 @@ defmodule TaskyWeb.Router do
     put "/exams/:id/paper-layout", ExamPaperLayoutApiController, :update
 
     post "/exams/:id/images", ExamImageApiController, :create
+    post "/exams/:id/audio", AudioUploadApiController, :exam
 
     put "/tasks/:id/content", TaskContentApiController, :update
 
     post "/tasks/:id/images", TaskImageApiController, :create
+    post "/tasks/:id/audio", AudioUploadApiController, :task
 
     put "/tasks/:id/sample-solution", TaskSampleSolutionApiController, :update
 
@@ -152,6 +164,10 @@ defmodule TaskyWeb.Router do
     pipe_through [:guest_api, :seb_guard_json]
 
     put "/exam/:token/content", ExamSubmissionContentApiController, :update
+
+    post "/exam/:token/audio/:audio_id/start", AudioController, :start
+    put "/exam/:token/audio/:audio_id/progress", AudioController, :progress
+    post "/exam/:token/audio/:audio_id/finish", AudioController, :finish
   end
 
   # Session-authenticated JSON API for students (course learning units)
@@ -159,6 +175,10 @@ defmodule TaskyWeb.Router do
     pipe_through [:authenticated_api, :require_authenticated_user, :require_student]
 
     put "/tasks/:id/answers", TaskAnswersApiController, :update
+
+    post "/tasks/:id/audio/:audio_id/start", AudioController, :start
+    put "/tasks/:id/audio/:audio_id/progress", AudioController, :progress
+    post "/tasks/:id/audio/:audio_id/finish", AudioController, :finish
   end
 
   # Public course export. Deliberately no `:accepts` plug: the response is a
@@ -210,6 +230,8 @@ defmodule TaskyWeb.Router do
     get "/tasks/:id/solution-files/:file_id", TaskSolutionFileController, :download
 
     get "/exams/:id/paper.pdf", ExamPaperController, :download
+    get "/exams/:id/audio/:filename", AudioController, :exam
+    get "/tasks/:id/audio/:filename", AudioController, :task
     get "/tasks/:id/worksheet.pdf", TaskPdfController, :worksheet
     get "/tasks/:id/solution.pdf", TaskPdfController, :solution
 
@@ -280,6 +302,8 @@ defmodule TaskyWeb.Router do
     get "/tasks/:task_id/files/:field_id", FileController, :download
 
     get "/tasks/:task_id/solution-files/:file_id", SolutionFileController, :download
+
+    get "/tasks/:task_id/audio/:audio_id", AudioController, :show
 
     live_session :student,
       on_mount: [{TaskyWeb.UserAuth, :require_student}] do

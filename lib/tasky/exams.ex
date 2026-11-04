@@ -10,6 +10,7 @@ defmodule Tasky.Exams do
   alias Tasky.Accounts.Scope
   alias Tasky.Accounts.User
   alias Tasky.AI.NodePatcher
+  alias Tasky.AudioPlays
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.ImagePin
   alias Tasky.Correction.PlainAnswers
@@ -674,6 +675,7 @@ defmodule Tasky.Exams do
       lastname: s.lastname,
       exam_token: s.exam_token,
       seb_exempt: s.seb_exempt,
+      audio_plays: s.audio_plays,
       submitted: s.submitted,
       submitted_at: s.submitted_at,
       inserted_at: s.inserted_at,
@@ -1227,6 +1229,126 @@ defmodule Tasky.Exams do
       |> AnswerKey.split()
 
     AnswerKey.merge(skeleton, Map.merge(previous, answers))
+  end
+
+  ## Audio blocks (see Tasky.AudioPlays)
+
+  @doc """
+  Starts a play of an audio block, or resumes the running one, for a learner
+  still writing. Returns `{:ok, view}` (see `Tasky.AudioPlays.view/2`) or
+  `{:error, :exhausted | :not_found | :already_submitted | :exam_not_running}`.
+  The limit comes from the exam's own content, never from the client.
+  """
+  def start_audio_play(%ExamSubmission{} = submission, audio_id),
+    do: update_audio_play(submission, audio_id, &AudioPlays.start/2, check_file: true)
+
+  @doc "Records how far the running play of an audio block has got."
+  def record_audio_progress(%ExamSubmission{} = submission, audio_id, position),
+    do:
+      update_audio_play(submission, audio_id, fn state, _max ->
+        {:ok, AudioPlays.progress(state, position)}
+      end)
+
+  @doc "Closes the running play of an audio block."
+  def finish_audio_play(%ExamSubmission{} = submission, audio_id),
+    do:
+      update_audio_play(submission, audio_id, fn state, _max ->
+        {:ok, AudioPlays.finish(state)}
+      end)
+
+  # `check_file`: a play must not be spent on a file that cannot load (gone,
+  # or a block pasted over from another exam whose `src` points there).
+  defp update_audio_play(submission, audio_id, fun, opts \\ []) do
+    Repo.transaction(fn ->
+      {exam, locked} = lock_submission_for_write!(submission)
+      ensure_submission_writable!(exam, locked)
+
+      with %{} = node <- AudioPlays.find(exam.content, audio_id) || {:error, :not_found},
+           :ok <- audio_file_check(opts, node, :exams, exam.id),
+           max = AudioPlays.max_plays(node),
+           state = AudioPlays.state(locked.audio_plays, audio_id),
+           {:ok, new_state} <- fun.(state, max),
+           {:ok, _} <- write_audio_state(locked, audio_id, state, new_state) do
+        AudioPlays.view(new_state, max)
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp audio_file_check(opts, node, kind, owner_id) do
+    if Keyword.get(opts, :check_file, false) do
+      case Tasky.Uploads.fetch_audio(AudioPlays.src(node), kind, owner_id) do
+        {:ok, _} -> :ok
+        {:error, _} -> {:error, :file_missing}
+      end
+    else
+      :ok
+    end
+  end
+
+  # A progress report that changes nothing must not cost an UPDATE.
+  defp write_audio_state(submission, _audio_id, state, state), do: {:ok, submission}
+
+  defp write_audio_state(submission, audio_id, _state, new_state) do
+    submission
+    |> ExamSubmission.audio_plays_changeset(
+      AudioPlays.put(submission.audio_plays, audio_id, new_state)
+    )
+    |> Repo.update()
+  end
+
+  @doc """
+  The stored audio file a learner may load right now, by exam token:
+  `{:ok, {source, content_type}}` or `{:error, :not_found | :not_playable}`.
+
+  A block without a limit plays once the exam runs (and afterwards); one with
+  a limit only during one of the learner's plays while the exam still runs.
+  """
+  def learner_audio_source(token, audio_id) when is_binary(token) do
+    with %ExamSubmission{} = submission <- Repo.get_by(ExamSubmission, exam_token: token),
+         %Exam{} = exam <- Repo.get(Exam, submission.exam_id),
+         %{} = node <- AudioPlays.find(exam.content, audio_id),
+         :ok <- learner_may_play(exam, submission, node, audio_id) do
+      Tasky.Uploads.fetch_audio(AudioPlays.src(node), :exams, exam.id)
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp learner_may_play(exam, submission, node, audio_id) do
+    case AudioPlays.max_plays(node) do
+      nil ->
+        if exam.status in ["running", "finished"], do: :ok, else: {:error, :not_playable}
+
+      max ->
+        state = AudioPlays.state(submission.audio_plays, audio_id)
+
+        if exam.status == "running" and not submission.submitted and
+             AudioPlays.playable?(state, max),
+           do: :ok,
+           else: {:error, :not_playable}
+    end
+  end
+
+  @doc """
+  Gives a participant one play of an audio block back (after a technical
+  problem). Only the exam owner (or an admin).
+  """
+  def grant_audio_play(%Scope{} = scope, %ExamSubmission{} = submission, audio_id)
+      when is_binary(audio_id) do
+    with :ok <- authorize_submission(scope, submission) do
+      Repo.transaction(fn ->
+        locked = Repo.lock_one!(ExamSubmission, submission.id)
+        state = AudioPlays.state(locked.audio_plays, audio_id)
+
+        case write_audio_state(locked, audio_id, state, AudioPlays.grant(state)) do
+          {:ok, updated} -> updated
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    end
   end
 
   @doc """

@@ -86,6 +86,7 @@ export function withFreshAnswerIds(slice: Slice, view: EditorView): Slice {
     if (node.attrs?.answerId != null) taken.add(String(node.attrs.answerId));
     if (node.attrs?.partId != null) taken.add(String(node.attrs.partId));
     if (node.attrs?.groupId != null) taken.add(String(node.attrs.groupId));
+    if (node.attrs?.audioId != null) taken.add(String(node.attrs.audioId));
   });
 
   // Radio groups are renamed consistently across the slice: a copied table
@@ -99,6 +100,12 @@ export function withFreshAnswerIds(slice: Slice, view: EditorView): Slice {
         attrs = { ...attrs, answerId: generateAnswerId() };
       }
       taken.add(String(attrs.answerId));
+    }
+    // An audio block's plays are counted per audioId: a pasted copy is a
+    // block of its own.
+    if (node.type.name === "audio" && attrs.audioId != null) {
+      if (taken.has(String(attrs.audioId))) attrs = { ...attrs, audioId: generateAnswerId() };
+      taken.add(String(attrs.audioId));
     }
     if (node.type.name === "choice" && attrs.groupId != null) {
       const old = String(attrs.groupId);
