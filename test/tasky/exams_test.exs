@@ -1038,4 +1038,51 @@ defmodule Tasky.ExamsTest do
       assert {:error, :not_assigned_mode} = Exams.return_exam(teacher_scope(exam), exam, %{})
     end
   end
+
+  describe "save_sample_solution_part/4 with a rule's lead-in" do
+    defp question(text, id),
+      do: %{
+        "type" => "heading",
+        "attrs" => %{"level" => 3, "partId" => id},
+        "content" => [%{"type" => "text", "text" => text}]
+      }
+
+    defp field(id, text) do
+      inner =
+        if text == "",
+          do: %{"type" => "paragraph"},
+          else: %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}
+
+      %{"type" => "answerBlock", "attrs" => %{"answerId" => id}, "content" => [inner]}
+    end
+
+    test "saving the second question keeps its lead-in and the first question" do
+      lead = [
+        %{"type" => "horizontalRule"},
+        %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Kontext"}]}
+      ]
+
+      content = %{
+        "type" => "doc",
+        "content" =>
+          [question("Eins", "q-1"), field("a", "")] ++
+            lead ++ [question("Zwei", "q-2"), field("b", "")]
+      }
+
+      exam = exam_fixture(attrs: %{content: content})
+
+      [_, %{id: "q-2", nodes: nodes}] = Exams.split_content_into_parts(content, "answer_fields")
+      assert Enum.take(nodes, 2) == lead
+
+      solved = lead ++ [question("Zwei", "q-2"), field("b", "Lösung B")]
+      {:ok, exam} = Exams.save_sample_solution_part(teacher_scope(exam), exam, "q-2", solved)
+
+      assert exam.content == content
+
+      [_, %{nodes: sample_nodes}] =
+        exam |> Exams.sample_solution_doc() |> Exams.split_content_into_parts("answer_fields")
+
+      assert sample_nodes == solved
+    end
+  end
 end

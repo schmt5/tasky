@@ -259,14 +259,18 @@ defmodule Tasky.ExamPaper do
     ExamDoc.assemble_parts_into_content(preamble, parts)
   end
 
-  # A part's nodes always start with its h3 (see ExamDoc), so the suffix goes
-  # on the first node's inline content.
-  defp append_to_heading([heading | rest], suffix) do
-    inline = Map.get(heading, "content", []) || []
-    [Map.put(heading, "content", inline ++ [%{"type" => "text", "text" => suffix}]) | rest]
+  # A part's nodes hold exactly one h3 (see ExamDoc) — after its lead-in, if
+  # a horizontal rule opened one — so the suffix goes on that heading.
+  defp append_to_heading(nodes, suffix) do
+    Enum.map(nodes, fn node ->
+      if ExamDoc.question_heading?(node) do
+        inline = Map.get(node, "content", []) || []
+        Map.put(node, "content", inline ++ [%{"type" => "text", "text" => suffix}])
+      else
+        node
+      end
+    end)
   end
-
-  defp append_to_heading([], _suffix), do: []
 
   ## --- layout ---
 

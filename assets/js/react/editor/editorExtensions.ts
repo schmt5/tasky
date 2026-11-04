@@ -53,7 +53,6 @@ export function buildEditorExtensions({
     // nur das Default-Protokoll wäre http, ein gepastetes "www.foo.ch" also
     // unverschlüsselt.
     StarterKit.configure({
-      horizontalRule: false,
       heading: false,
       blockquote: false,
       link: { defaultProtocol: "https" },

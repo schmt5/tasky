@@ -56,3 +56,19 @@ test("a stored blockquote stays readable", () => {
   assert.equal(findUnreadableContent(readonly, quoted), null);
   assert.equal(findUnreadableContent(buildEditorExtensions({ lockContent: true }), quoted), null);
 });
+
+// The rule cuts a question short (Tasky.ExamDoc); every editor that shows
+// the exam must read it, the locked sample solution as much as the viewer.
+test("a horizontal rule is readable", () => {
+  const ruled = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Frage 1" }] },
+      { type: "horizontalRule" },
+      { type: "paragraph", content: [{ type: "text", text: "Kontext" }] },
+    ],
+  };
+
+  assert.equal(findUnreadableContent(readonly, ruled), null);
+  assert.equal(findUnreadableContent(buildEditorExtensions({ lockContent: true }), ruled), null);
+});

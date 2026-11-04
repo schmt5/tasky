@@ -185,20 +185,35 @@ function mountedViews() {
 }
 
 // (part, block) of a top-level node. A solution editor holds exactly one
-// part; the content editor holds them all, each starting at its question
-// heading. Preamble blocks above the first question have no part.
+// part; the content editor holds them all (see partStarts). Preamble blocks
+// above the first question have no part.
 function partOf(view, index) {
   const container = view.dom.closest(SOLUTION_PART);
   if (container) return { part: container.dataset.partId, block: index };
 
-  const { doc } = view.state;
-  for (let i = index; i >= 0; i--) {
+  const owner = partStarts(view.state.doc)
+    .filter((p) => p.start <= index)
+    .pop();
+  return owner ? { part: owner.part, block: index - owner.start } : null;
+}
+
+// Where each question's part starts in the content editor, mirroring
+// Tasky.ExamDoc.split_content_into_parts/2: at the question heading, or at
+// the horizontal rule that opens its lead-in. A rule with no question after
+// it starts nothing.
+function partStarts(doc) {
+  const starts = [];
+  let rule = null;
+  for (let i = 0; i < doc.childCount; i++) {
     const node = doc.child(i);
-    if (isQuestion(node) && node.attrs.partId) {
-      return { part: node.attrs.partId, block: index - i };
+    if (node.type.name === "horizontalRule") {
+      rule = i;
+    } else if (isQuestion(node)) {
+      if (node.attrs.partId) starts.push({ part: node.attrs.partId, start: rule ?? i });
+      rule = null;
     }
   }
-  return null;
+  return starts;
 }
 
 function isQuestion(node) {
@@ -268,13 +283,9 @@ function findPart(part, y) {
   const view = document.querySelector(CONTENT_EDITOR)?.editor?.view;
   if (!view) return null;
 
-  const { doc } = view.state;
-  for (let i = 0; i < doc.childCount; i++) {
-    const node = doc.child(i);
-    if (isQuestion(node) && node.attrs.partId === part) return { view, start: i };
-  }
+  const found = partStarts(view.state.doc).find((p) => p.part === part);
   // The question is gone (deleted meanwhile): nothing to anchor to.
-  return false;
+  return found ? { view, start: found.start } : false;
 }
 
 function findAnswer(doc, answerId) {

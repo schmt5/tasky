@@ -553,6 +553,27 @@
     color: #78716c;
 }
 
+/* Trennlinie: schneidet die Frage davor ab — was folgt, gehört zur nächsten
+   Frage (siehe `Tasky.ExamDoc`). Ruhig, aber als Element anklickbar. */
+.exam-editor__content .ProseMirror hr {
+    margin: 1.4em 0;
+    border: 0;
+    border-top: 1px solid #d6d3d1;
+    transition: border-color 150ms ease;
+}
+
+.exam-editor__content .ProseMirror hr.ProseMirror-selectednode {
+    border-top-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgb(14 165 233 / 0.2);
+}
+
+/* Eine Karte pro Frage trennt schon selbst: die Linie, mit der die Einleitung
+   der Frage beginnt, entfällt dort. */
+:is([id^="sample-solution-part-editor-"], [id^="correction-part-editor-"])
+    .ProseMirror > hr:first-child {
+    display: none;
+}
+
 .exam-editor__content .ProseMirror ul,
 .exam-editor__content .ProseMirror ol {
     padding-left: 1.4em;

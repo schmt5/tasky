@@ -87,6 +87,101 @@ defmodule Tasky.ExamDocTest do
     end
   end
 
+  describe "split_content_into_parts/2 — horizontal rules" do
+    defp rule, do: %{"type" => "horizontalRule"}
+
+    defp para(text),
+      do: %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}
+
+    defp section(text) do
+      %{
+        "type" => "heading",
+        "attrs" => %{"level" => 2},
+        "content" => [%{"type" => "text", "text" => text}]
+      }
+    end
+
+    defp split(d) do
+      {ExamDoc.content_preamble(d, "answer_fields"),
+       ExamDoc.split_content_into_parts(d, "answer_fields")}
+    end
+
+    defp nodes_of(parts), do: Map.new(parts, &{&1.id, &1.nodes})
+
+    test "a rule hands the section after it to the next question" do
+      q1 = heading("Erste", %{"partId" => "q-1"})
+      q2 = heading("Zweite", %{"partId" => "q-2"})
+      d = doc([q1, para("A1"), rule(), section("Teil B"), para("Kontext"), q2, para("A2")])
+
+      {[], parts} = split(d)
+
+      assert [%{id: "q-1", label: "Erste"}, %{id: "q-2", label: "Zweite"}] = parts
+
+      assert nodes_of(parts) == %{
+               "q-1" => [q1, para("A1")],
+               "q-2" => [rule(), section("Teil B"), para("Kontext"), q2, para("A2")]
+             }
+    end
+
+    test "a rule with no question after it stays with the question before" do
+      q1 = heading("Erste", %{"partId" => "q-1"})
+      d = doc([q1, rule(), para("Schluss")])
+
+      assert {[], [%{id: "q-1", nodes: [^q1, %{"type" => "horizontalRule"}, _]}]} = split(d)
+    end
+
+    test "only the last of two rules opens the lead-in" do
+      q1 = heading("Erste", %{"partId" => "q-1"})
+      q2 = heading("Zweite", %{"partId" => "q-2"})
+      d = doc([q1, rule(), para("noch 1"), rule(), para("zu 2"), q2])
+
+      {[], parts} = split(d)
+
+      assert nodes_of(parts) == %{
+               "q-1" => [q1, rule(), para("noch 1")],
+               "q-2" => [rule(), para("zu 2"), q2]
+             }
+    end
+
+    test "a rule in the intro ends the preamble" do
+      q1 = heading("Erste", %{"partId" => "q-1"})
+      d = doc([para("Intro"), rule(), para("zu 1"), q1])
+
+      assert {[%{"type" => "paragraph"}], [%{id: "q-1", nodes: [_rule, _para, ^q1]}]} = split(d)
+    end
+
+    test "a rule without any question is preamble" do
+      d = doc([para("A"), rule(), para("B")])
+
+      assert {preamble, []} = split(d)
+      assert preamble == d["content"]
+    end
+
+    test "a rule right before a question splits like no rule at all" do
+      q1 = heading("Erste", %{"partId" => "q-1"})
+      q2 = heading("Zweite", %{"partId" => "q-2"})
+
+      {[], parts} = split(doc([q1, para("A1"), rule(), q2]))
+
+      assert nodes_of(parts) == %{"q-1" => [q1, para("A1")], "q-2" => [rule(), q2]}
+    end
+
+    test "assemble restores every shape" do
+      q1 = heading("Erste", %{"partId" => "q-1"})
+      q2 = heading("Zweite", %{"partId" => "q-2"})
+
+      for nodes <- [
+            [para("Intro"), rule(), q1, rule(), section("B"), q2, rule(), para("Ende")],
+            [rule(), rule(), q1, para("x"), rule(), rule(), q2],
+            [para("nur Text"), rule()]
+          ] do
+        d = doc(nodes)
+        {preamble, parts} = split(d)
+        assert ExamDoc.assemble_parts_into_content(preamble, parts) == d
+      end
+    end
+  end
+
   describe "split_content_into_parts/2 — free_document" do
     test "the whole document is one part under the fixed id" do
       d =

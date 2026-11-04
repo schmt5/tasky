@@ -32,6 +32,7 @@ import {
   ArrowUturnRightIcon,
   ScissorsIcon,
   LinkIcon,
+  MinusIcon,
 } from "@heroicons/react/24/outline";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Tabs from "@radix-ui/react-tabs";
@@ -130,6 +131,7 @@ export function Toolbar({
       canCallout: editor.can().setCallout(DEFAULT_CALLOUT_COLOR),
       blockquote: editor.isActive("blockquote"),
       canBlockquote: editor.can().toggleBlockquote(),
+      canRule: editor.can().setHorizontalRule(),
       canUndo: editor.can().undo(),
       canRedo: editor.can().redo(),
     }),
@@ -375,6 +377,15 @@ export function Toolbar({
             <QuestionMarkCircleIcon className={iconCls} />,
             () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
             active.h3,
+          ),
+          // The rule cuts the question before it short: what follows belongs
+          // to the next question (see Tasky.ExamDoc).
+          btn(
+            "Trennlinie – ab hier gehört der Text zur nächsten Frage",
+            <MinusIcon className={iconCls} />,
+            () => editor.chain().focus().setHorizontalRule().run(),
+            false,
+            !active.canRule,
           ),
         ])}
       {!hideAnswers &&

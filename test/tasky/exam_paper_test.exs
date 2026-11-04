@@ -260,6 +260,20 @@ defmodule Tasky.ExamPaperTest do
       assert length(b2["content"]) == 6
     end
 
+    test "the points go on the heading, also behind a rule's lead-in" do
+      rule = %{"type" => "horizontalRule"}
+      lead = paragraph("Kontext zu F2")
+
+      content =
+        doc([heading("F1", "q-1"), answer_block("a"), rule, lead, heading("F2", "q-2")])
+
+      %{"content" => [h1, _b, ^rule, ^lead, h2]} =
+        ExamPaper.paper_doc(content, opts(sample_solution_points: %{"q-1" => 1, "q-2" => 3}))
+
+      assert List.last(h1["content"]) == %{"type" => "text", "text" => " (1 Punkt)"}
+      assert List.last(h2["content"]) == %{"type" => "text", "text" => " (3 Punkte)"}
+    end
+
     test "the preamble survives" do
       intro = paragraph("Zeit: 90 Minuten")
       content = doc([intro, heading("F1", "q-1"), answer_block("a")])

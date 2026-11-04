@@ -71,9 +71,13 @@ defmodule Tasky.ExamDoc do
   @doc """
   Splits a TipTap document into parts, according to the exam's answer mode.
 
-  With `"answer_fields"`, each part begins with a level-3 heading (`h3`) which
-  represents the question. Anything before the first `h3` is *preamble* (intro
-  / instructions) and is NOT returned — use `content_preamble/2` to access it.
+  With `"answer_fields"`, each part is built around a level-3 heading (`h3`)
+  which represents the question. A horizontal rule lets the teacher cut
+  earlier: the rule and everything after it up to the next `h3` become that
+  question's lead-in, instead of trailing the question before. A rule with no
+  `h3` after it (before the next rule or the end) is just a line and stays
+  where it is. Anything before the first part is *preamble* (intro /
+  instructions) and is NOT returned — use `content_preamble/2` to access it.
 
   With `"free_document"` there are no questions: the whole document is one
   part under `free_document_part_id/0`, and the preamble is empty. Everything
@@ -83,7 +87,7 @@ defmodule Tasky.ExamDoc do
   Returns a list of `%{id, label, nodes}`:
     * `id` — the heading's stable `partId`, or positional `"q-N"` fallback
     * `label` — the heading's inline text content, or fallback `"Frage N"`
-    * `nodes` — the part's nodes, starting with the leading `h3` node
+    * `nodes` — the part's nodes: its lead-in (if any), then the `h3` node
 
   The mode has no default on purpose: a forgotten call site would silently
   report "no parts" for every essay exam, which reads as an empty exam rather
@@ -100,32 +104,60 @@ defmodule Tasky.ExamDoc do
   end
 
   def split_content_into_parts(doc, "answer_fields") when is_map(doc) do
-    nodes = Map.get(doc, "content", []) || []
-
-    {parts, current} = Enum.reduce(nodes, {[], nil}, &split_step/2)
-
-    parts = if current, do: [current | parts], else: parts
-    Enum.reverse(parts)
+    doc |> segment() |> elem(1)
   end
 
   def split_content_into_parts(_doc, mode) when mode in ["answer_fields", "free_document"],
     do: []
 
-  defp split_step(node, {parts, current}) when is_map(node) do
+  # Preamble and parts in one pass, so the two can never disagree about where
+  # the first question starts. Lossless: `preamble ++ parts' nodes` is the
+  # document again.
+  #
+  # `pending` holds the nodes since the last horizontal rule. If a question
+  # heading follows, they are that question's lead-in; if another rule or the
+  # end of the document comes first, they fall back to where they stand.
+  defp segment(doc) do
+    nodes = Map.get(doc, "content", []) || []
+
+    {preamble, parts, current, pending} =
+      Enum.reduce(nodes, {[], [], nil, nil}, &segment_step/2)
+
+    {preamble, current} = settle(pending, preamble, current)
+    parts = if current, do: [current | parts], else: parts
+    {preamble, Enum.reverse(parts)}
+  end
+
+  defp segment_step(node, {preamble, parts, current, pending}) when is_map(node) do
     cond do
       question_heading?(node) ->
         part = build_part_from_heading(node, length(parts) + count_if(current))
         parts = if current, do: [current | parts], else: parts
-        {parts, part}
+        {preamble, parts, %{part | nodes: (pending || []) ++ part.nodes}, nil}
+
+      rule?(node) ->
+        {preamble, current} = settle(pending, preamble, current)
+        {preamble, parts, current, [node]}
+
+      pending ->
+        {preamble, parts, current, pending ++ [node]}
 
       current ->
-        {parts, %{current | nodes: current.nodes ++ [node]}}
+        {preamble, parts, %{current | nodes: current.nodes ++ [node]}, nil}
 
       true ->
-        # pre-first-question content = preamble; ignore here
-        {parts, nil}
+        {preamble ++ [node], parts, nil, nil}
     end
   end
+
+  defp settle(nil, preamble, current), do: {preamble, current}
+  defp settle(pending, preamble, nil), do: {preamble ++ pending, nil}
+
+  defp settle(pending, preamble, current),
+    do: {preamble, %{current | nodes: current.nodes ++ pending}}
+
+  defp rule?(%{"type" => "horizontalRule"}), do: true
+  defp rule?(_), do: false
 
   @doc "True when the node is a question heading (level-3 heading)."
   def question_heading?(%{"type" => "heading", "attrs" => %{"level" => 3}}), do: true
@@ -154,8 +186,9 @@ defmodule Tasky.ExamDoc do
   defp heading_text(_), do: nil
 
   @doc """
-  Returns the preamble — nodes before the first level-3 heading. Empty list
-  if the document has no preamble (starts with an h3) or no h3 headings.
+  Returns the preamble — nodes before the first part (its `h3`, or the rule
+  that opens its lead-in). Empty list if the document starts with a part.
+  Without any `h3` the whole document is preamble.
 
   Always empty for `"free_document"`: there the single part already covers the
   whole document, so a preamble would duplicate it on reassembly.
@@ -163,8 +196,7 @@ defmodule Tasky.ExamDoc do
   def content_preamble(_doc, "free_document"), do: []
 
   def content_preamble(doc, "answer_fields") when is_map(doc) do
-    (doc |> Map.get("content", []) || [])
-    |> Enum.take_while(fn n -> not question_heading?(n) end)
+    doc |> segment() |> elem(0)
   end
 
   def content_preamble(_doc, "answer_fields"), do: []
@@ -173,7 +205,7 @@ defmodule Tasky.ExamDoc do
   Reassembles a TipTap doc from a preamble (nodes before the first question)
   and a list of parts (as returned by `split_content_into_parts/2`).
 
-  Each part's `nodes` already includes its leading `question` node, so the
+  Each part's `nodes` already includes its lead-in and question heading, so the
   reassembly is just concatenation. Inverse of `split_content_into_parts/2`
   + `content_preamble/2`.
   """
