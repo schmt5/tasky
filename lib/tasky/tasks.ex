@@ -537,6 +537,10 @@ defmodule Tasky.Tasks do
   Gets or creates a task submission for a student.
   Automatically creates a submission with "not_started" status if one doesn't exist.
 
+  Safe against a concurrent call for the same unit (two tabs, a quick reload):
+  the insert yields to the unique index instead of failing on it, and the row
+  that won is returned.
+
   ## Examples
 
       iex> get_or_create_submission(scope, task_id)
@@ -547,9 +551,12 @@ defmodule Tasky.Tasks do
       when user.role == "student" do
     case Repo.get_by(TaskSubmission, task_id: task_id, student_id: user.id) do
       nil ->
-        %TaskSubmission{}
-        |> TaskSubmission.create_changeset(%{task_id: task_id, student_id: user.id})
-        |> Repo.insert()
+        with {:ok, _} <-
+               %TaskSubmission{}
+               |> TaskSubmission.create_changeset(%{task_id: task_id, student_id: user.id})
+               |> Repo.insert(on_conflict: :nothing, conflict_target: [:task_id, :student_id]) do
+          {:ok, Repo.get_by!(TaskSubmission, task_id: task_id, student_id: user.id)}
+        end
 
       submission ->
         {:ok, submission}

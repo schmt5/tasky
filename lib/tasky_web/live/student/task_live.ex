@@ -769,9 +769,12 @@ defmodule TaskyWeb.Student.TaskLive do
 
       # Öffnen heisst Arbeiten: neu → in Bearbeitung, zurückgegeben → in
       # Überarbeitung (damit die Lehrperson sieht, dass die Rückgabe ankam).
-      # Blosses Nachlesen im Vorschaumodus ändert nichts.
+      # Blosses Nachlesen im Vorschaumodus ändert nichts. Erst im verbundenen
+      # Mount: der statische Render ist ein GET und soll nichts schreiben,
+      # und sonst lief der Wechsel samt Broadcast pro Öffnen zweimal.
       submission =
-        with false <- preview_mode,
+        with true <- connected?(socket),
+             false <- preview_mode,
              next_status when is_binary(next_status) <- Tasks.resume_status(submission),
              {:ok, updated} <-
                Tasks.update_submission_status(
