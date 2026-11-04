@@ -718,7 +718,7 @@ defmodule Tasky.Exams do
 
   @doc "Like `get_submission!/2` but returns nil instead of raising."
   def get_submission(%Exam{} = exam, id) do
-    Repo.get_by(ExamSubmission, id: id, exam_id: exam.id)
+    Repo.get_child(ExamSubmission, id, exam_id: exam.id)
   end
 
   # Transaction-only variants of the two functions above: they take a row lock on
@@ -3570,7 +3570,7 @@ defmodule Tasky.Exams do
 
   @doc "Gets an attachment of the given exam, or nil."
   def get_exam_attachment(%Exam{} = exam, id) do
-    Repo.get_by(ExamAttachment, id: id, exam_id: exam.id)
+    Repo.get_child(ExamAttachment, id, exam_id: exam.id)
   end
 
   @doc "Gets an attachment by its stored (UUID) filename, or nil."
@@ -3621,7 +3621,7 @@ defmodule Tasky.Exams do
 
   @doc "Gets an upload field of the given exam, or nil."
   def get_upload_field(%Exam{} = exam, id) do
-    Repo.get_by(ExamUploadField, id: id, exam_id: exam.id)
+    Repo.get_child(ExamUploadField, id, exam_id: exam.id)
   end
 
   @doc "Creates an upload field, appended at the end."
@@ -3710,7 +3710,7 @@ defmodule Tasky.Exams do
 
   @doc "Gets a file of the given submission by its id, or nil."
   def get_submission_file_by_id(%ExamSubmission{} = submission, file_id) do
-    Repo.get_by(ExamSubmissionFile, id: file_id, exam_submission_id: submission.id)
+    Repo.get_child(ExamSubmissionFile, file_id, exam_submission_id: submission.id)
   end
 
   @doc """

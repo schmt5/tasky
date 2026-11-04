@@ -132,6 +132,18 @@ defmodule Tasky.Tasks do
   end
 
   @doc """
+  A unit of the given course that the scope may manage, or `nil` — for an id
+  that arrives from the client (a `phx-value-id` on the course page). Unlike
+  `get_task!/2` it neither raises nor accepts a unit of some other course.
+  """
+  def get_course_task(%Scope{} = scope, %{id: course_id}, id) do
+    case Repo.get_child(Task, id, course_id: course_id) do
+      %Task{} = task -> if Policy.can_manage?(scope, task.user_id), do: task
+      nil -> nil
+    end
+  end
+
+  @doc """
   Creates a task.
 
   ## Examples
@@ -879,7 +891,7 @@ defmodule Tasky.Tasks do
   the task: callers fetch it via `get_task!/2` first.
   """
   def get_submission(%Task{} = task, id) do
-    Repo.get_by(TaskSubmission, id: id, task_id: task.id)
+    Repo.get_child(TaskSubmission, id, task_id: task.id)
   end
 
   @doc """
@@ -1584,7 +1596,7 @@ defmodule Tasky.Tasks do
 
   @doc "Gets an attachment of the given task, or nil."
   def get_task_attachment(%Task{} = task, id) do
-    Repo.get_by(TaskAttachment, id: id, task_id: task.id)
+    Repo.get_child(TaskAttachment, id, task_id: task.id)
   end
 
   @doc "Gets an attachment by its stored (UUID) filename, or nil."
@@ -1633,7 +1645,7 @@ defmodule Tasky.Tasks do
 
   @doc "Gets a solution file of the given task, or nil."
   def get_task_solution_file(%Task{} = task, id) do
-    Repo.get_by(TaskSolutionFile, id: id, task_id: task.id)
+    Repo.get_child(TaskSolutionFile, id, task_id: task.id)
   end
 
   @doc "Creates a solution file record, appending it to the list."
@@ -1710,7 +1722,7 @@ defmodule Tasky.Tasks do
 
   @doc "Gets an upload field of the given task, or nil."
   def get_task_upload_field(%Task{} = task, id) do
-    Repo.get_by(TaskUploadField, id: id, task_id: task.id)
+    Repo.get_child(TaskUploadField, id, task_id: task.id)
   end
 
   @doc "Creates an upload field, appended at the end."
@@ -1802,7 +1814,7 @@ defmodule Tasky.Tasks do
 
   @doc "Gets a file of the given submission by its id, or nil."
   def get_submission_file_by_id(%TaskSubmission{} = submission, file_id) do
-    Repo.get_by(TaskSubmissionFile, id: file_id, task_submission_id: submission.id)
+    Repo.get_child(TaskSubmissionFile, file_id, task_submission_id: submission.id)
   end
 
   @doc """

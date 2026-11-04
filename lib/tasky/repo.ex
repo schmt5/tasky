@@ -35,4 +35,18 @@ defmodule Tasky.Repo do
 
   def lock_one!(schema, id, :share),
     do: one!(from r in schema, where: r.id == ^id, lock: "FOR SHARE")
+
+  @doc """
+  `get_by/2` for a child row whose id may come straight from the client (a
+  `phx-value-id`), scoped to its parent by `clauses`.
+
+  An id that does not cast — `"abc"`, `""`, `nil` — is simply not found,
+  instead of an `Ecto.Query.CastError` that takes the LiveView down.
+  """
+  def get_child(schema, id, clauses) do
+    case Ecto.Type.cast(:id, id) do
+      {:ok, id} when is_integer(id) -> get_by(schema, [{:id, id} | clauses])
+      _ -> nil
+    end
+  end
 end

@@ -104,4 +104,18 @@ defmodule TaskyWeb.TaskLive.ContentTest do
       refute html =~ "Lösungsdateien"
     end
   end
+
+  describe "malformed ids from the client" do
+    test "leave the view running", %{conn: conn, task: task} do
+      {:ok, view, _html} = live(conn, ~p"/tasks/#{task}/content?tab=dateien")
+
+      for event <-
+            ~w(delete_solution_file delete_attachment edit_upload_field delete_upload_field),
+          id <- ["abc", "", "1.5"] do
+        render_hook(view, event, %{"id" => id})
+      end
+
+      assert Process.alive?(view.pid)
+    end
+  end
 end

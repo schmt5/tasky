@@ -638,12 +638,37 @@ defmodule TaskyWeb.CourseLive.ShowTest do
 
       {:ok, lv, _html} = live(log_in_user(conn, other), ~p"/courses/#{other_course}")
 
-      # `Tasks.get_task!/2` refuses the foreign id, taking the LiveView down
-      # with it rather than handing over someone else's unit.
-      Process.flag(:trap_exit, true)
-      catch_exit(render_click(lv, "open_rename", %{"id" => task.id}))
+      # The foreign id is not a unit of this course: no dialog, no crash, and
+      # nothing of someone else's unit is handed over.
+      render_click(lv, "open_rename", %{"id" => task.id})
 
+      refute has_element?(lv, "#rename-task-form")
       assert reload(task).name == "Einheit 1"
+    end
+  end
+
+  describe "unit ids from the client" do
+    test "garbage and units of other courses are ignored", %{
+      conn: conn,
+      scope: scope,
+      course: course,
+      task: task
+    } do
+      other_course = course_fixture(scope: scope, attrs: %{name: "Anderer Kurs"})
+      foreign = task_fixture(scope, %{name: "Fremd", position: 0, course_id: other_course.id})
+
+      {:ok, view, _html} = live(conn, ~p"/courses/#{course}")
+
+      for event <- ~w(open_copy delete_task open_rename),
+          id <- ["abc", "", to_string(foreign.id)] do
+        render_hook(view, event, %{"id" => id})
+      end
+
+      render_hook(view, "set_status", %{"id" => to_string(foreign.id), "status" => "open"})
+
+      assert Process.alive?(view.pid)
+      assert reload(foreign).status == "draft"
+      assert reload(task)
     end
   end
 end

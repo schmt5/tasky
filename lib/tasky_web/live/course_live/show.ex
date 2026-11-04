@@ -926,13 +926,17 @@ defmodule TaskyWeb.CourseLive.Show do
 
   @impl true
   def handle_event("open_copy", %{"id" => id}, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
+    case course_task(socket, id) do
+      nil ->
+        {:noreply, socket}
 
-    {:noreply,
-     socket
-     |> assign(:copying_task, task)
-     |> assign(:copy_targets, copy_targets(socket, task))
-     |> assign(:copy_selection, MapSet.new())}
+      task ->
+        {:noreply,
+         socket
+         |> assign(:copying_task, task)
+         |> assign(:copy_targets, copy_targets(socket, task))
+         |> assign(:copy_selection, MapSet.new())}
+    end
   end
 
   @impl true
@@ -1001,28 +1005,27 @@ defmodule TaskyWeb.CourseLive.Show do
 
   @impl true
   def handle_event("delete_task", %{"id" => id}, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
-    {:ok, _} = Tasks.delete_task(socket.assigns.current_scope, task)
+    with %{} = task <- course_task(socket, id),
+         {:ok, _} <- Tasks.delete_task(socket.assigns.current_scope, task) do
+      task_count = Courses.count_units(socket.assigns.course)
 
-    task_count = Courses.count_units(socket.assigns.course)
-
-    {:noreply,
-     socket
-     |> assign(:task_count, task_count)
-     |> assign(:has_tasks, task_count > 0)
-     |> stream_delete(:tasks, task)}
+      {:noreply,
+       socket
+       |> assign(:task_count, task_count)
+       |> assign(:has_tasks, task_count > 0)
+       |> stream_delete(:tasks, task)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Lerneinheit konnte nicht gelöscht werden.")}
+    end
   end
 
   @impl true
   def handle_event("set_status", %{"id" => id, "status" => status}, socket) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
-
-    case Tasks.set_status(socket.assigns.current_scope, task, status) do
-      {:ok, updated_task} ->
-        {:noreply, stream_insert(socket, :tasks, updated_task)}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Status konnte nicht geändert werden.")}
+    with %{} = task <- course_task(socket, id),
+         {:ok, updated_task} <- Tasks.set_status(socket.assigns.current_scope, task, status) do
+      {:noreply, stream_insert(socket, :tasks, updated_task)}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Status konnte nicht geändert werden.")}
     end
   end
 
@@ -1106,12 +1109,23 @@ defmodule TaskyWeb.CourseLive.Show do
   end
 
   defp open_rename(socket, id) do
-    task = Tasks.get_task!(socket.assigns.current_scope, id)
-    changeset = Tasks.change_task(socket.assigns.current_scope, task)
+    case course_task(socket, id) do
+      nil ->
+        socket
 
-    socket
-    |> assign(:renaming_task, task)
-    |> assign(:rename_form, to_form(changeset, as: :task))
+      task ->
+        changeset = Tasks.change_task(socket.assigns.current_scope, task)
+
+        socket
+        |> assign(:renaming_task, task)
+        |> assign(:rename_form, to_form(changeset, as: :task))
+    end
+  end
+
+  # Unit ids arrive as phx-values: a unit of this course, or nothing — never a
+  # crash on garbage, and never a unit of another course on this page.
+  defp course_task(socket, id) do
+    Tasks.get_course_task(socket.assigns.current_scope, socket.assigns.course, id)
   end
 
   # Räumt `?edit=` mit weg, sonst öffnet ein Reload das Modal erneut.

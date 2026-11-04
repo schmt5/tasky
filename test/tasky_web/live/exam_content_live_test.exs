@@ -462,4 +462,20 @@ defmodule TaskyWeb.ExamContentLiveTest do
       assert json =~ "Antwort zwei NEU"
     end
   end
+
+  describe "malformed ids from the client" do
+    test "leave the view running", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam(two_part_content())
+
+      {:ok, view, _html} =
+        conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/content?tab=dateien")
+
+      for event <- ~w(delete_attachment edit_upload_field delete_upload_field),
+          id <- ["abc", ""] do
+        render_hook(view, event, %{"id" => id})
+      end
+
+      assert Process.alive?(view.pid)
+    end
+  end
 end
