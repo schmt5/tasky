@@ -156,8 +156,10 @@ defmodule TaskyWeb.CatalogLive.ShowTest do
     assert html =~ "Kurs wird übernommen"
     assert html =~ "0/1"
 
+    # The redirect follows the copy run in the background. The default
+    # 100 ms receive timeout is too tight for a loaded CI runner.
     assert [copy] = Courses.list_courses(viewer_scope)
-    assert_redirect(lv, ~p"/courses/#{copy}")
+    assert_redirect(lv, ~p"/courses/#{copy}", 10_000)
   end
 
   test "an attachment is offered for download from the preview", %{
