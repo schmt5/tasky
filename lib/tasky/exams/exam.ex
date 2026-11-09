@@ -49,6 +49,11 @@ defmodule Tasky.Exams.Exam do
     # status it comes back with is the one it left with. Written only by
     # Exams.archive_exam/2 and unarchive_exam/2.
     field :archived_at, :utc_datetime
+    # The ids of the exam's parts, derived from :content by put_part_ids/1 on
+    # every content write — the same ids `corrected_parts` holds. Kept as a
+    # column so the exam list can tell how far the correction is without
+    # loading the documents (Exams.exam_phases/2). Never cast.
+    field :part_ids, {:array, :string}, default: []
 
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :exam_submissions, Tasky.Exams.ExamSubmission
@@ -114,7 +119,8 @@ defmodule Tasky.Exams.Exam do
   `changeset/2` let a crafted config-form event skip all of that.
   """
   def document_changeset(exam, attrs) do
-    cast(exam, attrs, [
+    exam
+    |> cast(attrs, [
       :content,
       :sample_solution,
       :sample_solution_points,
@@ -122,6 +128,34 @@ defmodule Tasky.Exams.Exam do
       :ai_correction_config,
       :grading_max_points
     ])
+    |> put_part_ids()
+  end
+
+  @doc """
+  Derives `:part_ids` from the content and the answer mode, with the same
+  split the correction keys `corrected_parts` by. A no-op when neither
+  changes, except on a new row: `Exams.create_exam/2` puts the essay template
+  into the struct, so there is no change to see.
+
+  Every writer of `:content` goes through here — this changeset,
+  `new_changeset/2` and `Exams.update_exam_json/2`.
+  """
+  def put_part_ids(%Ecto.Changeset{} = changeset) do
+    new? = Ecto.get_meta(changeset.data, :state) == :built
+
+    if new? or changed?(changeset, :content) or changed?(changeset, :answer_mode) do
+      content = get_field(changeset, :content) || %{}
+      mode = get_field(changeset, :answer_mode)
+
+      ids =
+        if mode in @answer_modes,
+          do: content |> Tasky.ExamDoc.split_content_into_parts(mode) |> Enum.map(& &1.id),
+          else: []
+
+      put_change(changeset, :part_ids, ids)
+    else
+      changeset
+    end
   end
 
   @doc """
@@ -164,6 +198,7 @@ defmodule Tasky.Exams.Exam do
     |> validate_required([:answer_mode])
     |> validate_inclusion(:answer_mode, @answer_modes)
     |> check_constraint(:answer_mode, name: :exams_answer_mode_check)
+    |> put_part_ids()
   end
 
   @doc """

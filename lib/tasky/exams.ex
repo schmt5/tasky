@@ -1622,7 +1622,10 @@ defmodule Tasky.Exams do
     Repo.transaction(fn ->
       locked = Repo.lock_one!(Exam, exam.id)
 
-      case locked |> Ecto.Changeset.change(fun.(locked)) |> Repo.update() do
+      case locked
+           |> Ecto.Changeset.change(fun.(locked))
+           |> Exam.put_part_ids()
+           |> Repo.update() do
         {:ok, updated} -> updated
         {:error, changeset} -> Repo.rollback(changeset)
       end
