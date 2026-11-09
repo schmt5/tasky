@@ -175,6 +175,34 @@ defmodule TaskyWeb.Admin.UserEditLive do
             <.icon name="hero-arrow-path" class="w-4 h-4" /> Zurücksetzen
           </button>
         </div>
+
+        <%!-- Delete teacher --%>
+        <div
+          :if={deletable_teacher?(@user, @current_scope)}
+          id="delete-teacher-section"
+          class="bg-white rounded-[14px] border border-stone-100 px-6 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] flex items-center justify-between gap-4"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-[10px] bg-red-50 flex items-center justify-center shrink-0">
+              <.icon name="hero-trash" class="w-5 h-5 text-red-500" />
+            </div>
+            <div>
+              <h2 class="text-[15px] font-semibold text-stone-800">Lehrperson löschen</h2>
+              <p class="text-[13px] text-stone-500">
+                Löscht den Account mit allen Kursen, Lerneinheiten und Prüfungen.
+                Kurse im Katalog gehen an Sie über.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            id="delete-teacher-button"
+            phx-click="open_delete_modal"
+            class="inline-flex items-center gap-1.5 text-sm font-medium text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-2 rounded-lg transition-all duration-150 shrink-0"
+          >
+            <.icon name="hero-trash" class="w-4 h-4" /> Löschen
+          </button>
+        </div>
       </div>
 
       <%= if @show_password_modal do %>
@@ -246,6 +274,124 @@ defmodule TaskyWeb.Admin.UserEditLive do
           </div>
         </dialog>
       <% end %>
+
+      <%= if @show_delete_modal do %>
+        <dialog
+          id="delete-teacher-modal"
+          class="modal modal-open"
+          phx-window-keydown="close_delete_modal"
+          phx-key="escape"
+        >
+          <div class="modal-box max-w-lg">
+            <div class="flex items-center gap-3 mb-5">
+              <div class="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
+                <.icon name="hero-trash" class="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-stone-900">Lehrperson löschen</h3>
+                <p class="text-sm text-stone-500">{full_name(@user)} · {@user.email}</p>
+              </div>
+            </div>
+
+            <div id="delete-teacher-summary" class="space-y-3 text-sm text-stone-700">
+              <p>Unwiderruflich gelöscht werden:</p>
+              <ul class="space-y-1.5">
+                <li id="delete-summary-courses" class="flex items-center gap-2">
+                  <.icon name="hero-book-open" class="w-4 h-4 text-stone-400" />
+                  {count_label(@delete_summary.courses_deleted, "Kurs", "Kurse")}
+                </li>
+                <li id="delete-summary-tasks" class="flex items-center gap-2">
+                  <.icon name="hero-document-text" class="w-4 h-4 text-stone-400" />
+                  {count_label(@delete_summary.tasks_deleted, "Lerneinheit", "Lerneinheiten")} samt Abgaben und Feedback
+                </li>
+                <li id="delete-summary-learners" class="flex items-center gap-2">
+                  <.icon name="hero-users" class="w-4 h-4 text-stone-400" />
+                  betrifft {count_label(
+                    @delete_summary.learners_affected,
+                    "lernende Person",
+                    "Lernende"
+                  )}
+                </li>
+              </ul>
+
+              <div
+                :if={@delete_summary.exams_deleted > 0}
+                id="delete-summary-exams"
+                class="bg-red-50 border border-red-200 rounded-[10px] p-3 flex items-start gap-2"
+              >
+                <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                <p class="text-red-800 leading-[1.5]">
+                  <span class="font-semibold">
+                    {count_label(@delete_summary.exams_deleted, "Prüfung", "Prüfungen")}
+                  </span>
+                  mit {count_label(@delete_summary.exam_submissions_deleted, "Abgabe", "Abgaben")} werden ebenfalls gelöscht, inklusive Korrekturen und Noten.
+                </p>
+              </div>
+
+              <div
+                :if={@delete_summary.courses_transferred != []}
+                id="delete-summary-transferred"
+                class="bg-sky-50 border border-sky-200 rounded-[10px] p-3"
+              >
+                <p class="text-sky-900 mb-1.5">
+                  Diese Katalog-Kurse bleiben erhalten und gehen an Sie über:
+                </p>
+                <ul class="space-y-1">
+                  <li
+                    :for={course <- @delete_summary.courses_transferred}
+                    id={"transferred-course-#{course.id}"}
+                    class="flex items-center gap-2 text-sky-800"
+                  >
+                    <.icon name="hero-arrow-right-circle" class="w-4 h-4 text-sky-500" />
+                    <span class="font-medium">{course.name}</span>
+                    <span class="text-sky-600">
+                      ({count_label(course.unit_count, "Lerneinheit", "Lerneinheiten")})
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <.form
+              for={@delete_form}
+              id={"delete-teacher-form-#{@user.id}"}
+              phx-change="validate_delete"
+              phx-submit="delete_teacher"
+              class="mt-5"
+            >
+              <.input
+                field={@delete_form[:email]}
+                type="text"
+                label={"Zur Bestätigung die E-Mail-Adresse eingeben: #{@user.email}"}
+                autocomplete="off"
+                phx-mounted={JS.focus()}
+              />
+
+              <div class="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  phx-click="close_delete_modal"
+                  class="px-4 py-2.5 text-sm font-medium text-stone-700 bg-white border border-stone-200 rounded-[10px] hover:bg-stone-50 transition-all duration-150"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  id="confirm-delete-teacher"
+                  disabled={not @delete_confirmed?}
+                  phx-disable-with="Wird gelöscht..."
+                  class="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-[10px] shadow-[0_2px_8px_rgba(220,38,38,0.25)] hover:bg-red-700 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-red-600"
+                >
+                  <.icon name="hero-trash" class="w-4 h-4" /> Endgültig löschen
+                </button>
+              </div>
+            </.form>
+          </div>
+          <div class="modal-backdrop bg-black/50" phx-click="close_delete_modal">
+            <button class="cursor-default">close</button>
+          </div>
+        </dialog>
+      <% end %>
     </Layouts.app>
     """
   end
@@ -263,7 +409,8 @@ defmodule TaskyWeb.Admin.UserEditLive do
      |> assign(:organizations, Organizations.list_organizations(socket.assigns.current_scope))
      |> assign(:profile_form, to_form(changeset))
      |> assign(:show_password_modal, false)
-     |> assign(:password_form, to_form(%{"password" => ""}, as: "password_reset"))}
+     |> assign(:password_form, to_form(%{"password" => ""}, as: "password_reset"))
+     |> reset_delete_modal()}
   end
 
   @impl true
@@ -330,6 +477,78 @@ defmodule TaskyWeb.Admin.UserEditLive do
         {:noreply, assign(socket, :password_form, to_form(changeset, as: "password_reset"))}
     end
   end
+
+  def handle_event("open_delete_modal", _params, socket) do
+    case Accounts.teacher_deletion_summary(socket.assigns.current_scope, socket.assigns.user) do
+      {:ok, summary} ->
+        {:noreply,
+         socket
+         |> reset_delete_modal()
+         |> assign(:show_delete_modal, true)
+         |> assign(:delete_summary, summary)}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Diese Person kann nicht gelöscht werden.")}
+    end
+  end
+
+  def handle_event("close_delete_modal", _params, socket) do
+    {:noreply, reset_delete_modal(socket)}
+  end
+
+  def handle_event("validate_delete", %{"delete_teacher" => %{"email" => email}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:delete_form, to_form(%{"email" => email}, as: "delete_teacher"))
+     |> assign(:delete_confirmed?, email_matches?(email, socket.assigns.user))}
+  end
+
+  def handle_event("delete_teacher", %{"delete_teacher" => %{"email" => email}}, socket) do
+    %{current_scope: scope, user: user} = socket.assigns
+
+    with true <- email_matches?(email, user),
+         {:ok, result} <- Accounts.delete_teacher(scope, user) do
+      TaskyWeb.UserAuth.disconnect_sessions(result.expired_tokens)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, deleted_message(user, result))
+       |> push_navigate(to: ~p"/admin/users")}
+    else
+      false ->
+        {:noreply, assign(socket, :delete_confirmed?, false)}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> reset_delete_modal()
+         |> put_flash(:error, "Die Lehrperson konnte nicht gelöscht werden.")}
+    end
+  end
+
+  defp reset_delete_modal(socket) do
+    socket
+    |> assign(:show_delete_modal, false)
+    |> assign(:delete_summary, nil)
+    |> assign(:delete_confirmed?, false)
+    |> assign(:delete_form, to_form(%{"email" => ""}, as: "delete_teacher"))
+  end
+
+  defp deletable_teacher?(user, scope), do: user.role == "teacher" and user.id != scope.user.id
+
+  defp email_matches?(email, user) do
+    String.downcase(String.trim(email)) == String.downcase(user.email)
+  end
+
+  defp deleted_message(user, %{transferred: 0}), do: "#{full_name(user)} wurde gelöscht."
+
+  defp deleted_message(user, %{transferred: n}) do
+    "#{full_name(user)} wurde gelöscht. " <>
+      "#{count_label(n, "Katalog-Kurs wurde", "Katalog-Kurse wurden")} Ihnen übertragen."
+  end
+
+  defp count_label(1, singular, _plural), do: "1 #{singular}"
+  defp count_label(n, _singular, plural), do: "#{n} #{plural}"
 
   defp full_name(user) do
     case String.trim("#{user.firstname || ""} #{user.lastname || ""}") do

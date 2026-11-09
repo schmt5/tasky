@@ -6,10 +6,11 @@ defmodule Tasky.Accounts do
   import Ecto.Query, warn: false
   alias Tasky.Repo
 
-  alias Tasky.Accounts.{User, UserNotifier, UserToken}
+  alias Tasky.Accounts.{Scope, User, UserNotifier, UserToken}
   alias Tasky.Classes
-  alias Tasky.Courses.CourseEnrollment
-  alias Tasky.Exams.ExamSubmission
+  alias Tasky.Courses.{Course, CourseEnrollment}
+  alias Tasky.Exams.{Exam, ExamSubmission}
+  alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskSubmission
 
   ## Database getters
@@ -527,6 +528,175 @@ defmodule Tasky.Accounts do
   end
 
   defp authorize_student(_scope, %User{}), do: {:error, :unauthorized}
+
+  @doc """
+  What deleting a teacher would take with it, for the admin's confirmation
+  dialog. Counts the same rows `delete_teacher/2` deletes, so the dialog does
+  not promise anything the delete then does differently.
+
+  `courses_transferred` lists the catalog-published courses that survive and
+  move to the admin, each with its unit count.
+  """
+  def teacher_deletion_summary(scope, %User{} = teacher) do
+    with :ok <- Tasky.Policy.authorize_admin(scope),
+         :ok <- deletable_teacher(scope, teacher) do
+      deleted_courses = deleted_courses_query(teacher.id)
+      deleted_tasks = deleted_tasks_query(teacher.id)
+      exams = where(Exam, [e], e.teacher_id == ^teacher.id)
+
+      transferred =
+        Repo.all(
+          from c in Course,
+            left_join: t in Task,
+            on: t.course_id == c.id,
+            where: c.teacher_id == ^teacher.id and not is_nil(c.catalog_published_at),
+            group_by: c.id,
+            order_by: c.name,
+            select: %{id: c.id, name: c.name, unit_count: count(t.id)}
+        )
+
+      learners =
+        from(e in CourseEnrollment,
+          where: e.course_id in subquery(select(deleted_courses, [c], c.id)),
+          select: e.student_id
+        )
+        |> union(
+          ^from(s in TaskSubmission,
+            where: s.task_id in subquery(select(deleted_tasks, [t], t.id)),
+            select: s.student_id
+          )
+        )
+        |> union(
+          ^from(s in ExamSubmission,
+            where: s.exam_id in subquery(select(exams, [e], e.id)) and not is_nil(s.user_id),
+            select: s.user_id
+          )
+        )
+
+      {:ok,
+       %{
+         courses_deleted: count_rows(deleted_courses),
+         courses_transferred: transferred,
+         tasks_deleted: count_rows(deleted_tasks),
+         exams_deleted: count_rows(exams),
+         exam_submissions_deleted:
+           count_rows(where(ExamSubmission, [s], s.exam_id in subquery(select(exams, [e], e.id)))),
+         learners_affected: count_rows(subquery(learners))
+       }}
+    end
+  end
+
+  # The teacher's courses that go down with the account: every one that is
+  # not published to the catalog.
+  defp deleted_courses_query(teacher_id) do
+    where(Course, [c], c.teacher_id == ^teacher_id and is_nil(c.catalog_published_at))
+  end
+
+  # Units that disappear: those in a deleted course (whoever wrote them) and
+  # the teacher's units that belong to no course. Units of the teacher inside
+  # a surviving course are handed over instead, see `delete_teacher/2`.
+  defp deleted_tasks_query(teacher_id) do
+    deleted_course_ids = select(deleted_courses_query(teacher_id), [c], c.id)
+
+    where(
+      Task,
+      [t],
+      t.course_id in subquery(deleted_course_ids) or
+        (is_nil(t.course_id) and t.user_id == ^teacher_id)
+    )
+  end
+
+  @doc """
+  Deletes a teacher's account for good, on behalf of an admin.
+
+  Everything the teacher owns goes with them through the foreign keys —
+  courses, units, exams with every submission, sessions — except the courses
+  published to the catalog: other teachers may still import them, so they are
+  handed to the deleting admin, together with their enrolments and learner
+  submissions.
+
+  A course changes hands in two columns. `courses.teacher_id` alone is not
+  enough: `tasks.user_id` cascades too, and would take the units of a handed
+  over course with the account. So every unit of the teacher that sits in a
+  surviving course gets that course's owner as its new `user_id` — the admin
+  for a published course, the colleague for a unit in a colleague's course.
+
+  The teacher's row is locked first. A concurrent insert of a course, unit or
+  exam has to wait for that lock in its foreign-key check, so the ids collected
+  here are all the ids the cascade removes, and no stored file is orphaned.
+  Those files are cleared after the commit, best effort, like
+  `Tasky.Courses.delete_course/1`.
+
+  Returns `{:ok, %{transferred: n, tasks_deleted: n, exams_deleted: n,
+  expired_tokens: tokens}}`. Deleting the token rows stops the teacher's next
+  request; the caller kicks already-connected LiveView sockets with
+  `TaskyWeb.UserAuth.disconnect_sessions/1`, as for `admin_reset_password/3`.
+  """
+  def delete_teacher(%Scope{} = scope, %User{} = teacher) do
+    with :ok <- Tasky.Policy.authorize_admin(scope),
+         :ok <- deletable_teacher(scope, teacher),
+         {:ok, {result, task_ids, exam_ids, tokens}} <- do_delete_teacher(scope.user, teacher) do
+      # After the commit, and never inside it: a storage hiccup must not roll
+      # back a deletion the admin already confirmed.
+      Tasky.Uploads.delete_task_files_many(task_ids)
+      Tasky.Uploads.delete_exam_files_many(exam_ids)
+      {:ok, Map.put(result, :expired_tokens, tokens)}
+    end
+  end
+
+  defp do_delete_teacher(%User{} = admin, %User{id: teacher_id}) do
+    Repo.transaction(fn ->
+      locked = Repo.one(from u in User, where: u.id == ^teacher_id, lock: "FOR UPDATE")
+
+      # The role may have changed since the admin opened the page.
+      unless match?(%User{role: "teacher"}, locked), do: Repo.rollback(:unauthorized)
+
+      {transferred, _} =
+        Repo.update_all(
+          from(c in Course,
+            where: c.teacher_id == ^teacher_id and not is_nil(c.catalog_published_at)
+          ),
+          set: [teacher_id: admin.id]
+        )
+
+      Repo.update_all(
+        from(t in Task,
+          join: c in Course,
+          on: c.id == t.course_id,
+          where: t.user_id == ^teacher_id and c.teacher_id != ^teacher_id,
+          update: [set: [user_id: c.teacher_id]]
+        ),
+        []
+      )
+
+      task_ids = Repo.all(select(deleted_tasks_query(teacher_id), [t], t.id))
+
+      exam_ids =
+        Repo.all(from e in Exam, where: e.teacher_id == ^teacher_id, select: e.id)
+
+      tokens = Repo.all(UserToken.by_user_and_contexts_query(locked, :all))
+
+      case Repo.delete(locked) do
+        {:ok, _} ->
+          result = %{
+            transferred: transferred,
+            tasks_deleted: length(task_ids),
+            exams_deleted: length(exam_ids)
+          }
+
+          {result, task_ids, exam_ids, tokens}
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  # Only teachers: an admin's account is not deleted from here, a learner's
+  # goes through `delete_student/2`, and nobody deletes themselves.
+  defp deletable_teacher(%Scope{user: %User{id: id}}, %User{id: id}), do: {:error, :unauthorized}
+  defp deletable_teacher(_scope, %User{role: "teacher"}), do: :ok
+  defp deletable_teacher(_scope, %User{}), do: {:error, :unauthorized}
 
   # An absent `class_id` leaves the current one alone; an explicit empty one
   # clears it — which only an admin can undo, so the UI warns about it.

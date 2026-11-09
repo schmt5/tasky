@@ -659,19 +659,35 @@ defmodule Tasky.Uploads do
   inside a `Repo.transaction/1`.
   """
   @spec delete_task_files_many([term()]) :: :ok
-  def delete_task_files_many(task_ids) do
+  def delete_task_files_many(task_ids), do: delete_owner_files_many("tasks", task_ids)
+
+  @doc """
+  Removes the stored files of several exams at once, in parallel.
+
+  Used when a teacher's account goes away: the `exams.teacher_id` cascade
+  takes the exam rows with it, so `Tasky.Exams.delete_exam/2` never runs.
+  Best-effort and never raises, like `delete_task_files_many/1`, and must not
+  run inside a `Repo.transaction/1`.
+  """
+  @spec delete_exam_files_many([term()]) :: :ok
+  def delete_exam_files_many(exam_ids), do: delete_owner_files_many("exams", exam_ids)
+
+  defp delete_owner_files_many(segment, ids) do
     Tasky.TaskSupervisor
     |> Task.Supervisor.async_stream_nolink(
-      task_ids,
-      &delete_task_files/1,
+      ids,
+      &delete_owner_files(segment, &1),
       max_concurrency: @copy_concurrency,
       timeout: @copy_timeout,
       on_timeout: :kill_task,
       ordered: false
     )
     |> Enum.each(fn
-      {:ok, _} -> :ok
-      {:exit, reason} -> Logger.warning("delete: task file cleanup failed #{inspect(reason)}")
+      {:ok, _} ->
+        :ok
+
+      {:exit, reason} ->
+        Logger.warning("delete: #{segment} file cleanup failed #{inspect(reason)}")
     end)
   end
 
