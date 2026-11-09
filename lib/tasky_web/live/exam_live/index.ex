@@ -54,38 +54,21 @@ defmodule TaskyWeb.ExamLive.Index do
         </div>
 
         <div :if={@has_exams} class="px-6 pt-5 pb-1">
-          <div
+          <.form
+            for={@filter_form}
             id="status-filter"
-            role="group"
-            aria-label="Nach Status filtern"
-            class="inline-flex items-center flex-wrap gap-1 p-1 bg-stone-100 rounded-lg"
+            phx-change="filter"
+            class="flex items-center gap-3 [&_.fieldset]:mb-0 [&_.fieldset]:min-w-0 [&_.fieldset]:flex-1 sm:[&_.fieldset]:flex-none"
           >
-            <.link
-              :for={{value, label} <- @status_filter_options}
-              id={"status-filter-#{value}"}
-              patch={status_path(value)}
-              replace
-              aria-pressed={to_string(@status_filter == value)}
-              class={[
-                "inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
-                if(@status_filter == value,
-                  do: "bg-white text-stone-800 shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
-                  else: "text-stone-500 hover:text-stone-700"
-                )
-              ]}
-            >
-              {label}
-              <span class={[
-                "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-full",
-                if(@status_filter == value,
-                  do: "bg-stone-100 text-stone-600",
-                  else: "bg-stone-200/70 text-stone-500"
-                )
-              ]}>
-                {Map.get(@status_counts, value, 0)}
-              </span>
-            </.link>
-          </div>
+            <span class="text-sm font-medium text-stone-500">Status</span>
+            <.input
+              field={@filter_form[:status]}
+              type="select"
+              aria-label="Nach Status filtern"
+              options={status_options(@status_counts)}
+              class="select select-sm w-full sm:w-64 rounded-lg border-stone-200 bg-white text-sm font-medium text-stone-700 transition-colors duration-150 hover:border-stone-300 focus:border-sky-400 focus:outline-none"
+            />
+          </.form>
         </div>
 
         <ul :if={@has_exams} id="exams" phx-update="stream" class="list-none p-0 m-0">
@@ -97,7 +80,7 @@ defmodule TaskyWeb.ExamLive.Index do
             <p class="text-sm font-medium text-stone-500">Keine Prüfungen mit diesem Status.</p>
           </li>
           <li
-            :for={{id, exam} <- @streams.exams}
+            :for={{id, %{exam: exam, phase: phase}} <- @streams.exams}
             id={id}
             class="flex items-start gap-5 px-6 py-5 border-b border-stone-100 bg-white transition-colors duration-150 last:border-b-0 hover:bg-stone-50"
           >
@@ -114,7 +97,7 @@ defmodule TaskyWeb.ExamLive.Index do
               <div class="flex items-center gap-2.5 flex-wrap">
                 <h3 class="text-[15px] font-semibold text-stone-800 leading-[1.4]">{exam.name}</h3>
 
-                <.exam_status_chip status={exam.status} />
+                <.exam_status_chip status={phase} />
               </div>
 
               <div class="flex items-center gap-2 mt-1">
@@ -197,12 +180,17 @@ defmodule TaskyWeb.ExamLive.Index do
     """
   end
 
+  # The phases of `Exams.exam_phases/2` rather than the bare status: once an
+  # exam is finished, what the teacher filters for is how far the correction
+  # and the return are.
   @status_filter_options [
     {"all", "Alle"},
     {"draft", "Entwurf"},
     {"open", "Offen"},
     {"running", "Laufend"},
-    {"finished", "Beendet"}
+    {"correcting", "Korrektur offen"},
+    {"ready_to_return", "Bereit zur Rückgabe"},
+    {"returned", "Zurückgegeben"}
   ]
 
   @status_filters Enum.map(@status_filter_options, &elem(&1, 0))
@@ -212,7 +200,6 @@ defmodule TaskyWeb.ExamLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Prüfungen")
-     |> assign(:status_filter_options, @status_filter_options)
      |> close_rename()}
   end
 
@@ -225,10 +212,15 @@ defmodule TaskyWeb.ExamLive.Index do
     {:noreply,
      socket
      |> assign(:status_filter, status)
+     |> assign(:filter_form, to_form(%{"status" => status}, as: :filter))
      |> assign_exams()}
   end
 
   @impl true
+  def handle_event("filter", %{"filter" => %{"status" => status}}, socket) do
+    {:noreply, push_patch(socket, to: status_path(status), replace: true)}
+  end
+
   def handle_event("archive", %{"id" => id}, socket) do
     scope = socket.assigns.current_scope
     exam = Exams.get_exam!(scope, id)
@@ -305,14 +297,17 @@ defmodule TaskyWeb.ExamLive.Index do
   defp assign_exams(socket) do
     scope = socket.assigns.current_scope
     exams = Exams.list_exams(scope)
+    phases = Exams.exam_phases(scope, exams)
     status = socket.assigns.status_filter
 
-    counts =
-      exams
-      |> Enum.frequencies_by(& &1.status)
-      |> Map.put("all", length(exams))
+    rows = Enum.map(exams, &%{id: &1.id, exam: &1, phase: Map.fetch!(phases, &1.id)})
 
-    visible = if status == "all", do: exams, else: Enum.filter(exams, &(&1.status == status))
+    counts =
+      rows
+      |> Enum.frequencies_by(& &1.phase)
+      |> Map.put("all", length(rows))
+
+    visible = if status == "all", do: rows, else: Enum.filter(rows, &(&1.phase == status))
 
     socket
     |> assign(:exam_count, length(exams))
@@ -320,6 +315,11 @@ defmodule TaskyWeb.ExamLive.Index do
     |> assign(:status_counts, counts)
     |> assign(:archived_count, Exams.count_archived_exams(scope))
     |> stream(:exams, visible, reset: true)
+  end
+
+  defp status_options(counts) do
+    for {value, label} <- @status_filter_options,
+        do: {"#{label} (#{Map.get(counts, value, 0)})", value}
   end
 
   defp status_path("all"), do: ~p"/exams"

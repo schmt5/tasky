@@ -1037,11 +1037,28 @@ defmodule TaskyWeb.CoreComponents do
     """
   end
 
+  @doc """
+  The chip for an exam's status, or for one of the finer phases the exam list
+  shows instead (`Tasky.Exams.exam_phases/2`): `"correcting"`,
+  `"ready_to_return"`, `"returned"`.
+  """
   attr :status, :string, required: true
 
   def exam_status_chip(assigns) do
     ~H"""
     <%= cond do %>
+      <% @status == "correcting" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-orange-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-orange-400"></span> Korrektur offen
+        </span>
+      <% @status == "ready_to_return" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-sky-50 text-sky-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-sky-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span> Bereit zur Rückgabe
+        </span>
+      <% @status == "returned" -> %>
+        <span class="inline-flex items-center gap-1.5 bg-stone-100 text-stone-500 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-stone-200">
+          <.icon name="hero-check" class="w-3 h-3" /> Zurückgegeben
+        </span>
       <% @status == "open" -> %>
         <span class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-600 text-xs font-semibold px-3 py-1 rounded-full ring-1 ring-blue-200">
           <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Offen
