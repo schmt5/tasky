@@ -84,6 +84,61 @@ defmodule Tasky.Exams do
     end
   end
 
+  @phases ~w(draft open running correcting ready_to_return returned)
+
+  @doc """
+  Where each exam stands, for the exam list's filter and chips:
+  `%{exam_id => phase}`, one of `phases/0`.
+
+    * `"returned"` — `returned_at` is set. Wins over everything else: a
+      withdrawn correction is not the list's business once handed back.
+    * `"correcting"` — finished, and some submission's `corrected_parts`
+      does not contain every one of the exam's `part_ids`.
+    * `"ready_to_return"` — finished and nothing left to correct, including
+      an exam nobody sat. The mark needs no step of its own: it follows from
+      the points (`Tasky.Grading`).
+    * otherwise the status: `"draft"`, `"open"`, `"running"`.
+
+  Every submission counts, handed in or not — the same set the correction
+  views count. One grouped query for all finished exams, reading
+  `exams.part_ids` rather than the documents, which `list_exams/2` does not
+  load. Exams the scope cannot manage are left out.
+  """
+  def exam_phases(%Scope{} = scope, exams) do
+    exams = Enum.filter(exams, &Policy.can_manage?(scope, &1.teacher_id))
+
+    finished_ids =
+      for %Exam{status: "finished", returned_at: nil, id: id} <- exams, do: id
+
+    open_correction =
+      if finished_ids == [] do
+        []
+      else
+        from(s in ExamSubmission,
+          join: e in Exam,
+          on: e.id == s.exam_id,
+          where: e.id in ^finished_ids,
+          where: fragment("NOT (? <@ ?)", e.part_ids, s.corrected_parts),
+          distinct: true,
+          select: s.exam_id
+        )
+        |> Repo.all()
+      end
+
+    Map.new(exams, fn exam -> {exam.id, phase(exam, open_correction)} end)
+  end
+
+  @doc "The phases `exam_phases/2` returns, in lifecycle order."
+  def phases, do: @phases
+
+  defp phase(%Exam{returned_at: %DateTime{}}, _), do: "returned"
+
+  defp phase(%Exam{status: "finished", id: id}, open_correction) do
+    if id in open_correction, do: "correcting", else: "ready_to_return"
+  end
+
+  defp phase(%Exam{status: status}, _), do: status
+
   @doc """
   Gets a single exam.
 

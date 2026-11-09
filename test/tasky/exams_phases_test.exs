@@ -34,6 +34,25 @@ defmodule Tasky.ExamsPhasesTest do
     )
   end
 
+  defp finish(scope, exam) do
+    {:ok, exam} = Exams.update_exam_status(scope, exam, "running")
+    {:ok, exam} = Exams.update_exam_status(scope, exam, "finished")
+    exam
+  end
+
+  defp corrected(submission, parts) do
+    submission |> Ecto.Changeset.change(corrected_parts: parts) |> Repo.update!()
+  end
+
+  defp returned(exam) do
+    exam |> Exam.return_changeset(%{returned_at: DateTime.utc_now(:second)}) |> Repo.update!()
+  end
+
+  defp phase(scope, exam) do
+    exam = Repo.reload!(exam)
+    Map.fetch!(Exams.exam_phases(scope, [exam]), exam.id)
+  end
+
   describe "part_ids" do
     test "follow the content on every save", %{scope: scope} do
       exam = two_part_exam(scope)
@@ -81,6 +100,54 @@ defmodule Tasky.ExamsPhasesTest do
       {:ok, copy} = Exams.duplicate_exam(scope, exam, "Kopie")
 
       assert copy.part_ids == ["p1", "p2"]
+    end
+  end
+
+  describe "exam_phases/2" do
+    test "an exam before its end has its status as phase", %{scope: scope} do
+      for status <- ~w(draft open running) do
+        assert phase(scope, two_part_exam(scope, status: status)) == status
+      end
+    end
+
+    test "a finished exam with an uncorrected part is being corrected", %{scope: scope} do
+      exam = two_part_exam(scope, status: "open")
+      exam |> exam_submission_fixture() |> corrected(["p1", "p2"])
+      exam |> exam_submission_fixture(%{"email" => "b@example.com"}) |> corrected(["p1"])
+
+      assert phase(scope, finish(scope, exam)) == "correcting"
+    end
+
+    test "a finished exam with every part corrected is ready to return", %{scope: scope} do
+      exam = two_part_exam(scope, status: "open")
+      exam |> exam_submission_fixture() |> corrected(["p2", "p1"])
+
+      assert phase(scope, finish(scope, exam)) == "ready_to_return"
+    end
+
+    test "a part deleted after its correction does not count", %{scope: scope} do
+      exam = two_part_exam(scope, status: "open")
+      exam |> exam_submission_fixture() |> corrected(["p1", "p2", "gone"])
+
+      assert phase(scope, finish(scope, exam)) == "ready_to_return"
+    end
+
+    test "a finished exam nobody sat is ready to return", %{scope: scope} do
+      assert phase(scope, two_part_exam(scope, status: "finished")) == "ready_to_return"
+    end
+
+    test "a returned exam is returned, corrected or not", %{scope: scope} do
+      exam = two_part_exam(scope, status: "open")
+      exam_submission_fixture(exam)
+
+      assert phase(scope, returned(finish(scope, exam))) == "returned"
+    end
+
+    test "leaves out exams the scope cannot manage", %{scope: scope} do
+      other = user_scope_fixture(user_fixture(%{role: "teacher"}))
+      exam = two_part_exam(scope)
+
+      assert Exams.exam_phases(other, [exam]) == %{}
     end
   end
 end
