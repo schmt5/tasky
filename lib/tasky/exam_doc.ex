@@ -218,6 +218,28 @@ defmodule Tasky.ExamDoc do
   end
 
   @doc """
+  Replaces every question heading with `fun.(part_id, heading)`, keyed by the
+  same ids as `split_content_into_parts/2` — including the positional `"q-N"`
+  fallback of old documents. Mints no ids: a read path that stamped random
+  ones would stop matching the part-keyed maps (`sample_solution_points`, …).
+
+  A free document has no question headings and comes back unchanged.
+  """
+  def map_question_headings(doc, "answer_fields", fun) when is_map(doc) and is_function(fun, 2) do
+    {preamble, parts} = segment(doc)
+
+    nodes = Enum.flat_map(parts, &map_part_heading(&1, fun))
+    Map.put(doc, "content", preamble ++ nodes)
+  end
+
+  def map_question_headings(doc, "free_document", _fun) when is_map(doc), do: doc
+
+  # A part's nodes hold exactly one h3, after its lead-in (if any).
+  defp map_part_heading(part, fun) do
+    Enum.map(part.nodes, &if(question_heading?(&1), do: fun.(part.id, &1), else: &1))
+  end
+
+  @doc """
   Labels for the answer blocks of a part's nodes, keyed by block index: the
   inline text immediately preceding each answer node (or the preceding table
   cell for the "Begriff | [Antwort]" layout).

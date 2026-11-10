@@ -236,40 +236,21 @@ defmodule Tasky.ExamPaper do
 
   defp with_points_in_headings(content, "answer_fields" = mode, opts) do
     part_points = Keyword.get(opts, :sample_solution_points) || %{}
-    # Deliberately no ensure_part_ids/1: it mints *random* ids, and this is a
-    # read path that persists nothing. A legacy doc whose headings carry no
-    # partId is keyed positionally ("q-1", "q-2") in sample_solution_points,
-    # and split_content_into_parts/2 reproduces exactly that fallback — minting
-    # ids here would silently stop matching those keys, so the points would
-    # vanish from the paper version. Only the save path in Exams stamps ids.
-    doc = doc_or_empty(content)
 
-    preamble = ExamDoc.content_preamble(doc, mode)
-
-    parts =
-      doc
-      |> ExamDoc.split_content_into_parts(mode)
-      |> Enum.map(fn part ->
-        case points_suffix(Map.get(part_points, part.id)) do
-          nil -> part
-          suffix -> %{part | nodes: append_to_heading(part.nodes, suffix)}
-        end
-      end)
-
-    ExamDoc.assemble_parts_into_content(preamble, parts)
+    # Keyed like sample_solution_points, legacy "q-N" fallback included —
+    # see ExamDoc.map_question_headings/3 for why no ids are minted here.
+    content
+    |> doc_or_empty()
+    |> ExamDoc.map_question_headings(mode, fn part_id, heading ->
+      append_text(heading, points_suffix(Map.get(part_points, part_id)))
+    end)
   end
 
-  # A part's nodes hold exactly one h3 (see ExamDoc) — after its lead-in, if
-  # a horizontal rule opened one — so the suffix goes on that heading.
-  defp append_to_heading(nodes, suffix) do
-    Enum.map(nodes, fn node ->
-      if ExamDoc.question_heading?(node) do
-        inline = Map.get(node, "content", []) || []
-        Map.put(node, "content", inline ++ [%{"type" => "text", "text" => suffix}])
-      else
-        node
-      end
-    end)
+  defp append_text(heading, nil), do: heading
+
+  defp append_text(heading, suffix) do
+    inline = Map.get(heading, "content", []) || []
+    Map.put(heading, "content", inline ++ [%{"type" => "text", "text" => suffix}])
   end
 
   ## --- layout ---
