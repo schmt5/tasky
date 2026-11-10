@@ -30,4 +30,18 @@ defmodule Tasky.TasksFixtures do
   def task_fixture(%Tasky.Accounts.User{} = user, attrs) do
     task_fixture(Scope.for_user(user), attrs)
   end
+
+  @doc """
+  Stores the answers of `filled_doc` (the answer-filled document) as the
+  task's sample solution, replacing what was there. Test setup only: the
+  teacher saves one question at a time (`Tasky.Tasks.save_sample_solution_part/4`),
+  which needs question headings many fixtures do not bother with.
+  """
+  def sample_solution_fixture(%Tasky.Tasks.Task{} = task, filled_doc) do
+    {_blanked, answers} = Tasky.Correction.AnswerKey.split(filled_doc)
+
+    task
+    |> Tasky.Tasks.Task.sample_solution_changeset(answers)
+    |> Tasky.Repo.update!()
+  end
 end

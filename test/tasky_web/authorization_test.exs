@@ -62,7 +62,7 @@ defmodule TaskyWeb.AuthorizationTest do
       conn =
         conn
         |> log_in_role("student")
-        |> put("/api/tasks/#{task.id}/sample-solution", @doc_body)
+        |> put("/api/tasks/#{task.id}/sample-solution/parts/q-1/content", %{"nodes" => []})
 
       assert conn.status in [302, 401, 403]
     end
@@ -74,7 +74,7 @@ defmodule TaskyWeb.AuthorizationTest do
       conn = log_in_role(conn, "teacher")
 
       assert_error_sent 404, fn ->
-        put(conn, "/api/tasks/#{task.id}/sample-solution", @doc_body)
+        put(conn, "/api/tasks/#{task.id}/sample-solution/parts/q-1/content", %{"nodes" => []})
       end
     end
 

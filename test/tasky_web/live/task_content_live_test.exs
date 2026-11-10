@@ -18,10 +18,20 @@ defmodule TaskyWeb.TaskLive.ContentTest do
     %{conn: log_in_user(conn, teacher), scope: scope, task: task}
   end
 
+  defp question(part_id) do
+    %{
+      "type" => "heading",
+      "attrs" => %{"level" => 3, "partId" => part_id},
+      "content" => [%{"type" => "text", "text" => "Frage"}]
+    }
+  end
+
+  # One question with one answer field, at position 1.
   defp doc_with_answer do
     %{
       "type" => "doc",
       "content" => [
+        question("q-1"),
         %{
           "type" => "answerBlock",
           "attrs" => %{"answerId" => "a1"},
@@ -35,8 +45,8 @@ defmodule TaskyWeb.TaskLive.ContentTest do
     test "zeigt einen Leerzustand ohne Antwortfelder", %{conn: conn, task: task} do
       {:ok, _lv, html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
 
-      assert html =~ "Noch keine Antwortfelder"
-      refute html =~ "task-sample-solution-editor"
+      assert html =~ "Noch keine Frage vorhanden"
+      refute html =~ "sample-solution-part-editor"
     end
 
     test "hängt den Editor mit dem antwortgefüllten Dokument ein", %{
@@ -47,17 +57,56 @@ defmodule TaskyWeb.TaskLive.ContentTest do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answer())
 
       filled =
-        put_in(doc_with_answer(), ["content", Access.at(0), "content"], [
+        put_in(doc_with_answer(), ["content", Access.at(1), "content"], [
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "LOESUNGSTEXT"}]}
         ])
 
-      {:ok, task} = Tasks.save_sample_solution(scope, task, filled)
+      task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
-      {:ok, _lv, html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
+      {:ok, lv, html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
 
-      assert html =~ "task-sample-solution-editor-#{task.id}"
+      assert has_element?(lv, "#sample-solution-part-editor-#{task.id}-q-1")
       assert html =~ "LOESUNGSTEXT"
-      refute html =~ "Noch keine Antwortfelder"
+      refute html =~ "Noch keine Frage vorhanden"
+    end
+
+    test "warnt vor Antwortfeldern ausserhalb einer Frage", %{
+      conn: conn,
+      scope: scope,
+      task: task
+    } do
+      %{"content" => [_question, answer]} = doc_with_answer()
+      loose = %{"type" => "doc", "content" => [answer]}
+      {:ok, task} = Tasks.save_task_content(scope, task, loose)
+
+      {:ok, lv, _html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
+
+      assert has_element?(lv, "#loose-answers-note")
+      refute has_element?(lv, "[id^='sample-solution-part-editor-']")
+    end
+
+    test "speichert die Korrekturoptionen einer Frage", %{conn: conn, scope: scope, task: task} do
+      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answer())
+
+      {:ok, lv, _html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
+
+      # Neue Fragen einer Lerneinheit prüfen sich selbst, ohne Gross-/Kleinschreibung.
+      assert lv |> element("#correction-options-summary-q-1") |> render() =~ "Auto-Korrektur"
+
+      lv |> element("#correction-options-btn-q-1") |> render_click()
+      assert has_element?(lv, "#correction-options-modal")
+      refute has_element?(lv, "#correction-options-modal input[name='options[max_points]']")
+
+      lv
+      |> form("#correction-options-form-q-1", %{
+        "options" => %{"ignore_case" => "false", "ignore_punctuation" => "true"}
+      })
+      |> render_submit()
+
+      refute has_element?(lv, "#correction-options-modal")
+
+      assert %{"auto_correct" => true, "ignore_case" => false, "ignore_punctuation" => true} =
+               Tasks.get_task!(scope, task.id).correction_config["q-1"]
     end
 
     # Der Freigabe-Modus wird beim Erstellen/Bearbeiten der Lerneinheit gesetzt,

@@ -109,7 +109,7 @@ defmodule TaskyWeb.Student.TaskLiveTest do
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "MUSTERLOESUNG"}]}
         ])
 
-      {:ok, task} = Tasky.Tasks.save_sample_solution(teacher_scope, task, filled)
+      task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
       %{task: task, teacher_scope: teacher_scope}
     end
@@ -293,17 +293,25 @@ defmodule TaskyWeb.Student.TaskLiveTest do
 
       teacher_scope = Scope.for_user(Tasky.Repo.get!(Tasky.Accounts.User, task.user_id))
 
-      # Zwei Antwortfelder: eines wird richtig beantwortet, eines falsch.
+      # Zwei Fragen mit je einem Antwortfeld: eines wird richtig beantwortet,
+      # eines falsch. Antwortfeld n steht an Stelle 2n + 1, hinter seiner Frage.
       skeleton = fn ->
         %{
           "type" => "doc",
           "content" =>
-            Enum.map(["a1", "a2"], fn id ->
-              %{
-                "type" => "answerBlock",
-                "attrs" => %{"answerId" => id},
-                "content" => [%{"type" => "paragraph"}]
-              }
+            Enum.flat_map(["1", "2"], fn n ->
+              [
+                %{
+                  "type" => "heading",
+                  "attrs" => %{"level" => 3, "partId" => "q-#{n}"},
+                  "content" => [%{"type" => "text", "text" => "Frage #{n}"}]
+                },
+                %{
+                  "type" => "answerBlock",
+                  "attrs" => %{"answerId" => "a#{n}"},
+                  "content" => [%{"type" => "paragraph"}]
+                }
+              ]
             end)
         }
       end
@@ -312,14 +320,14 @@ defmodule TaskyWeb.Student.TaskLiveTest do
 
       filled =
         skeleton.()
-        |> put_in(["content", Access.at(0), "content"], [
+        |> put_in(["content", Access.at(1), "content"], [
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Bern"}]}
         ])
-        |> put_in(["content", Access.at(1), "content"], [
+        |> put_in(["content", Access.at(3), "content"], [
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Aare"}]}
         ])
 
-      {:ok, task} = Tasky.Tasks.save_sample_solution(teacher_scope, task, filled)
+      task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
       {:ok, task} =
         Tasky.Tasks.update_task(teacher_scope, task, %{solution_release_mode: "on_complete"})
@@ -333,7 +341,7 @@ defmodule TaskyWeb.Student.TaskLiveTest do
 
       doc =
         Enum.reduce(Enum.with_index(answers), skeleton.(), fn {text, index}, acc ->
-          put_in(acc, ["content", Access.at(index), "content"], [
+          put_in(acc, ["content", Access.at(2 * index + 1), "content"], [
             %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}
           ])
         end)
@@ -418,14 +426,15 @@ defmodule TaskyWeb.Student.TaskLiveTest do
       refute html =~ "Deine Antworten im Vergleich"
     end
 
-    test "prüft ein abgeschaltetes Feld nicht, zeigt dort aber die Musterlösung", %{
+    test "prüft eine Frage ohne Auto-Korrektur nicht, zeigt dort aber die Musterlösung", %{
       conn: conn,
       student: student,
       task: task,
       teacher_scope: teacher_scope,
       skeleton: skeleton
     } do
-      {:ok, task} = Tasky.Tasks.toggle_self_check(teacher_scope, task, "a2")
+      {:ok, task} =
+        Tasky.Tasks.apply_part_options(teacher_scope, task, "q-2", %{"auto_correct" => false})
 
       submission = answer_and_complete(student, task, skeleton, ["Bern", "eigene Worte"])
 

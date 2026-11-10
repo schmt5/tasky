@@ -13,6 +13,7 @@ defmodule Tasky.Exams do
   alias Tasky.AudioPlays
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.ImagePin
+  alias Tasky.Correction.PartConfig
   alias Tasky.Correction.PlainAnswers
   alias Tasky.Correction.StringComparator
   alias Tasky.Exams.Exam
@@ -2685,17 +2686,10 @@ defmodule Tasky.Exams do
   `%{rule: "per_checkbox" | "all_or_nothing"}`. A rule that no longer exists
   reads as `"per_checkbox"`.
   """
-  def checkbox_scoring(%Exam{} = exam, part_id) when is_binary(part_id) do
-    cfg = Map.get(exam.ai_correction_config || %{}, part_id, %{})
-
-    rule =
-      case cfg["checkbox_scoring"] do
-        r when is_binary(r) -> if r in Grading.checkbox_rules(), do: r, else: "per_checkbox"
-        _ -> "per_checkbox"
-      end
-
-    %{rule: rule}
-  end
+  def checkbox_scoring(%Exam{} = exam, part_id) when is_binary(part_id),
+    do: %{
+      rule: exam.ai_correction_config |> PartConfig.get(part_id) |> PartConfig.checkbox_rule()
+    }
 
   # Maps numeric (manual) verdicts to the marker vocabulary understood by
   # NodePatcher.rewrite_markers: full block points → ✅, zero → ❌, else 🟡.
@@ -2879,8 +2873,6 @@ defmodule Tasky.Exams do
 
   defp normalize_submission_mark(_, _step), do: {:error, :invalid_mark}
 
-  @part_option_flags ~w(auto_correct ignore_case ignore_spelling ignore_punctuation)
-
   @doc """
   Applies the correction options of one part as the sample solution's options
   dialog submits them, in one transaction:
@@ -2966,30 +2958,8 @@ defmodule Tasky.Exams do
     }
   end
 
-  defp part_config_changes(exam, part_id, opts) do
-    given = Map.get(opts, :config, %{})
-    current = Map.get(exam.ai_correction_config || %{}, part_id, %{})
-    auto? = Map.get(given, "auto_correct", current["auto_correct"]) == true
-
-    flags =
-      Map.new(@part_option_flags, fn key ->
-        value = Map.get(given, key, current[key]) == true
-        {key, if(key == "auto_correct", do: auto?, else: auto? and value)}
-      end)
-
-    rule =
-      case Map.get(given, "checkbox_scoring", current["checkbox_scoring"]) do
-        r when is_binary(r) -> if r in Grading.checkbox_rules(), do: r, else: "per_checkbox"
-        _ -> "per_checkbox"
-      end
-
-    part_cfg =
-      current
-      |> Map.merge(flags)
-      |> Map.put("checkbox_scoring", rule)
-
-    Map.put(exam.ai_correction_config || %{}, part_id, part_cfg)
-  end
+  defp part_config_changes(exam, part_id, opts),
+    do: PartConfig.put(exam.ai_correction_config, part_id, Map.get(opts, :config, %{}))
 
   # Recomputes `points_per_part[part_id]` from the stored verdicts under
   # `exam`'s settings, for every submission whose total is still what its
@@ -3086,10 +3056,7 @@ defmodule Tasky.Exams do
   Whether `blocks` (from `Tasky.AI.NodePatcher.list_answer_blocks/1`) are all
   checkboxes, radios or pin images, and there is at least one.
   """
-  def choice_only_blocks?([_ | _] = blocks),
-    do: Enum.all?(blocks, &(&1.type in ["taskItem", "choice", "imagePin"]))
-
-  def choice_only_blocks?(_blocks), do: false
+  defdelegate choice_only_blocks?(blocks), to: PartConfig
 
   @doc """
   Enumerates correction job descriptors eligible for bulk AI correction across

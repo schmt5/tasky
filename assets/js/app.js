@@ -26,11 +26,10 @@ import { hooks as colocatedHooks } from "phoenix-colocated/tasky";
 import topbar from "../vendor/topbar";
 import { ExamContentEditor } from "./hooks/exam_content_editor_hook";
 import { TaskContentEditor } from "./hooks/task_content_editor_hook";
-import { TaskSampleSolutionEditor } from "./hooks/task_sample_solution_editor_hook";
 import { TaskCorrectionEditor } from "./hooks/task_correction_editor_hook";
 import { ExamSubmissionEditor } from "./hooks/exam_submission_editor_hook";
 import { ExamAnswersForm } from "./hooks/exam_answers_form_hook";
-import { ExamSampleSolutionPartEditor } from "./hooks/exam_sample_solution_editor_hook";
+import { SampleSolutionPartEditor } from "./hooks/sample_solution_part_editor_hook";
 import { SolutionToolbar } from "./hooks/solution_toolbar_hook";
 import { PinPanel } from "./hooks/pin_panel_hook";
 import { ExamCorrectionEditor } from "./hooks/exam_correction_editor_hook";
@@ -54,11 +53,10 @@ const liveSocket = new LiveSocket("/live", Socket, {
     ...colocatedHooks,
     ExamContentEditor,
     TaskContentEditor,
-    TaskSampleSolutionEditor,
     TaskCorrectionEditor,
     ExamSubmissionEditor,
     ExamAnswersForm,
-    ExamSampleSolutionPartEditor,
+    SampleSolutionPartEditor,
     SolutionToolbar,
     PinPanel,
     ExamCorrectionEditor,

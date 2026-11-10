@@ -294,7 +294,7 @@ defmodule Tasky.CoursesCatalogTest do
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
         ])
 
-      {:ok, _task} = Tasks.save_sample_solution(author, task, filled)
+      _task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
       published = catalog_course_fixture(scope: author, course: course)
 

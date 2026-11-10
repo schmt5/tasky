@@ -146,7 +146,7 @@ defmodule Tasky.CoursesCopyTaskTest do
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
         ])
 
-      {:ok, source_task} = Tasks.save_sample_solution(scope, source_task, filled)
+      source_task = Tasky.TasksFixtures.sample_solution_fixture(source_task, filled)
 
       {:ok, stored} =
         Tasky.Uploads.save_task_attachment(source_task.id, tmp_file("bytes"), "blatt.pdf")

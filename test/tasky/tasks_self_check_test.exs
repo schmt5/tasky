@@ -51,84 +51,184 @@ defmodule Tasky.TasksSelfCheckTest do
 
   defp doc(nodes), do: %{"type" => "doc", "content" => nodes}
 
-  defp task(sample, off \\ []),
-    do: %Task{sample_solution: sample, self_check_off: off, content: %{}}
+  defp question(id),
+    do: %{
+      "type" => "heading",
+      "attrs" => %{"level" => 3, "partId" => id},
+      "content" => [%{"type" => "text", "text" => "Frage"}]
+    }
+
+  # Only the sample matters to `review_doc/3`; the content is the skeleton
+  # `evaluate/2` reads the questions from.
+  defp task(sample, content_nodes \\ [], config \\ %{}),
+    do: %Task{
+      sample_solution: sample,
+      content: doc([question("q-1") | content_nodes]),
+      correction_config: config
+    }
 
   defp submission(nodes), do: %TaskSubmission{content: doc(nodes)}
+
+  # Evaluates `nodes` as the submission against a unit whose single question
+  # holds the same answer fields, under `config` for that question.
+  defp evaluate(sample, nodes, config \\ nil) do
+    config = if config, do: %{"q-1" => config}, else: %{}
+    SelfCheck.evaluate(task(sample, nodes, config), submission(nodes))
+  end
 
   describe "evaluate/2" do
     test "paart über die answerId, nicht über die Reihenfolge" do
       # Die Antworten stehen in umgekehrter Reihenfolge im Dokument: eine
       # positionsbasierte Paarung (wie bei Prüfungen) würde hier beides
       # verdrehen und zwei falsche Verdikte liefern.
-      task = task(%{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("Aare")]})
+      task =
+        task(
+          %{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("Aare")]},
+          [answer_block("a", nil), answer_block("b", nil)]
+        )
+
       submission = submission([answer_block("b", "Aare"), answer_block("a", "Bern")])
 
       assert %{verdicts: verdicts, correct: 2, total: 2} = SelfCheck.evaluate(task, submission)
       assert verdicts == %{"a" => "correct", "b" => "correct"}
     end
 
-    test "ignoriert Gross-/Kleinschreibung, aber keine Tippfehler" do
-      task = task(%{"a" => [text_paragraph("Bern")]})
+    test "ignoriert ohne eigene Optionen Gross-/Kleinschreibung, aber keine Tippfehler" do
+      sample = %{"a" => [text_paragraph("Bern")]}
 
-      assert %{correct: 1} = SelfCheck.evaluate(task, submission([answer_block("a", "bern")]))
-
-      assert %{correct: 0, total: 1} =
-               SelfCheck.evaluate(task, submission([answer_block("a", "Bren")]))
+      assert %{correct: 1} = evaluate(sample, [answer_block("a", "bern")])
+      assert %{correct: 0, total: 1} = evaluate(sample, [answer_block("a", "Bren")])
     end
 
     test "akzeptiert die mit ; getrennten Alternativen der Musterlösung" do
-      task = task(%{"a" => [text_paragraph("Bern; Berne")]})
+      sample = %{"a" => [text_paragraph("Bern; Berne")]}
 
-      assert %{correct: 1} = SelfCheck.evaluate(task, submission([answer_block("a", "Berne")]))
-      assert %{correct: 0} = SelfCheck.evaluate(task, submission([answer_block("a", "Basel")]))
+      assert %{correct: 1} = evaluate(sample, [answer_block("a", "Berne")])
+      assert %{correct: 0} = evaluate(sample, [answer_block("a", "Basel")])
     end
 
     test "wertet Lückentexte wie Antwortfelder" do
-      task = task(%{"a" => [%{"type" => "text", "text" => "Bern"}]})
-      submission = submission([lueckentext_paragraph("a", "Bern")])
+      sample = %{"a" => [%{"type" => "text", "text" => "Bern"}]}
 
-      assert %{verdicts: %{"a" => "correct"}, total: 1} = SelfCheck.evaluate(task, submission)
+      assert %{verdicts: %{"a" => "correct"}, total: 1} =
+               evaluate(sample, [lueckentext_paragraph("a", "Bern")])
     end
 
     test "vergleicht bei Checkboxen den checked-Zustand" do
-      task = task(%{"a" => true, "b" => false})
+      assert %{verdicts: verdicts, correct: 1, total: 2} =
+               evaluate(%{"a" => true, "b" => false}, [
+                 task_item("a", "Bern", true),
+                 task_item("b", "Zürich", true)
+               ])
 
-      submission = submission([task_item("a", "Bern", true), task_item("b", "Zürich", true)])
-
-      assert %{verdicts: verdicts, correct: 1, total: 2} = SelfCheck.evaluate(task, submission)
       assert verdicts == %{"a" => "correct", "b" => "wrong"}
     end
 
     test "eine leere Antwort ist falsch, nicht ungeprüft" do
-      task = task(%{"a" => [text_paragraph("Bern")]})
-
       assert %{verdicts: %{"a" => "wrong"}, total: 1} =
-               SelfCheck.evaluate(task, submission([answer_block("a", "   ")]))
-    end
-
-    test "abgeschaltete Felder zählen nicht in die Quote" do
-      task = task(%{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("Aare")]}, ["b"])
-      submission = submission([answer_block("a", "Bern"), answer_block("b", "irgendwas")])
-
-      assert %{verdicts: verdicts, correct: 1, total: 1} = SelfCheck.evaluate(task, submission)
-      refute Map.has_key?(verdicts, "b")
+               evaluate(%{"a" => [text_paragraph("Bern")]}, [answer_block("a", "   ")])
     end
 
     test "Felder ohne Musterlösung zählen nicht" do
       # Ein Feld, das die Lehrperson leer gelassen hat, darf keine Quote
       # verderben — es gibt schlicht keine Vorgabe.
-      task = task(%{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("  ")]})
-      submission = submission([answer_block("a", "Bern"), answer_block("b", "etwas")])
+      sample = %{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("  ")]}
 
-      assert %{correct: 1, total: 1} = SelfCheck.evaluate(task, submission)
+      assert %{correct: 1, total: 1} =
+               evaluate(sample, [answer_block("a", "Bern"), answer_block("b", "etwas")])
     end
 
     test "ohne Antwortdokument gibt es nichts zu prüfen" do
-      task = task(%{"a" => [text_paragraph("Bern")]})
+      task = task(%{"a" => [text_paragraph("Bern")]}, [answer_block("a", nil)])
 
       assert %{verdicts: %{}, correct: 0, total: 0} =
                SelfCheck.evaluate(task, %TaskSubmission{content: nil})
+    end
+
+    test "Antwortfelder vor der ersten Frage werden nicht geprüft" do
+      task = %Task{
+        sample_solution: %{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("Aare")]},
+        content: doc([answer_block("a", nil), question("q-1"), answer_block("b", nil)]),
+        correction_config: %{}
+      }
+
+      submission = submission([answer_block("a", "Bern"), answer_block("b", "Aare")])
+
+      assert %{verdicts: verdicts, total: 1} = SelfCheck.evaluate(task, submission)
+      assert verdicts == %{"b" => "correct"}
+    end
+  end
+
+  describe "Korrekturoptionen pro Frage" do
+    test "ohne Auto-Korrektur zählen die Textfelder der Frage nicht" do
+      sample = %{"a" => [text_paragraph("Bern")], "b" => true}
+
+      assert %{verdicts: verdicts, total: 1} =
+               evaluate(
+                 sample,
+                 [answer_block("a", "irgendwas"), task_item("b", "Bern", true)],
+                 %{"auto_correct" => false}
+               )
+
+      # Checkboxen vergleichen exakt und werden darum immer geprüft.
+      assert verdicts == %{"b" => "correct"}
+    end
+
+    test "Gross-/Kleinschreibung zählt, wenn die Option aus ist" do
+      config = %{"auto_correct" => true, "ignore_case" => false}
+
+      assert %{verdicts: %{"a" => "wrong"}} =
+               evaluate(%{"a" => [text_paragraph("Bern")]}, [answer_block("a", "bern")], config)
+    end
+
+    test "Satzzeichen und Rechtschreibung lassen sich ignorieren" do
+      config = %{"auto_correct" => true, "ignore_punctuation" => true, "ignore_spelling" => true}
+
+      assert %{verdicts: %{"a" => "correct", "b" => "correct"}} =
+               evaluate(
+                 %{"a" => [text_paragraph("Bern!")], "b" => [text_paragraph("Hauptstadt")]},
+                 [answer_block("a", "Bern"), answer_block("b", "Hauptstat")],
+                 config
+               )
+    end
+
+    test "jede Frage hat ihre eigenen Optionen" do
+      task = %Task{
+        sample_solution: %{"a" => [text_paragraph("Bern")], "b" => [text_paragraph("Bern")]},
+        content:
+          doc([
+            question("q-1"),
+            answer_block("a", nil),
+            question("q-2"),
+            answer_block("b", nil)
+          ]),
+        correction_config: %{"q-2" => %{"auto_correct" => true, "ignore_case" => false}}
+      }
+
+      submission = submission([answer_block("a", "bern"), answer_block("b", "bern")])
+
+      assert %{verdicts: %{"a" => "correct", "b" => "wrong"}} =
+               SelfCheck.evaluate(task, submission)
+    end
+
+    test "alles oder nichts zählt eine Checkbox-Liste als einen Eintrag" do
+      list = fn a, b ->
+        %{
+          "type" => "taskList",
+          "content" => [task_item("a", "Bern", a), task_item("b", "Zürich", b)]
+        }
+      end
+
+      sample = %{"a" => true, "b" => false}
+      config = %{"checkbox_scoring" => "all_or_nothing"}
+
+      assert %{verdicts: verdicts, correct: 0, total: 1} =
+               evaluate(sample, [list.(true, true)], config)
+
+      assert verdicts == %{"a" => "wrong", "b" => "wrong"}
+
+      assert %{correct: 1, total: 1} = evaluate(sample, [list.(true, false)], config)
+      assert %{correct: 1, total: 2} = evaluate(sample, [list.(true, true)])
     end
   end
 
@@ -184,8 +284,8 @@ defmodule Tasky.TasksSelfCheckTest do
       assert hd(nodes)["attrs"]["verdict"] == "wrong"
     end
 
-    test "zeigt die Musterlösung auch bei abgeschalteter Prüfung — nur ohne Verdikt" do
-      task = task(%{"a" => [text_paragraph("Bern")]}, ["a"])
+    test "zeigt die Musterlösung auch ohne Auto-Korrektur — nur ohne Verdikt" do
+      task = task(%{"a" => [text_paragraph("Bern")]})
       base = doc([answer_block("a", "eigene Formulierung")])
 
       %{"content" => [answer, hint]} = SelfCheck.review_doc(task, base, %{})
@@ -253,22 +353,17 @@ defmodule Tasky.TasksSelfCheckTest do
     end
 
     test "die Anzeige ändert die Bewertung nicht — jede Variante zählt weiter" do
-      task = task(%{"a" => [text_paragraph("pdf;.pdf")], "b" => [text_paragraph("pdf;.pdf")]})
+      sample = %{"a" => [text_paragraph("pdf;.pdf")], "b" => [text_paragraph("pdf;.pdf")]}
 
       assert %{verdicts: verdicts, correct: 2, total: 2} =
-               SelfCheck.evaluate(
-                 task,
-                 doc([answer_block("a", "pdf"), answer_block("b", ".pdf")])
-               )
+               evaluate(sample, [answer_block("a", "pdf"), answer_block("b", ".pdf")])
 
       assert verdicts == %{"a" => "correct", "b" => "correct"}
     end
 
     test "eine Antwort, die keiner Variante entspricht, bleibt falsch" do
-      task = task(%{"a" => [text_paragraph("pdf;.pdf")]})
-
       assert %{verdicts: %{"a" => "wrong"}} =
-               SelfCheck.evaluate(task, doc([answer_block("a", "docx")]))
+               evaluate(%{"a" => [text_paragraph("pdf;.pdf")]}, [answer_block("a", "docx")])
     end
   end
 
@@ -279,8 +374,9 @@ defmodule Tasky.TasksSelfCheckTest do
       "content" => [text_paragraph("Mein Aufsatz")]
     }
 
-    task = task(%{"e" => [text_paragraph("Erwartungshorizont")]})
-    assert %{verdicts: verdicts, total: 0} = SelfCheck.evaluate(task, doc([essay]))
+    assert %{verdicts: verdicts, total: 0} =
+             evaluate(%{"e" => [text_paragraph("Erwartungshorizont")]}, [essay])
+
     assert verdicts == %{}
   end
 
@@ -297,8 +393,6 @@ defmodule Tasky.TasksSelfCheckTest do
       }
 
     test "is right with every pin in its zone, wrong with any outside" do
-      task = task(%{"img" => @zones})
-
       both = [
         %{"pinId" => "a", "x" => 0.2, "y" => 0.21},
         %{"pinId" => "b", "x" => 0.8, "y" => 0.8}
@@ -309,8 +403,8 @@ defmodule Tasky.TasksSelfCheckTest do
         %{"pinId" => "b", "x" => nil, "y" => nil}
       ]
 
-      assert %{verdicts: %{"img" => "correct"}} = SelfCheck.evaluate(task, doc([pin_image(both)]))
-      assert %{verdicts: %{"img" => "wrong"}} = SelfCheck.evaluate(task, doc([pin_image(one)]))
+      assert %{verdicts: %{"img" => "correct"}} = evaluate(%{"img" => @zones}, [pin_image(both)])
+      assert %{verdicts: %{"img" => "wrong"}} = evaluate(%{"img" => @zones}, [pin_image(one)])
     end
   end
 end

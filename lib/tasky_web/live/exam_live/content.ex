@@ -3,6 +3,7 @@ defmodule TaskyWeb.ExamLive.Content do
 
   import TaskyWeb.AnswerSheetComponents
   import TaskyWeb.FileComponents
+  import TaskyWeb.SampleSolutionComponents
 
   import TaskyWeb.ContentComponents,
     only: [
@@ -105,17 +106,13 @@ defmodule TaskyWeb.ExamLive.Content do
         />
       </div>
 
-      <%!-- Musterlösung tab --%>
+      <%!-- Musterlösung tab: one editor per question, shared with learning
+           units (TaskyWeb.SampleSolutionComponents) --%>
       <div :if={@tab == "musterloesung"} class="bg-stone-100 min-h-[calc(100vh-54px)]">
-        <%!-- Shared toolbar: one bar bound to the focused part editor --%>
-        <div
+        <.solution_toolbar
           :if={@part_views != [] and not @free_document}
           id={"solution-toolbar-#{@exam.id}"}
-          phx-hook="SolutionToolbar"
-          phx-update="ignore"
-          class="sticky top-[54px] z-30"
-        >
-        </div>
+        />
 
         <div class="max-w-7xl mx-auto px-8 py-6">
           <%!-- Freies Dokument: keine Fragen, keine Antwortfelder — also auch
@@ -179,456 +176,120 @@ defmodule TaskyWeb.ExamLive.Content do
             </p>
           </div>
 
-          <div
+          <.part_row
             :for={pv <- @part_views}
             :if={not @free_document}
-            class="grid grid-cols-4 gap-6 items-stretch mb-10"
+            id={"sample-solution-part-editor-#{@exam.id}-#{pv.id}"}
+            part={pv}
+            save_url={~p"/api/exams/#{@exam}/sample-solution/parts/#{pv.id}/content"}
           >
-            <div class="col-span-3 min-w-0">
-              <div
-                id={"sample-solution-part-editor-#{@exam.id}-#{pv.id}"}
-                phx-hook="ExamSampleSolutionPartEditor"
-                phx-update="ignore"
-                data-exam-id={@exam.id}
-                data-part-id={pv.id}
-                data-content={pv.doc_json}
-                class="h-full"
-              >
-              </div>
-            </div>
-
-            <%!-- top offset: 54px header + shared toolbar height --%>
-            <aside class="col-span-1 self-start sticky top-[180px]">
-              <div class="bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]">
-                <div class="p-5 border-b border-stone-100">
-                  <h2 class="text-base font-semibold text-stone-800 truncate">{pv.label}</h2>
-                  <p class="text-xs text-stone-500 mt-1">Musterlösung</p>
-                  <button
-                    type="button"
-                    phx-click="open_alternatives_help"
-                    class="block w-full text-left mt-2 text-xs font-medium text-stone-500 hover:text-stone-700 hover:underline underline-offset-2 cursor-pointer transition-colors duration-150"
-                  >
-                    Mehrere Musterlösungen pro Antwortfeld
-                  </button>
-                </div>
-
-                <div class="p-5">
-                  <label class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
-                    Max. Punkte
-                  </label>
-                  <div :if={!pv.custom_points} class="flex items-center gap-1.5">
-                    <.step_button
-                      direction="up"
-                      phx-click="adjust_max_points"
-                      phx-value-part-id={pv.id}
-                    />
-                    <form phx-change="set_max_points" phx-submit="set_max_points" class="flex-1">
-                      <input type="hidden" name="part_id" value={pv.id} />
-                      <input
-                        type="number"
-                        name="points"
-                        value={pv.max_points || ""}
-                        step="0.25"
-                        min="0"
-                        inputmode="decimal"
-                        phx-debounce="500"
-                        placeholder="—"
-                        class={points_input_class()}
-                      />
-                    </form>
-                    <.step_button
-                      direction="down"
-                      phx-click="adjust_max_points"
-                      phx-value-part-id={pv.id}
-                      disabled={is_nil(pv.max_points) or pv.max_points <= 0}
-                    />
-                  </div>
-                  <div
-                    :if={pv.custom_points}
-                    class="font-mono text-base text-center text-stone-800 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"
-                  >
-                    {format_block_points(pv.max_points)}
-                  </div>
-                  <p :if={pv.custom_points} class="text-xs text-stone-500 mt-1.5 leading-relaxed">
-                    Summe der Punkte pro Antwortfeld.
-                  </p>
-                </div>
-
-                <div class="p-5 border-t border-stone-100">
-                  <button
-                    type="button"
-                    id={"correction-options-btn-#{pv.id}"}
-                    phx-click="open_correction_options"
+            <:card>
+              <div class="p-5">
+                <label class="block text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+                  Max. Punkte
+                </label>
+                <div :if={!pv.custom_points} class="flex items-center gap-1.5">
+                  <.step_button
+                    direction="up"
+                    phx-click="adjust_max_points"
                     phx-value-part-id={pv.id}
-                    class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold text-stone-700 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 px-4 py-2.5 rounded-lg transition-colors duration-150 active:scale-[0.98]"
-                  >
-                    <.icon name="hero-adjustments-horizontal" class="w-4 h-4" /> Korrekturoptionen
-                  </button>
-
-                  <ul id={"correction-options-summary-#{pv.id}"} class="mt-4 space-y-1.5">
-                    <li
-                      :for={label <- active_option_labels(pv)}
-                      class="flex items-center gap-2 text-xs text-stone-600"
-                    >
-                      <.icon name="hero-check-circle" class="w-4 h-4 text-stone-400 shrink-0" />
-                      <span class="min-w-0">{label}</span>
-                    </li>
-                    <li :if={active_option_labels(pv) == []} class="text-xs text-stone-400">
-                      Keine Korrekturoptionen aktiv
-                    </li>
-                  </ul>
+                  />
+                  <form phx-change="set_max_points" phx-submit="set_max_points" class="flex-1">
+                    <input type="hidden" name="part_id" value={pv.id} />
+                    <input
+                      type="number"
+                      name="points"
+                      value={pv.max_points || ""}
+                      step="0.25"
+                      min="0"
+                      inputmode="decimal"
+                      phx-debounce="500"
+                      placeholder="—"
+                      class={points_input_class()}
+                    />
+                  </form>
+                  <.step_button
+                    direction="down"
+                    phx-click="adjust_max_points"
+                    phx-value-part-id={pv.id}
+                    disabled={is_nil(pv.max_points) or pv.max_points <= 0}
+                  />
                 </div>
-
-                <%!-- Audio blocks of the question: what learners get, set in
-                     «Inhalt» (the sample solution cannot change the text). --%>
                 <div
-                  :if={pv.audios != []}
-                  id={"audio-summary-#{pv.id}"}
-                  class="p-5 border-t border-stone-100"
+                  :if={pv.custom_points}
+                  class="font-mono text-base text-center text-stone-800 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"
                 >
-                  <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
-                    Audio
-                  </h3>
-                  <ul class="space-y-1.5">
-                    <li
-                      :for={audio <- pv.audios}
-                      class="flex items-start gap-2 text-xs text-stone-600"
-                    >
-                      <.icon name="hero-speaker-wave" class="w-4 h-4 text-stone-400 shrink-0" />
-                      <span class="min-w-0">
-                        <span class="font-medium text-stone-700">{audio.title}</span> · {audio.limit}
-                      </span>
-                    </li>
-                  </ul>
-                  <.link
-                    patch={~p"/exams/#{@exam}/content?tab=inhalt"}
-                    class="inline-block mt-2 text-xs font-medium text-sky-700 hover:text-sky-800 hover:underline underline-offset-2 transition-colors duration-150"
-                  >
-                    Im Inhalt ändern
-                  </.link>
+                  {format_block_points(pv.max_points)}
                 </div>
-
-                <%!-- Pins of the question's pin image: a React island bound to
-                     the part editor beside it (assets/js/react/PinPanel.jsx). --%>
-                <div
-                  :if={pv.has_pin_image}
-                  id={"pin-panel-#{@exam.id}-#{pv.id}"}
-                  phx-hook="PinPanel"
-                  phx-update="ignore"
-                  data-part-id={pv.id}
-                  class="p-5 border-t border-stone-100"
-                >
-                </div>
+                <p :if={pv.custom_points} class="text-xs text-stone-500 mt-1.5 leading-relaxed">
+                  Summe der Punkte pro Antwortfeld.
+                </p>
               </div>
-            </aside>
-          </div>
+
+              <.options_summary part={pv} />
+              <.audio_summary part={pv} content_path={~p"/exams/#{@exam}/content?tab=inhalt"} />
+              <.pin_panel id={"pin-panel-#{@exam.id}-#{pv.id}"} part={pv} />
+            </:card>
+          </.part_row>
         </div>
 
-        <%!-- Korrekturoptionen: one dialog for whichever question it was opened
-             for. It edits a draft; nothing is saved before "Übernehmen". --%>
-        <%= if @options_draft do %>
-          <dialog
-            id="correction-options-modal"
-            class="modal modal-open"
-            phx-window-keydown="close_correction_options"
-            phx-key="escape"
-          >
-            <div class="modal-backdrop bg-stone-900/50" phx-click="close_correction_options"></div>
-            <div class="modal-box max-w-2xl p-0 bg-white rounded-[16px] shadow-2xl">
-              <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
-                    <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
-                  </div>
-                  <div class="min-w-0">
-                    <h3 class="text-lg font-semibold text-stone-900">Korrekturoptionen</h3>
-                    <p class="text-xs text-stone-500 truncate">{@options_draft.label}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  phx-click="close_correction_options"
-                  aria-label="Schliessen"
-                  class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors duration-150"
-                >
-                  <.icon name="hero-x-mark" class="w-5 h-5" />
-                </button>
-              </div>
+        <.correction_options_dialog
+          :if={@options_draft}
+          kind={:exam}
+          draft={@options_draft}
+          form={@options_form}
+        >
+          <:points>
+            <section class="space-y-3">
+              <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                Punkte
+              </h4>
+              <.points_field
+                :if={!@options_draft.custom_points}
+                id={@options_form[:max_points].id}
+                name={@options_form[:max_points].name}
+                value={@options_draft.max_points}
+                label="Max. Punkte"
+                key="max_points"
+                class="max-w-[14rem]"
+              />
+              <p :if={@options_draft.custom_points} class="text-sm text-stone-700">
+                Max. Punkte:
+                <span class="font-mono font-semibold">
+                  {format_block_points(draft_total(@options_draft))}
+                </span>
+                <span class="text-xs text-stone-500">(Summe der Antwortfelder)</span>
+              </p>
 
-              <.form
-                for={@options_form}
-                id={"correction-options-form-#{@options_draft.part_id}"}
-                phx-change="change_correction_options"
-                phx-submit="apply_correction_options"
+              <%!-- One field takes all points anyway. A distribution
+                     already set stays switchable, so it can be turned off. --%>
+              <.option_toggle
+                :if={@options_draft.custom_points or answer_field_count(@options_draft) > 1}
+                field={@options_form[:custom_points]}
+                label="Punkte pro Antwortfeld"
+                hint="Punkte ungleich auf die Antwortfelder dieser Aufgabe verteilen."
+              />
+              <div
+                :if={@options_draft.custom_points}
+                class="grid grid-cols-2 gap-3 pl-7"
               >
-                <div class="px-6 py-5 space-y-6 max-h-[65vh] overflow-y-auto">
-                  <section class="space-y-3">
-                    <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                      Punkte
-                    </h4>
-                    <.points_field
-                      :if={!@options_draft.custom_points}
-                      id={@options_form[:max_points].id}
-                      name={@options_form[:max_points].name}
-                      value={@options_draft.max_points}
-                      label="Max. Punkte"
-                      key="max_points"
-                      class="max-w-[14rem]"
-                    />
-                    <p :if={@options_draft.custom_points} class="text-sm text-stone-700">
-                      Max. Punkte:
-                      <span class="font-mono font-semibold">
-                        {format_block_points(draft_total(@options_draft))}
-                      </span>
-                      <span class="text-xs text-stone-500">(Summe der Antwortfelder)</span>
-                    </p>
-
-                    <%!-- One field takes all points anyway. A distribution
-                         already set stays switchable, so it can be turned off. --%>
-                    <.option_toggle
-                      :if={@options_draft.custom_points or answer_field_count(@options_draft) > 1}
-                      field={@options_form[:custom_points]}
-                      label="Punkte pro Antwortfeld"
-                      hint="Punkte ungleich auf die Antwortfelder dieser Aufgabe verteilen."
-                    />
-                    <div
-                      :if={@options_draft.custom_points}
-                      class="grid grid-cols-2 gap-3 pl-7"
-                    >
-                      <.points_field
-                        :for={block <- @options_draft.blocks}
-                        :if={block.answer_id}
-                        id={"options-block-points-#{block.answer_id}"}
-                        name={"options[block_points][#{block.answer_id}]"}
-                        value={Map.get(@options_draft.block_points, block.answer_id)}
-                        label={block.snippet}
-                        key={block.answer_id}
-                      />
-                    </div>
-
-                    <.split_hint hint={uneven_split_hint(@options_draft)} />
-                  </section>
-
-                  <section class="space-y-3 pt-5 border-t border-stone-100">
-                    <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                      Auto-Korrektur
-                    </h4>
-                    <p
-                      :if={@options_draft.choice_only}
-                      id="auto-correct-always-note"
-                      class="flex items-start gap-2 text-sm text-stone-600 leading-relaxed"
-                    >
-                      <.icon
-                        name="hero-check-circle"
-                        class="w-[18px] h-[18px] text-violet-500 shrink-0 mt-0.5"
-                      />
-                      <span>
-                        {choice_kinds(@options_draft)} werden immer automatisch korrigiert.
-                        Du kannst jede Bewertung weiterhin von Hand ändern.
-                      </span>
-                    </p>
-                    <.option_toggle
-                      :if={!@options_draft.choice_only}
-                      field={@options_form[:auto_correct]}
-                      label="Auto-Korrektur"
-                      hint="Diese Aufgabe wird beim Start der Auto-Korrektur automatisch bewertet."
-                    />
-                    <%= if @options_draft.has_text_answers do %>
-                      <p
-                        :if={@options_draft.has_checkboxes}
-                        id="text-options-note"
-                        class="text-xs text-stone-500 leading-relaxed pl-7"
-                      >
-                        Die folgenden Optionen gelten nur für Textantworten, nicht für Multiple-Choice.
-                      </p>
-                      <div class="pl-7 space-y-3">
-                        <.option_toggle
-                          :for={{key, label, hint} <- text_options()}
-                          field={@options_form[key]}
-                          label={label}
-                          hint={hint}
-                          disabled={!@options_draft.auto_correct}
-                        />
-                      </div>
-                    <% end %>
-                  </section>
-
-                  <section
-                    :if={@options_draft.has_checkboxes}
-                    id="checkbox-scoring"
-                    class="space-y-3 pt-5 border-t border-stone-100"
-                  >
-                    <div>
-                      <h4 class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                        Punkte bei Multiple-Choice
-                      </h4>
-                      <p class="text-xs text-stone-500 mt-1 leading-relaxed">
-                        Gilt für die Auto-Korrektur und die Korrektur von Hand. Manuelle Punkte
-                        bleiben immer möglich.
-                      </p>
-                    </div>
-                    <.input type="hidden" field={@options_form[:checkbox_rule]} />
-                    <div class="grid grid-cols-2 gap-2" role="radiogroup">
-                      <button
-                        :for={{rule, label, hint} <- checkbox_rule_options()}
-                        type="button"
-                        id={"checkbox-scoring-#{rule}"}
-                        role="radio"
-                        aria-checked={to_string(@options_draft.checkbox_rule == rule)}
-                        phx-click="draft_checkbox_rule"
-                        phx-value-rule={rule}
-                        class={[
-                          "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors duration-150",
-                          if(@options_draft.checkbox_rule == rule,
-                            do: "border-violet-400 bg-violet-50/60",
-                            else: "border-stone-200 bg-white hover:bg-stone-50 hover:border-stone-300"
-                          )
-                        ]}
-                      >
-                        <span class="text-sm font-medium text-stone-700">{label}</span>
-                        <span class="text-xs text-stone-500 leading-relaxed">{hint}</span>
-                      </button>
-                    </div>
-                  </section>
-                </div>
-
-                <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    phx-click="close_correction_options"
-                    class="text-sm font-semibold text-stone-500 px-4 py-2.5 rounded-lg transition-colors duration-150 hover:text-stone-700 hover:bg-stone-50"
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="submit"
-                    id="apply-correction-options-btn"
-                    class="inline-flex items-center gap-2 bg-violet-600 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(124,58,237,0.25)] transition-all duration-150 hover:bg-violet-700 active:scale-[0.98]"
-                  >
-                    <.icon name="hero-check" class="w-4 h-4" /> Übernehmen
-                  </button>
-                </div>
-              </.form>
-            </div>
-          </dialog>
-        <% end %>
-
-        <%!-- Erklär-Dialog: rendered ONCE outside the part loop, so several
-             question cards share one <dialog> instead of duplicating its ID. --%>
-        <%= if @show_alternatives_help do %>
-          <dialog
-            id="alternatives-help-modal"
-            class="modal modal-open"
-            phx-window-keydown="close_alternatives_help"
-            phx-key="escape"
-          >
-            <div class="modal-backdrop bg-stone-900/50" phx-click="close_alternatives_help"></div>
-            <div class="modal-box max-w-lg p-0 bg-white rounded-[16px] shadow-2xl">
-              <div class="px-6 py-5 border-b border-stone-100 flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3 min-w-0">
-                  <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
-                    <.icon name="hero-information-circle" class="w-5 h-5" />
-                  </div>
-                  <h3 class="text-lg font-semibold text-stone-900">
-                    Mehrere Musterlösungen pro Antwortfeld
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  phx-click="close_alternatives_help"
-                  aria-label="Schliessen"
-                  class="inline-flex items-center justify-center w-8 h-8 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors duration-150 cursor-pointer shrink-0"
-                >
-                  <.icon name="hero-x-mark" class="w-5 h-5" />
-                </button>
+                <.points_field
+                  :for={block <- @options_draft.blocks}
+                  :if={block.answer_id}
+                  id={"options-block-points-#{block.answer_id}"}
+                  name={"options[block_points][#{block.answer_id}]"}
+                  value={Map.get(@options_draft.block_points, block.answer_id)}
+                  label={block.snippet}
+                  key={block.answer_id}
+                />
               </div>
 
-              <div class="px-6 py-5 space-y-4">
-                <p class="text-sm text-stone-600 leading-relaxed">
-                  Ein Antwortfeld kann mehrere gültige Antworten haben. Trenne sie in der
-                  Musterlösung mit einem Semikolon.
-                </p>
+              <.split_hint hint={uneven_split_hint(@options_draft)} />
+            </section>
+          </:points>
+        </.correction_options_dialog>
 
-                <div class="rounded-xl border border-stone-200 bg-stone-50/70 px-4 py-3.5 space-y-2">
-                  <div>
-                    <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">Frage</p>
-                    <p class="text-sm text-stone-700 mt-0.5">
-                      Nenne ein Synonym für „schnell“.
-                    </p>
-                  </div>
-                  <div>
-                    <p class="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                      Musterlösung
-                    </p>
-                    <p class="font-mono text-sm text-violet-600 mt-0.5">
-                      rasch; flink; zügig; geschwind
-                    </p>
-                  </div>
-                  <p class="text-xs text-stone-500 leading-relaxed pt-1">
-                    Jede dieser vier Eingaben zählt als richtig.
-                  </p>
-                </div>
-
-                <ul class="text-sm text-stone-600 space-y-2 leading-relaxed">
-                  <li class="flex gap-2">
-                    <span class="text-stone-400 shrink-0">•</span>
-                    <span>
-                      Gilt für <span class="font-medium text-stone-700">Antwortfelder</span>
-                      und <span class="font-medium text-stone-700">Lückentextfelder</span>
-                      – nicht für Multiple-Choice und Single-Choice.
-                    </span>
-                  </li>
-                  <li class="flex gap-2">
-                    <span class="text-stone-400 shrink-0">•</span>
-                    <span>
-                      Wirkt bei der Auto-Korrektur und als Vorschlag in der Korrektur nach Frage.
-                      Du kannst jede Bewertung weiterhin überschreiben.
-                    </span>
-                  </li>
-                  <li class="flex gap-2">
-                    <span class="text-stone-400 shrink-0">•</span>
-                    <span>
-                      Jede Alternative wird mit denselben Regeln geprüft wie eine einzelne
-                      Musterlösung – auch „Gross-/Kleinschreibung ignorieren“,
-                      „Satzzeichen ignorieren“ und „Rechtschreibung ignorieren“.
-                    </span>
-                  </li>
-                  <li class="flex gap-2">
-                    <span class="text-stone-400 shrink-0">•</span>
-                    <span>
-                      Leerzeichen rund um die Alternativen und leere Abschnitte werden ignoriert.
-                    </span>
-                  </li>
-                  <li class="flex gap-2">
-                    <span class="text-stone-400 shrink-0">•</span>
-                    <span>
-                      Teilnehmende sehen das Semikolon nie. Wird ihnen die Musterlösung gezeigt,
-                      steht dort <span class="font-medium text-stone-700">„rasch, flink, zügig,
-                      geschwind"</span>.
-                    </span>
-                  </li>
-                  <li class="flex gap-2">
-                    <span class="text-stone-400 shrink-0">•</span>
-                    <span>
-                      Das Semikolon ist das Trennzeichen: eine Antwort, die selbst ein Semikolon
-                      enthält, lässt sich so nicht abbilden.
-                    </span>
-                  </li>
-                </ul>
-              </div>
-
-              <div class="px-6 py-4 border-t border-stone-100 flex items-center justify-end">
-                <button
-                  type="button"
-                  phx-click="close_alternatives_help"
-                  class="bg-sky-500 text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-[0_2px_8px_rgba(14,165,233,0.25)] transition-all duration-150 hover:bg-sky-600 active:scale-[0.98] cursor-pointer"
-                >
-                  Verstanden
-                </button>
-              </div>
-            </div>
-          </dialog>
-        <% end %>
+        <.alternatives_help_dialog :if={@show_alternatives_help} kind={:exam} />
       </div>
 
       <%!-- Dateien tab --%>
@@ -970,39 +631,15 @@ defmodule TaskyWeb.ExamLive.Content do
           %{answer_id: entry.answer_id, type: entry.type, snippet: snippet, points: nil}
         end)
 
-      Map.merge(
-        %{
-          id: part.id,
-          label: part.label,
-          doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
-          has_text_answers: Enum.any?(blocks, &(&1.type in ["answerBlock", "lueckentext"])),
-          has_checkboxes: Enum.any?(blocks, &(&1.type == "taskItem")),
-          has_pin_image: Enum.any?(blocks, &(&1.type == "imagePin")),
-          audios: audio_summaries(part.nodes)
-        },
-        option_fields(exam, part.id, blocks)
-      )
+      %{
+        id: part.id,
+        label: part.label,
+        doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
+        audios: audio_summaries(part.nodes)
+      }
+      |> Map.merge(block_flags(blocks))
+      |> Map.merge(option_fields(exam, part.id, blocks))
     end)
-  end
-
-  # The audio blocks of a part, as the card names them. Read from the exam's
-  # content: title and limit are set there, the sample solution only shows them.
-  defp audio_summaries(nodes) do
-    for node <- Tasky.AudioPlays.list(%{"content" => nodes}) do
-      title =
-        case node["attrs"]["title"] do
-          title when is_binary(title) and title != "" -> title
-          _ -> "Audio"
-        end
-
-      limit =
-        case Tasky.AudioPlays.max_plays(node) do
-          nil -> "beliebig oft abspielbar"
-          max -> "höchstens #{max}× abspielbar"
-        end
-
-      %{id: node["attrs"]["audioId"], title: title, limit: limit}
-    end
   end
 
   # The part view's points and correction options, as stored on the exam.
@@ -1322,15 +959,6 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
-  defp checkbox_rule_options do
-    [
-      {"per_checkbox", "Pro Checkbox",
-       "Jede richtig angekreuzte oder richtig leer gelassene Checkbox gibt ihren Anteil der Punkte."},
-      {"all_or_nothing", "Alles oder nichts",
-       "Volle Punkte nur, wenn alle Checkboxen stimmen, sonst 0."}
-    ]
-  end
-
   defp assign_options_draft(socket, nil),
     do: socket |> assign(:options_draft, nil) |> assign(:options_form, nil)
 
@@ -1380,53 +1008,10 @@ defmodule TaskyWeb.ExamLive.Content do
           {block_points, max_points}
       end
 
-    auto? = flag_param(params, "auto_correct", draft.auto_correct)
-
-    %{
-      draft
-      | custom_points: custom?,
-        block_points: block_points,
-        max_points: max_points,
-        auto_correct: auto?,
-        ignore_case: auto? and flag_param(params, "ignore_case", draft.ignore_case),
-        ignore_spelling: auto? and flag_param(params, "ignore_spelling", draft.ignore_spelling),
-        ignore_punctuation:
-          auto? and flag_param(params, "ignore_punctuation", draft.ignore_punctuation),
-        checkbox_rule: Map.get(params, "checkbox_rule", draft.checkbox_rule)
-    }
-  end
-
-  # The kinds of tick questions in a part of only ticks, as the note names them.
-  defp choice_kinds(draft) do
-    types = MapSet.new(draft.blocks, & &1.type)
-
-    case {"taskItem" in types, "choice" in types} do
-      {true, true} -> "Multiple-Choice- und Single-Choice-Aufgaben"
-      {true, false} -> "Multiple-Choice-Aufgaben"
-      {false, true} -> "Single-Choice-Aufgaben"
-      _ -> "Ankreuzaufgaben"
-    end
-  end
-
-  # A part of only ticks shows no auto-correction switch, so its stored flag
-  # stays as it is — a text field added later falls back to it.
-  defp options_config(draft) do
-    config = %{
-      "auto_correct" => draft.auto_correct,
-      "ignore_case" => draft.ignore_case,
-      "ignore_spelling" => draft.ignore_spelling,
-      "ignore_punctuation" => draft.ignore_punctuation,
-      "checkbox_scoring" => draft.checkbox_rule
-    }
-
-    if draft.choice_only, do: Map.delete(config, "auto_correct"), else: config
-  end
-
-  defp flag_param(params, key, default) do
-    case Map.fetch(params, key) do
-      {:ok, value} -> value == "true"
-      :error -> default
-    end
+    merge_option_flags(
+      %{draft | custom_points: custom?, block_points: block_points, max_points: max_points},
+      params
+    )
   end
 
   defp answer_field_count(draft), do: Enum.count(draft.blocks, & &1.answer_id)
@@ -1492,30 +1077,6 @@ defmodule TaskyWeb.ExamLive.Content do
   defp draft_total(draft) do
     draft.block_points |> Map.values() |> Enum.map(&(&1 || 0)) |> Enum.sum()
   end
-
-  # What the sidebar lists under "Korrekturoptionen": the active settings by
-  # name, without their descriptions.
-  defp active_option_labels(pv) do
-    text =
-      if pv.has_text_answers,
-        do: for({key, label, _hint} <- text_options(), Map.fetch!(pv, key), do: label),
-        else: []
-
-    Enum.reject(
-      [
-        pv.custom_points && "Punkte pro Antwortfeld",
-        pv.auto_correct && "Auto-Korrektur"
-      ],
-      &(&1 in [nil, false])
-    ) ++ text ++ checkbox_rule_summary(pv)
-  end
-
-  defp checkbox_rule_summary(%{has_checkboxes: false}), do: []
-
-  defp checkbox_rule_summary(%{checkbox_rule: "all_or_nothing"}),
-    do: ["Multiple-Choice: alles oder nichts"]
-
-  defp checkbox_rule_summary(_pv), do: ["Multiple-Choice: pro Checkbox"]
 
   # One 0.25 step up or down, never below 0; whole numbers stay integers.
   defp step_points(value, dir) do
@@ -1674,34 +1235,6 @@ defmodule TaskyWeb.ExamLive.Content do
     """
   end
 
-  attr :field, Phoenix.HTML.FormField, required: true
-  attr :label, :string, required: true
-  attr :hint, :string, required: true
-  attr :disabled, :boolean, default: false
-
-  # A checkbox with its description underneath, for the options dialog.
-  defp option_toggle(assigns) do
-    ~H"""
-    <div class={["flex items-start gap-3", @disabled && "opacity-40"]}>
-      <div class="pt-0.5">
-        <.input
-          field={@field}
-          type="checkbox"
-          disabled={@disabled}
-          class="w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0 disabled:cursor-not-allowed"
-        />
-      </div>
-      <label
-        for={@field.id}
-        class={["min-w-0", if(@disabled, do: "cursor-not-allowed", else: "cursor-pointer")]}
-      >
-        <span class="block text-sm font-medium text-stone-700">{@label}</span>
-        <span class="block text-xs text-stone-500 mt-0.5 leading-relaxed">{@hint}</span>
-      </label>
-    </div>
-    """
-  end
-
   defp save_max_points(socket, part_id, points) do
     case part_view(socket, part_id) do
       nil ->
@@ -1761,20 +1294,6 @@ defmodule TaskyWeb.ExamLive.Content do
     else
       {:noreply, socket}
     end
-  end
-
-  # The text comparison options of a part, in display order. Keys match both
-  # the part view and `ai_correction_config` (see
-  # `Tasky.Correction.StringComparator.match_opts/1`).
-  defp text_options do
-    [
-      {:ignore_case, "Gross-/Kleinschreibung ignorieren",
-       "Bei der Auto-Korrektur dieser Aufgabe wird Gross-/Kleinschreibung nicht bewertet."},
-      {:ignore_punctuation, "Satzzeichen ignorieren",
-       "Punkt, Komma, Ausrufe- und Fragezeichen usw. werden beim Vergleich nicht beachtet."},
-      {:ignore_spelling, "Rechtschreibung ignorieren",
-       "Bei der Auto-Korrektur dieser Aufgabe werden Rechtschreibfehler nicht streng bewertet (Fuzzy-Matching ab Jaro-Ähnlichkeit ≥ 0,85)."}
-    ]
   end
 
   defp part_view(socket, part_id),

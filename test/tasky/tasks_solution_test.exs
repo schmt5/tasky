@@ -51,70 +51,82 @@ defmodule Tasky.TasksSolutionTest do
     course.id |> Tasky.Courses.list_enrolled_students() |> Enum.map(& &1.id)
   end
 
-  # Ein Dokument mit zwei Antwortfeldern und stabilen ids.
+  # Eine Frage ("q-1") mit Antwortfeldern mit stabilen ids.
   defp doc_with_answers(ids, filled \\ %{}) do
+    %{"type" => "doc", "content" => [question("q-1") | answer_nodes(ids, filled)]}
+  end
+
+  defp question(part_id) do
     %{
-      "type" => "doc",
-      "content" =>
-        Enum.map(ids, fn id ->
-          %{
-            "type" => "answerBlock",
-            "attrs" => %{"answerId" => id},
-            "content" => Map.get(filled, id, [%{"type" => "paragraph"}])
-          }
-        end)
+      "type" => "heading",
+      "attrs" => %{"level" => 3, "partId" => part_id},
+      "content" => [%{"type" => "text", "text" => "Frage"}]
     }
   end
+
+  defp answer_nodes(ids, filled) do
+    Enum.map(ids, fn id ->
+      %{
+        "type" => "answerBlock",
+        "attrs" => %{"answerId" => id},
+        "content" => Map.get(filled, id, [%{"type" => "paragraph"}])
+      }
+    end)
+  end
+
+  # Was der Editor einer Frage speichert: ihre Knoten, Überschrift inklusive.
+  defp part_nodes(ids, filled), do: doc_with_answers(ids, filled)["content"]
 
   defp text_node(text) do
     [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}]
   end
 
-  describe "save_sample_solution/3" do
+  describe "save_sample_solution_part/4" do
     test "speichert nur die Antworten, nicht den Inhalt", %{teacher_scope: scope, task: task} do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
 
-      filled = doc_with_answers(["a1", "a2"], %{"a1" => text_node("Lösung A")})
-      assert {:ok, task} = Tasks.save_sample_solution(scope, task, filled)
+      nodes = part_nodes(["a1", "a2"], %{"a1" => text_node("Lösung A")})
+      assert {:ok, task} = Tasks.save_sample_solution_part(scope, task, "q-1", nodes)
 
       assert Map.keys(task.sample_solution) |> Enum.sort() == ["a1", "a2"]
       assert task.sample_solution["a1"] == text_node("Lösung A")
 
       # Der Inhalt bleibt antwortfrei — der Musterlösungs-Tab fasst ihn nicht an.
-      assert %{"content" => [block_a, _block_b]} = task.content
+      assert %{"content" => [_question, block_a, _block_b]} = task.content
       assert block_a["content"] == [%{"type" => "paragraph"}]
     end
 
     test "rekonstruiert das antwortgefüllte Dokument", %{teacher_scope: scope, task: task} do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1"]))
-      filled = doc_with_answers(["a1"], %{"a1" => text_node("Lösung A")})
-      {:ok, task} = Tasks.save_sample_solution(scope, task, filled)
+      nodes = part_nodes(["a1"], %{"a1" => text_node("Lösung A")})
+      {:ok, task} = Tasks.save_sample_solution_part(scope, task, "q-1", nodes)
 
-      assert %{"content" => [%{"content" => content}]} = Tasks.sample_solution_doc(task)
+      assert %{"content" => [_question, %{"content" => content}]} =
+               Tasks.sample_solution_doc(task)
+
       assert content == text_node("Lösung A")
     end
 
-    test "ersetzt statt zu mergen — gelöschte Antworten kommen nicht zurück", %{
+    test "ersetzt die Antworten der Frage — gelöschte Antworten kommen nicht zurück", %{
       teacher_scope: scope,
       task: task
     } do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
 
       {:ok, task} =
-        Tasks.save_sample_solution(
+        Tasks.save_sample_solution_part(
           scope,
           task,
-          doc_with_answers(["a1", "a2"], %{
-            "a1" => text_node("A"),
-            "a2" => text_node("B")
-          })
+          "q-1",
+          part_nodes(["a1", "a2"], %{"a1" => text_node("A"), "a2" => text_node("B")})
         )
 
       {:ok, task} =
-        Tasks.save_sample_solution(
+        Tasks.save_sample_solution_part(
           scope,
           task,
-          doc_with_answers(["a1", "a2"], %{"a1" => text_node("A")})
+          "q-1",
+          part_nodes(["a1", "a2"], %{"a1" => text_node("A")})
         )
 
       assert task.sample_solution["a1"] == text_node("A")
@@ -122,19 +134,39 @@ defmodule Tasky.TasksSolutionTest do
       assert task.sample_solution["a2"] == [%{"type" => "paragraph"}]
     end
 
-    test "verwirft Antworten zu ids, die es im Inhalt nicht gibt", %{
+    test "lässt die Antworten der anderen Fragen stehen", %{teacher_scope: scope, task: task} do
+      content = %{
+        "type" => "doc",
+        "content" =>
+          [question("q-1") | answer_nodes(["a1"], %{})] ++
+            [question("q-2") | answer_nodes(["a2"], %{})]
+      }
+
+      {:ok, task} = Tasks.save_task_content(scope, task, content)
+
+      {:ok, task} =
+        Tasks.save_sample_solution_part(scope, task, "q-1", [
+          question("q-1") | answer_nodes(["a1"], %{"a1" => text_node("A")})
+        ])
+
+      {:ok, task} =
+        Tasks.save_sample_solution_part(scope, task, "q-2", [
+          question("q-2") | answer_nodes(["a2"], %{"a2" => text_node("B")})
+        ])
+
+      assert task.sample_solution == %{"a1" => text_node("A"), "a2" => text_node("B")}
+    end
+
+    test "verwirft Antworten zu ids, die es in der Frage nicht gibt", %{
       teacher_scope: scope,
       task: task
     } do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1"]))
 
-      filled =
-        doc_with_answers(["a1", "fremd"], %{
-          "a1" => text_node("A"),
-          "fremd" => text_node("Waise")
-        })
+      nodes =
+        part_nodes(["a1", "fremd"], %{"a1" => text_node("A"), "fremd" => text_node("Waise")})
 
-      assert {:ok, task} = Tasks.save_sample_solution(scope, task, filled)
+      assert {:ok, task} = Tasks.save_sample_solution_part(scope, task, "q-1", nodes)
       assert Map.keys(task.sample_solution) == ["a1"]
     end
 
@@ -145,31 +177,55 @@ defmodule Tasky.TasksSolutionTest do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
 
       {:ok, task} =
-        Tasks.save_sample_solution(
+        Tasks.save_sample_solution_part(
           scope,
           task,
-          doc_with_answers(["a1", "a2"], %{"a1" => text_node("A"), "a2" => text_node("B")})
+          "q-1",
+          part_nodes(["a1", "a2"], %{"a1" => text_node("A"), "a2" => text_node("B")})
         )
 
       assert {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1"]))
       assert Map.keys(task.sample_solution) == ["a1"]
     end
 
+    test "kennt keine Frage, die es nicht gibt", %{teacher_scope: scope, task: task} do
+      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1"]))
+
+      assert {:error, :unknown_part} =
+               Tasks.save_sample_solution_part(scope, task, "q-x", part_nodes(["a1"], %{}))
+    end
+
     test "weist eine fremde Lehrperson ab", %{task: task} do
       other = user_scope_fixture(user_fixture(%{role: "teacher"}))
 
       assert {:error, :unauthorized} =
-               Tasks.save_sample_solution(other, task, doc_with_answers(["a1"]))
+               Tasks.save_sample_solution_part(other, task, "q-1", part_nodes(["a1"], %{}))
     end
 
     test "lehnt eine zu grosse Musterlösung ab", %{teacher_scope: scope, task: task} do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1"]))
-      huge = doc_with_answers(["a1"], %{"a1" => text_node(String.duplicate("x", 6_000_000))})
+      huge = part_nodes(["a1"], %{"a1" => text_node(String.duplicate("x", 6_000_000))})
 
       assert {:error, %Ecto.Changeset{} = changeset} =
-               Tasks.save_sample_solution(scope, task, huge)
+               Tasks.save_sample_solution_part(scope, task, "q-1", huge)
 
       assert "Musterlösung ist zu gross" in errors_on(changeset).sample_solution
+    end
+  end
+
+  describe "save_task_content/3" do
+    test "gibt jeder Frage eine stabile partId", %{teacher_scope: scope, task: task} do
+      doc = %{
+        "type" => "doc",
+        "content" => [
+          %{"type" => "heading", "attrs" => %{"level" => 3}, "content" => []}
+          | answer_nodes(["a1"], %{})
+        ]
+      }
+
+      {:ok, task} = Tasks.save_task_content(scope, task, doc)
+
+      assert %{"content" => [%{"attrs" => %{"partId" => "q-" <> _}} | _]} = task.content
     end
   end
 
@@ -672,70 +728,48 @@ defmodule Tasky.TasksSolutionTest do
     end
   end
 
-  describe "toggle_self_check/3" do
+  describe "apply_part_options/4" do
     setup %{teacher_scope: scope, task: task} do
-      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
+      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1"]))
       %{task: task}
     end
 
-    test "schaltet ein Antwortfeld ab und wieder ein", %{teacher_scope: scope, task: task} do
-      assert task.self_check_off == []
-
-      {:ok, task} = Tasks.toggle_self_check(scope, task, "a1")
-      assert task.self_check_off == ["a1"]
-
-      {:ok, task} = Tasks.toggle_self_check(scope, task, "a1")
-      assert task.self_check_off == []
+    test "eine Frage ohne Einstellungen prüft sich selbst, ohne Gross-/Kleinschreibung", %{
+      task: task
+    } do
+      assert %{"auto_correct" => true, "ignore_case" => true} = Tasks.part_config(task, "q-1")
     end
 
-    test "wirft Waisen heraus, wenn das Antwortfeld verschwindet", %{
+    test "speichert die Optionen einer Frage", %{teacher_scope: scope, task: task} do
+      {:ok, task} =
+        Tasks.apply_part_options(scope, task, "q-1", %{
+          "ignore_spelling" => true,
+          "checkbox_scoring" => "all_or_nothing"
+        })
+
+      assert %{
+               "auto_correct" => true,
+               "ignore_case" => true,
+               "ignore_spelling" => true,
+               "ignore_punctuation" => false,
+               "checkbox_scoring" => "all_or_nothing"
+             } = task.correction_config["q-1"]
+    end
+
+    test "schaltet die Textoptionen mit der Auto-Korrektur aus", %{
       teacher_scope: scope,
       task: task
     } do
-      {:ok, task} = Tasks.toggle_self_check(scope, task, "a1")
-      {:ok, task} = Tasks.toggle_self_check(scope, task, "a2")
-      assert Enum.sort(task.self_check_off) == ["a1", "a2"]
+      {:ok, task} = Tasks.apply_part_options(scope, task, "q-1", %{"auto_correct" => false})
 
-      # Die Lehrperson löscht das erste Antwortfeld aus dem Inhalt. Ohne das
-      # Prunen würde die Liste mit jedem gelöschten Feld weiterwachsen.
-      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a2"]))
-      {:ok, task} = Tasks.toggle_self_check(scope, task, "a2")
-
-      assert task.self_check_off == []
+      assert %{"auto_correct" => false, "ignore_case" => false} = task.correction_config["q-1"]
     end
 
     test "verweigert einer fremden Lehrperson den Zugriff", %{task: task} do
       other = user_scope_fixture(user_fixture(%{role: "teacher"}))
 
-      assert {:error, :unauthorized} = Tasks.toggle_self_check(other, task, "a1")
-    end
-  end
-
-  describe "list_solution_blocks/1" do
-    test "listet die Antwortfelder mit Ausschnitt und Prüfstatus", %{
-      teacher_scope: scope,
-      task: task
-    } do
-      {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))
-
-      {:ok, task} =
-        Tasks.save_sample_solution(
-          scope,
-          task,
-          doc_with_answers(["a1", "a2"], %{
-            "a1" => text_node("Bern"),
-            "a2" => text_node("Aare")
-          })
-        )
-
-      {:ok, task} = Tasks.toggle_self_check(scope, task, "a2")
-
-      assert [first, second] = Tasks.list_solution_blocks(task)
-      assert first.answer_id == "a1"
-      assert first.snippet == "Bern"
-      assert first.checked
-      assert second.answer_id == "a2"
-      refute second.checked
+      assert {:error, :unauthorized} =
+               Tasks.apply_part_options(other, task, "q-1", %{"auto_correct" => false})
     end
   end
 end

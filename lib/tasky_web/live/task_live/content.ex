@@ -1,14 +1,16 @@
 defmodule TaskyWeb.TaskLive.Content do
   @moduledoc """
   Authoring view for a learning unit (task): the Tiptap content editor
-  (tab «Inhalt»), the model answers and their release mode
-  (tab «Musterlösung») plus teacher attachments and student upload fields
+  (tab «Inhalt»), the model answers with their correction options per
+  question (tab «Musterlösung», shared with exams via
+  `TaskyWeb.SampleSolutionComponents`) plus teacher attachments and student upload fields
   (tab «Dateien»). Adapted from `TaskyWeb.ExamLive.Content`.
   """
   use TaskyWeb, :live_view
 
   import TaskyWeb.AnswerSheetComponents
   import TaskyWeb.FileComponents
+  import TaskyWeb.SampleSolutionComponents
 
   import TaskyWeb.ContentComponents,
     only: [
@@ -19,6 +21,9 @@ defmodule TaskyWeb.TaskLive.Content do
       put_draft_error: 5
     ]
 
+  alias Tasky.Correction.AnswerKey
+  alias Tasky.Correction.PartConfig
+  alias Tasky.ExamDoc
   alias Tasky.Tasks
   alias Tasky.Uploads
 
@@ -103,80 +108,76 @@ defmodule TaskyWeb.TaskLive.Content do
         />
       </div>
 
-      <%!-- Musterlösung tab: dieselbe Struktur wie «Inhalt», aber gesperrter
-           Aufgabentext — die Lehrperson füllt nur die Antwortfelder. Rechts
-           daneben die Selbstkontrolle pro Antwortfeld. --%>
-      <div :if={@tab == "musterloesung"} class="min-w-0">
-        <div :if={@answer_block_count > 0} class="flex items-stretch min-h-[calc(100vh-54px)]">
-          <div class="min-w-0 flex-1 bg-stone-100">
-            <div
-              id={"task-sample-solution-editor-#{@task.id}"}
-              phx-hook="TaskSampleSolutionEditor"
-              phx-update="ignore"
-              data-task-id={@task.id}
-              data-content={@solution_json}
-            >
-            </div>
-          </div>
+      <%!-- Musterlösung tab: wie bei Prüfungen ein Editor pro Frage mit
+           Korrekturoptionen daneben (TaskyWeb.SampleSolutionComponents) —
+           nur ohne Punkte. --%>
+      <div :if={@tab == "musterloesung"} class="bg-stone-100 min-h-[calc(100vh-54px)]">
+        <.solution_toolbar :if={@part_views != []} id={"solution-toolbar-#{@task.id}"} />
 
-          <aside class="w-[300px] shrink-0 border-l border-stone-200 bg-white">
-            <div class="p-5 border-b border-stone-100">
-              <h3 class="text-sm font-semibold text-stone-800">Selbstkontrolle</h3>
-              <p class="text-xs text-stone-500 mt-1 leading-relaxed">
-                Geprüfte Felder vergleicht Tasky nach der Freigabe automatisch mit der
-                Musterlösung. Gross-/Kleinschreibung wird ignoriert, mehrere gültige
-                Antworten trennst du mit <code class="font-mono">;</code> — Lernenden werden
-                sie als „pdf, .pdf" gezeigt.
+        <div class="max-w-7xl mx-auto px-8 py-6">
+          <div
+            :if={@loose_answer_count > 0}
+            id="loose-answers-note"
+            role="status"
+            class="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3.5"
+          >
+            <.icon
+              name="hero-exclamation-triangle"
+              class="w-[18px] h-[18px] text-amber-500 shrink-0 mt-0.5"
+            />
+            <div class="min-w-0 text-sm text-stone-700 leading-relaxed">
+              <p class="font-semibold text-stone-800">
+                {loose_answers_label(@loose_answer_count)} vor der ersten Frage
               </p>
-            </div>
-
-            <div class="p-5 space-y-2">
-              <label
-                :for={block <- @solution_blocks}
-                class="flex items-start gap-3 cursor-pointer rounded-lg border border-stone-200 bg-stone-50/60 px-2.5 py-2 hover:bg-stone-50"
+              <p class="text-xs text-stone-600 mt-0.5">
+                Musterlösung und Selbstkontrolle gibt es nur für Antwortfelder unter einer Frage.
+                Setze im Inhalt eine Fragen-Überschrift davor.
+              </p>
+              <.link
+                patch={~p"/tasks/#{@task}/content?tab=inhalt"}
+                class="inline-block mt-1.5 text-xs font-medium text-sky-700 hover:text-sky-800 hover:underline underline-offset-2 transition-colors duration-150"
               >
-                <input
-                  type="checkbox"
-                  checked={block.checked}
-                  phx-click="toggle_self_check"
-                  phx-value-answer-id={block.answer_id}
-                  aria-label="Automatisch prüfen"
-                  class="mt-0.5 w-[18px] h-[18px] rounded-md border-stone-300 text-amber-500 focus:ring-amber-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
-                />
-                <span class="min-w-0">
-                  <span class="block text-xs font-semibold text-stone-700">
-                    {block.type_label}
-                  </span>
-                  <span class="block text-xs text-stone-500 mt-0.5 truncate">
-                    {block.snippet}
-                  </span>
-                </span>
-              </label>
-
-              <p class="text-xs text-stone-400 leading-relaxed pt-1">
-                Nimm offen formulierte Fragen heraus — dort sieht die/der Lernende nur die
-                Musterlösung und vergleicht selbst.
-              </p>
+                Zum Inhalt
+              </.link>
             </div>
-          </aside>
+          </div>
+
+          <div
+            :if={@part_views == [] and @loose_answer_count == 0}
+            class="flex flex-col items-center justify-center text-center py-24"
+          >
+            <div class="flex items-center justify-center w-14 h-14 rounded-2xl bg-stone-100 text-stone-400 mb-4">
+              <.icon name="hero-document-text" class="w-7 h-7" />
+            </div>
+            <h3 class="text-base font-semibold text-stone-700">Noch keine Frage vorhanden</h3>
+            <p class="text-sm text-stone-500 mt-1.5 max-w-md leading-relaxed">
+              Lege zuerst im Tab <span class="font-medium text-stone-600">„Inhalt“</span>
+              eine Frage (Überschrift) mit Antwortfeldern an, um hier die Musterlösung zu erfassen.
+            </p>
+          </div>
+
+          <.part_row
+            :for={pv <- @part_views}
+            id={"sample-solution-part-editor-#{@task.id}-#{pv.id}"}
+            part={pv}
+            save_url={~p"/api/tasks/#{@task}/sample-solution/parts/#{pv.id}/content"}
+          >
+            <:card>
+              <.options_summary part={pv} class="p-5" />
+              <.audio_summary part={pv} content_path={~p"/tasks/#{@task}/content?tab=inhalt"} />
+              <.pin_panel id={"pin-panel-#{@task.id}-#{pv.id}"} part={pv} />
+            </:card>
+          </.part_row>
         </div>
 
-        <div :if={@answer_block_count == 0} class="bg-stone-100 min-h-[calc(100vh-54px)]">
-          <div class="max-w-4xl mx-auto px-8 py-16 text-center">
-            <.icon name="hero-key" class="w-10 h-10 text-stone-300" />
-            <h3 class="mt-3 text-base font-semibold text-stone-700">Noch keine Antwortfelder</h3>
-            <p class="mt-1 text-sm text-stone-500">
-              Lege zuerst im Tab «Inhalt» ein Antwortfeld an – die Musterlösung wird direkt in
-              diesen Feldern erfasst.
-            </p>
-            <.link
-              patch={~p"/tasks/#{@task}/content?tab=inhalt"}
-              class="mt-5 inline-flex items-center gap-2 border border-stone-200 text-stone-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all duration-150 hover:bg-white hover:border-stone-300"
-            >
-              <.icon name="hero-pencil-square" class="w-4 h-4" /> Zum Inhalt
-            </.link>
-          </div>
-        </div>
+        <.correction_options_dialog
+          :if={@options_draft}
+          kind={:task}
+          draft={@options_draft}
+          form={@options_form}
+        />
+
+        <.alternatives_help_dialog :if={@show_alternatives_help} kind={:task} />
       </div>
 
       <%!-- Dateien tab --%>
@@ -512,6 +513,11 @@ defmodule TaskyWeb.TaskLive.Content do
      |> assign(:task, task)
      |> assign(:preview_rev, 0)
      |> assign(:course, task.course)
+     # Assigned here rather than in the "musterloesung" branch of
+     # handle_params/3 so they are defined on every tab.
+     |> assign(:show_alternatives_help, false)
+     |> assign(:options_draft, nil)
+     |> assign(:options_form, nil)
      |> allow_upload(:attachment,
        accept: Uploads.attachment_accept_exts(),
        max_entries: 3,
@@ -568,9 +574,8 @@ defmodule TaskyWeb.TaskLive.Content do
       "musterloesung" ->
         {:noreply,
          socket
-         |> assign(:solution_json, Jason.encode!(Tasks.sample_solution_doc(task)))
-         |> assign(:answer_block_count, Tasks.answer_block_count(task))
-         |> assign_solution_blocks(task)}
+         |> assign(:part_views, build_part_views(task))
+         |> assign(:loose_answer_count, loose_answer_count(task))}
 
       "dateien" ->
         {:noreply,
@@ -583,35 +588,189 @@ defmodule TaskyWeb.TaskLive.Content do
     end
   end
 
-  ## Musterlösung tab: Selbstkontrolle pro Antwortfeld
+  ## Musterlösung tab: ein Editor und Korrekturoptionen pro Frage
 
-  defp assign_solution_blocks(socket, task) do
-    blocks =
+  # One view-model entry per question, rendered as a stacked editor + card.
+  # `doc_json` is only computed here (full navigation) — event handlers must
+  # never touch it, so the phx-update="ignore" editor hooks stay untouched.
+  defp build_part_views(task) do
+    parts = ExamDoc.split_content_into_parts(task.content || %{}, "answer_fields")
+
+    sample_parts =
       task
-      |> Tasks.list_solution_blocks()
-      |> Enum.map(&Map.put(&1, :type_label, block_type_label(&1.type)))
+      |> Tasks.sample_solution_doc()
+      |> ExamDoc.split_content_into_parts("answer_fields")
+      |> Map.new(&{&1.id, &1})
 
-    assign(socket, :solution_blocks, blocks)
+    Enum.map(parts, fn part ->
+      nodes =
+        case Map.get(sample_parts, part.id) do
+          nil -> part.nodes
+          sample -> sample.nodes
+        end
+
+      blocks =
+        nodes
+        |> Tasky.AI.NodePatcher.list_answer_blocks()
+        |> Enum.map(&Map.take(&1, [:answer_id, :type]))
+
+      %{
+        id: part.id,
+        label: part.label,
+        doc_json: Jason.encode!(%{"type" => "doc", "content" => nodes}),
+        blocks: blocks,
+        audios: audio_summaries(part.nodes)
+      }
+      |> Map.merge(block_flags(blocks))
+      |> Map.merge(option_fields(task, part.id, blocks))
+    end)
   end
 
-  defp block_type_label("answerBlock"), do: "Antwortfeld"
-  defp block_type_label("lueckentext"), do: "Lücke"
-  defp block_type_label("taskItem"), do: "Checkbox"
-  defp block_type_label("choice"), do: "Auswahl"
-  defp block_type_label(_type), do: "Antwortfeld"
+  # The question view's correction options, as stored on the unit. Shared by
+  # the full build and the refresh after «Übernehmen», which must not touch
+  # `doc_json`.
+  defp option_fields(task, part_id, blocks) do
+    config = Tasks.part_config(task, part_id)
+    choice_only? = PartConfig.choice_only_blocks?(blocks)
 
-  ## Dateien tab: Lösungsdateien
+    %{
+      # A question of only ticks is always checked (`Tasky.Tasks.SelfCheck`).
+      choice_only: choice_only?,
+      auto_correct: choice_only? or PartConfig.flag?(config, "auto_correct"),
+      ignore_case: PartConfig.flag?(config, "ignore_case"),
+      ignore_spelling: PartConfig.flag?(config, "ignore_spelling"),
+      ignore_punctuation: PartConfig.flag?(config, "ignore_punctuation"),
+      checkbox_rule: PartConfig.checkbox_rule(config)
+    }
+  end
+
+  # Answer fields before the first question: neither edited nor checked here.
+  defp loose_answer_count(task) do
+    preamble = ExamDoc.content_preamble(task.content || %{}, "answer_fields")
+    %{"content" => preamble} |> AnswerKey.block_ids() |> MapSet.size()
+  end
+
+  defp loose_answers_label(1), do: "1 Antwortfeld steht"
+  defp loose_answers_label(n), do: "#{n} Antwortfelder stehen"
+
+  defp part_view(socket, part_id),
+    do: Enum.find(socket.assigns.part_views, &(&1.id == part_id))
+
+  # Updates the options of one question view. Deliberately never touches
+  # `doc_json` — see build_part_views/1. The question may have been removed
+  # while the dialog was open.
+  defp refresh_part_options(socket, task, part_id) do
+    part_views =
+      Enum.map(socket.assigns.part_views, fn pv ->
+        if pv.id == part_id, do: Map.merge(pv, option_fields(task, pv.id, pv.blocks)), else: pv
+      end)
+
+    assign(socket, :part_views, part_views)
+  end
+
+  defp assign_options_draft(socket, nil),
+    do: socket |> assign(:options_draft, nil) |> assign(:options_form, nil)
+
+  defp assign_options_draft(socket, draft) do
+    params = %{
+      "auto_correct" => draft.auto_correct,
+      "ignore_case" => draft.ignore_case,
+      "ignore_spelling" => draft.ignore_spelling,
+      "ignore_punctuation" => draft.ignore_punctuation,
+      "checkbox_rule" => draft.checkbox_rule
+    }
+
+    socket
+    |> assign(:options_draft, draft)
+    |> assign(:options_form, to_form(params, as: :options))
+  end
 
   @impl true
-  def handle_event("toggle_self_check", %{"answer-id" => answer_id}, socket) do
-    case Tasks.toggle_self_check(socket.assigns.current_scope, socket.assigns.task, answer_id) do
-      {:ok, task} ->
-        {:noreply, socket |> assign(:task, task) |> assign_solution_blocks(task)}
+  def handle_event("open_correction_options", %{"part-id" => part_id}, socket) do
+    case part_view(socket, part_id) do
+      nil ->
+        {:noreply, socket}
 
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Konnte nicht gespeichert werden.")}
+      pv ->
+        draft =
+          pv
+          |> Map.take([
+            :label,
+            :blocks,
+            :has_text_answers,
+            :has_checkboxes,
+            :choice_only,
+            :auto_correct,
+            :ignore_case,
+            :ignore_spelling,
+            :ignore_punctuation,
+            :checkbox_rule
+          ])
+          |> Map.put(:part_id, pv.id)
+
+        {:noreply, assign_options_draft(socket, draft)}
     end
   end
+
+  def handle_event("close_correction_options", _params, socket) do
+    {:noreply, assign_options_draft(socket, nil)}
+  end
+
+  def handle_event("change_correction_options", %{"options" => params}, socket) do
+    case socket.assigns.options_draft do
+      nil -> {:noreply, socket}
+      draft -> {:noreply, assign_options_draft(socket, merge_option_flags(draft, params))}
+    end
+  end
+
+  def handle_event("draft_checkbox_rule", %{"rule" => rule}, socket) do
+    case socket.assigns.options_draft do
+      %{} = draft when is_binary(rule) ->
+        rule = if rule in Tasky.Grading.checkbox_rules(), do: rule, else: draft.checkbox_rule
+        {:noreply, assign_options_draft(socket, %{draft | checkbox_rule: rule})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("apply_correction_options", %{"options" => params}, socket) do
+    case socket.assigns.options_draft do
+      nil ->
+        {:noreply, socket}
+
+      draft ->
+        draft = merge_option_flags(draft, params)
+
+        case Tasks.apply_part_options(
+               socket.assigns.current_scope,
+               socket.assigns.task,
+               draft.part_id,
+               options_config(draft)
+             ) do
+          {:ok, task} ->
+            {:noreply,
+             socket
+             |> assign(:task, task)
+             |> refresh_part_options(task, draft.part_id)
+             |> assign_options_draft(nil)}
+
+          {:error, _reason} ->
+            {:noreply,
+             put_flash(socket, :error, "Korrekturoptionen konnten nicht gespeichert werden.")}
+        end
+    end
+  end
+
+  def handle_event("open_alternatives_help", _params, socket) do
+    {:noreply, assign(socket, :show_alternatives_help, true)}
+  end
+
+  def handle_event("close_alternatives_help", _params, socket) do
+    {:noreply, assign(socket, :show_alternatives_help, false)}
+  end
+
+  ## Dateien tab: Lösungsdateien
 
   def handle_event("validate_solution_file", _params, socket) do
     # auto_upload does the work; this handler just accepts the phx-change.

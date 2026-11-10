@@ -24,7 +24,7 @@ defmodule Tasky.TaskPdfTest do
     scope = user_scope_fixture(user_fixture(%{role: "teacher"}))
     task = task_fixture(scope, %{name: "Rechnen"})
     {:ok, task} = Tasks.save_task_content(scope, task, content([%{"type" => "paragraph"}]))
-    {:ok, task} = Tasks.save_sample_solution(scope, task, content([paragraph("Vier")]))
+    task = Tasky.TasksFixtures.sample_solution_fixture(task, content([paragraph("Vier")]))
 
     %{task: task}
   end

@@ -2,11 +2,11 @@
 
 import { Node, Mark } from "@tiptap/core";
 
-// Die Musterlösung eines Antwortfelds, in der Vergleichsansicht einer
-// Lerneinheit direkt unter der eigenen Antwort. Eingefügt wird der Knoten
-// ausschliesslich serverseitig von `Tasky.Tasks.SelfCheck.review_doc/3` —
-// darum kein Command und keine Input-Rule: er kann nicht in ein
-// Autoren-Dokument geraten.
+// Die Musterlösung eines Antwortfelds, in der Vergleichsansicht direkt unter
+// der eigenen Antwort — in der Selbstkontrolle einer Lerneinheit wie in der
+// zurückgegebenen Prüfung. Eingefügt wird der Knoten ausschliesslich
+// serverseitig von `Tasky.Correction.SolutionHints.annotate/4` — darum kein
+// Command und keine Input-Rule: er kann nicht in ein Autoren-Dokument geraten.
 export const SolutionHint = Node.create({
   name: "solutionHint",
   group: "block",

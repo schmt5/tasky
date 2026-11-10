@@ -135,7 +135,7 @@ defmodule Tasky.CoursesDuplicateTest do
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Lösung"}]}
         ])
 
-      {:ok, _task} = Tasks.save_sample_solution(scope, task, filled)
+      _task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
       assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
       assert [copied_task] = Tasks.list_tasks_by_course(copy.id)
@@ -171,7 +171,7 @@ defmodule Tasky.CoursesDuplicateTest do
           %{"type" => "image", "attrs" => %{"src" => url}}
         ])
 
-      {:ok, _task} = Tasks.save_sample_solution(scope, task, filled)
+      _task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
       assert {:ok, copy} = Courses.duplicate_course(scope, course, "Kopie")
       assert [copied_task] = Tasks.list_tasks_by_course(copy.id)

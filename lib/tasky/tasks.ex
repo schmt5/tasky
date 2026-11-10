@@ -7,11 +7,12 @@ defmodule Tasky.Tasks do
   alias Tasky.Repo
 
   alias Tasky.Accounts.Scope
-  alias Tasky.AI.NodePatcher
   alias Tasky.AudioPlays
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.PartConfig
   alias Tasky.Correction.PlainAnswers
+  alias Tasky.ExamDoc
   alias Tasky.Policy
   alias Tasky.Positioned
   alias Tasky.Tasks.SelfCheck
@@ -248,8 +249,8 @@ defmodule Tasky.Tasks do
     end
   end
 
-  # Die Musterlösung reist hier mit, weil `Task.changeset/2` die JSON-Spalte
-  # bewusst nicht castet. Die Antwortmap läuft ebenfalls durch
+  # Musterlösung und Korrekturoptionen reisen hier mit, weil `Task.changeset/2`
+  # die JSON-Spalten bewusst nicht castet. Die Antwortmap läuft ebenfalls durch
   # `plan_content_image_copies/4`: klebt ein Screenshot in einem Antwortfeld,
   # zeigt seine URL sonst auf das Präfix der Quelleinheit und läuft ins Leere,
   # sobald die Quelle gelöscht wird.
@@ -269,6 +270,7 @@ defmodule Tasky.Tasks do
            task
            |> Task.content_changeset(content)
            |> Ecto.Changeset.put_change(:sample_solution, answers)
+           |> Ecto.Changeset.put_change(:correction_config, source.correction_config || %{})
            |> Repo.update() do
       {:ok, task, content_jobs ++ answer_jobs}
     end
@@ -969,7 +971,11 @@ defmodule Tasky.Tasks do
   """
   def save_task_content(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
     with :ok <- Policy.authorize(scope, task.user_id) do
-      new_content = AnswerKey.ensure_ids(doc)
+      new_content =
+        doc
+        |> AnswerKey.ensure_ids()
+        |> ExamDoc.ensure_part_ids()
+        |> keep_choice_groups_in_parts()
 
       result =
         Repo.transaction(fn ->
@@ -1003,28 +1009,49 @@ defmodule Tasky.Tasks do
     do: AnswerKey.merge(task.content || %{}, task.sample_solution || %{})
 
   @doc """
-  Speichert die Musterlösung aus dem Musterlösungs-Tab.
+  Speichert die Musterlösung einer Frage aus dem Musterlösungs-Tab — wie bei
+  Prüfungen hat jede Frage (h3) ihren eigenen Editor.
 
-  `doc` ist das ganze antwortgefüllte Dokument. Wir splitten es und behalten
-  nur die Antworten: `content` wird hier bewusst nicht geschrieben. Der Editor
-  läuft mit gesperrtem Inhalt, das Skelett kann sich also gar nicht ändern —
-  und der Musterlösungs-Tab darf unter keinen Umständen das Dokument
-  überschreiben, an dem die Lernenden arbeiten.
+  `part_nodes` sind die antwortgefüllten Knoten der Frage. Wir splitten sie
+  und mergen nur die Antworten in `sample_solution`: `content` wird hier
+  bewusst nicht geschrieben. Der Editor läuft mit gesperrtem Inhalt, das
+  Skelett kann sich also gar nicht ändern — und der Musterlösungs-Tab darf
+  unter keinen Umständen das Dokument überschreiben, an dem die Lernenden
+  arbeiten.
 
-  Ersetzen statt Mergen ist hier richtig: es gibt genau einen Editor, der das
-  ganze Dokument hält. Ein Merge würde Antworten wieder auferstehen lassen,
-  die die Lehrperson gerade gelöscht hat.
+  Die Antworten der Frage werden ersetzt, nicht gemergt: Antwortfelder der
+  Frage, die im gespeicherten Stück fehlen, verlieren ihre Antwort. Die
+  anderen Fragen bleiben unberührt. Gesperrt wird die Zeile, weil jede Frage
+  für sich autosaved und zwei Speichervorgänge sonst einander überschreiben.
+
+  `{:error, :unknown_part}`, wenn es die Frage im Inhalt nicht (mehr) gibt.
   """
-  def save_sample_solution(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
+  def save_sample_solution_part(%Scope{} = scope, %Task{} = task, part_id, part_nodes)
+      when is_binary(part_id) and is_list(part_nodes) do
     with :ok <- Policy.authorize(scope, task.user_id) do
-      {_blanked, answers} = AnswerKey.split(doc)
+      {_blanked, answers} = AnswerKey.split(%{"type" => "doc", "content" => part_nodes})
 
       result =
         Repo.transaction(fn ->
           locked = Repo.lock_one!(Task, task.id)
-          pruned = prune_orphan_answers(locked.content || %{}, answers)
+          content = locked.content || %{}
 
-          case locked |> Task.sample_solution_changeset(pruned) |> Repo.update() do
+          part =
+            content
+            |> ExamDoc.split_content_into_parts("answer_fields")
+            |> Enum.find(&(&1.id == part_id))
+
+          if is_nil(part), do: Repo.rollback(:unknown_part)
+
+          part_ids = AnswerKey.block_ids(%{"content" => part.nodes})
+
+          merged =
+            (locked.sample_solution || %{})
+            |> Map.drop(MapSet.to_list(part_ids))
+            |> Map.merge(Map.take(answers, MapSet.to_list(part_ids)))
+            |> then(&prune_orphan_answers(content, &1))
+
+          case locked |> Task.sample_solution_changeset(merged) |> Repo.update() do
             {:ok, updated} -> updated
             {:error, changeset} -> Repo.rollback(changeset)
           end
@@ -1047,37 +1074,45 @@ defmodule Tasky.Tasks do
   def answer_block_count(%Task{} = task),
     do: task.content |> Kernel.||(%{}) |> AnswerKey.block_ids() |> MapSet.size()
 
-  ## Selbstkontrolle
+  # Eine Optionsgruppe darf nicht über zwei Fragen laufen — sonst gälten für
+  # sie zwei Korrekturoptionen. Wie `Tasky.Exams.save_exam_structure/3`.
+  defp keep_choice_groups_in_parts(content) do
+    Tasky.Correction.Choice.separate_by_part(
+      content,
+      &ExamDoc.question_heading?/1,
+      AnswerKey.block_ids(content)
+    )
+  end
+
+  ## Korrekturoptionen
 
   @doc """
-  Nimmt ein Antwortfeld von der automatischen Selbstkontrolle aus bzw. gibt es
-  wieder frei. Gedacht für offene Formulierungsfragen, bei denen ein
-  Textvergleich nur täuschen würde.
-
-  Bewusst ein eigener Schreibweg statt eines Attributs im Dokument:
-  `save_sample_solution/3` verwirft das geblankte Dokument und darf `content`
-  unter keinen Umständen anfassen — ein Attribut am Antwortknoten käme dort
-  also nie an.
+  Die Korrekturoptionen der Frage `part_id`, mit den Vorgaben einer
+  Lerneinheit für eine Frage, an der noch niemand etwas eingestellt hat
+  (`Tasky.Correction.PartConfig.defaults/1`).
   """
-  def toggle_self_check(%Scope{} = scope, %Task{} = task, answer_id)
-      when is_binary(answer_id) do
+  def part_config(%Task{} = task, part_id) when is_binary(part_id),
+    do: PartConfig.get(task.correction_config, part_id, PartConfig.defaults(:task))
+
+  @doc """
+  Übernimmt die Korrekturoptionen einer Frage aus dem Dialog im
+  Musterlösungs-Tab. `config` hat die Schlüssel von
+  `Tasky.Correction.PartConfig`; was fehlt, bleibt wie gespeichert.
+
+  Anders als bei Prüfungen gibt es nichts nachzurechnen: die Selbstkontrolle
+  speichert keine Verdikte, sie wertet bei jedem Anzeigen neu aus.
+  """
+  def apply_part_options(%Scope{} = scope, %Task{} = task, part_id, config)
+      when is_binary(part_id) and is_map(config) do
     with :ok <- Policy.authorize(scope, task.user_id) do
       result =
         Repo.transaction(fn ->
           locked = Repo.lock_one!(Task, task.id)
-          current = locked.self_check_off || []
 
-          toggled =
-            if answer_id in current,
-              do: List.delete(current, answer_id),
-              else: [answer_id | current]
+          configs =
+            PartConfig.put(locked.correction_config, part_id, config, PartConfig.defaults(:task))
 
-          # Waisen fliegen raus, sonst wächst die Liste mit jedem gelöschten
-          # Antwortfeld weiter — gleiches Muster wie `prune_orphan_answers/2`.
-          ids = AnswerKey.block_ids(locked.content || %{})
-          pruned = Enum.filter(toggled, &MapSet.member?(ids, &1))
-
-          case locked |> Task.self_check_off_changeset(pruned) |> Repo.update() do
+          case locked |> Task.correction_config_changeset(configs) |> Repo.update() do
             {:ok, updated} -> updated
             {:error, changeset} -> Repo.rollback(changeset)
           end
@@ -1089,43 +1124,6 @@ defmodule Tasky.Tasks do
       end
     end
   end
-
-  @doc """
-  Die Antwortfelder der Lerneinheit für die Selbstkontroll-Liste im
-  Musterlösungs-Tab: `answer_id`, `type`, ein Text-Ausschnitt und ob das Feld
-  automatisch geprüft wird.
-
-  Gelesen wird das antwortgefüllte Dokument, nicht `content` — im Skelett sind
-  die Textfelder geblankt, der Ausschnitt wäre also leer. Felder ohne
-  `answerId` fallen weg: ohne id gibt es nichts zu schalten.
-  """
-  def list_solution_blocks(%Task{} = task) do
-    off = MapSet.new(task.self_check_off || [])
-
-    task
-    |> sample_solution_doc()
-    |> Map.get("content", [])
-    |> Kernel.||([])
-    |> NodePatcher.list_answer_blocks()
-    |> Enum.reject(&is_nil(&1.answer_id))
-    |> Enum.map(fn block ->
-      %{
-        answer_id: block.answer_id,
-        type: block.type,
-        snippet: snippet(block.text),
-        checked: not MapSet.member?(off, block.answer_id)
-      }
-    end)
-  end
-
-  defp snippet(text) when is_binary(text) do
-    case String.trim(text) do
-      "" -> "—"
-      trimmed -> String.slice(trimmed, 0, 60)
-    end
-  end
-
-  defp snippet(_text), do: "—"
 
   @doc """
   Die Auswertung der Selbstkontrolle einer Abgabe.

@@ -11,6 +11,13 @@ defmodule Tasky.Tasks.SelfCheck do
   und `task.sample_solution` — ändert die Lehrperson die Musterlösung, stimmt
   die Auswertung sofort.
 
+  Wie bei Prüfungen gelten die Korrekturoptionen pro Frage (h3), gespeichert
+  in `task.correction_config` (`Tasky.Correction.PartConfig`): Auto-Korrektur
+  der Textfelder, Gross-/Kleinschreibung, Satzzeichen, Rechtschreibung und die
+  Bewertung von Multiple-Choice. Antwortfelder ausserhalb einer Frage werden
+  nicht geprüft. Welches Feld zu welcher Frage gehört, sagt immer
+  `task.content`, nie die Abgabe.
+
   Zwei weitere bewusste Unterschiede zur Prüfungs-Autokorrektur
   (`Tasky.AI.BulkCorrectionRunner`):
 
@@ -30,11 +37,14 @@ defmodule Tasky.Tasks.SelfCheck do
   es setzen würde.
   """
 
+  alias Tasky.AI.NodePatcher
   alias Tasky.Correction.AnswerVariants
   alias Tasky.Correction.Choice
   alias Tasky.Correction.ImagePin
+  alias Tasky.Correction.PartConfig
   alias Tasky.Correction.SolutionHints
   alias Tasky.Correction.StringComparator
+  alias Tasky.ExamDoc
   alias Tasky.Tasks.Task
   alias Tasky.Tasks.TaskSubmission
 
@@ -43,20 +53,16 @@ defmodule Tasky.Tasks.SelfCheck do
   @answer_types Tasky.Correction.AnswerKey.answer_types()
   @text_types ["answerBlock", "lueckentext"]
 
-  # Gross-/Kleinschreibung ignorieren, aber kein Fuzzy-Matching: "bern" gilt,
-  # "Bren" nicht. Alternativen erfasst die Lehrperson wie bei Prüfungen mit
-  # `;` in der Musterlösung.
-  @match_opts %{ignore_case: true}
-
   @type summary :: %{verdicts: %{String.t() => String.t()}, correct: integer(), total: integer()}
 
   @doc """
   Vergleicht die Antworten der Abgabe mit der Musterlösung.
 
-  `total` zählt nur die tatsächlich geprüften Antwortfelder. Nicht geprüft
-  werden Felder, die in `task.self_check_off` stehen, und Felder ohne
-  brauchbare Musterlösung — ein Feld, das die Lehrperson leer gelassen hat,
-  darf keine Quote verderben.
+  `total` zählt, was tatsächlich geprüft wurde: jedes Antwortfeld einzeln,
+  eine Checkbox-Liste unter „alles oder nichts“ aber als ein Eintrag. Nicht
+  geprüft werden Felder ausserhalb einer Frage, Textfelder einer Frage ohne
+  Auto-Korrektur und Felder ohne brauchbare Musterlösung — ein Feld, das die
+  Lehrperson leer gelassen hat, darf keine Quote verderben.
   """
   @spec evaluate(Task.t() | map(), TaskSubmission.t() | map()) :: summary()
   def evaluate(%Task{} = task, %TaskSubmission{} = submission),
@@ -65,7 +71,7 @@ defmodule Tasky.Tasks.SelfCheck do
   def evaluate(%Task{} = task, content) when is_map(content) or is_nil(content) do
     nodes = doc_nodes(content)
     sample = task.sample_solution || %{}
-    off = MapSet.new(task.self_check_off || [])
+    fields = fields_by_answer_id(task)
 
     choices = Choice.groups(nodes)
 
@@ -73,17 +79,59 @@ defmodule Tasky.Tasks.SelfCheck do
       nodes
       |> collect_answers(choices)
       |> Enum.reduce(%{}, fn {id, node}, acc ->
-        case verdict_for(node, Map.get(sample, id), MapSet.member?(off, id)) do
-          nil -> acc
-          verdict -> Map.put(acc, id, verdict)
+        with %{config: config} <- Map.get(fields, id),
+             verdict when not is_nil(verdict) <- verdict_for(node, Map.get(sample, id), config) do
+          Map.put(acc, id, verdict)
+        else
+          _ -> acc
         end
       end)
+      |> all_or_nothing(fields)
+
+    units = Enum.group_by(verdicts, fn {id, _v} -> fields[id].unit end, fn {_id, v} -> v end)
 
     %{
       verdicts: verdicts,
-      correct: Enum.count(verdicts, fn {_id, v} -> v == "correct" end),
-      total: map_size(verdicts)
+      correct: Enum.count(units, fn {_unit, vs} -> Enum.all?(vs, &(&1 == "correct")) end),
+      total: map_size(units)
     }
+  end
+
+  # Every answer field under a question of `task.content`, with its question's
+  # options and the unit it counts as: itself, or its checkbox list when the
+  # question scores checkboxes all or nothing.
+  defp fields_by_answer_id(%Task{} = task) do
+    task.content
+    |> Kernel.||(%{})
+    |> ExamDoc.split_content_into_parts("answer_fields")
+    |> Enum.flat_map(fn part ->
+      config = PartConfig.get(task.correction_config, part.id, PartConfig.defaults(:task))
+      all_or_nothing? = PartConfig.checkbox_rule(config) == "all_or_nothing"
+
+      for block <- NodePatcher.list_answer_blocks(part.nodes), block.answer_id do
+        {block.answer_id, %{config: config, unit: unit(block, part.id, all_or_nothing?)}}
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp unit(%{type: "taskItem", group: group}, part_id, true) when not is_nil(group),
+    do: {:list, part_id, group}
+
+  defp unit(block, _part_id, _all_or_nothing?), do: block.answer_id
+
+  # Under "alles oder nichts" a checkbox list is right only as a whole: one
+  # wrong box marks every box of the list wrong, as the exam's points would.
+  defp all_or_nothing(verdicts, fields) do
+    wrong_lists =
+      for {id, "wrong"} <- verdicts,
+          match?({:list, _, _}, fields[id].unit),
+          into: MapSet.new(),
+          do: fields[id].unit
+
+    Map.new(verdicts, fn {id, v} ->
+      if MapSet.member?(wrong_lists, fields[id].unit), do: {id, "wrong"}, else: {id, v}
+    end)
   end
 
   @doc """
@@ -105,37 +153,35 @@ defmodule Tasky.Tasks.SelfCheck do
 
   ## Auswertung
 
-  defp verdict_for(_node, nil, _off?), do: nil
-  defp verdict_for(_node, _payload, true), do: nil
+  defp verdict_for(_node, nil, _config), do: nil
 
   # A radio group: right when exactly the sample's radio is chosen.
-  defp verdict_for({:choice, group}, payload, _off?) when is_binary(payload) do
+  defp verdict_for({:choice, group}, payload, _config) when is_binary(payload) do
     if Choice.checked_options(group) == [payload], do: "correct", else: "wrong"
   end
 
-  defp verdict_for(%{"type" => "taskItem"} = node, payload, _off?) when is_boolean(payload) do
+  defp verdict_for(%{"type" => "taskItem"} = node, payload, _config) when is_boolean(payload) do
     if checked?(node) == payload, do: "correct", else: "wrong"
   end
 
   # An essay field is read by the teacher, never compared with the sample.
-  defp verdict_for(%{"type" => "answerBlock", "attrs" => %{"rich" => true}}, _payload, _off?),
+  defp verdict_for(%{"type" => "answerBlock", "attrs" => %{"rich" => true}}, _payload, _config),
     do: nil
 
-  defp verdict_for(%{"type" => type} = node, payload, _off?)
+  defp verdict_for(%{"type" => type} = node, payload, config)
        when type in @text_types and is_list(payload) do
-    case accepted_answers(payload) do
-      # Ein leeres Antwortfeld in der Musterlösung ist keine Vorgabe.
-      [] ->
-        nil
-
-      accepted ->
-        text_verdict(plain_text(node), accepted)
+    # Ein leeres Antwortfeld in der Musterlösung ist keine Vorgabe.
+    with true <- PartConfig.flag?(config, "auto_correct"),
+         [_ | _] = accepted <- accepted_answers(payload) do
+      text_verdict(plain_text(node), accepted, StringComparator.match_opts(config))
+    else
+      _ -> nil
     end
   end
 
   # A pin image: right when every pin is in its zone. A learning unit has no
   # points to share, so partly right is wrong.
-  defp verdict_for(%{"type" => "imagePin"} = node, [_ | _] = payload, _off?) do
+  defp verdict_for(%{"type" => "imagePin"} = node, [_ | _] = payload, _config) do
     case ImagePin.score(ImagePin.pins(node), payload, ImagePin.aspect(node)) do
       {_hits, 0} -> nil
       {total, total} -> "correct"
@@ -143,15 +189,15 @@ defmodule Tasky.Tasks.SelfCheck do
     end
   end
 
-  defp verdict_for(_node, _payload, _off?), do: nil
+  defp verdict_for(_node, _payload, _config), do: nil
 
-  defp text_verdict(given, accepted) do
+  defp text_verdict(given, accepted, match_opts) do
     case String.trim(given) do
       "" ->
         "wrong"
 
       given ->
-        if Enum.any?(accepted, &StringComparator.text_match?(given, &1, @match_opts)),
+        if Enum.any?(accepted, &StringComparator.text_match?(given, &1, match_opts)),
           do: "correct",
           else: "wrong"
     end

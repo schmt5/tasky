@@ -451,30 +451,37 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
     setup %{task: task, student: student} do
       teacher_scope = Scope.for_user(Tasky.Repo.get!(Tasky.Accounts.User, task.user_id))
 
+      # One question, two answer fields (at positions 1 and 2).
       skeleton = %{
         "type" => "doc",
-        "content" =>
-          Enum.map(["a1", "a2"], fn id ->
-            %{
-              "type" => "answerBlock",
-              "attrs" => %{"answerId" => id},
-              "content" => [%{"type" => "paragraph"}]
-            }
-          end)
+        "content" => [
+          %{
+            "type" => "heading",
+            "attrs" => %{"level" => 3, "partId" => "q-1"},
+            "content" => [%{"type" => "text", "text" => "Frage"}]
+          }
+          | Enum.map(["a1", "a2"], fn id ->
+              %{
+                "type" => "answerBlock",
+                "attrs" => %{"answerId" => id},
+                "content" => [%{"type" => "paragraph"}]
+              }
+            end)
+        ]
       }
 
       {:ok, task} = Tasks.save_task_content(teacher_scope, task, skeleton)
 
       filled =
         skeleton
-        |> put_in(["content", Access.at(0), "content"], [
+        |> put_in(["content", Access.at(1), "content"], [
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Bern"}]}
         ])
-        |> put_in(["content", Access.at(1), "content"], [
+        |> put_in(["content", Access.at(2), "content"], [
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Aare"}]}
         ])
 
-      {:ok, task} = Tasks.save_sample_solution(teacher_scope, task, filled)
+      task = Tasky.TasksFixtures.sample_solution_fixture(task, filled)
 
       %{task: task, teacher_scope: teacher_scope, skeleton: skeleton, student: student}
     end
@@ -496,7 +503,7 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       {:ok, submission} = Tasks.get_or_create_submission(other_scope, task.id)
 
       answered =
-        put_in(skeleton, ["content", Access.at(0), "content"], [
+        put_in(skeleton, ["content", Access.at(1), "content"], [
           %{"type" => "paragraph", "content" => [%{"type" => "text", "text" => "Bern"}]}
         ])
 
@@ -513,8 +520,8 @@ defmodule TaskyWeb.TaskLive.ProgressTest do
       task: task,
       teacher_scope: teacher_scope
     } do
-      {:ok, task} = Tasks.toggle_self_check(teacher_scope, task, "a1")
-      {:ok, task} = Tasks.toggle_self_check(teacher_scope, task, "a2")
+      {:ok, task} =
+        Tasks.apply_part_options(teacher_scope, task, "q-1", %{"auto_correct" => false})
 
       {:ok, _lv, html} = live(conn, ~p"/progress/#{task.id}")
 

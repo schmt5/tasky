@@ -14,11 +14,14 @@ defmodule Tasky.Tasks.Task do
   JSON-Spalten — regulär castbar. Ausgewertet wird der Modus an genau einer
   Stelle: `Tasky.Tasks.solution_visible?/2`.
 
-  `self_check_off` listet die `answerId`s, die von der automatischen
-  Selbstkontrolle (`Tasky.Tasks.SelfCheck`) ausgenommen sind — gedacht für
-  offene Formulierungsfragen, bei denen ein Textvergleich nur täuschen würde.
-  Geschrieben wird die Liste ausschliesslich über
-  `Tasky.Tasks.toggle_self_check/3`, nicht über ein Formular.
+  `correction_config` hält die Korrekturoptionen pro Frage (`partId =>
+  Optionen`), in derselben Form wie `ai_correction_config` einer Prüfung
+  (siehe `Tasky.Correction.PartConfig`). Geschrieben wird sie ausschliesslich
+  über `Tasky.Tasks.apply_part_options/4`, nicht über ein Formular.
+
+  `self_check_off` wird nicht mehr gelesen — die Migration
+  `AddCorrectionConfigToTasks` hat es in `correction_config` übertragen. Die
+  Spalte fällt in einem späteren Deploy weg.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -38,6 +41,9 @@ defmodule Tasky.Tasks.Task do
     field :extended, :boolean, default: false
     field :content, :map
     field :sample_solution, :map, default: %{}
+    field :correction_config, :map, default: %{}
+    # Deprecated: read by no one since `correction_config`; dropped in a
+    # later deploy (live data, boot-time migrator).
     field :self_check_off, {:array, :string}, default: []
     field :solution_release_mode, :string, default: "never"
     field :user_id, :id
@@ -132,13 +138,13 @@ defmodule Tasky.Tasks.Task do
   end
 
   @doc """
-  Changeset für die von der Selbstkontrolle ausgenommenen Antwortfelder.
+  Changeset für die Korrekturoptionen pro Frage.
 
-  Eigenes Changeset statt `changeset/3`: die Liste kommt nie aus einem
-  Formular, sondern immer aus `Tasky.Tasks.toggle_self_check/3`, das sie vorher
-  gegen die Antwortfelder im Inhalt abgleicht.
+  Eigenes Changeset statt `changeset/2`: die Map kommt nie aus einem
+  Formular, sondern immer aus `Tasky.Tasks.apply_part_options/4`, das sie über
+  `Tasky.Correction.PartConfig` baut.
   """
-  def self_check_off_changeset(task, answer_ids) when is_list(answer_ids) do
-    change(task, self_check_off: Enum.sort(answer_ids))
+  def correction_config_changeset(task, config) when is_map(config) do
+    change(task, correction_config: config)
   end
 end

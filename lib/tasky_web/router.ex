@@ -142,7 +142,9 @@ defmodule TaskyWeb.Router do
     post "/tasks/:id/images", TaskImageApiController, :create
     post "/tasks/:id/audio", AudioUploadApiController, :task
 
-    put "/tasks/:id/sample-solution", TaskSampleSolutionApiController, :update
+    put "/tasks/:id/sample-solution/parts/:part_id/content",
+        TaskSampleSolutionApiController,
+        :update_part
 
     put "/tasks/:id/submissions/:submission_id/correction",
         TaskCorrectionContentApiController,

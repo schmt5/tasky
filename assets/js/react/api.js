@@ -119,16 +119,6 @@ export function saveTaskContent(taskId, content, opts = {}) {
   });
 }
 
-// Whole-document payload, unlike the exam endpoint's per-part `nodes`:
-// learning units have no parts.
-export function saveTaskSampleSolution(taskId, content, opts = {}) {
-  return request(`/api/tasks/${taskId}/sample-solution`, {
-    method: "PUT",
-    body: JSON.stringify({ content }),
-    ...opts,
-  });
-}
-
 export function saveTaskCorrection(taskId, submissionId, content, opts = {}) {
   return request(`/api/tasks/${taskId}/submissions/${submissionId}/correction`, {
     method: "PUT",
@@ -156,8 +146,10 @@ export function saveAnswerFields(url, payload, opts = {}) {
   });
 }
 
-export function saveExamSampleSolutionPart(examId, partId, nodes, opts = {}) {
-  return request(`/api/exams/${examId}/sample-solution/parts/${partId}/content`, {
+// One question's sample solution, exam or learning unit alike: the page
+// renders the endpoint (`.../sample-solution/parts/:part_id/content`).
+export function saveSampleSolutionPart(url, nodes, opts = {}) {
+  return request(url, {
     method: "PUT",
     body: JSON.stringify({ nodes }),
     ...opts,

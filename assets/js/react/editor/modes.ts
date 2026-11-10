@@ -52,7 +52,10 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
    */
   freeDocument: { hideAnswers: true, hideQuestion: true },
 
-  /** One sample-solution part editor under the shared toolbar. */
+  /**
+   * One sample-solution part editor under the shared toolbar — the same for
+   * an exam question and a learning-unit question.
+   */
   solution: {
     hideAnswers: true,
     protectAnswers: true,
@@ -62,22 +65,6 @@ export const EDITOR_MODES: Record<string, EditorModePreset> = {
     notFullWidth: true,
     solutionMode: true,
     externalToolbar: true,
-  },
-
-  /**
-   * Teacher filling in the model answers of a whole learning unit.
-   *
-   * Same lock as the exam `solution` preset, but without `externalToolbar` /
-   * `notFullWidth`: a learning unit has no parts, so there is a single editor
-   * and nothing to share a toolbar between.
-   */
-  taskSolution: {
-    hideAnswers: true,
-    protectAnswers: true,
-    hideCallout: true,
-    hideQuestion: true,
-    lockContent: true,
-    solutionMode: true,
   },
 
   /** Teacher correcting one part of a submission. */
