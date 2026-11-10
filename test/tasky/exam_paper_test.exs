@@ -229,6 +229,19 @@ defmodule Tasky.ExamPaperTest do
              ]
     end
 
+    test "no points when the teacher hides them, the boxes still sized by them" do
+      content = doc([heading("Frage eins", "q-1"), answer_block("a")])
+
+      %{"content" => [h, block]} =
+        ExamPaper.paper_doc(
+          content,
+          opts(sample_solution_points: %{"q-1" => 4}, show_part_points: false)
+        )
+
+      assert h["content"] == [%{"type" => "text", "text" => "Frage eins"}]
+      assert length(block["content"]) == ExamPaper.lines_for_points(4)
+    end
+
     test "a question without points gets no suffix" do
       content = doc([heading("Frage eins", "q-1"), answer_block("a")])
 

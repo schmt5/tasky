@@ -268,7 +268,7 @@ defmodule Tasky.Exams do
 
     with {:ok, exam} <- create_exam(scope, attrs),
          {:ok, exam, image_jobs} <- copy_exam_content(exam, source),
-         {:ok, exam} <- copy_paper_layout(exam, source),
+         {:ok, exam} <- copy_sheet_settings(exam, source),
          {:ok, attachment_jobs} <- copy_exam_attachments(scope, exam, source),
          :ok <- copy_exam_upload_fields(scope, exam, source) do
       {:ok, exam, image_jobs ++ attachment_jobs}
@@ -285,10 +285,16 @@ defmodule Tasky.Exams do
   # absent from every changeset on purpose (see Exam), and nothing
   # user-supplied reaches this value — it is copied from a row the caller was
   # already authorized for.
-  defp copy_paper_layout(exam, %Exam{paper_layout: nil}), do: {:ok, exam}
+  #
+  # The setting whether learners see each question's points rides along: it
+  # belongs to the same printed and digital sheet.
+  defp copy_sheet_settings(exam, %Exam{paper_layout: layout, show_part_points: show}) do
+    changes =
+      if is_nil(layout),
+        do: %{show_part_points: show},
+        else: %{paper_layout: layout, show_part_points: show}
 
-  defp copy_paper_layout(exam, %Exam{paper_layout: layout}) do
-    exam |> Ecto.Changeset.change(%{paper_layout: layout}) |> Repo.update()
+    exam |> Ecto.Changeset.change(changes) |> Repo.update()
   end
 
   # Both the exam body and the stored model answers can carry content images (a
@@ -591,6 +597,36 @@ defmodule Tasky.Exams do
       |> update_and_broadcast(&broadcast_exam_update/1)
     end
   end
+
+  @doc """
+  Shows or hides each question's points for the learners, online and on the
+  paper version. See `learner_visible_part_points/1`.
+  """
+  def set_show_part_points(scope, %Exam{} = exam, value) do
+    with :ok <- Policy.authorize(scope, exam.teacher_id) do
+      # No broadcast: the learners' sheet is rendered once per page load, so
+      # the change reaches them on their next one anyway.
+      exam
+      |> Exam.show_part_points_changeset(value)
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  The points per question the learners may see, `%{part_id => points}`, or
+  `nil` when the teacher hides them or the exam has no questions (free
+  document).
+
+  Only the question's total. The split over its answer fields
+  (`sample_solution_block_points`) never leaves the teacher's side: an uneven
+  split hints at the answer.
+  """
+  def learner_visible_part_points(
+        %Exam{answer_mode: "answer_fields", show_part_points: true} = exam
+      ),
+      do: exam.sample_solution_points || %{}
+
+  def learner_visible_part_points(%Exam{}), do: nil
 
   @doc """
   Suspends SEB enforcement for `minutes`, degrading `"enforce"` to `"observe"`

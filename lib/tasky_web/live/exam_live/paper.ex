@@ -160,7 +160,8 @@ defmodule TaskyWeb.ExamLive.Paper do
         layout: exam.paper_layout,
         sample_solution_points: exam.sample_solution_points,
         sample_solution_block_points: exam.sample_solution_block_points,
-        answer_mode: exam.answer_mode
+        answer_mode: exam.answer_mode,
+        show_part_points: exam.show_part_points
       )
 
     free_document = Exams.free_document?(exam)

@@ -54,6 +54,10 @@ defmodule Tasky.Exams.Exam do
     # column so the exam list can tell how far the correction is without
     # loading the documents (Exams.exam_phases/2). Never cast.
     field :part_ids, {:array, :string}, default: []
+    # Whether the learners see each question's points (online and on paper).
+    # Only the question's total, never its split over the answer fields.
+    # Written only by Exams.set_show_part_points/3 and the duplication path.
+    field :show_part_points, :boolean, default: true
 
     belongs_to :teacher, Tasky.Accounts.User, foreign_key: :teacher_id
     has_many :exam_submissions, Tasky.Exams.ExamSubmission
@@ -95,7 +99,8 @@ defmodule Tasky.Exams.Exam do
   # because that write also re-rounds every stored manual mark of the exam
   # onto the new grid — a plain cast would move the grid and leave the marks
   # behind. :archived_at is only written by Exams.archive_exam/2 and
-  # unarchive_exam/2. The document and grading columns are in
+  # unarchive_exam/2, :show_part_points only by Exams.set_show_part_points/3.
+  # The document and grading columns are in
   # document_changeset/2 — see there.
   def changeset(exam, attrs) do
     exam
@@ -241,6 +246,16 @@ defmodule Tasky.Exams.Exam do
     |> validate_required([:seb_enforcement])
     |> validate_inclusion(:seb_enforcement, @enforcement_modes)
     |> check_constraint(:seb_enforcement, name: :exams_seb_enforcement_check)
+  end
+
+  @doc """
+  Shows or hides each question's points for the learners. Cast because the
+  value arrives from a checkbox.
+  """
+  def show_part_points_changeset(exam, value) do
+    exam
+    |> cast(%{show_part_points: value}, [:show_part_points])
+    |> validate_required([:show_part_points])
   end
 
   @doc """

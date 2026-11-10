@@ -64,6 +64,9 @@ defmodule Tasky.ExamPaper do
     * `:sample_solution_points` — `%{part_id => points}`
     * `:sample_solution_block_points` — `%{part_id => %{answer_id => points}}`
     * `:answer_mode` — required, no default (see `ExamDoc.split_content_into_parts/2`)
+    * `:show_part_points` — `false` leaves the headings without points
+      (`exam.show_part_points`); the boxes are still sized by the points.
+      Defaults to `true`.
   """
   def paper_doc(content, opts) when is_list(opts) do
     mode = Keyword.fetch!(opts, :answer_mode)
@@ -235,15 +238,19 @@ defmodule Tasky.ExamPaper do
   defp with_points_in_headings(content, "free_document", _opts), do: doc_or_empty(content)
 
   defp with_points_in_headings(content, "answer_fields" = mode, opts) do
-    part_points = Keyword.get(opts, :sample_solution_points) || %{}
+    if Keyword.get(opts, :show_part_points, true) do
+      part_points = Keyword.get(opts, :sample_solution_points) || %{}
 
-    # Keyed like sample_solution_points, legacy "q-N" fallback included —
-    # see ExamDoc.map_question_headings/3 for why no ids are minted here.
-    content
-    |> doc_or_empty()
-    |> ExamDoc.map_question_headings(mode, fn part_id, heading ->
-      append_text(heading, points_suffix(Map.get(part_points, part_id)))
-    end)
+      # Keyed like sample_solution_points, legacy "q-N" fallback included —
+      # see ExamDoc.map_question_headings/3 for why no ids are minted here.
+      content
+      |> doc_or_empty()
+      |> ExamDoc.map_question_headings(mode, fn part_id, heading ->
+        append_text(heading, points_suffix(Map.get(part_points, part_id)))
+      end)
+    else
+      doc_or_empty(content)
+    end
   end
 
   defp append_text(heading, nil), do: heading
