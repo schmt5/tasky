@@ -176,6 +176,16 @@ defmodule TaskyWeb.ExamLive.Content do
             </p>
           </div>
 
+          <%!-- What the exam is worth, and whether the learners see each
+               question's share. Scrolls along: header and toolbar already
+               stick, a third bar would squeeze the editors. --%>
+          <.points_summary
+            :if={@part_views != [] and not @free_document}
+            exam={@exam}
+            part_views={@part_views}
+            form={@part_points_form}
+          />
+
           <.part_row
             :for={pv <- @part_views}
             :if={not @free_document}
@@ -535,6 +545,7 @@ defmodule TaskyWeb.ExamLive.Content do
      |> assign(:options_draft, nil)
      |> assign(:options_form, nil)
      |> assign(:free_document, ExamComponents.free_document?(exam))
+     |> assign_part_points_form(exam)
      |> allow_upload(:attachment,
        accept: Uploads.attachment_accept_exts(),
        max_entries: 3,
@@ -665,6 +676,23 @@ defmodule TaskyWeb.ExamLive.Content do
   end
 
   @impl true
+  def handle_event(
+        "set_show_part_points",
+        %{"part_points" => %{"show_part_points" => raw}},
+        socket
+      ) do
+    case Exams.set_show_part_points(socket.assigns.current_scope, socket.assigns.exam, raw) do
+      {:ok, updated} ->
+        {:noreply, socket |> assign(:exam, updated) |> assign_part_points_form(updated)}
+
+      {:error, _} ->
+        {:noreply,
+         socket
+         |> assign_part_points_form(socket.assigns.exam)
+         |> put_flash(:error, "Einstellung konnte nicht gespeichert werden.")}
+    end
+  end
+
   def handle_event("set_max_points", %{"points" => raw, "part_id" => part_id}, socket) do
     save_max_points(socket, part_id, parse_points(raw))
   end
@@ -1103,6 +1131,99 @@ defmodule TaskyWeb.ExamLive.Content do
       <.icon name={if @direction == "up", do: "hero-plus", else: "hero-minus"} class="w-4 h-4" />
     </button>
     """
+  end
+
+  attr :exam, :map, required: true
+  attr :part_views, :list, required: true
+  attr :form, :map, required: true
+
+  defp points_summary(assigns) do
+    assigns = assign(assigns, :summary, summarize_points(assigns.exam, assigns.part_views))
+
+    ~H"""
+    <div
+      id="solution-points-summary"
+      class="mb-6 bg-white rounded-[14px] border border-stone-100 shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)] px-5 py-3.5 flex flex-wrap items-center justify-between gap-x-8 gap-y-3"
+    >
+      <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-stone-500">
+        <span class="text-stone-800 font-semibold">
+          Total
+          <span id="solution-points-total" class="font-mono tabular-nums">
+            {format_block_points(@summary.total)}
+          </span>
+          {if @summary.total == 1, do: "Punkt", else: "Punkte"}
+        </span>
+        <span class="text-stone-300" aria-hidden="true">·</span>
+        <span>
+          {@summary.questions} {if @summary.questions == 1, do: "Aufgabe", else: "Aufgaben"}
+        </span>
+        <%= if @summary.missing > 0 do %>
+          <span class="text-stone-300" aria-hidden="true">·</span>
+          <span
+            id="solution-points-missing"
+            class="inline-flex items-center gap-1 self-center text-amber-700 font-medium"
+          >
+            <.icon name="hero-exclamation-triangle-mini" class="w-4 h-4" />
+            {@summary.missing} ohne Punkte
+          </span>
+        <% end %>
+        <%= if @summary.points_for_six do %>
+          <span class="text-stone-300" aria-hidden="true">·</span>
+          <span id="solution-points-six">
+            Note 6 bei
+            <span class="font-mono tabular-nums">
+              {format_block_points(@summary.points_for_six)}
+            </span>
+            Punkten
+          </span>
+        <% end %>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <.form
+          for={@form}
+          id={"part-points-display-form-#{@exam.id}"}
+          phx-change="set_show_part_points"
+        >
+          <.input
+            field={@form[:show_part_points]}
+            type="checkbox"
+            label="Punkte pro Aufgabe den Lernenden zeigen"
+          />
+        </.form>
+        <div
+          class="tooltip tooltip-delayed tooltip-left"
+          data-tip="Gilt auch für die Papierversion. Die Verteilung auf die Antwortfelder bleibt verborgen."
+        >
+          <.icon name="hero-information-circle" class="w-4 h-4 text-stone-400" />
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Total over the questions shown, how many still lack points, and the
+  # points for a 6 when the teacher set them apart from the total.
+  defp summarize_points(exam, part_views) do
+    points = exam.sample_solution_points || %{}
+    values = Enum.map(part_views, &Map.get(points, &1.id))
+    total = values |> Enum.filter(&(is_number(&1) and &1 > 0)) |> Enum.sum()
+    six = exam.grading_max_points
+
+    %{
+      total: total,
+      questions: length(part_views),
+      missing: Enum.count(values, &(not is_number(&1) or &1 <= 0)),
+      points_for_six: if(is_number(six) and six > 0 and six != total, do: six)
+    }
+  end
+
+  defp assign_part_points_form(socket, exam) do
+    assign(
+      socket,
+      :part_points_form,
+      to_form(%{"show_part_points" => exam.show_part_points}, as: :part_points)
+    )
   end
 
   # The preview shows what the learners get, points per question included —

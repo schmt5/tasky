@@ -200,6 +200,47 @@ defmodule TaskyWeb.ExamContentLiveTest do
     end
   end
 
+  describe "points summary" do
+    test "totals the questions and counts those without points", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(mixed_answer_content())
+      {:ok, _} = Exams.set_sample_solution_part_points(scope, exam, "q-1", 4)
+      exam = Exams.get_exam!(scope, exam.id)
+      {:ok, _} = Exams.set_sample_solution_part_points(scope, exam, "q-2", 2.5)
+
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      assert has_element?(view, "#solution-points-total", "6.5")
+      assert has_element?(view, "#solution-points-summary", "3 Aufgaben")
+      assert has_element?(view, "#solution-points-missing", "1 ohne Punkte")
+    end
+
+    test "follows the points as the teacher sets them", %{conn: conn} do
+      %{teacher: teacher, exam: exam} = create_exam(two_part_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      assert has_element?(view, "#solution-points-missing", "2 ohne Punkte")
+
+      render_change(view, "set_max_points", %{"part_id" => "q-1", "points" => "3"})
+      render_change(view, "set_max_points", %{"part_id" => "q-2", "points" => "2"})
+
+      assert has_element?(view, "#solution-points-total", "5")
+      refute has_element?(view, "#solution-points-missing")
+    end
+
+    test "the toggle hides the points from the learners", %{conn: conn} do
+      %{teacher: teacher, scope: scope, exam: exam} = create_exam(two_part_content())
+      {:ok, view, _html} = open_musterloesung(conn, teacher, exam)
+
+      view
+      |> form("#part-points-display-form-#{exam.id}", %{
+        "part_points" => %{"show_part_points" => "false"}
+      })
+      |> render_change()
+
+      refute Exams.get_exam!(scope, exam.id).show_part_points
+    end
+  end
+
   describe "Korrekturoptionen dialog" do
     defp open_options(view, part_id) do
       view |> element("#correction-options-btn-#{part_id}") |> render_click()
