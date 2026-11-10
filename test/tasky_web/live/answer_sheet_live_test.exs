@@ -170,6 +170,76 @@ defmodule TaskyWeb.AnswerSheetLiveTest do
     end
   end
 
+  describe "points per question" do
+    setup do
+      exam =
+        exam_fixture(
+          status: "running",
+          attrs: %{
+            content: skeleton(),
+            sample_solution_points: %{"q-1" => 4},
+            sample_solution_block_points: %{"q-1" => %{"gap" => 3, "block" => 1}}
+          }
+        )
+
+      %{exam: exam, submission: exam_submission_fixture(exam)}
+    end
+
+    test "the learner sees what the question is worth", %{conn: conn, submission: submission} do
+      {:ok, view, _html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      assert has_element?(
+               view,
+               "#exam-answers-#{submission.id} h3 + .exam-doc__points",
+               "4 Punkte"
+             )
+    end
+
+    test "but not how it splits over the fields", %{conn: conn, submission: submission} do
+      {:ok, view, _html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      points = view |> element("#exam-answers-#{submission.id}") |> render()
+      refute points =~ "3 Punkte"
+      refute points =~ "1 Punkt"
+    end
+
+    test "nothing when the teacher hides them", %{
+      conn: conn,
+      exam: exam,
+      submission: submission
+    } do
+      scope = Scope.for_user(Tasky.Accounts.get_user!(exam.teacher_id))
+      {:ok, _} = Exams.set_show_part_points(scope, exam, false)
+
+      {:ok, view, _html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      refute has_element?(view, "#exam-answers-#{submission.id} .exam-doc__points")
+    end
+
+    test "the points never reach the stored answers", %{conn: conn, submission: submission} do
+      {:ok, _view, _html} = live(conn, ~p"/guest/exam/#{submission.exam_token}")
+
+      conn =
+        put_json(conn, ~p"/api/guest/exam/#{submission.exam_token}/content", %{
+          "answers" => %{"gap" => "Bern"},
+          "choices" => %{}
+        })
+
+      assert json_response(conn, 200)
+      content = Tasky.Repo.get!(Tasky.Exams.ExamSubmission, submission.id).content
+      refute inspect(content) =~ "maxPoints"
+    end
+
+    test "the teacher preview shows them too", %{conn: conn, exam: exam} do
+      teacher = Tasky.Accounts.get_user!(exam.teacher_id)
+
+      {:ok, view, _html} =
+        conn |> log_in_user(teacher) |> live(~p"/exams/#{exam}/content?tab=vorschau")
+
+      assert has_element?(view, "#exam-preview-#{exam.id}-0 .exam-doc__points", "4 Punkte")
+    end
+  end
+
   describe "teacher preview" do
     test "shows the exam as learners see it, without saving", %{conn: conn} do
       teacher = user_fixture(%{role: "teacher"})

@@ -240,6 +240,27 @@ defmodule Tasky.ExamDoc do
   end
 
   @doc """
+  Marks each question heading with what the question is worth, as the
+  heading attribute `"maxPoints"`, for the learner's answer sheet
+  (`TaskyWeb.ExamDocHTML`). `points` is `%{part_id => points}`; questions
+  without points (or with 0) stay unmarked.
+
+  Only ever applied to the doc being rendered, never stored: the setting and
+  the points may change after a learner's copy was taken.
+  """
+  def put_part_points(doc, mode, points) when is_map(doc) and is_map(points) do
+    map_question_headings(doc, mode, fn part_id, heading ->
+      case Map.get(points, part_id) do
+        p when is_number(p) and p > 0 ->
+          Map.update(heading, "attrs", %{"maxPoints" => p}, &Map.put(&1, "maxPoints", p))
+
+        _ ->
+          heading
+      end
+    end)
+  end
+
+  @doc """
   Labels for the answer blocks of a part's nodes, keyed by block index: the
   inline text immediately preceding each answer node (or the preceding table
   cell for the "Begriff | [Antwort]" layout).

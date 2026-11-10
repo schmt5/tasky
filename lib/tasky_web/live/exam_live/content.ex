@@ -102,7 +102,7 @@ defmodule TaskyWeb.ExamLive.Content do
         </div>
         <.answer_sheet
           id={"exam-preview-#{@exam.id}-#{@preview_rev}"}
-          doc={@exam.content || %{}}
+          doc={preview_doc(@exam)}
         />
       </div>
 
@@ -1103,6 +1103,17 @@ defmodule TaskyWeb.ExamLive.Content do
       <.icon name={if @direction == "up", do: "hero-plus", else: "hero-minus"} class="w-4 h-4" />
     </button>
     """
+  end
+
+  # The preview shows what the learners get, points per question included —
+  # same as Guest.ExamLive.
+  defp preview_doc(exam) do
+    doc = exam.content || %{}
+
+    case Exams.learner_visible_part_points(exam) do
+      nil -> doc
+      points -> Tasky.ExamDoc.put_part_points(doc, exam.answer_mode, points)
+    end
   end
 
   # One look for every points input, in the sidebar and in the options dialog.

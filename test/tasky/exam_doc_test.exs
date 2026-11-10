@@ -236,4 +236,32 @@ defmodule Tasky.ExamDocTest do
 
     assert ExamDoc.assemble_parts_into_content(preamble, parts) == d
   end
+
+  describe "put_part_points/3" do
+    test "marks only the questions that have points" do
+      d = doc([heading("A", %{"partId" => "q-a"}), heading("B", %{"partId" => "q-b"})])
+
+      %{"content" => [a, b]} =
+        ExamDoc.put_part_points(d, "answer_fields", %{"q-a" => 4, "q-b" => 0})
+
+      assert a["attrs"]["maxPoints"] == 4
+      refute Map.has_key?(b["attrs"], "maxPoints")
+    end
+
+    test "finds the positional ids of a legacy doc" do
+      d = doc([heading("A"), heading("B")])
+
+      %{"content" => [a, b]} = ExamDoc.put_part_points(d, "answer_fields", %{"q-2" => 3})
+
+      refute Map.has_key?(a["attrs"], "maxPoints")
+      assert b["attrs"]["maxPoints"] == 3
+      refute Map.has_key?(b["attrs"], "partId")
+    end
+
+    test "leaves a free document alone" do
+      d = doc([heading("A", %{"partId" => "q-a"})])
+
+      assert ExamDoc.put_part_points(d, "free_document", %{"q-a" => 4}) == d
+    end
+  end
 end

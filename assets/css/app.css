@@ -815,6 +815,16 @@ body:has(.page-wrapper) {
     margin-top: 0.8em;
 }
 
+/* Was die Frage wert ist (`TaskyWeb.ExamDocHTML`), ruhig unter dem Titel —
+   an derselben Stelle, an der die zurückgegebene Prüfung "2/4 P." zeigt. */
+.exam-doc h3 + .exam-doc__points {
+    margin-top: 0.15em;
+    font-size: 0.8em;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: #78716c;
+}
+
 .exam-doc > :first-child {
     margin-top: 0;
 }

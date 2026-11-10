@@ -7,6 +7,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   import TaskyWeb.StudentComponents
 
   alias Tasky.Accounts.Scope
+  alias Tasky.ExamDoc
   alias Tasky.Exams
   alias Tasky.Uploads
   alias TaskyWeb.Params
@@ -673,6 +674,9 @@ defmodule TaskyWeb.Guest.ExamLive do
     # The learner's process holds neither the sample solution nor the SEB
     # passwords — see `Exams.learner_exam/1`. The preloaded copy on the
     # submission goes too, or it would keep them in the assigns after all.
+    # What each question is worth is taken before that: only the questions'
+    # totals, never their split over the answer fields.
+    part_points = Exams.learner_visible_part_points(submission.exam)
     exam = Exams.learner_exam(submission.exam)
     submission = Ecto.reset_fields(submission, [:exam])
 
@@ -729,6 +733,7 @@ defmodule TaskyWeb.Guest.ExamLive do
         content when is_map(content) and map_size(content) > 0 -> content
         _ -> exam.content || %{}
       end
+      |> with_part_points(exam.answer_mode, part_points)
 
     attachments = Exams.list_exam_attachments(exam)
     upload_fields = Exams.list_upload_fields(exam)
@@ -771,6 +776,11 @@ defmodule TaskyWeb.Guest.ExamLive do
 
   # The gate, recomputed whenever the teacher grants or withdraws this
   # participant's SEB exemption — so it must only read assigns.
+  # Only for rendering: the points go onto the doc in the assigns, never into
+  # `submission.content` — the answer hook saves field values, not the doc.
+  defp with_part_points(doc, _mode, nil), do: doc
+  defp with_part_points(doc, mode, points), do: ExamDoc.put_part_points(doc, mode, points)
+
   defp assign_seb_ok(socket) do
     %{exam: exam, submission: submission, seb_state: seb_state, in_seb: in_seb} =
       socket.assigns

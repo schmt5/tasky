@@ -42,6 +42,7 @@ defmodule TaskyWeb.ExamDocHTML do
   alias Tasky.Correction.Choice
   alias Tasky.Correction.ImagePin
   alias Tasky.Correction.PlainAnswers
+  alias Tasky.Grading
 
   @doc """
   Rendert `doc` zu sicherem HTML.
@@ -107,7 +108,8 @@ defmodule TaskyWeb.ExamDocHTML do
         _ -> 1
       end
 
-    wrap("h#{level}", [], children(n), ctx)
+    {html, ctx} = wrap("h#{level}", [], children(n), ctx)
+    {[html, part_points(attrs(n)["maxPoints"])], ctx}
   end
 
   defp node(%{"type" => "blockquote"} = n, ctx), do: wrap("blockquote", [], children(n), ctx)
@@ -543,6 +545,21 @@ defmodule TaskyWeb.ExamDocHTML do
   end
 
   defp escape(text), do: text |> html_escape() |> Phoenix.HTML.safe_to_string()
+
+  # Was die Frage wert ist (`Tasky.ExamDoc.put_part_points/3`), als Text unter
+  # dem Titel statt darin: So bleibt die Frage als Beschriftung der Felder
+  # (`ctx.question`) ohne Punkte, und Screenreader lesen sie trotzdem vor.
+  defp part_points(points) when is_number(points) and points > 0 do
+    unit = if points == 1, do: "Punkt", else: "Punkte"
+
+    [
+      ~s(<p class="exam-doc__points" data-part-points>),
+      escape("#{Grading.format_points(points)} #{unit}"),
+      "</p>"
+    ]
+  end
+
+  defp part_points(_points), do: []
 
   defp answer_id(n) do
     case attrs(n)["answerId"] do

@@ -348,4 +348,42 @@ defmodule TaskyWeb.ExamDocHTMLTest do
       assert attr(doc, "[data-audio]", "data-audio-id") == []
     end
   end
+
+  describe "points per question" do
+    defp question(attrs) do
+      %{
+        "type" => "heading",
+        "attrs" => Map.merge(%{"level" => 3}, attrs),
+        "content" => [text("Hauptstadt")]
+      }
+    end
+
+    defp gap, do: p([%{"type" => "lueckentext", "attrs" => %{"answerId" => 5}}])
+
+    test "a marked question shows what it is worth under its heading" do
+      doc = render_doc([question(%{"maxPoints" => 4}), gap()])
+
+      assert doc |> LazyHTML.query("h3 + p.exam-doc__points") |> LazyHTML.text() == "4 Punkte"
+    end
+
+    test "one point is singular, quarters stay" do
+      one = render_doc([question(%{"maxPoints" => 1})])
+      quarter = render_doc([question(%{"maxPoints" => 2.25})])
+
+      assert one |> LazyHTML.query(".exam-doc__points") |> LazyHTML.text() == "1 Punkt"
+      assert quarter |> LazyHTML.query(".exam-doc__points") |> LazyHTML.text() == "2.25 Punkte"
+    end
+
+    test "an unmarked question shows nothing" do
+      doc = render_doc([question(%{}), gap()])
+
+      assert doc |> LazyHTML.query(".exam-doc__points") |> Enum.count() == 0
+    end
+
+    test "the points stay out of the fields' label" do
+      doc = render_doc([question(%{"maxPoints" => 4}), gap()])
+
+      assert attr(doc, "input.exam-doc__gap", "aria-label") == ["Lücke 1 zu: Hauptstadt"]
+    end
+  end
 end
