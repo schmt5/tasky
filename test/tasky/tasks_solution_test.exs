@@ -81,6 +81,87 @@ defmodule Tasky.TasksSolutionTest do
     [%{"type" => "paragraph", "content" => [%{"type" => "text", "text" => text}]}]
   end
 
+  describe "pin images" do
+    # The teacher places the pins in the "Musterlösung" tab; the learner's
+    # field shows as many pins as the content's pin image lists. Without them
+    # there is nothing to place, and a click on the picture does nothing.
+    defp pin_doc(pins) do
+      %{
+        "type" => "doc",
+        "content" => [
+          question("q-1"),
+          %{
+            "type" => "imagePin",
+            "attrs" => %{
+              "answerId" => "pin",
+              "src" => "/uploads/tasks/1/karte.png",
+              "aspect" => 1.0,
+              "pins" => pins
+            }
+          }
+        ]
+      }
+    end
+
+    @placed [
+      %{"pinId" => "p1", "x" => 0.5, "y" => 0.8, "zone" => %{"shape" => "circle", "r" => 0.1}},
+      %{"pinId" => "p2", "x" => 0.2, "y" => 0.3, "zone" => %{"shape" => "circle", "r" => 0.1}}
+    ]
+
+    defp content_pins(task) do
+      [_question, %{"attrs" => %{"pins" => pins}}] = task.content["content"]
+      pins
+    end
+
+    test "pins placed in the sample solution reach the content, without positions", %{
+      teacher_scope: scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.save_task_content(scope, task, pin_doc([]))
+
+      {:ok, task} =
+        Tasks.save_sample_solution_part(scope, task, "q-1", pin_doc(@placed)["content"])
+
+      assert content_pins(task) == [%{"pinId" => "p1"}, %{"pinId" => "p2"}]
+      assert task.sample_solution["pin"] |> Enum.map(& &1["x"]) == [0.5, 0.2]
+    end
+
+    test "saving the content again keeps the pins of the sample solution", %{
+      teacher_scope: scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.save_task_content(scope, task, pin_doc([]))
+
+      {:ok, task} =
+        Tasks.save_sample_solution_part(scope, task, "q-1", pin_doc(@placed)["content"])
+
+      # An "Inhalt" editor opened before the pins were placed saves its stale,
+      # pin-less copy.
+      {:ok, task} = Tasks.save_task_content(scope, task, pin_doc([]))
+
+      assert content_pins(task) == [%{"pinId" => "p1"}, %{"pinId" => "p2"}]
+    end
+
+    test "a learner gets the pins to place", %{
+      teacher_scope: scope,
+      student_scope: student_scope,
+      task: task
+    } do
+      {:ok, task} = Tasks.save_task_content(scope, task, pin_doc([]))
+      {:ok, _} = Tasks.save_sample_solution_part(scope, task, "q-1", pin_doc(@placed)["content"])
+
+      submission = submission(student_scope, task)
+
+      {:ok, submission} =
+        Tasks.save_student_answer_fields(student_scope, submission, %{
+          "answers" => %{"pin" => [%{"pinId" => "p1", "x" => 0.5, "y" => 0.8}]}
+        })
+
+      [_question, pin] = submission.content["content"]
+      assert [%{"pinId" => "p1", "x" => 0.5}, %{"pinId" => "p2"}] = pin["attrs"]["pins"]
+    end
+  end
+
   describe "save_sample_solution_part/4" do
     test "speichert nur die Antworten, nicht den Inhalt", %{teacher_scope: scope, task: task} do
       {:ok, task} = Tasks.save_task_content(scope, task, doc_with_answers(["a1", "a2"]))

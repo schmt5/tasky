@@ -10,6 +10,7 @@ defmodule Tasky.Tasks do
   alias Tasky.AudioPlays
   alias Tasky.Correction.AnswerKey
   alias Tasky.Correction.AnswerVariants
+  alias Tasky.Correction.ImagePin
   alias Tasky.Correction.PartConfig
   alias Tasky.Correction.PlainAnswers
   alias Tasky.ExamDoc
@@ -968,6 +969,10 @@ defmodule Tasky.Tasks do
   bleibt er für immer als Waise liegen. Weil das ein Read-Modify-Write über
   beide Spalten ist, läuft es gegen die gesperrte Zeile (ein gleichzeitiger
   Speichervorgang im Musterlösungs-Tab würde sich sonst damit überschreiben).
+
+  Wie viele Pins ein Pin-Bild hat, sagt die Musterlösung, nicht dieser Tab
+  (`ImagePin.sync_public_pins/2`): ein Inhalts-Editor, der vor dem Setzen der
+  Pins geöffnet wurde, speichert sonst seine pin-lose Kopie darüber.
   """
   def save_task_content(%Scope{} = scope, %Task{} = task, doc) when is_map(doc) do
     with :ok <- Policy.authorize(scope, task.user_id) do
@@ -981,6 +986,7 @@ defmodule Tasky.Tasks do
         Repo.transaction(fn ->
           locked = Repo.lock_one!(Task, task.id)
           pruned = prune_orphan_answers(new_content, locked.sample_solution || %{})
+          new_content = ImagePin.sync_public_pins(new_content, pruned)
 
           locked
           |> Task.content_changeset(new_content)
@@ -1013,11 +1019,16 @@ defmodule Tasky.Tasks do
   Prüfungen hat jede Frage (h3) ihren eigenen Editor.
 
   `part_nodes` sind die antwortgefüllten Knoten der Frage. Wir splitten sie
-  und mergen nur die Antworten in `sample_solution`: `content` wird hier
-  bewusst nicht geschrieben. Der Editor läuft mit gesperrtem Inhalt, das
-  Skelett kann sich also gar nicht ändern — und der Musterlösungs-Tab darf
+  und mergen nur die Antworten in `sample_solution`: den Text von `content`
+  schreibt dieser Tab bewusst nicht. Der Editor läuft mit gesperrtem Inhalt,
+  das Skelett kann sich also gar nicht ändern — und der Musterlösungs-Tab darf
   unter keinen Umständen das Dokument überschreiben, an dem die Lernenden
   arbeiten.
+
+  Die eine Ausnahme sind die Pins eines Pin-Bilds: Die Lehrperson setzt sie
+  hier, Lernende brauchen aber im Inhalt, wie viele es sind (nur die ids, nie
+  die Positionen; `ImagePin.sync_public_pins/2`). Ohne sie hat das Pin-Feld
+  der Lernenden nichts zu setzen.
 
   Die Antworten der Frage werden ersetzt, nicht gemergt: Antwortfelder der
   Frage, die im gespeicherten Stück fehlen, verlieren ihre Antwort. Die
@@ -1051,7 +1062,12 @@ defmodule Tasky.Tasks do
             |> Map.merge(Map.take(answers, MapSet.to_list(part_ids)))
             |> then(&prune_orphan_answers(content, &1))
 
-          case locked |> Task.sample_solution_changeset(merged) |> Repo.update() do
+          changeset =
+            locked
+            |> Task.sample_solution_changeset(merged)
+            |> put_synced_pins(content, merged)
+
+          case Repo.update(changeset) do
             {:ok, updated} -> updated
             {:error, changeset} -> Repo.rollback(changeset)
           end
@@ -1061,6 +1077,14 @@ defmodule Tasky.Tasks do
         broadcast_task(scope, {:updated, updated})
         {:ok, updated}
       end
+    end
+  end
+
+  # Writes `content` only when a pin image's pin list actually changed.
+  defp put_synced_pins(changeset, content, sample_solution) do
+    case ImagePin.sync_public_pins(content, sample_solution) do
+      ^content -> changeset
+      synced -> Ecto.Changeset.put_change(changeset, :content, synced)
     end
   end
 
