@@ -13,18 +13,13 @@ deterministic auto-correction doing the first pass.
 
 LearningLine is currently being piloted at **be-med**.
 
-![The content editor: a learning unit with headings, a callout and a photo](docs/screenshots/editor.png)
+![The content editor: a practice test with a callout, a single-choice question and a true/false table](docs/screenshots/content-editor.webp)
 
-<table>
-  <tr>
-    <td><img src="docs/screenshots/sample-solution.png" alt="The sample solution tab: each question with its model answer and correction options"></td>
-    <td><img src="docs/screenshots/learner.png" alt="A learner working on a practice exam"></td>
-  </tr>
-  <tr>
-    <td align="center">Sample solution and correction options per question</td>
-    <td align="center">The learner's view of a practice exam</td>
-  </tr>
-</table>
+![The sample solution tab: the true/false table with its answers marked, next to the question's correction options](docs/screenshots/sample-solution-choice.webp)
+
+![The sample solution tab: a pin placed on a photo of a meerkat, with a rectangular target area](docs/screenshots/sample-solution-pin.webp)
+
+![The learner's view: a pin set on the meerkat, saved automatically](docs/screenshots/learner-pin.webp)
 
 ## Contents
 
