@@ -109,6 +109,42 @@ defmodule TaskyWeb.TaskLive.ContentTest do
                Tasks.get_task!(scope, task.id).correction_config["q-1"]
     end
 
+    # A pin image has no correction switches, so the dialog submits an empty
+    # form — no `options` key at all. That crashed the LiveView.
+    test "übernimmt die Optionen einer Frage ohne Schalter", %{
+      conn: conn,
+      scope: scope,
+      task: task
+    } do
+      doc = %{
+        "type" => "doc",
+        "content" => [
+          question("q-1"),
+          %{
+            "type" => "imagePin",
+            "attrs" => %{
+              "answerId" => "a1",
+              "src" => "/uploads/tasks/#{task.id}/karte.png",
+              "aspect" => 1.0,
+              "pins" => [%{"pinId" => "pin-1"}]
+            }
+          }
+        ]
+      }
+
+      {:ok, task} = Tasks.save_task_content(scope, task, doc)
+
+      {:ok, lv, _html} = live(conn, ~p"/tasks/#{task}/content?tab=musterloesung")
+
+      lv |> element("#correction-options-btn-q-1") |> render_click()
+      refute has_element?(lv, "#correction-options-modal input[name^='options[']")
+
+      lv |> form("#correction-options-form-q-1") |> render_submit()
+
+      refute has_element?(lv, "#correction-options-modal")
+      assert %{"auto_correct" => true} = Tasks.get_task!(scope, task.id).correction_config["q-1"]
+    end
+
     # Der Freigabe-Modus wird beim Erstellen/Bearbeiten der Lerneinheit gesetzt,
     # nicht hier.
     test "enthält keine Modus-Auswahl mehr", %{conn: conn, task: task} do

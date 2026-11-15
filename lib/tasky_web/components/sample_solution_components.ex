@@ -46,6 +46,15 @@ defmodule TaskyWeb.SampleSolutionComponents do
   end
 
   @doc """
+  The dialog's fields from the event params of its form. A question without
+  switches (a pin image, single choice only) renders the dialog without a
+  single input, and its empty form arrives without the `options` key: no field
+  changed, so the draft stays as it is.
+  """
+  def option_params(%{"options" => %{} = params}), do: params
+  def option_params(_params), do: %{}
+
+  @doc """
   Folds the dialog's flag params into the draft: the text options go with
   auto-correction, as `Tasky.Correction.PartConfig.put/4` stores them.
   """

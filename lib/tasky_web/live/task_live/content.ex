@@ -716,10 +716,13 @@ defmodule TaskyWeb.TaskLive.Content do
     {:noreply, assign_options_draft(socket, nil)}
   end
 
-  def handle_event("change_correction_options", %{"options" => params}, socket) do
+  def handle_event("change_correction_options", params, socket) do
     case socket.assigns.options_draft do
-      nil -> {:noreply, socket}
-      draft -> {:noreply, assign_options_draft(socket, merge_option_flags(draft, params))}
+      nil ->
+        {:noreply, socket}
+
+      draft ->
+        {:noreply, assign_options_draft(socket, merge_option_flags(draft, option_params(params)))}
     end
   end
 
@@ -734,13 +737,13 @@ defmodule TaskyWeb.TaskLive.Content do
     end
   end
 
-  def handle_event("apply_correction_options", %{"options" => params}, socket) do
+  def handle_event("apply_correction_options", params, socket) do
     case socket.assigns.options_draft do
       nil ->
         {:noreply, socket}
 
       draft ->
-        draft = merge_option_flags(draft, params)
+        draft = merge_option_flags(draft, option_params(params))
 
         case Tasks.apply_part_options(
                socket.assigns.current_scope,

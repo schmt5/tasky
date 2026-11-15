@@ -740,10 +740,14 @@ defmodule TaskyWeb.ExamLive.Content do
     {:noreply, assign_options_draft(socket, nil)}
   end
 
-  def handle_event("change_correction_options", %{"options" => params}, socket) do
+  def handle_event("change_correction_options", params, socket) do
     case socket.assigns.options_draft do
-      nil -> {:noreply, socket}
-      draft -> {:noreply, assign_options_draft(socket, merge_options_params(draft, params))}
+      nil ->
+        {:noreply, socket}
+
+      draft ->
+        {:noreply,
+         assign_options_draft(socket, merge_options_params(draft, option_params(params)))}
     end
   end
 
@@ -790,13 +794,13 @@ defmodule TaskyWeb.ExamLive.Content do
     end
   end
 
-  def handle_event("apply_correction_options", %{"options" => params}, socket) do
+  def handle_event("apply_correction_options", params, socket) do
     case socket.assigns.options_draft do
       nil ->
         {:noreply, socket}
 
       draft ->
-        draft = merge_options_params(draft, params)
+        draft = merge_options_params(draft, option_params(params))
 
         opts = %{
           max_points: draft.max_points,
