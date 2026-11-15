@@ -4,8 +4,9 @@
 #     mix run priv/repo/seeds.exs
 #
 # This file is intentionally empty: a fresh database needs no baseline rows.
-# For a working demo dataset (teacher, students, an exam with submissions) run
+# For local logins and a demo course run
 #
-#     mix run priv/repo/demo_submissions.exs
+#     mix run priv/repo/dev_users.exs
+#     mix run priv/repo/demo_course.exs
 #
-# which is not wired into `mix setup` so that a plain setup stays empty.
+# which are not wired into `mix setup` so that a plain setup stays empty.
