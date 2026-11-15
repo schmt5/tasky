@@ -77,7 +77,11 @@ defmodule TaskyWeb.CourseLive.FeedbackLiveTest do
     {:ok, lv, html} = live(conn, ~p"/courses/#{course}/feedback")
     assert html =~ "Weg damit"
 
-    html = lv |> element("button[phx-click=delete]") |> render_click()
+    lv |> element("#delete-message-#{message.id}") |> render_click()
+    assert has_element?(lv, "#confirm-dialog")
+    assert Repo.get(Message, message.id)
+
+    html = lv |> element("#confirm-dialog-confirm") |> render_click()
 
     refute html =~ "Weg damit"
     assert html =~ "Noch keine Rückmeldungen"

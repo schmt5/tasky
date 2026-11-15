@@ -56,7 +56,18 @@ defmodule TaskyWeb.ExamShowLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
 
-      assert has_element?(view, "#archive-exam[data-confirm]")
+      view |> element("#archive-exam") |> render_click()
+      assert has_element?(view, "#confirm-dialog")
+      refute Tasky.Exams.archived?(Tasky.Exams.get_exam!(scope, exam.id))
+
+      view |> element("#confirm-dialog-cancel") |> render_click()
+      refute has_element?(view, "#confirm-dialog")
+      refute Tasky.Exams.archived?(Tasky.Exams.get_exam!(scope, exam.id))
+
+      view |> element("#archive-exam") |> render_click()
+      view |> element("#confirm-dialog-confirm") |> render_click()
+      assert has_element?(view, "#archived-notice")
+      assert Tasky.Exams.archived?(Tasky.Exams.get_exam!(scope, exam.id))
     end
 
     test "archives a finished exam without asking", %{conn: conn, scope: scope} do
@@ -64,7 +75,31 @@ defmodule TaskyWeb.ExamShowLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
 
-      refute has_element?(view, "#archive-exam[data-confirm]")
+      view |> element("#archive-exam") |> render_click()
+      refute has_element?(view, "#confirm-dialog")
+      assert Tasky.Exams.archived?(Tasky.Exams.get_exam!(scope, exam.id))
+    end
+  end
+
+  describe "deleting" do
+    setup %{conn: conn} do
+      teacher = user_fixture(%{role: "teacher"})
+      %{conn: log_in_user(conn, teacher), scope: user_scope_fixture(teacher)}
+    end
+
+    test "deletes only after the confirmation", %{conn: conn, scope: scope} do
+      exam = exam_fixture(scope: scope)
+
+      {:ok, view, _html} = live(conn, ~p"/exams/#{exam}")
+
+      view |> element("#delete-exam") |> render_click()
+      assert has_element?(view, "#confirm-dialog")
+      assert Tasky.Repo.get(Tasky.Exams.Exam, exam.id)
+
+      assert {:error, {:live_redirect, %{to: "/exams"}}} =
+               view |> element("#confirm-dialog-confirm") |> render_click()
+
+      refute Tasky.Repo.get(Tasky.Exams.Exam, exam.id)
     end
   end
 

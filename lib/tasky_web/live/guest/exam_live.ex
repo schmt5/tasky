@@ -10,6 +10,7 @@ defmodule TaskyWeb.Guest.ExamLive do
   alias Tasky.ExamDoc
   alias Tasky.Exams
   alias Tasky.Uploads
+  alias TaskyWeb.Confirm
   alias TaskyWeb.Params
   alias TaskyWeb.SebGuard
 
@@ -374,9 +375,10 @@ defmodule TaskyWeb.Guest.ExamLive do
                           </a>
                           <button
                             type="button"
-                            phx-click="delete_answer_file"
+                            id={"delete-answer-file-#{field.id}"}
+                            phx-click="ask_confirm"
+                            phx-value-action="delete_answer_file"
                             phx-value-field-id={field.id}
-                            data-confirm={"Datei «#{uploaded_file.original_name}» wirklich löschen?"}
                             aria-label="Datei löschen"
                             class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors duration-150 shrink-0"
                           >
@@ -535,6 +537,8 @@ defmodule TaskyWeb.Guest.ExamLive do
                   </div>
                 </dialog>
               <% end %>
+
+              <.confirm_dialog confirm={@confirm} />
             </div>
           <% @exam.status == "finished" -> %>
             <%!-- Finished. Not necessarily a success for this participant — they
@@ -747,6 +751,7 @@ defmodule TaskyWeb.Guest.ExamLive do
       |> assign(:submission, submission)
       |> assign(:answer_doc, answer_doc)
       |> assign(:show_submit_modal, false)
+      |> assign(:confirm, nil)
       |> assign(:submit_check, :checking)
       |> assign(:in_seb, in_seb)
       |> assign(:seb_state, seb_state)
@@ -873,6 +878,13 @@ defmodule TaskyWeb.Guest.ExamLive do
     end
   end
 
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
   def handle_event("submit_check_result", %{"ok" => ok}, socket) do
     {:noreply, assign(socket, :submit_check, if(ok == true, do: :ok, else: :error))}
   end
@@ -892,6 +904,19 @@ defmodule TaskyWeb.Guest.ExamLive do
   def handle_event("confirm_submit_exam", _params, socket) do
     submit_exam(socket)
   end
+
+  # Only files of this submission: `@submission_files` holds nothing else.
+  defp describe_confirm("delete_answer_file", %{"field-id" => field_id}, socket) do
+    if file = socket.assigns.submission_files[Params.int(field_id)] do
+      %{
+        title: "Datei «#{file.original_name}» löschen?",
+        confirm_label: "Löschen",
+        tone: :danger
+      }
+    end
+  end
+
+  defp describe_confirm(_action, _params, _socket), do: nil
 
   defp submit_exam(%{assigns: %{submit_check: check}} = socket) when check != :ok do
     # Defense against stale clicks: the button is disabled unless the flush

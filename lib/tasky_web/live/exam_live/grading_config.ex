@@ -19,6 +19,7 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
 
   alias Tasky.Exams
   alias Tasky.Grading
+  alias TaskyWeb.Confirm
   alias TaskyWeb.ExamComponents
 
   @impl true
@@ -92,17 +93,25 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
         </div>
 
         <div class="max-w-3xl flex items-center justify-between">
-          <.link
-            id="grading-config-back-link"
-            navigate={@back_to}
-            data-confirm={
-              (not @pending? and @dirty?) &&
-                "Deine Änderungen sind noch nicht gespeichert. Trotzdem verlassen?"
-            }
-            class="text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
-          >
-            ← {@back_tooltip}
-          </.link>
+          <%= if not @pending? and @dirty? do %>
+            <button
+              type="button"
+              id="grading-config-back-link"
+              phx-click="ask_confirm"
+              phx-value-action="leave"
+              class="text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
+            >
+              ← {@back_tooltip}
+            </button>
+          <% else %>
+            <.link
+              id="grading-config-back-link"
+              navigate={@back_to}
+              class="text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
+            >
+              ← {@back_tooltip}
+            </.link>
+          <% end %>
           <%= if @pending? do %>
             <button
               type="button"
@@ -135,6 +144,8 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
           <% end %>
         </div>
       </div>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -171,6 +182,7 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
      |> assign(:sample_solution_total, sample_solution_total)
      |> assign(:draft_points_for_six, exam.grading_max_points)
      |> assign(:points_for_six_error, nil)
+     |> assign(:confirm, nil)
      |> assign_dirty()
      |> assign_chrome()}
   end
@@ -273,6 +285,29 @@ defmodule TaskyWeb.ExamLive.GradingConfig do
   def handle_event("reset_points_for_six", _params, socket) do
     {:noreply, put_draft_points_for_six(socket, nil)}
   end
+
+  # Only reached through the dialog: without unsaved changes the back link
+  # navigates on its own.
+  def handle_event("leave", _params, socket),
+    do: {:noreply, push_navigate(socket, to: socket.assigns.back_to)}
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm/2)}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  defp describe_confirm("leave", _params) do
+    %{
+      title: "Ohne Speichern verlassen?",
+      message: "Deine Änderungen sind noch nicht gespeichert und gehen verloren.",
+      confirm_label: "Verlassen",
+      icon: "hero-exclamation-triangle"
+    }
+  end
+
+  defp describe_confirm(_action, _params), do: nil
 
   defp put_draft_points_for_six(socket, value) do
     socket

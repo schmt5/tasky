@@ -2,6 +2,7 @@ defmodule TaskyWeb.ExamLive.Show do
   use TaskyWeb, :live_view
 
   alias Tasky.Exams
+  alias TaskyWeb.Confirm
   alias TaskyWeb.ExamComponents
 
   @impl true
@@ -96,13 +97,13 @@ defmodule TaskyWeb.ExamLive.Show do
                     <button
                       id="archive-exam"
                       type="button"
-                      phx-click="archive"
+                      phx-click={
+                        if @exam.status in ["open", "running"],
+                          do: JS.push("ask_confirm", value: %{action: "archive"}),
+                          else: "archive"
+                      }
                       popovertarget="exam-actions-menu"
                       popovertargetaction="hide"
-                      data-confirm={
-                        @exam.status in ["open", "running"] &&
-                          "Die Durchführung läuft weiter, die Prüfung verschwindet nur aus deiner Liste. Trotzdem archivieren?"
-                      }
                       class="flex items-center gap-2 text-sm text-stone-700"
                     >
                       <.icon name="hero-archive-box" class="w-4 h-4 text-stone-400" /> Archivieren
@@ -111,9 +112,12 @@ defmodule TaskyWeb.ExamLive.Show do
                 </li>
                 <li>
                   <button
+                    id="delete-exam"
                     type="button"
-                    phx-click="delete"
-                    data-confirm="Bist du sicher, dass du diese Prüfung löschen möchtest?"
+                    phx-click="ask_confirm"
+                    phx-value-action="delete"
+                    popovertarget="exam-actions-menu"
+                    popovertargetaction="hide"
                     class="flex items-center gap-2 text-sm text-red-600 hover:bg-red-50"
                   >
                     <.icon name="hero-trash" class="w-4 h-4" /> Löschen
@@ -316,6 +320,8 @@ defmodule TaskyWeb.ExamLive.Show do
         form={@rename_form}
         source_name={@rename_source_name}
       />
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -335,6 +341,7 @@ defmodule TaskyWeb.ExamLive.Show do
      |> assign_exam(exam)
      |> assign(:answer_mode_option, ExamComponents.answer_mode_option(exam.answer_mode))
      |> assign(:grading_available, grading_available?(exam))
+     |> assign(:confirm, nil)
      |> close_rename()}
   end
 
@@ -448,6 +455,35 @@ defmodule TaskyWeb.ExamLive.Show do
         {:noreply, assign(socket, :rename_form, to_form(changeset, as: :exam))}
     end
   end
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket.assigns.exam))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  defp describe_confirm("archive", _params, exam) do
+    %{
+      title: "«#{exam.name}» archivieren?",
+      message:
+        "Die Durchführung läuft weiter, die Prüfung verschwindet nur aus deiner Liste. " <>
+          "Du kannst sie jederzeit wiederherstellen.",
+      confirm_label: "Archivieren",
+      icon: "hero-archive-box"
+    }
+  end
+
+  defp describe_confirm("delete", _params, exam) do
+    %{
+      title: "«#{exam.name}» löschen?",
+      message: "Die Prüfung und alle Abgaben werden endgültig gelöscht.",
+      confirm_label: "Prüfung löschen",
+      tone: :danger
+    }
+  end
+
+  defp describe_confirm(_action, _params, _exam), do: nil
 
   defp open_rename(socket, exam, source_name) do
     socket

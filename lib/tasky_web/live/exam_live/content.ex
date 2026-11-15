@@ -16,6 +16,7 @@ defmodule TaskyWeb.ExamLive.Content do
 
   alias Tasky.Exams
   alias Tasky.Uploads
+  alias TaskyWeb.Confirm
   alias TaskyWeb.ExamComponents
 
   @impl true
@@ -401,9 +402,10 @@ defmodule TaskyWeb.ExamLive.Content do
                 </a>
                 <button
                   type="button"
-                  phx-click="delete_attachment"
+                  id={"delete-attachment-#{attachment.id}"}
+                  phx-click="ask_confirm"
+                  phx-value-action="delete_attachment"
                   phx-value-id={attachment.id}
-                  data-confirm={"Anhang «#{attachment.original_name}» wirklich löschen?"}
                   aria-label="Anhang löschen"
                   class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors duration-150 shrink-0"
                 >
@@ -499,9 +501,10 @@ defmodule TaskyWeb.ExamLive.Content do
                       </button>
                       <button
                         type="button"
-                        phx-click="delete_upload_field"
+                        id={"delete-upload-field-#{field.id}"}
+                        phx-click="ask_confirm"
+                        phx-value-action="delete_upload_field"
                         phx-value-id={field.id}
-                        data-confirm={"Upload-Feld «#{field.label}» wirklich löschen? Bereits hochgeladene Abgaben der Schüler werden ebenfalls gelöscht."}
                         aria-label="Feld löschen"
                         class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors duration-150"
                       >
@@ -525,6 +528,8 @@ defmodule TaskyWeb.ExamLive.Content do
           </div>
         </div>
       </div>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -544,6 +549,7 @@ defmodule TaskyWeb.ExamLive.Content do
      |> assign(:show_alternatives_help, false)
      |> assign(:options_draft, nil)
      |> assign(:options_form, nil)
+     |> assign(:confirm, nil)
      |> assign(:free_document, ExamComponents.free_document?(exam))
      |> assign_part_points_form(exam)
      |> allow_upload(:attachment,
@@ -990,6 +996,36 @@ defmodule TaskyWeb.ExamLive.Content do
       _ -> {:noreply, put_flash(socket, :error, "Upload-Feld konnte nicht gelöscht werden.")}
     end
   end
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket.assigns.exam))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  defp describe_confirm("delete_attachment", %{"id" => id}, exam) do
+    if attachment = Exams.get_exam_attachment(exam, id) do
+      %{
+        title: "Anhang «#{attachment.original_name}» löschen?",
+        confirm_label: "Löschen",
+        tone: :danger
+      }
+    end
+  end
+
+  defp describe_confirm("delete_upload_field", %{"id" => id}, exam) do
+    if field = Exams.get_upload_field(exam, id) do
+      %{
+        title: "Upload-Feld «#{field.label}» löschen?",
+        message: "Bereits hochgeladene Abgaben der Lernenden werden ebenfalls gelöscht.",
+        confirm_label: "Löschen",
+        tone: :danger
+      }
+    end
+  end
+
+  defp describe_confirm(_action, _params, _exam), do: nil
 
   defp assign_options_draft(socket, nil),
     do: socket |> assign(:options_draft, nil) |> assign(:options_form, nil)

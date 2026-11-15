@@ -15,6 +15,7 @@ defmodule TaskyWeb.CourseLive.Feedback do
 
   alias Tasky.Courses
   alias Tasky.Feedback
+  alias TaskyWeb.Confirm
 
   @impl true
   def render(assigns) do
@@ -122,9 +123,11 @@ defmodule TaskyWeb.CourseLive.Feedback do
 
                   <button
                     type="button"
-                    phx-click="delete"
+                    id={"delete-message-#{message.id}"}
+                    phx-click="ask_confirm"
+                    phx-value-action="delete"
                     phx-value-id={message.id}
-                    data-confirm="Diese Nachricht wirklich löschen?"
+                    aria-label="Nachricht löschen"
                     class="inline-flex items-center text-stone-400 p-1.5 rounded-[6px] transition-colors duration-150 hover:bg-red-50 hover:text-red-500"
                   >
                     <.icon name="hero-trash" class="w-4 h-4" />
@@ -151,6 +154,8 @@ defmodule TaskyWeb.CourseLive.Feedback do
           />
         </div>
       </div>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -167,6 +172,7 @@ defmodule TaskyWeb.CourseLive.Feedback do
      |> assign(:course, course)
      |> assign(:message_count, length(messages))
      |> assign(:unread_count, Enum.count(messages, &is_nil(&1.read_at)))
+     |> assign(:confirm, nil)
      |> stream(:messages, messages)}
   end
 
@@ -203,7 +209,25 @@ defmodule TaskyWeb.CourseLive.Feedback do
     end
   end
 
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm/2)}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
   # Private
+
+  defp describe_confirm("delete", _params) do
+    %{
+      title: "Nachricht löschen?",
+      message: "Die Nachricht wird endgültig gelöscht.",
+      confirm_label: "Löschen",
+      tone: :danger
+    }
+  end
+
+  defp describe_confirm(_action, _params), do: nil
 
   defp message_count_label(0, _unread), do: "Noch keine Nachrichten"
 

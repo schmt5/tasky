@@ -5,6 +5,7 @@ defmodule TaskyWeb.CourseLive.Show do
   alias Tasky.Courses.Course
   alias Tasky.Courses.DuplicateRunner
   alias Tasky.Tasks
+  alias TaskyWeb.Confirm
 
   @impl true
   def render(assigns) do
@@ -33,8 +34,8 @@ defmodule TaskyWeb.CourseLive.Show do
                 <button
                   type="button"
                   id="unpublish-course"
-                  phx-click="unpublish_course"
-                  data-confirm="Kurs aus dem Katalog entfernen? Bereits erstellte Kopien anderer Lehrpersonen bleiben bestehen."
+                  phx-click="ask_confirm"
+                  phx-value-action="unpublish_course"
                   class="inline-flex items-center gap-2 text-stone-600 text-[13px] font-semibold px-3.5 py-1.5 rounded-[6px] border border-stone-200 transition-all duration-150 hover:bg-stone-50 hover:border-stone-300 hover:text-stone-700 active:scale-[0.98]"
                 >
                   <.icon name="hero-no-symbol" class="w-4 h-4" /> Aus Katalog entfernen
@@ -331,8 +332,10 @@ defmodule TaskyWeb.CourseLive.Show do
                   <li>
                     <button
                       type="button"
-                      phx-click={JS.push("delete_task", value: %{id: task.id}) |> hide("##{id}")}
-                      data-confirm="Sind Sie sicher?"
+                      id={"delete-task-#{task.id}"}
+                      phx-click="ask_confirm"
+                      phx-value-action="delete_task"
+                      phx-value-id={task.id}
                       class="flex items-center gap-2 text-sm text-red-600 hover:bg-red-50"
                     >
                       <.icon name="hero-trash" class="w-4 h-4" /> Löschen
@@ -763,6 +766,8 @@ defmodule TaskyWeb.CourseLive.Show do
           </div>
         </dialog>
       <% end %>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -789,6 +794,7 @@ defmodule TaskyWeb.CourseLive.Show do
      |> assign(:copy_status, nil)
      |> assign(:publishing_course, false)
      |> assign(:share_url, nil)
+     |> assign(:confirm, nil)
      |> stream(:tasks, course.tasks)}
   end
 
@@ -1069,6 +1075,41 @@ defmodule TaskyWeb.CourseLive.Show do
   def handle_event("close_rename", _params, socket) do
     {:noreply, close_rename(socket)}
   end
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  defp describe_confirm("unpublish_course", _params, _socket) do
+    %{
+      title: "Kurs aus dem Katalog entfernen?",
+      message:
+        "Andere Lehrpersonen finden ihn danach nicht mehr im Katalog. " <>
+          "Bereits erstellte Kopien bleiben bestehen.",
+      confirm_label: "Aus Katalog entfernen",
+      icon: "hero-no-symbol"
+    }
+  end
+
+  defp describe_confirm("delete_task", %{"id" => id}, socket) do
+    case course_task(socket, id) do
+      %{} = task ->
+        %{
+          title: "Lerneinheit «#{task.name}» löschen?",
+          message: "Inhalt, Musterlösung und alle Abgaben der Lernenden werden gelöscht.",
+          confirm_label: "Lerneinheit löschen",
+          tone: :danger
+        }
+
+      nil ->
+        nil
+    end
+  end
+
+  defp describe_confirm(_action, _params, _socket), do: nil
 
   # Erst beim Öffnen des Dialogs geladen — die Zielliste wird auf der
   # Kursseite sonst nie gebraucht. Warum nur eigene Kurse: siehe

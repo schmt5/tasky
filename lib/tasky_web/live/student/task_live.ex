@@ -13,6 +13,7 @@ defmodule TaskyWeb.Student.TaskLive do
 
   alias Tasky.Tasks
   alias Tasky.Uploads
+  alias TaskyWeb.Confirm
   alias TaskyWeb.Params
 
   @impl true
@@ -335,9 +336,10 @@ defmodule TaskyWeb.Student.TaskLive do
                     <button
                       :if={@editable}
                       type="button"
-                      phx-click="delete_answer_file"
+                      id={"delete-answer-file-#{field.id}"}
+                      phx-click="ask_confirm"
+                      phx-value-action="delete_answer_file"
                       phx-value-field-id={field.id}
-                      data-confirm={"Datei «#{uploaded_file.original_name}» wirklich löschen?"}
                       aria-label="Datei löschen"
                       class="inline-flex items-center justify-center w-8 h-8 rounded-full text-stone-400 hover:bg-red-50 hover:text-red-500 transition-colors duration-150 shrink-0"
                     >
@@ -688,6 +690,8 @@ defmodule TaskyWeb.Student.TaskLive do
           </div>
         </dialog>
       <% end %>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -812,6 +816,7 @@ defmodule TaskyWeb.Student.TaskLive do
         |> assign(:solution_has_doc, Tasks.answer_block_count(task) > 0)
         |> assign(:student_tab, initial_student_tab(params))
         |> assign(:show_complete_modal, false)
+        |> assign(:confirm, nil)
         |> assign(:submit_check, :checking)
         |> assign(:missing_uploads, [])
         |> assign_submission(submission)
@@ -985,6 +990,26 @@ defmodule TaskyWeb.Student.TaskLive do
         end
     end
   end
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  # Only files of this submission: `@submission_files` holds nothing else.
+  defp describe_confirm("delete_answer_file", %{"field-id" => field_id}, socket) do
+    if file = socket.assigns.submission_files[Params.int(field_id)] do
+      %{
+        title: "Datei «#{file.original_name}» löschen?",
+        confirm_label: "Löschen",
+        tone: :danger
+      }
+    end
+  end
+
+  defp describe_confirm(_action, _params, _socket), do: nil
 
   defp complete_task(%{assigns: %{submit_check: check}} = socket) when check != :ok do
     # Defense against stale clicks: the button is disabled unless the flush

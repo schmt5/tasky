@@ -225,10 +225,13 @@ defmodule TaskyWeb.CourseLive.ShowTest do
 
       {:ok, lv, _html} = live(conn, ~p"/courses/#{published}")
 
-      assert has_element?(lv, "#unpublish-course[data-confirm]")
-
       lv |> element("#unpublish-course") |> render_click()
+      assert has_element?(lv, "#confirm-dialog")
+      assert Courses.get_course!(scope, published.id).catalog_published_at
 
+      lv |> element("#confirm-dialog-confirm") |> render_click()
+
+      refute has_element?(lv, "#confirm-dialog")
       refute Courses.get_course!(scope, published.id).catalog_published_at
       assert has_element?(lv, "#publish-course")
     end

@@ -10,6 +10,7 @@ defmodule TaskyWeb.Admin.OrganizationLive do
   use TaskyWeb, :live_view
 
   alias Tasky.Organizations
+  alias TaskyWeb.Confirm
 
   @impl true
   def render(assigns) do
@@ -111,9 +112,10 @@ defmodule TaskyWeb.Admin.OrganizationLive do
                   >
                     <button
                       type="button"
-                      phx-click="rotate_token"
+                      id={"rotate-invite-#{organization.id}"}
+                      phx-click="ask_confirm"
+                      phx-value-action="rotate_token"
                       phx-value-id={organization.id}
-                      data-confirm="Neuen Einladungslink generieren? Der bisherige Link funktioniert danach nicht mehr."
                       class="inline-flex items-center gap-1.5 bg-transparent text-stone-500 text-[12px] font-medium px-2.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-amber-50 hover:text-amber-700"
                     >
                       <.icon name="hero-arrow-path" class="w-3.5 h-3.5" /> Neu
@@ -131,9 +133,10 @@ defmodule TaskyWeb.Admin.OrganizationLive do
 
                   <button
                     type="button"
-                    phx-click="delete"
+                    id={"delete-organization-#{organization.id}"}
+                    phx-click="ask_confirm"
+                    phx-value-action="delete"
                     phx-value-id={organization.id}
-                    data-confirm={delete_confirm(@member_counts, @class_counts, organization)}
                     class="inline-flex items-center gap-1.5 bg-transparent text-stone-500 text-[12px] font-medium px-2.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-red-50 hover:text-red-600"
                   >
                     <.icon name="hero-trash" class="w-3.5 h-3.5" /> Löschen
@@ -144,6 +147,8 @@ defmodule TaskyWeb.Admin.OrganizationLive do
           </ul>
         </div>
       </div>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -153,6 +158,7 @@ defmodule TaskyWeb.Admin.OrganizationLive do
     {:ok,
      socket
      |> assign(:page_title, "Organisationen")
+     |> assign(:confirm, nil)
      |> assign_editing(nil)
      |> load_organizations()}
   end
@@ -239,6 +245,43 @@ defmodule TaskyWeb.Admin.OrganizationLive do
     end
   end
 
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  defp describe_confirm("rotate_token", %{"id" => id}, socket) do
+    organization = Organizations.get_organization!(socket.assigns.current_scope, id)
+
+    %{
+      title: "Neuen Einladungslink für «#{organization.name}»?",
+      message:
+        "Der bisherige Link funktioniert danach nicht mehr. Bereits registrierte " <>
+          "Lehrpersonen sind nicht betroffen.",
+      confirm_label: "Neuen Link generieren",
+      icon: "hero-arrow-path"
+    }
+  end
+
+  defp describe_confirm("delete", %{"id" => id}, socket) do
+    organization = Organizations.get_organization!(socket.assigns.current_scope, id)
+    members = member_count(socket.assigns.member_counts, organization)
+    classes = class_count(socket.assigns.class_counts, organization)
+
+    %{
+      title: "Organisation «#{organization.name}» löschen?",
+      message:
+        "#{members} Mitglieder und #{classes} Klassen verlieren ihre Zuordnung. " <>
+          "Diese Klassen sind danach für keine Lehrperson mehr sichtbar.",
+      confirm_label: "Organisation löschen",
+      tone: :danger
+    }
+  end
+
+  defp describe_confirm(_action, _params, _socket), do: nil
+
   defp load_organizations(socket) do
     scope = socket.assigns.current_scope
 
@@ -264,13 +307,4 @@ defmodule TaskyWeb.Admin.OrganizationLive do
 
   defp member_count(counts, organization), do: Map.get(counts, organization.id, 0)
   defp class_count(counts, organization), do: Map.get(counts, organization.id, 0)
-
-  defp delete_confirm(member_counts, class_counts, organization) do
-    members = member_count(member_counts, organization)
-    classes = class_count(class_counts, organization)
-
-    "Organisation \"#{organization.name}\" wirklich löschen? " <>
-      "#{members} Mitglieder und #{classes} Klassen verlieren ihre Zuordnung. " <>
-      "Diese Klassen sind danach für keine Lehrperson mehr sichtbar."
-  end
 end

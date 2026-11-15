@@ -2,6 +2,7 @@ defmodule TaskyWeb.ClassLive.Index do
   use TaskyWeb, :live_view
 
   alias Tasky.Classes
+  alias TaskyWeb.Confirm
 
   @impl true
   def render(assigns) do
@@ -106,11 +107,11 @@ defmodule TaskyWeb.ClassLive.Index do
               </.link>
               <button
                 type="button"
-                phx-click="delete"
+                id={"delete-class-#{class.id}"}
+                phx-click="ask_confirm"
+                phx-value-action="delete"
                 phx-value-id={class.id}
-                data-confirm="Möchten Sie diese Klasse wirklich löschen? Lernende werden nicht gelöscht."
                 class="inline-flex items-center gap-2 bg-transparent text-stone-500 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-red-50 hover:text-red-600"
-                title="Löschen"
               >
                 <.icon name="hero-trash" class="w-4 h-4" /> Löschen
               </button>
@@ -197,6 +198,8 @@ defmodule TaskyWeb.ClassLive.Index do
           </div>
         </dialog>
       <% end %>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -215,6 +218,7 @@ defmodule TaskyWeb.ClassLive.Index do
      |> assign(:can_create, Tasky.Policy.organization_scope(scope) != :none)
      |> assign(:student_counts, Classes.count_students_per_class(scope))
      |> assign(:rotating_class, nil)
+     |> assign(:confirm, nil)
      |> stream(:classes, classes)}
   end
 
@@ -278,6 +282,26 @@ defmodule TaskyWeb.ClassLive.Index do
         {:noreply, put_flash(socket, :error, "Klasse konnte nicht gelöscht werden.")}
     end
   end
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  defp describe_confirm("delete", %{"id" => id}, socket) do
+    class = Classes.get_class!(socket.assigns.current_scope, id)
+
+    %{
+      title: "Klasse «#{class.name}» löschen?",
+      message: "Die Lernenden werden nicht gelöscht, gehören danach aber keiner Klasse mehr an.",
+      confirm_label: "Klasse löschen",
+      tone: :danger
+    }
+  end
+
+  defp describe_confirm(_action, _params, _socket), do: nil
 
   defp registration_url(invite_token) do
     url(~p"/users/register?class=#{invite_token}")

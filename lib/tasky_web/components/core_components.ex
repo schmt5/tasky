@@ -547,6 +547,81 @@ defmodule TaskyWeb.CoreComponents do
   end
 
   @doc """
+  Renders the confirmation dialog of `TaskyWeb.Confirm` while one is pending.
+
+  Pass the LiveView's `@confirm` assign; see `TaskyWeb.Confirm` for the events
+  the LiveView handles.
+  """
+  attr :confirm, :map, default: nil, doc: "the pending confirmation, or nil"
+
+  def confirm_dialog(assigns) do
+    ~H"""
+    <dialog
+      :if={@confirm}
+      id="confirm-dialog"
+      class="modal modal-open"
+      aria-labelledby="confirm-dialog-title"
+      phx-window-keydown="cancel_confirm"
+      phx-key="escape"
+    >
+      <div class="modal-backdrop bg-stone-900/50" phx-click="cancel_confirm"></div>
+      <div
+        phx-mounted={JS.focus_first()}
+        class="modal-box max-w-md p-0 bg-white rounded-[14px] shadow-2xl border border-stone-200"
+      >
+        <div class="p-6 flex gap-4">
+          <div class={[
+            "w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0",
+            if(@confirm.tone == :danger,
+              do: "bg-red-50 text-red-600",
+              else: "bg-sky-50 text-sky-600"
+            )
+          ]}>
+            <.icon name={@confirm.icon} class="w-5 h-5" />
+          </div>
+          <div class="min-w-0">
+            <h3 id="confirm-dialog-title" class="text-lg font-semibold text-stone-800">
+              {@confirm.title}
+            </h3>
+            <p
+              :if={@confirm.message}
+              id="confirm-dialog-message"
+              class="text-sm text-stone-500 mt-2 leading-[1.6]"
+            >
+              {@confirm.message}
+            </p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 px-6 py-4 border-t border-stone-100 bg-stone-50 rounded-b-[14px]">
+          <button
+            type="button"
+            id="confirm-dialog-cancel"
+            phx-click="cancel_confirm"
+            class="px-4 py-2 text-sm font-medium text-stone-600 rounded-[8px] transition-colors duration-150 hover:bg-stone-100"
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            id="confirm-dialog-confirm"
+            phx-click="confirmed"
+            class={[
+              "px-4 py-2 text-sm font-semibold text-white rounded-[8px] transition-all duration-150 active:scale-[0.98]",
+              if(@confirm.tone == :danger,
+                do: "bg-red-500 shadow-[0_2px_8px_rgba(239,68,68,0.25)] hover:bg-red-600",
+                else: "bg-sky-500 shadow-[0_2px_8px_rgba(14,165,233,0.25)] hover:bg-sky-600"
+              )
+            ]}
+          >
+            {@confirm.confirm_label}
+          </button>
+        </div>
+      </div>
+    </dialog>
+    """
+  end
+
+  @doc """
   Renders a modal.
 
   ## Examples

@@ -42,4 +42,22 @@ defmodule TaskyWeb.ClassLive.IndexLiveTest do
     assert Classes.get_class_by_invite_token(class.invite_token) == nil
     refute has_element?(view, ~s(#registration-link-#{class.id}[value$="=#{class.invite_token}"]))
   end
+
+  test "deleting a class asks first; cancelling keeps it", %{conn: conn, class: class} do
+    {:ok, view, _html} = live(conn, ~p"/classes")
+
+    view |> element("#delete-class-#{class.id}") |> render_click()
+    assert has_element?(view, "#confirm-dialog-title", "Klasse «Klasse 5a» löschen?")
+
+    view |> element("#confirm-dialog-cancel") |> render_click()
+    refute has_element?(view, "#confirm-dialog")
+    assert Tasky.Repo.get(Classes.Class, class.id)
+
+    view |> element("#delete-class-#{class.id}") |> render_click()
+    view |> element("#confirm-dialog-confirm") |> render_click()
+
+    refute has_element?(view, "#confirm-dialog")
+    refute Tasky.Repo.get(Classes.Class, class.id)
+    refute has_element?(view, "#delete-class-#{class.id}")
+  end
 end

@@ -4,6 +4,7 @@ defmodule TaskyWeb.CourseLive.Students do
   alias Tasky.Accounts
   alias Tasky.Classes
   alias Tasky.Courses
+  alias TaskyWeb.Confirm
 
   @impl true
   def render(assigns) do
@@ -77,10 +78,10 @@ defmodule TaskyWeb.CourseLive.Students do
 
               <button
                 type="button"
-                phx-click={
-                  JS.push("unenroll_student", value: %{student_id: student.id}) |> hide("##{id}")
-                }
-                data-confirm="Sind Sie sicher, dass Sie diese/n Lernende/n ausschreiben möchten?"
+                id={"unenroll-student-#{student.id}"}
+                phx-click="ask_confirm"
+                phx-value-action="unenroll_student"
+                phx-value-student_id={student.id}
                 class="inline-flex items-center gap-2 text-red-600 text-[13px] font-medium px-3.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-red-100 hover:text-red-700"
               >
                 <.icon name="hero-x-mark" class="w-4 h-4" /> Ausschreiben
@@ -242,6 +243,8 @@ defmodule TaskyWeb.CourseLive.Students do
           </div>
         </dialog>
       <% end %>
+
+      <.confirm_dialog confirm={@confirm} />
     </Layouts.app>
     """
   end
@@ -262,6 +265,7 @@ defmodule TaskyWeb.CourseLive.Students do
      |> assign(:search, "")
      |> assign(:has_students, enrolled_students != [])
      |> assign(:student_count, length(enrolled_students))
+     |> assign(:confirm, nil)
      |> stream(:enrolled_students, enrolled_students)}
   end
 
@@ -393,6 +397,35 @@ defmodule TaskyWeb.CourseLive.Students do
         {:noreply, socket}
     end
   end
+
+  def handle_event("ask_confirm", params, socket),
+    do: {:noreply, Confirm.ask(socket, params, &describe_confirm(&1, &2, socket))}
+
+  def handle_event("cancel_confirm", _params, socket), do: {:noreply, Confirm.cancel(socket)}
+
+  def handle_event("confirmed", _params, socket), do: Confirm.run(socket, &handle_event/3)
+
+  # Only for a student of this course: the id comes from a phx-value, and the
+  # dialog shows the email address.
+  defp describe_confirm("unenroll_student", %{"student_id" => student_id}, socket) do
+    course_id = socket.assigns.course.id
+
+    with id when is_integer(id) <- TaskyWeb.Params.int(student_id),
+         true <- Courses.enrolled?(course_id, id) do
+      %{
+        title: "Aus dem Kurs ausschreiben?",
+        message:
+          "#{Accounts.get_user!(id).email} verliert den Zugang zum Kurs. " <>
+            "Die Abgaben werden nicht gelöscht.",
+        confirm_label: "Ausschreiben",
+        icon: "hero-user-minus"
+      }
+    else
+      _ -> nil
+    end
+  end
+
+  defp describe_confirm(_action, _params, _socket), do: nil
 
   defp load_candidates(socket) do
     assign(
