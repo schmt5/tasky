@@ -431,6 +431,7 @@ defmodule TaskyWeb.ExamLive.CorrectionExam do
           id={@id}
           patch={@target}
           data-keep-part
+          aria-label={@title}
           class="inline-flex items-center justify-center w-7 h-7 rounded-md text-sky-700 bg-white border border-sky-300 transition-all duration-150 hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800"
         >
           <.icon name={@icon} class="w-4 h-4" />

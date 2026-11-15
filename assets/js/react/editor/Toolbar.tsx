@@ -217,22 +217,19 @@ export function Toolbar({
           >
             <div className="exam-editor__menu-swatches">
               {colors.map((c) => (
-                <DropdownMenu.Item
-                  key={c.value}
-                  asChild
-                  onSelect={() => onPick(c.value)}
-                >
-                  <button
-                    type="button"
-                    title={c.name}
-                    aria-label={c.name}
-                    className={
-                      "exam-editor__swatch" +
-                      (activeColor === c.value ? " is-active" : "")
-                    }
-                    style={{ backgroundColor: c.swatch ?? c.value }}
-                  />
-                </DropdownMenu.Item>
+                <Tip key={c.value} label={c.name}>
+                  <DropdownMenu.Item asChild onSelect={() => onPick(c.value)}>
+                    <button
+                      type="button"
+                      aria-label={c.name}
+                      className={
+                        "exam-editor__swatch" +
+                        (activeColor === c.value ? " is-active" : "")
+                      }
+                      style={{ backgroundColor: c.swatch ?? c.value }}
+                    />
+                  </DropdownMenu.Item>
+                </Tip>
               ))}
             </div>
             <DropdownMenu.Separator className="exam-editor__menu-separator" />

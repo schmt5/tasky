@@ -40,22 +40,32 @@ defmodule TaskyWeb.TaskLive.Correction do
             <span class="text-[12px] text-stone-500 hidden sm:inline">
               {@current_index + 1}/{length(@submissions)}
             </span>
-            <.link
+            <div
               :if={@prev_path}
-              navigate={@prev_path}
-              class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50"
-              title="Vorherige/r Lernende/r"
+              class="tooltip tooltip-bottom tooltip-delayed"
+              data-tip="Vorherige/r Lernende/r"
             >
-              <.icon name="hero-chevron-up" class="w-4 h-4" />
-            </.link>
-            <.link
+              <.link
+                navigate={@prev_path}
+                aria-label="Vorherige/r Lernende/r"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50"
+              >
+                <.icon name="hero-chevron-up" class="w-4 h-4" />
+              </.link>
+            </div>
+            <div
               :if={@next_path}
-              navigate={@next_path}
-              class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50"
-              title="Nächste/r Lernende/r"
+              class="tooltip tooltip-bottom tooltip-delayed"
+              data-tip="Nächste/r Lernende/r"
             >
-              <.icon name="hero-chevron-down" class="w-4 h-4" />
-            </.link>
+              <.link
+                navigate={@next_path}
+                aria-label="Nächste/r Lernende/r"
+                class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50"
+              >
+                <.icon name="hero-chevron-down" class="w-4 h-4" />
+              </.link>
+            </div>
           </div>
         </div>
       </div>

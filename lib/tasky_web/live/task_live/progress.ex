@@ -123,24 +123,24 @@ defmodule TaskyWeb.TaskLive.Progress do
                             aria-label="Alle auswählen"
                             class="w-[18px] h-[18px] rounded-md border-stone-300 text-sky-500 focus:ring-sky-500/30 focus:ring-offset-0 cursor-pointer transition-colors duration-150 shrink-0"
                           />
-                          <button
-                            type="button"
-                            phx-click="toggle_anonymize"
-                            class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
-                            title={
-                              if @anonymized,
-                                do: "Namen anzeigen",
-                                else: "Namen ausblenden"
-                            }
+                          <div
+                            class="tooltip tooltip-right tooltip-delayed normal-case tracking-normal font-normal"
+                            data-tip={if @anonymized, do: "Namen anzeigen", else: "Namen ausblenden"}
                           >
-                            <.icon
-                              name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
-                              class="w-4 h-4 text-stone-600"
-                            />
-                            <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
-                              Lernende
-                            </span>
-                          </button>
+                            <button
+                              type="button"
+                              phx-click="toggle_anonymize"
+                              class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
+                            >
+                              <.icon
+                                name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
+                                class="w-4 h-4 text-stone-600"
+                              />
+                              <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                                Lernende
+                              </span>
+                            </button>
+                          </div>
                         </div>
                       </th>
 
@@ -601,11 +601,14 @@ defmodule TaskyWeb.TaskLive.Progress do
     assigns = assign(assigns, :meta, status_meta(assigns.status))
 
     ~H"""
-    <div
-      class={["w-10 h-10 rounded-[8px] flex items-center justify-center shadow-sm", @meta.bg]}
-      title={@meta.label}
-    >
-      <.icon name={@meta.icon} class={["w-5 h-5", @meta.fg]} />
+    <div class="tooltip tooltip-delayed" data-tip={@meta.label}>
+      <div
+        role="img"
+        aria-label={@meta.label}
+        class={["w-10 h-10 rounded-[8px] flex items-center justify-center shadow-sm", @meta.bg]}
+      >
+        <.icon name={@meta.icon} class={["w-5 h-5", @meta.fg]} />
+      </div>
     </div>
     """
   end
@@ -650,8 +653,8 @@ defmodule TaskyWeb.TaskLive.Progress do
     ~H"""
     <span
       :if={@task.solution_release_mode == "never"}
-      class="text-[12px] text-stone-400"
-      title="Für diese Lerneinheit ausgeblendet"
+      class="tooltip tooltip-delayed text-[12px] text-stone-400"
+      data-tip="Für diese Lerneinheit ausgeblendet"
     >
       Ausgeblendet
     </span>

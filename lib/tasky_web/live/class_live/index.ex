@@ -70,15 +70,16 @@ defmodule TaskyWeb.ClassLive.Index do
                       class="flex-1 px-2.5 py-1.5 text-[12px] text-stone-600 bg-stone-50 border border-stone-200 rounded-[6px] font-mono"
                       id={"registration-link-#{class.id}"}
                     />
-                    <button
-                      type="button"
-                      phx-click="copy_link"
-                      phx-value-url={registration_url(class.invite_token)}
-                      class="inline-flex items-center gap-1.5 bg-transparent text-stone-500 text-[12px] font-medium px-2.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
-                      title="Link kopieren"
-                    >
-                      <.icon name="hero-clipboard-document" class="w-3.5 h-3.5" /> Kopieren
-                    </button>
+                    <div class="tooltip tooltip-delayed tooltip-top" data-tip="Link kopieren">
+                      <button
+                        type="button"
+                        phx-click="copy_link"
+                        phx-value-url={registration_url(class.invite_token)}
+                        class="inline-flex items-center gap-1.5 bg-transparent text-stone-500 text-[12px] font-medium px-2.5 py-1.5 rounded-[6px] transition-all duration-150 hover:bg-sky-50 hover:text-sky-600"
+                      >
+                        <.icon name="hero-clipboard-document" class="w-3.5 h-3.5" /> Kopieren
+                      </button>
+                    </div>
                     <div
                       class="tooltip tooltip-delayed tooltip-top"
                       data-tip="Neuen Link generieren — der alte wird ungültig"

@@ -50,15 +50,19 @@ defmodule TaskyWeb.ExamLive.Progress do
 
             <div
               :if={@exam.status == "running"}
-              id="progress-live-indicator"
-              class="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full"
-              title="Der Stand wird alle 5 Sekunden aktualisiert."
+              class="tooltip tooltip-bottom tooltip-delayed"
+              data-tip="Der Stand wird alle 5 Sekunden aktualisiert."
             >
-              <span class="relative flex w-2 h-2">
-                <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
-                <span class="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
-              </span>
-              Live
+              <div
+                id="progress-live-indicator"
+                class="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-sm font-semibold px-3 py-1.5 rounded-full"
+              >
+                <span class="relative flex w-2 h-2">
+                  <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                  <span class="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+                </span>
+                Live
+              </div>
             </div>
           </div>
 
@@ -79,21 +83,25 @@ defmodule TaskyWeb.ExamLive.Progress do
                       scope="col"
                       class="sticky left-0 z-10 bg-stone-50 px-6 py-4 text-left align-bottom border-r border-stone-200 w-[320px] min-w-[320px] max-w-[320px]"
                     >
-                      <button
-                        type="button"
-                        id="toggle-anonymize"
-                        phx-click="toggle_anonymize"
-                        class="inline-flex items-center gap-2 px-2 py-1 -mx-2 rounded-lg hover:bg-stone-200 transition-colors"
-                        title={if @anonymized, do: "Namen anzeigen", else: "Namen ausblenden"}
+                      <div
+                        class="tooltip tooltip-right tooltip-delayed font-normal"
+                        data-tip={if @anonymized, do: "Namen anzeigen", else: "Namen ausblenden"}
                       >
-                        <.icon
-                          name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
-                          class="w-4 h-4 text-stone-600"
-                        />
-                        <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
-                          Aufgaben
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          id="toggle-anonymize"
+                          phx-click="toggle_anonymize"
+                          class="inline-flex items-center gap-2 px-2 py-1 -mx-2 rounded-lg hover:bg-stone-200 transition-colors"
+                        >
+                          <.icon
+                            name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
+                            class="w-4 h-4 text-stone-600"
+                          />
+                          <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                            Aufgaben
+                          </span>
+                        </button>
+                      </div>
                     </th>
 
                     <th
@@ -145,12 +153,11 @@ defmodule TaskyWeb.ExamLive.Progress do
                       scope="row"
                       class="sticky left-0 z-10 bg-white px-6 py-3 text-left font-normal border-r border-stone-200 w-[320px] min-w-[320px] max-w-[320px]"
                     >
-                      <span
-                        class="text-[14px] font-medium text-stone-800 line-clamp-2"
-                        title={part.label}
-                      >
-                        {part.label}
-                      </span>
+                      <div class="tooltip tooltip-right tooltip-delayed block" data-tip={part.label}>
+                        <span class="text-[14px] font-medium text-stone-800 line-clamp-2">
+                          {part.label}
+                        </span>
+                      </div>
                       <span class="block text-[12px] text-stone-400 mt-0.5 tabular-nums">
                         {started_count(@cells, @rows, part.id)} von {length(@rows)} bearbeitet
                       </span>

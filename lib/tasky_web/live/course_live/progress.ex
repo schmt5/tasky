@@ -51,24 +51,24 @@ defmodule TaskyWeb.CourseLive.Progress do
                         scope="col"
                         class="sticky left-0 z-10 bg-stone-50 px-6 py-4 text-left text-xs font-semibold text-stone-700 uppercase tracking-wider border-r border-stone-200"
                       >
-                        <button
-                          type="button"
-                          phx-click="toggle_anonymize"
-                          class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
-                          title={
-                            if @anonymized,
-                              do: "Namen anzeigen",
-                              else: "Namen ausblenden"
-                          }
+                        <div
+                          class="tooltip tooltip-right tooltip-delayed normal-case tracking-normal font-normal"
+                          data-tip={if @anonymized, do: "Namen anzeigen", else: "Namen ausblenden"}
                         >
-                          <.icon
-                            name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
-                            class="w-4 h-4 text-stone-600"
-                          />
-                          <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
-                            Lernende
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            phx-click="toggle_anonymize"
+                            class="inline-flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-stone-200 transition-colors"
+                          >
+                            <.icon
+                              name={if @anonymized, do: "hero-eye-slash", else: "hero-eye"}
+                              class="w-4 h-4 text-stone-600"
+                            />
+                            <span class="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                              Lernende
+                            </span>
+                          </button>
+                        </div>
                       </th>
 
                       <th
@@ -76,15 +76,19 @@ defmodule TaskyWeb.CourseLive.Progress do
                         scope="col"
                         class="px-3 py-4 text-center text-xs font-semibold text-stone-700 uppercase tracking-wider min-w-[100px] max-w-[140px]"
                       >
-                        <.link
-                          navigate={~p"/progress/#{task.id}"}
-                          title={task.name}
-                          class="block hover:text-sky-700 transition-colors"
+                        <div
+                          class="tooltip tooltip-bottom tooltip-delayed normal-case tracking-normal font-normal"
+                          data-tip={task.name}
                         >
-                          <span class="line-clamp-2 text-[12px] font-medium text-stone-800 hover:text-sky-700 normal-case">
-                            {task.name}
-                          </span>
-                        </.link>
+                          <.link
+                            navigate={~p"/progress/#{task.id}"}
+                            class="block hover:text-sky-700 transition-colors"
+                          >
+                            <span class="line-clamp-2 text-[12px] font-medium text-stone-800 hover:text-sky-700 normal-case">
+                              {task.name}
+                            </span>
+                          </.link>
+                        </div>
                       </th>
                     </tr>
                   </thead>
@@ -109,50 +113,9 @@ defmodule TaskyWeb.CourseLive.Progress do
 
                       <td :for={task <- @tasks} class="px-4 py-4">
                         <div class="flex justify-center">
-                          <%= case get_submission_status(@progress_map, student.id, task.id) do %>
-                            <% :review_approved -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-emerald-500 flex items-center justify-center shadow-sm"
-                                title="Genehmigt"
-                              >
-                                <.icon name="hero-check-badge" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :completed -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-amber-400 flex items-center justify-center shadow-sm"
-                                title="Wartet auf Review"
-                              >
-                                <.icon name="hero-inbox-arrow-down" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :review_denied -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-rose-400 flex items-center justify-center shadow-sm"
-                                title="Zurückgegeben"
-                              >
-                                <.icon name="hero-arrow-uturn-left" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :in_revision -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-amber-500 flex items-center justify-center shadow-sm"
-                                title="In Überarbeitung"
-                              >
-                                <.icon name="hero-pencil-square" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :in_progress -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-sky-500 flex items-center justify-center shadow-sm"
-                                title="In Bearbeitung"
-                              >
-                                <.icon name="hero-ellipsis-horizontal" class="w-5 h-5 text-white" />
-                              </div>
-                            <% :not_started -> %>
-                              <div
-                                class="w-10 h-10 rounded-[8px] bg-stone-200 flex items-center justify-center"
-                                title="Nicht begonnen"
-                              >
-                                <.icon name="hero-minus" class="w-5 h-5 text-stone-400" />
-                              </div>
-                          <% end %>
+                          <.status_cell status={
+                            get_submission_status(@progress_map, student.id, task.id)
+                          } />
                         </div>
                       </td>
                     </tr>
@@ -284,6 +247,45 @@ defmodule TaskyWeb.CourseLive.Progress do
       _ -> :not_started
     end
   end
+
+  attr :status, :atom, required: true
+
+  defp status_cell(assigns) do
+    {label, icon, tile} = status_style(assigns.status)
+    assigns = assign(assigns, label: label, icon: icon, tile: tile)
+
+    ~H"""
+    <div class="tooltip tooltip-delayed" data-tip={@label}>
+      <div
+        role="img"
+        aria-label={@label}
+        class={["w-10 h-10 rounded-[8px] flex items-center justify-center", @tile]}
+      >
+        <.icon
+          name={@icon}
+          class={["w-5 h-5", if(@status == :not_started, do: "text-stone-400", else: "text-white")]}
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp status_style(:review_approved),
+    do: {"Genehmigt", "hero-check-badge", "bg-emerald-500 shadow-sm"}
+
+  defp status_style(:completed),
+    do: {"Wartet auf Review", "hero-inbox-arrow-down", "bg-amber-400 shadow-sm"}
+
+  defp status_style(:review_denied),
+    do: {"Zurückgegeben", "hero-arrow-uturn-left", "bg-rose-400 shadow-sm"}
+
+  defp status_style(:in_revision),
+    do: {"In Überarbeitung", "hero-pencil-square", "bg-amber-500 shadow-sm"}
+
+  defp status_style(:in_progress),
+    do: {"In Bearbeitung", "hero-ellipsis-horizontal", "bg-sky-500 shadow-sm"}
+
+  defp status_style(:not_started), do: {"Nicht begonnen", "hero-minus", "bg-stone-200"}
 
   defp get_full_name(student) do
     first = student.firstname || ""
