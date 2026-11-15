@@ -7,6 +7,7 @@ export const TaskContentEditor = createReactHook({
     save: (doc, opts) => api.saveTaskContent(dataset.taskId, doc, opts),
     uploadImage: (file) => api.uploadTaskImage(dataset.taskId, file),
     uploadAudio: (file) => api.uploadTaskAudio(dataset.taskId, file),
+    pinImages: true,
     placeholder: "Beginne mit einer Überschrift …",
   }),
 });
