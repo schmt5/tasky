@@ -13,15 +13,15 @@ deterministic auto-correction doing the first pass.
 
 LearningLine is currently being piloted at **be-med**.
 
-![The content editor: a learning unit with headings, a callout and a table](docs/screenshots/editor.png)
+![The content editor: a learning unit with headings, a callout and a photo](docs/screenshots/editor.png)
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/sample-solution.png" alt="Sample solution with a pin target zone on a map of Africa"></td>
+    <td><img src="docs/screenshots/sample-solution.png" alt="The sample solution tab: each question with its model answer and correction options"></td>
     <td><img src="docs/screenshots/learner.png" alt="A learner working on a practice exam"></td>
   </tr>
   <tr>
-    <td align="center">Sample solution: pins and their target zones</td>
+    <td align="center">Sample solution and correction options per question</td>
     <td align="center">The learner's view of a practice exam</td>
   </tr>
 </table>
